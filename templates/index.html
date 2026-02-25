@@ -1,0 +1,22 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+    <h1>{% block title %}{{ status|capitalize }} Patients{% endblock %}</h1>
+    <ul>
+        {% for patient in patients %}
+            <li>
+                <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}">
+                    {{ patient['name'] }}
+                </a>
+                {% if patient['email'] %}
+                    - {{ patient['email'] }}
+                {% endif %}
+                {% if patient['phone'] %}
+                    - {{ patient['phone'] }}
+                {% endif %}
+            </li>
+        {% else %}
+            <li>No patients found.</li>
+        {% endfor %}
+    </ul>
+{% endblock %}

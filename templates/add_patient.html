@@ -1,0 +1,25 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+    <h1>{% block title %}Add Patient{% endblock %}</h1>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="name">Name</label>
+        <input name="name" id="name" required>
+
+        <label for="status">Status</label>
+        <select name="status" id="status">
+            <option value="ongoing">Ongoing</option>
+            <option value="candidate">Candidate</option>
+            <option value="archived">Archived</option>
+        </select>
+
+        <label for="email">Email</label>
+        <input name="email" id="email">
+
+        <label for="phone">Phone</label>
+        <input name="phone" id="phone">
+
+        <input type="submit" value="Save">
+    </form>
+{% endblock %}

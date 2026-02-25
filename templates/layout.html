@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Private Psychotherapy Clinic</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1><a href="{{ url_for('index') }}">Private Clinic</a></h1>
+        <nav>
+            <a href="{{ url_for('patients', status='ongoing') }}">Ongoing</a>
+            <a href="{{ url_for('patients', status='candidate') }}">Candidates</a>
+            <a href="{{ url_for('patients', status='archived') }}">Archived</a>
+            <a href="{{ url_for('add_patient') }}">Add Patient</a>
+        </nav>
+    </header>
+
+    <section class="content">
+        {% for message in get_flashed_messages() %}
+            <div class="flash">{{ message }}</div>
+        {% endfor %}
+        {% block content %}{% endblock %}
+    </section>
+</body>
+</html>
