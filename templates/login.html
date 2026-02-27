@@ -19,7 +19,7 @@
                         <label for="username" class="form-label text-uppercase smallest fw-bold tracking-wider">Username</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="username" name="username" placeholder="Enter username" required autofocus>
+                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="username" name="username" placeholder="Enter username" required autofocus value="{{ username or '' }}">
                         </div>
                     </div>
                     <div class="mb-4">
@@ -32,6 +32,22 @@
                             <input type="password" class="form-control bg-light border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required>
                         </div>
                     </div>
+
+                    {% if require_otp %}
+                    <div id="otp-group" class="mb-4">
+                         <label for="otp" class="form-label text-uppercase smallest fw-bold tracking-wider text-danger">2FA Code</label>
+                         <div class="input-group">
+                            <span class="input-group-text bg-danger bg-opacity-10 border-end-0 text-danger"><i class="bi bi-qr-code"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="otp" name="otp" placeholder="000000">
+                        </div>
+                        <div class="form-text small text-danger">Required for admin access.</div>
+                    </div>
+                    {% else %}
+                    <div id="otp-group" class="mb-4 d-none">
+                        <input type="text" class="form-control" name="otp" placeholder="000000">
+                    </div>
+                    {% endif %}
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3">
                             Sign In <i class="bi bi-arrow-right ms-2"></i>

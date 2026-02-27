@@ -1,0 +1,107 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12 mb-4">
+        <h2 class="mb-3 text-primary fw-bold"><i class="bi bi-graph-up-arrow me-2"></i>Revenue Dashboard</h2>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="d-inline-block p-3 rounded-circle bg-success bg-opacity-10 mb-3">
+                    <i class="bi bi-cash-stack text-success fs-3"></i>
+                </div>
+                <h6 class="text-uppercase text-muted fw-bold smallest tracking-wider mb-1">Total Revenue</h6>
+                <h2 class="display-6 fw-bold text-success mb-0">${{ "%.2f"|format(total_revenue) }}</h2>
+                <p class="text-muted small mt-2 mb-0">Collected from receipts</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="d-inline-block p-3 rounded-circle bg-danger bg-opacity-10 mb-3">
+                    <i class="bi bi-hourglass-split text-danger fs-3"></i>
+                </div>
+                <h6 class="text-uppercase text-muted fw-bold smallest tracking-wider mb-1">Pending Debt</h6>
+                <h2 class="display-6 fw-bold text-danger mb-0">${{ "%.2f"|format(pending_debt) }}</h2>
+                <p class="text-muted small mt-2 mb-0">Unpaid appointments</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-12 col-lg-4 mb-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+             <div class="card-body p-4 text-center">
+                <div class="d-inline-block p-3 rounded-circle bg-primary bg-opacity-10 mb-3">
+                    <i class="bi bi-calendar-check text-primary fs-3"></i>
+                </div>
+                <h6 class="text-uppercase text-muted fw-bold smallest tracking-wider mb-1">This Month</h6>
+                <h2 class="display-6 fw-bold text-primary mb-0">${{ "%.2f"|format(monthly_revenue) }}</h2>
+                <p class="text-muted small mt-2 mb-0">Revenue in {{ current_month }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Monthly Revenue Trend</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="bg-light">
+                            <tr>
+                                <th scope="col" class="border-0 rounded-start-3 py-3 ps-4">Month</th>
+                                <th scope="col" class="border-0 py-3 text-end pe-4 rounded-end-3">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for month, amount in monthly_growth %}
+                                <tr>
+                                    <td class="ps-4 fw-bold text-secondary">{{ month }}</td>
+                                    <td class="text-end pe-4 fw-bold text-success">${{ "%.2f"|format(amount) }}</td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="2" class="text-center py-4 text-muted">No revenue data available.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card border-0 shadow-sm rounded-4 bg-light">
+            <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="fw-bold mb-1"><i class="bi bi-database-fill-gear me-2"></i>System Maintenance</h5>
+                    <p class="text-muted small mb-0">Manage system integrity and backups.</p>
+                </div>
+                <form method="post" action="{{ url_for('backup_now') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-dark fw-bold px-4 rounded-pill">
+                        <i class="bi bi-download me-2"></i>Backup Database Now
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.smallest { font-size: 0.75rem; }
+.tracking-wider { letter-spacing: 0.08em; }
+</style>
+{% endblock %}

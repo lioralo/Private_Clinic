@@ -84,6 +84,44 @@
             </div>
         </div>
 
+        <!-- Treatment Goals Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-flag me-2 text-primary"></i>Treatment Goals</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group">
+                        <input type="text" name="description" class="form-control" placeholder="New treatment goal..." required>
+                        <button type="submit" class="btn btn-primary">Add Goal</button>
+                    </div>
+                </form>
+                <ul class="list-group list-group-flush border rounded-3">
+                    {% for goal in goals %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center p-3">
+                            <div>
+                                <span class="d-block {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% else %}fw-medium{% endif %}">
+                                    {{ goal['description'] }}
+                                </span>
+                                <small class="text-muted smallest">
+                                    <i class="bi bi-clock me-1"></i> {{ goal['created_at'] }}
+                                </small>
+                            </div>
+                            <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm {% if goal['status'] == 'achieved' %}btn-outline-secondary{% else %}btn-success{% endif %} rounded-pill px-3 py-1 smaller">
+                                    {% if goal['status'] == 'achieved' %}Reopen{% else %}Mark Achieved{% endif %}
+                                </button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-center text-muted small py-4">No active goals.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
         <!-- Treatment Notes Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0">

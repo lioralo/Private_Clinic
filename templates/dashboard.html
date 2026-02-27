@@ -39,7 +39,7 @@
                 <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
             </div>
             <div class="card-body p-4">
-                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
+                <div class="list-group list-group-flush border rounded-3 overflow-hidden mb-3">
                     {% for appt in appointments %}
                         <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
                             <div>
@@ -56,6 +56,49 @@
                             <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
                             <p class="small mb-0">No therapy sessions scheduled.</p>
                         </div>
+                    {% endfor %}
+                </div>
+
+                <h6 class="text-primary fw-bold mb-3"><i class="bi bi-calendar-plus me-2"></i>Available Slots</h6>
+                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
+                    {% for slot in slots %}
+                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
+                            <div>
+                                <span class="fw-bold d-block text-dark">{{ slot['start_time']|replace('T', ' ') }}</span>
+                                <span class="text-muted smallest">to {{ slot['end_time']|replace('T', ' ') }}</span>
+                            </div>
+                            <form method="post" action="{{ url_for('request_slot', slot_id=slot['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                    Request
+                                </button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <div class="py-3 text-center text-muted small">No available slots at the moment.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Resource Library Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-collection-play me-2 text-primary"></i>Resource Library</h5>
+            </div>
+            <div class="card-body p-4">
+                 <div class="list-group list-group-flush border rounded-3">
+                    {% for res in resources %}
+                        <div class="list-group-item py-3">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-file-earmark-play-fill text-info fs-5 me-2"></i>
+                                <div class="overflow-hidden">
+                                    <a href="{{ res['file_path'] }}" target="_blank" class="text-decoration-none text-dark fw-medium text-truncate d-block">{{ res['title'] }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="p-4 text-center text-muted smallest">No resources available.</div>
                     {% endfor %}
                 </div>
             </div>

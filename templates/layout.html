@@ -35,6 +35,18 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('revenue') }}">Revenue</a>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Manage
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                                <li><a class="dropdown-item" href="{{ url_for('manage_slots') }}">Scheduling</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('manage_resources') }}">Resources</a></li>
+                            </ul>
+                        </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
                                 <i class="bi bi-person-plus-fill me-1"></i> Add Patient
@@ -44,6 +56,14 @@
                 </ul>
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
+                        <li class="nav-item me-3">
+                            <a href="{{ url_for('messages') }}" class="nav-link text-white-50 small">
+                                <i class="bi bi-envelope me-1"></i> Messages
+                                {% if unread_messages > 0 %}
+                                    <span class="badge bg-danger rounded-pill ms-1">{{ unread_messages }}</span>
+                                {% endif %}
+                            </a>
+                        </li>
                         <li class="nav-item me-3">
                             <span class="nav-link text-white-50 small">
                                 <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
@@ -83,5 +103,13 @@
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    {% if current_user.is_authenticated and current_user.role != 'admin' %}
+        <script>
+            // Simple new message indicator logic (could be more sophisticated with AJAX)
+            // For now, we assume if there are unread messages, we might show a badge.
+            // But we need to pass unread count to template context globally.
+            // Let's rely on server-side rendering for now.
+        </script>
+    {% endif %}
 </body>
 </html>
