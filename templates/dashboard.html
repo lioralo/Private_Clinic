@@ -1,0 +1,103 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- Balance / Debt -->
+        <div class="card mb-4 shadow-sm border-primary">
+            <div class="card-header bg-primary text-white">
+                <h3 class="h5 mb-0">Current Balance</h3>
+            </div>
+            <div class="card-body text-center">
+                {% if balance > 0 %}
+                    <h2 class="display-4 text-danger">${{ "%.2f"|format(balance) }}</h2>
+                    <p class="text-muted">You have an outstanding balance.</p>
+                {% elif balance < 0 %}
+                    <h2 class="display-4 text-success">-${{ "%.2f"|format(balance|abs) }}</h2>
+                    <p class="text-muted">You have a credit.</p>
+                {% else %}
+                    <h2 class="display-4 text-success">$0.00</h2>
+                    <p class="text-muted">You are all caught up!</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Appointments -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <h3 class="h5 mb-0">Your Appointments</h3>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for appt in appointments %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ appt['appointment_date'] }}</strong> at {{ appt['appointment_time'] }}
+                            <span class="badge bg-secondary ms-2">{{ appt['status'] }}</span>
+                        </div>
+                        <span class="text-muted">${{ "%.2f"|format(appt['cost']) }}</span>
+                    </li>
+                {% else %}
+                    <li class="list-group-item text-muted">No appointments scheduled.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Receipts -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <h3 class="h5 mb-0">Receipts</h3>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for receipt in receipts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${{ "%.2f"|format(receipt['amount']) }}</strong>
+                            {% if receipt['description'] %} - {{ receipt['description'] }}{% endif %}
+                            <br><small class="text-muted">{{ receipt['created_at'] }}</small>
+                        </div>
+                        <!-- Simple "Download" link which just views a receipt page (or could be PDF) -->
+                        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Print</button>
+                    </li>
+                {% else %}
+                    <li class="list-group-item text-muted">No receipts found.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <!-- Files -->
+         <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <h3 class="h5 mb-0">Shared Files</h3>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for file in files %}
+                    <li class="list-group-item">
+                        <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank">{{ file['filename'] }}</a>
+                        <br><small class="text-muted">{{ file['created_at'] }}</small>
+                    </li>
+                {% else %}
+                    <li class="list-group-item text-muted">No files shared.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Contact Therapist -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <h3 class="h5 mb-0">Contact Therapist</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('contact_admin') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <textarea name="content" class="form-control" rows="5" placeholder="Request a change or ask a question..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Send Message</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h2>Edit Patient: {{ patient['name'] }}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name</label>
+                <input type="text" class="form-control" name="name" id="name" value="{{ patient['name'] }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" name="status" id="status">
+                    <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
+                    <option value="candidate" {% if patient['status'] == 'candidate' %}selected{% endif %}>Candidate</option>
+                    <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" class="form-control" name="email" id="email" value="{{ patient['email'] }}">
+            </div>
+
+            <div class="mb-3">
+                <label for="phone" class="form-label">Phone</label>
+                <input type="text" class="form-control" name="phone" id="phone" value="{{ patient['phone'] }}">
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

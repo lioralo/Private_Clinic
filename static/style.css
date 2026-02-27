@@ -1,0 +1,47 @@
+body {
+    font-family: sans-serif;
+    margin: 2em;
+}
+
+header {
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 1em;
+    margin-bottom: 1em;
+}
+
+nav a {
+    margin-right: 1em;
+    text-decoration: none;
+    color: #333;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+.flash {
+    background: #eef;
+    padding: 1em;
+    border: 1px solid #ccf;
+    margin-bottom: 1em;
+}
+
+form {
+    margin-bottom: 1em;
+}
+
+label {
+    display: block;
+    margin-top: 0.5em;
+}
+
+input, select, textarea {
+    margin-bottom: 0.5em;
+    padding: 0.5em;
+}
+
+hr {
+    margin: 2em 0;
+    border: 0;
+    border-top: 1px solid #eee;
+}
