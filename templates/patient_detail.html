@@ -2,184 +2,233 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-8">
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h2 class="h4 mb-0">{{ patient['name'] }}</h2>
+    <div class="col-lg-7">
+        <!-- Patient Summary Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h4 class="mb-0 text-primary fw-bold">
+                    <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
+                </h4>
                 <div>
-                    <span class="badge bg-info text-dark">{{ patient['status'] }}</span>
-                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary ms-2">Edit</a>
+                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3">
+                        {{ patient['status']|capitalize }}
+                    </span>
+                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary ms-2 rounded-pill px-3">
+                        <i class="bi bi-pencil-square me-1"></i>Edit
+                    </a>
                 </div>
             </div>
-            <div class="card-body">
-                <p><strong>Email:</strong> {{ patient['email'] }}</p>
-                <p><strong>Phone:</strong> {{ patient['phone'] }}</p>
+            <div class="card-body p-4 bg-light bg-opacity-10 border-top">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="p-3 bg-white rounded-3 shadow-sm border">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Email</small>
+                            <div class="fw-medium text-dark">{{ patient['email'] or 'Not provided' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 bg-white rounded-3 shadow-sm border">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Phone</small>
+                            <div class="fw-medium text-dark">{{ patient['phone'] or 'Not provided' }}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Appointments -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Appointments</h3>
+        <!-- Appointments Management -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
             </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-3 align-items-end">
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="col-md-4">
-                        <label class="form-label">Date</label>
+                        <label class="form-label smallest text-uppercase fw-bold">Date</label>
                         <input type="date" name="date" class="form-control" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Time</label>
+                        <label class="form-label smallest text-uppercase fw-bold">Time</label>
                         <input type="time" name="time" class="form-control" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Cost</label>
+                        <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
                         <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
                     </div>
                     <div class="col-md-2">
-                        <button type="submit" class="btn btn-primary w-100">Add</button>
+                        <label class="form-label d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
                     </div>
                 </form>
 
-                <ul class="list-group list-group-flush">
+                <div class="appointments-list">
                     {% for appt in appointments %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
                             <div>
-                                <strong>{{ appt['appointment_date'] }}</strong> at {{ appt['appointment_time'] }}
-                                <span class="badge bg-secondary ms-2">{{ appt['status'] }}</span>
-                                <span class="badge bg-success ms-1">${{ appt['cost'] }}</span>
+                                <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
+                                <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
+                                <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
                             </div>
-                            <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Are you sure?');">
+                            <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-danger">&times;</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
                             </form>
-                        </li>
+                        </div>
                     {% else %}
-                        <li class="list-group-item text-muted">No appointments scheduled.</li>
+                        <div class="text-center py-4 bg-light rounded-3">
+                            <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
+                        </div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
 
-        <!-- Notes -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Treatment Notes</h3>
+        <!-- Treatment Notes Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
             </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" class="mb-3">
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <textarea name="content" class="form-control mb-2" rows="3" required placeholder="Add a note..."></textarea>
-                    <button type="submit" class="btn btn-primary">Add Note</button>
+                    <div class="input-group bg-light rounded-3 p-1">
+                        <textarea name="content" class="form-control border-0 bg-transparent py-3" rows="2" required placeholder="Add a new clinical note..."></textarea>
+                        <button type="submit" class="btn btn-primary px-4 ms-2 rounded-3 fw-bold">Post Note</button>
+                    </div>
                 </form>
-                <div class="list-group list-group-flush">
+                <div class="notes-timeline">
                     {% for note in notes %}
-                        <div class="list-group-item">
-                            <p class="mb-1">{{ note['content'] }}</p>
-                            <small class="text-muted">{{ note['created_at'] }}</small>
+                        <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3">
+                            <div class="text-dark mb-2">{{ note['content'] }}</div>
+                            <div class="text-muted smaller d-flex align-items-center">
+                                <i class="bi bi-clock me-1"></i> {{ note['created_at'] }}
+                            </div>
                         </div>
                     {% else %}
-                        <div class="list-group-item text-muted">No notes yet.</div>
+                        <div class="text-center py-4 bg-light rounded-3">
+                            <p class="text-muted mb-0 small">No clinical history recorded.</p>
+                        </div>
                     {% endfor %}
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <!-- Access Management -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Patient Portal Access</h3>
+    <div class="col-lg-5">
+        <!-- Access Management Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden">
+            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
                 {% if user %}
-                    <div class="alert {% if user['is_active'] %}alert-success{% else %}alert-warning{% endif %}">
-                        Account is <strong>{% if user['is_active'] %}Active{% else %}Disabled{% endif %}</strong>
-                        <br>Username: <strong>{{ user['username'] }}</strong>
+                    <div class="p-3 mb-3 rounded-3 {% if user['is_active'] %}bg-success{% else %}bg-warning{% endif %} bg-opacity-10 border border-{% if user['is_active'] %}success{% else %}warning{% endif %} border-opacity-25 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge {% if user['is_active'] %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if user['is_active'] %}ACTIVE{% else %}DISABLED{% endif %}</span>
+                            <span class="fw-bold">@{{ user['username'] }}</span>
+                        </div>
+                        <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm {% if user['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill px-3">
+                                {% if user['is_active'] %}Disable{% else %}Enable{% endif %}
+                            </button>
+                        </form>
                     </div>
-                    <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}" class="mb-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn w-100 {% if user['is_active'] %}btn-warning{% else %}btn-success{% endif %}">
-                            {% if user['is_active'] %}Disable Access{% else %}Enable Access{% endif %}
-                        </button>
-                    </form>
-                    <hr>
-                    <h6>Update Credentials</h6>
+                    <hr class="border-secondary border-opacity-50 my-4">
+                    <h6 class="smallest text-uppercase fw-bold text-info mb-3">Update Credentials</h6>
                 {% else %}
-                    <div class="alert alert-secondary">No account created.</div>
-                    <h6>Create Account</h6>
+                    <div class="text-center py-4 bg-white bg-opacity-10 rounded-3 mb-4">
+                        <i class="bi bi-person-plus fs-1 opacity-25 d-block mb-2"></i>
+                        <p class="small mb-0">No patient account created.</p>
+                    </div>
+                    <h6 class="smallest text-uppercase fw-bold text-info mb-3">Initialize Account</h6>
                 {% endif %}
 
                 <form method="post" action="{{ url_for('manage_access', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-2">
-                        <input type="text" name="username" class="form-control" placeholder="Username" required value="{{ user['username'] if user else '' }}">
+                    <div class="mb-3">
+                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Username" required value="{{ user['username'] if user else '' }}">
                     </div>
-                    <div class="mb-2">
-                        <input type="password" name="password" class="form-control" placeholder="Password" required>
+                    <div class="mb-3">
+                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Password" required>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">{% if user %}Update{% else %}Create{% endif %}</button>
+                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
                 </form>
             </div>
         </div>
 
-        <!-- Files -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Files</h3>
+        <!-- Files Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>Medical Files</h5>
             </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-3">
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group">
-                        <input type="file" name="file" class="form-control" required>
-                        <button class="btn btn-outline-secondary" type="submit">Upload</button>
+                    <div class="input-group input-group-sm">
+                        <input type="file" name="file" class="form-control rounded-start-3" id="inputGroupFile" required>
+                        <button class="btn btn-primary px-3 fw-bold" type="submit">Upload</button>
                     </div>
                 </form>
-                <ul class="list-group list-group-flush">
+                <div class="list-group list-group-flush border-top border-bottom">
                     {% for file in files %}
-                        <li class="list-group-item">
-                            <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank">{{ file['filename'] }}</a>
-                            <br><small class="text-muted">{{ file['created_at'] }}</small>
-                        </li>
+                        <div class="list-group-item px-0 py-3 bg-transparent d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 p-2 rounded text-primary me-3">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark fw-medium d-block text-truncate">{{ file['filename'] }}</a>
+                                <span class="text-muted smallest">{{ file['created_at'].split(' ')[0] }}</span>
+                            </div>
+                        </div>
                     {% else %}
-                        <li class="list-group-item text-muted">No files.</li>
+                        <div class="py-4 text-center text-muted small">No documents found.</div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
 
-        <!-- Receipts -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Receipts</h3>
+        <!-- Receipts Management -->
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Financial Receipts</h5>
             </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-3">
+            <div class="card-body p-4 bg-light bg-opacity-25">
+                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-2">
-                        <input type="number" step="0.01" name="amount" class="form-control" required placeholder="Amount">
+                    <div class="row g-2 mb-2">
+                        <div class="col-5">
+                            <input type="number" step="0.01" name="amount" class="form-control form-control-sm border-0 shadow-sm" required placeholder="Amount ($)">
+                        </div>
+                        <div class="col-7">
+                            <input type="text" name="description" class="form-control form-control-sm border-0 shadow-sm" placeholder="Description">
+                        </div>
                     </div>
-                    <div class="mb-2">
-                        <input type="text" name="description" class="form-control" placeholder="Description">
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Add Receipt</button>
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100 fw-bold rounded-pill">Create New Receipt</button>
                 </form>
-                <ul class="list-group list-group-flush">
+                <div class="receipts-list bg-white rounded-3 shadow-sm overflow-hidden border">
                     {% for receipt in receipts %}
-                        <li class="list-group-item">
-                            <strong>${{ receipt['amount'] }}</strong>
-                            {% if receipt['description'] %} - {{ receipt['description'] }}{% endif %}
-                            <br><small class="text-muted">{{ receipt['created_at'] }}</small>
-                        </li>
+                        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="fw-bold text-success d-block">${{ "%.2f"|format(receipt['amount']) }}</span>
+                                <span class="text-muted smaller">{{ receipt['description'] or 'Medical Service' }}</span>
+                            </div>
+                            <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
+                        </div>
                     {% else %}
-                        <li class="list-group-item text-muted">No receipts.</li>
+                        <div class="p-4 text-center text-muted small">No financial records.</div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.note-item { transition: transform 0.2s; }
+.note-item:hover { transform: translateX(5px); }
+.placeholder-light::placeholder { color: rgba(255,255,255,0.5); }
+.smallest { font-size: 0.7rem; }
+</style>
 {% endblock %}

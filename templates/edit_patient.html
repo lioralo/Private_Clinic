@@ -1,40 +1,65 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-header">
-        <h2>Edit Patient: {{ patient['name'] }}</h2>
-    </div>
-    <div class="card-body">
-        <form method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="mb-3">
-                <label for="name" class="form-label">Name</label>
-                <input type="text" class="form-control" name="name" id="name" value="{{ patient['name'] }}" required>
-            </div>
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-circle p-2 me-3 lh-1">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <h2 class="mb-0 fw-bold text-primary">Edit Patient</h2>
+        </div>
 
-            <div class="mb-3">
-                <label for="status" class="form-label">Status</label>
-                <select class="form-select" name="status" id="status">
-                    <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
-                    <option value="candidate" {% if patient['status'] == 'candidate' %}selected{% endif %}>Candidate</option>
-                    <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
-                </select>
-            </div>
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-body p-4 p-lg-5">
+                <div class="text-center mb-4 pb-2 border-bottom">
+                    <h5 class="fw-bold mb-1">{{ patient['name'] }}</h5>
+                    <p class="text-muted small">Update patient information</p>
+                </div>
+                
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div class="row g-4">
+                        <div class="col-md-8">
+                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
+                            <input type="text" class="form-control" name="name" id="name" value="{{ patient['name'] }}" required>
+                        </div>
 
-            <div class="mb-3">
-                <label for="email" class="form-label">Email</label>
-                <input type="email" class="form-control" name="email" id="email" value="{{ patient['email'] }}">
-            </div>
+                        <div class="col-md-4">
+                            <label for="status" class="form-label text-uppercase smallest fw-bold">Status</label>
+                            <select class="form-select" name="status" id="status" required>
+                                <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
+                                <option value="candidate" {% if patient['status'] == 'candidate' %}selected{% endif %}>Candidate</option>
+                                <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
+                            </select>
+                        </div>
 
-            <div class="mb-3">
-                <label for="phone" class="form-label">Phone</label>
-                <input type="text" class="form-control" name="phone" id="phone" value="{{ patient['phone'] }}">
-            </div>
+                        <div class="col-md-12">
+                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" name="email" id="email" value="{{ patient['email'] or '' }}">
+                            </div>
+                        </div>
 
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-secondary">Cancel</a>
-        </form>
+                        <div class="col-md-12">
+                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
+                                <input type="text" class="form-control" name="phone" id="phone" value="{{ patient['phone'] or '' }}">
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-5">
+                            <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-3">
+                                <i class="bi bi-save me-2"></i> Save Patient Record
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -2,102 +2,150 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-8">
-        <!-- Balance / Debt -->
-        <div class="card mb-4 shadow-sm border-primary">
-            <div class="card-header bg-primary text-white">
-                <h3 class="h5 mb-0">Current Balance</h3>
+    <div class="col-lg-8">
+        <!-- Balance / Debt Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-primary">Financial Summary</h5>
+                <i class="bi bi-wallet2 text-primary fs-5"></i>
             </div>
-            <div class="card-body text-center">
+            <div class="card-body p-4 text-center border-top">
                 {% if balance > 0 %}
-                    <h2 class="display-4 text-danger">${{ "%.2f"|format(balance) }}</h2>
-                    <p class="text-muted">You have an outstanding balance.</p>
+                    <div class="p-4 bg-danger bg-opacity-10 rounded-4 border border-danger border-opacity-10 mb-2">
+                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">Total Outstanding</small>
+                        <h2 class="display-5 text-danger fw-bold mb-0">${{ "%.2f"|format(balance) }}</h2>
+                    </div>
+                    <p class="text-muted small">Outstanding balance for therapeutic services.</p>
                 {% elif balance < 0 %}
-                    <h2 class="display-4 text-success">-${{ "%.2f"|format(balance|abs) }}</h2>
-                    <p class="text-muted">You have a credit.</p>
+                    <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Credit Balance</small>
+                        <h2 class="display-5 text-success fw-bold mb-0">-${{ "%.2f"|format(balance|abs) }}</h2>
+                    </div>
+                    <p class="text-muted small">You have credit in your account.</p>
                 {% else %}
-                    <h2 class="display-4 text-success">$0.00</h2>
-                    <p class="text-muted">You are all caught up!</p>
+                    <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Account Balance</small>
+                        <h2 class="display-5 text-success fw-bold mb-0">$0.00</h2>
+                    </div>
+                    <p class="text-muted small">Your account is fully settled!</p>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Appointments -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Your Appointments</h3>
+        <!-- Appointments Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments</h5>
+                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
             </div>
-            <ul class="list-group list-group-flush">
-                {% for appt in appointments %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>{{ appt['appointment_date'] }}</strong> at {{ appt['appointment_time'] }}
-                            <span class="badge bg-secondary ms-2">{{ appt['status'] }}</span>
+            <div class="card-body p-4">
+                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
+                    {% for appt in appointments %}
+                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
+                            <div>
+                                <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
+                                <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
+                                <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
+                            </div>
                         </div>
-                        <span class="text-muted">${{ "%.2f"|format(appt['cost']) }}</span>
-                    </li>
-                {% else %}
-                    <li class="list-group-item text-muted">No appointments scheduled.</li>
-                {% endfor %}
-            </ul>
+                    {% else %}
+                        <div class="py-5 text-center text-muted">
+                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
+                            <p class="small mb-0">No therapy sessions scheduled.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
-        <!-- Receipts -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Receipts</h3>
-            </div>
-            <ul class="list-group list-group-flush">
-                {% for receipt in receipts %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>${{ "%.2f"|format(receipt['amount']) }}</strong>
-                            {% if receipt['description'] %} - {{ receipt['description'] }}{% endif %}
-                            <br><small class="text-muted">{{ receipt['created_at'] }}</small>
+        <!-- Financial Documents Section -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Receipts</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="list-group list-group-flush border rounded-3">
+                            {% for receipt in receipts %}
+                                <div class="list-group-item py-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="fw-bold text-success">${{ "%.2f"|format(receipt['amount']) }}</span>
+                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
+                                    </div>
+                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
+                                    <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
+                                </div>
+                            {% else %}
+                                <div class="p-4 text-center text-muted smallest">No receipts.</div>
+                            {% endfor %}
                         </div>
-                        <!-- Simple "Download" link which just views a receipt page (or could be PDF) -->
-                        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Print</button>
-                    </li>
-                {% else %}
-                    <li class="list-group-item text-muted">No receipts found.</li>
-                {% endfor %}
-            </ul>
-        </div>
-
-        <!-- Files -->
-         <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Shared Files</h3>
+                    </div>
+                </div>
             </div>
-            <ul class="list-group list-group-flush">
-                {% for file in files %}
-                    <li class="list-group-item">
-                        <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank">{{ file['filename'] }}</a>
-                        <br><small class="text-muted">{{ file['created_at'] }}</small>
-                    </li>
-                {% else %}
-                    <li class="list-group-item text-muted">No files shared.</li>
-                {% endfor %}
-            </ul>
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>Shared Files</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="list-group list-group-flush border rounded-3">
+                            {% for file in files %}
+                                <div class="list-group-item py-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-pdf-fill text-danger fs-5 me-2"></i>
+                                        <div class="overflow-hidden">
+                                            <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark fw-medium text-truncate d-block">{{ file['filename'] }}</a>
+                                            <span class="text-muted smallest opacity-75">{{ file['created_at'].split(' ')[0] }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="p-4 text-center text-muted smallest">No shared files.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <!-- Contact Therapist -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header">
-                <h3 class="h5 mb-0">Contact Therapist</h3>
-            </div>
-            <div class="card-body">
+    <div class="col-lg-4">
+        <!-- Contact Therapist Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px;">
+            <div class="card-body p-4 p-lg-5">
+                <div class="text-center mb-4">
+                    <div class="bg-white bg-opacity-20 d-inline-block p-3 rounded-circle mb-3">
+                        <i class="bi bi-envelope-fill text-white fs-3"></i>
+                    </div>
+                    <h5 class="fw-bold mb-1">Contact Therapist</h5>
+                    <p class="small text-white-50">Send a direct message to your clinical provider.</p>
+                </div>
+                
                 <form method="post" action="{{ url_for('contact_admin') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <textarea name="content" class="form-control" rows="5" placeholder="Request a change or ask a question..." required></textarea>
+                    <div class="mb-4">
+                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-3 rounded-3" rows="6" placeholder="Type your message here..." required></textarea>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Send Message</button>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-light py-2 fw-bold rounded-3 text-primary">
+                            Send Securely <i class="bi bi-send-fill ms-2"></i>
+                        </button>
+                    </div>
                 </form>
+                <div class="text-center mt-4 pt-2">
+                    <p class="smallest text-white-50 mb-0">Responses are typically received within 24-48 business hours.</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.tracking-wider { letter-spacing: 0.05em; }
+.placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
+</style>
 {% endblock %}

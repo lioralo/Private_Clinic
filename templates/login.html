@@ -1,29 +1,52 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <h3 class="card-title mb-0">Login</h3>
+<div class="row justify-content-center py-5">
+    <div class="col-md-5 col-lg-4">
+        <div class="text-center mb-4">
+            <div class="bg-primary d-inline-block p-3 rounded-circle shadow-sm mb-3">
+                <i class="bi bi-shield-lock-fill text-white fs-2"></i>
             </div>
-            <div class="card-body">
+            <h3 class="fw-bold">Welcome Back</h3>
+            <p class="text-muted small">Please sign in to access the clinic CRM</p>
+        </div>
+        
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="card-body p-4 p-lg-5">
                 <form method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                        <label for="username" class="form-label text-uppercase smallest fw-bold tracking-wider">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="username" name="username" placeholder="Enter username" required autofocus>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between">
+                            <label for="password" class="form-label text-uppercase smallest fw-bold tracking-wider">Password</label>
+                            <a href="#" class="smallest text-decoration-none fw-bold">Forgot?</a>
+                        </div>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control bg-light border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required>
+                        </div>
                     </div>
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Login</button>
+                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3">
+                            Sign In <i class="bi bi-arrow-right ms-2"></i>
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
+        <p class="text-center mt-4 text-muted smallest">
+            Secure HIPAA compliant portal access.
+        </p>
     </div>
 </div>
+
+<style>
+.tracking-wider { letter-spacing: 0.05em; }
+</style>
 {% endblock %}

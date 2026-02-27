@@ -2,45 +2,62 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <h3 class="h4 mb-0">Add New Patient</h3>
-            </div>
-            <div class="card-body">
+    <div class="col-md-8 col-lg-6">
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('patients', status='ongoing') }}" class="btn btn-outline-secondary btn-sm rounded-circle p-2 me-3 lh-1">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            <h2 class="mb-0 fw-bold text-primary">Add New Patient</h2>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-body p-4 p-lg-5">
                 <form method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <label for="name" class="form-label">Name</label>
-                        <input type="text" class="form-control" name="name" id="name" placeholder="Full Name" required>
-                    </div>
+                    
+                    <div class="row g-4">
+                        <div class="col-md-8">
+                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
+                            <input type="text" class="form-control" name="name" id="name" placeholder="John Doe" required>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="status" class="form-label">Status</label>
-                        <select class="form-select" name="status" id="status" required>
-                            <option value="ongoing">Ongoing</option>
-                            <option value="candidate">Candidate</option>
-                            <option value="archived">Archived</option>
-                        </select>
-                    </div>
+                        <div class="col-md-4">
+                            <label for="status" class="form-label text-uppercase smallest fw-bold">Initial Status</label>
+                            <select class="form-select" name="status" id="status" required>
+                                <option value="ongoing">Ongoing</option>
+                                <option value="candidate">Candidate</option>
+                                <option value="archived">Archived</option>
+                            </select>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" name="email" id="email" placeholder="example@email.com">
-                    </div>
+                        <div class="col-md-12">
+                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" name="email" id="email" placeholder="john@example.com">
+                            </div>
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="phone" class="form-label">Phone</label>
-                        <input type="tel" class="form-control" name="phone" id="phone" placeholder="(123) 456-7890">
-                    </div>
+                        <div class="col-md-12">
+                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
+                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="+1 (234) 567-890">
+                            </div>
+                        </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Add Patient</button>
-                        <a href="{{ url_for('patients', status='ongoing') }}" class="btn btn-secondary">Cancel</a>
+                        <div class="col-12 mt-5">
+                            <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-3">
+                                <i class="bi bi-person-check me-2"></i> Register Patient Record
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
         </div>
+        <p class="text-center mt-4 text-muted small">
+            New records are automatically initialized in the database.
+        </p>
     </div>
 </div>
 {% endblock %}
