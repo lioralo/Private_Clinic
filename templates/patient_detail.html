@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-lg-7">
+    <div class="col-12">
         <!-- Patient Summary Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
@@ -14,368 +14,308 @@
                         {{ patient['status']|capitalize }}
                     </span>
                     <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary ms-2 rounded-pill px-3">
-                        <i class="bi bi-pencil-square me-1"></i>Edit
+                        <i class="bi bi-pencil-square me-1"></i>Edit Profile
                     </a>
                 </div>
             </div>
-            <div class="card-body p-4 bg-light bg-opacity-10 border-top">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Email</small>
-                            <div class="fw-medium text-dark">{{ patient['email'] or 'Not provided' }}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Phone</small>
-                            <div class="fw-medium text-dark">{{ patient['phone'] or 'Not provided' }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
-        <!-- Appointments Management -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-md-4">
-                        <label class="form-label smallest text-uppercase fw-bold">Date</label>
-                        <input type="date" name="date" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label smallest text-uppercase fw-bold">Time</label>
-                        <input type="time" name="time" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
-                        <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label d-none d-md-block">&nbsp;</label>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
-                    </div>
-                </form>
+        <!-- Tabbed Navigation -->
+        <ul class="nav nav-tabs mb-4" id="patientTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active fw-bold" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab">Information</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold" id="background-tab" data-bs-toggle="tab" data-bs-target="#background" type="button" role="tab">User Background</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold" id="treatment-tab" data-bs-toggle="tab" data-bs-target="#treatment" type="button" role="tab">Treatment Info</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">History</button>
+            </li>
+        </ul>
 
-                <div class="appointments-list">
-                    {% for appt in appointments %}
-                        <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
-                            <div>
-                                <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
-                                <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
-                            </div>
-                            <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
-                            </form>
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 bg-light rounded-3">
-                            <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Treatment Goals Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-flag me-2 text-primary"></i>Treatment Goals</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="mb-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group">
-                        <input type="text" name="description" class="form-control" placeholder="New treatment goal..." required>
-                        <button type="submit" class="btn btn-primary">Add Goal</button>
-                    </div>
-                </form>
-                <ul class="list-group list-group-flush border rounded-3">
-                    {% for goal in goals %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center p-3">
-                            <div>
-                                <span class="d-block {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% else %}fw-medium{% endif %}">
-                                    {{ goal['description'] }}
-                                </span>
-                                <small class="text-muted smallest">
-                                    <i class="bi bi-clock me-1"></i> {{ goal['created_at'] }}
-                                </small>
-                            </div>
-                            <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm {% if goal['status'] == 'achieved' %}btn-outline-secondary{% else %}btn-success{% endif %} rounded-pill px-3 py-1 smaller">
-                                    {% if goal['status'] == 'achieved' %}Reopen{% else %}Mark Achieved{% endif %}
-                                </button>
-                            </form>
-                        </li>
-                    {% else %}
-                        <li class="list-group-item text-center text-muted small py-4">No active goals.</li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-
-        <!-- Patient Progress & Analytics -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Therapeutic Insights</h5>
-                <button class="btn btn-sm btn-light rounded-pill px-3 smallest" onclick="loadCharts()">Refresh Data</button>
-            </div>
-            <div class="card-body p-4">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <small class="text-muted d-block text-uppercase fw-bold mb-3 smallest">Session Frequency (Last 6 Months)</small>
-                        <canvas id="attendanceChart" height="200"></canvas>
-                    </div>
-                    <div class="col-md-6">
-                        <small class="text-muted d-block text-uppercase fw-bold mb-3 smallest">Common Discussion Topics</small>
-                        <canvas id="topicsChart" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Treatment Notes Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-3 border">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-3">
-                            <label class="form-label smallest text-uppercase fw-bold">Session #</label>
-                            <input type="number" name="session_number" class="form-control form-control-sm" placeholder="e.g. 5">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label smallest text-uppercase fw-bold">Appearance</label>
-                            <input type="text" name="patient_appearance" class="form-control form-control-sm" placeholder="e.g. Calm, anxious">
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
-                            <input type="text" name="key_topics" class="form-control form-control-sm" placeholder="e.g. Family, work stress">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label smallest text-uppercase fw-bold">Note Content</label>
-                        <textarea name="content" class="form-control" rows="3" required placeholder="Detailed clinical observations..."></textarea>
-                    </div>
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-8">
-                            <label class="form-label smallest text-uppercase fw-bold">Attach File (Verbatim, Medical, etc.)</label>
-                            <input type="file" name="note_file" class="form-control form-control-sm">
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <button type="submit" class="btn btn-primary w-100 fw-bold">Save Note</button>
-                        </div>
-                    </div>
-                </form>
-
-                <div class="notes-timeline">
-                    {% for note in notes %}
-                        <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="d-flex align-items-center">
-                                    {% if note['session_number'] %}
-                                        <span class="badge bg-primary me-2">Session #{{ note['session_number'] }}</span>
-                                    {% endif %}
-                                    <span class="text-muted smallest"><i class="bi bi-clock me-1"></i> {{ note['created_at'] }}</span>
-                                </div>
-                                <div>
-                                    <button class="btn btn-sm btn-link text-primary p-0 me-2" onclick="editNote({{ note|tojson }})">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
+        <div class="tab-content" id="patientTabsContent">
+            <!-- Information Tab -->
+            <div class="tab-pane fade show active" id="info" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-7">
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-body p-4">
+                                <h6 class="text-uppercase fw-bold text-muted smallest mb-3">Contact Details</h6>
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 border">
+                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Email</small>
+                                            <div class="fw-medium text-dark">{{ patient['email'] or 'Not provided' }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-light rounded-3 border">
+                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Phone</small>
+                                            <div class="fw-medium text-dark">{{ patient['phone'] or 'Not provided' }}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
 
-                            {% if note['patient_appearance'] or note['key_topics'] %}
-                            <div class="mb-2 p-2 bg-light rounded-2 border-start border-3 border-info">
-                                {% if note['patient_appearance'] %}
-                                <div class="smallest"><span class="fw-bold text-uppercase">Appearance:</span> {{ note['patient_appearance'] }}</div>
-                                {% endif %}
-                                {% if note['key_topics'] %}
-                                <div class="smallest"><span class="fw-bold text-uppercase">Key Topics:</span> {{ note['key_topics'] }}</div>
-                                {% endif %}
+                        <!-- Progress & Insights inside info for quick glance -->
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Therapeutic Insights</h5>
+                                <button class="btn btn-sm btn-light rounded-pill px-3 smallest" onclick="loadCharts()">Refresh</button>
                             </div>
-                            {% endif %}
+                            <div class="card-body p-4">
+                                <div class="row g-4">
+                                    <div class="col-md-6">
+                                        <canvas id="attendanceChart" height="200"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="topicsChart" height="200"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                            <div class="text-dark mb-2">{{ note['content'] }}</div>
+                    <div class="col-lg-5">
+                        <!-- Access Management -->
+                        <div class="card border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden mb-4">
+                            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
+                            </div>
+                            <div class="card-body p-4">
+                                {% if user %}
+                                    <div class="p-3 mb-3 rounded-3 {% if user['is_active'] %}bg-success{% else %}bg-warning{% endif %} bg-opacity-10 border border-{% if user['is_active'] %}success{% else %}warning{% endif %} border-opacity-25 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="badge {% if user['is_active'] %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if user['is_active'] %}ACTIVE{% else %}DISABLED{% endif %}</span>
+                                            <span class="fw-bold">@{{ user['username'] }}</span>
+                                        </div>
+                                        <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm {% if user['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill px-3">
+                                                {% if user['is_active'] %}Disable{% else %}Enable{% endif %}
+                                            </button>
+                                        </form>
+                                    </div>
+                                {% else %}
+                                    <p class="small text-muted mb-4">No patient account created.</p>
+                                {% endif %}
 
-                            {% set note_files = files|selectattr('note_id', 'equalto', note['id'])|list %}
-                            {% if note_files %}
-                            <div class="mt-2 border-top pt-2">
-                                <span class="smallest fw-bold text-muted text-uppercase d-block mb-1">Attached Files:</span>
-                                {% for nf in note_files %}
-                                    <a href="{{ url_for('download_file', name=nf['filename']) }}" class="badge bg-info text-dark text-decoration-none me-1">
-                                        <i class="bi bi-paperclip"></i> {{ nf['filename'] }}
-                                    </a>
+                                <form method="post" action="{{ url_for('manage_access', patient_id=patient['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="mb-3">
+                                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="Username" required value="{{ user['username'] if user else '' }}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="Password" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Background Tab -->
+            <div class="tab-pane fade" id="background" role="tabpanel">
+                <div class="card border-0 shadow-sm rounded-4 p-4">
+                    <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-person-lines-fill me-2"></i>Personal & Medical History</h5>
+                    <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-muted smallest text-uppercase">Patient Background & Narrative</label>
+                            <textarea name="background" class="form-control" rows="15" placeholder="Enter family history, previous treatments, traumatic events, etc...">{{ patient['background'] or '' }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">Save Background Info</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Treatment Info Tab -->
+            <div class="tab-pane fade" id="treatment" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-clipboard2-pulse me-2"></i>Clinical Strategy & Goals</h5>
+                            <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-muted smallest text-uppercase">Treatment Plan & Formulation</label>
+                                    <textarea name="treatment_info" class="form-control" rows="8" placeholder="Enter clinical formulation, session goals, therapeutic approach...">{{ patient['treatment_info'] or '' }}</textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary px-4 fw-bold">Update Formulation</button>
+                            </form>
+
+                            <hr class="my-4">
+
+                            <!-- Goals sub-section -->
+                            <h6 class="fw-bold text-muted text-uppercase smallest mb-3">Concrete Treatment Goals</h6>
+                            <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="input-group">
+                                    <input type="text" name="description" class="form-control" placeholder="New target goal..." required>
+                                    <button type="submit" class="btn btn-outline-primary">Add</button>
+                                </div>
+                            </form>
+                            <ul class="list-group list-group-flush border rounded-3">
+                                {% for goal in goals %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center p-3">
+                                        <div class="{% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">
+                                            {{ goal['description'] }}
+                                        </div>
+                                        <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm {% if goal['status'] == 'achieved' %}btn-secondary{% else %}btn-success{% endif %} rounded-pill px-3 py-1 smaller">
+                                                {% if goal['status'] == 'achieved' %}Undo{% else %}Done{% endif %}
+                                            </button>
+                                        </form>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+
+                        <!-- Clinical Notes moved here -->
+                        <div class="card border-0 shadow-sm rounded-4 p-4">
+                            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-journal-text me-2"></i>Clinical Notes</h5>
+                            <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-3 border">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label smallest text-uppercase fw-bold">Session #</label>
+                                        <input type="number" name="session_number" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label smallest text-uppercase fw-bold">Appearance</label>
+                                        <input type="text" name="patient_appearance" class="form-control form-control-sm">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
+                                        <input type="text" name="key_topics" class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <textarea name="content" class="form-control" rows="3" required placeholder="Observations..."></textarea>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <input type="file" name="note_file" class="form-control form-control-sm w-50">
+                                    <button type="submit" class="btn btn-primary fw-bold">Save Note</button>
+                                </div>
+                            </form>
+                            
+                            <div class="notes-timeline">
+                                {% for note in notes %}
+                                    <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <span class="text-muted smallest">{{ note['created_at'] }}</span>
+                                            <button class="btn btn-sm btn-link text-primary p-0" onclick="editNote({{ note|tojson }})"><i class="bi bi-pencil-square"></i></button>
+                                        </div>
+                                        <div class="fw-medium mb-1">{{ note['content'] }}</div>
+                                        {% if note['key_topics'] %}
+                                            <small class="text-muted">Topics: {{ note['key_topics'] }}</small>
+                                        {% endif %}
+                                    </div>
                                 {% endfor %}
                             </div>
-                            {% endif %}
                         </div>
-                    {% else %}
-                        <div class="text-center py-4 bg-light rounded-3">
-                            <p class="text-muted mb-0 small">No clinical history recorded.</p>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card border-0 shadow-sm rounded-4 p-4">
+                            <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-file-earmark-medical me-2"></i>Medical Files</h5>
+                            <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="input-group input-group-sm">
+                                    <input type="file" name="file" class="form-control" required>
+                                    <button class="btn btn-primary" type="submit">Upload</button>
+                                </div>
+                            </form>
+                            <div class="list-group list-group-flush">
+                                {% for file in files %}
+                                    <div class="list-group-item px-0 py-2 d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-text text-primary me-2"></i>
+                                        <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark small text-truncate">{{ file['filename'] }}</a>
+                                    </div>
+                                {% endfor %}
+                            </div>
                         </div>
-                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-calendar-check me-2"></i>Past Appointments</h5>
+                            <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-2 mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="col-md-5"><input type="date" name="date" class="form-control form-control-sm" required></div>
+                                <div class="col-md-3"><input type="time" name="time" class="form-control form-control-sm" required></div>
+                                <div class="col-md-2"><input type="number" step="0.01" name="cost" class="form-control form-control-sm" placeholder="$"></div>
+                                <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100">Add</button></div>
+                            </form>
+                            <div class="list-group list-group-flush border rounded-3">
+                                {% for appt in appointments %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>{{ appt['appointment_date'] }} <small class="text-muted ms-1">{{ appt['appointment_time'] }}</small></span>
+                                        <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-link text-danger p-0"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card border-0 shadow-sm rounded-4 p-4">
+                            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-receipt me-2"></i>Financial Records</h5>
+                            <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-2 mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="col-md-4"><input type="number" step="0.01" name="amount" class="form-control form-control-sm" placeholder="Amount ($)" required></div>
+                                <div class="col-md-6"><input type="text" name="description" class="form-control form-control-sm" placeholder="Description"></div>
+                                <div class="col-md-2"><button type="submit" class="btn btn-outline-primary btn-sm w-100">Add</button></div>
+                            </form>
+                            <div class="receipts-list border rounded-3 overflow-hidden">
+                                {% for receipt in receipts %}
+                                    <div class="p-3 border-bottom d-flex justify-content-between">
+                                        <span><strong class="text-success">${{ "%.2f"|format(receipt['amount']) }}</strong> - {{ receipt['description'] or 'Medical Service' }}</span>
+                                        <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Edit Note Modal -->
-    <div class="modal fade" id="editNoteModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content rounded-4 border-0 shadow">
-                <div class="modal-header border-0 bg-primary text-white">
-                    <h5 class="modal-title fw-bold">Edit Clinical Note</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+<!-- Edit Note Modal -->
+<div class="modal fade" id="editNoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content rounded-4 shadow">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">Edit Note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editNoteForm" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <textarea name="content" id="edit_content" class="form-control" rows="5" required></textarea>
                 </div>
-                <form id="editNoteForm" method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="modal-body p-4">
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3">
-                                <label class="form-label smallest text-uppercase fw-bold">Session #</label>
-                                <input type="number" name="session_number" id="edit_session_number" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label smallest text-uppercase fw-bold">Appearance</label>
-                                <input type="text" name="patient_appearance" id="edit_patient_appearance" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
-                                <input type="text" name="key_topics" id="edit_key_topics" class="form-control form-control-sm">
-                            </div>
-                        </div>
-                        <div class="mb-0">
-                            <label class="form-label smallest text-uppercase fw-bold">Note Content</label>
-                            <textarea name="content" id="edit_content" class="form-control" rows="5" required></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer border-0">
-                        <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Update Note</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-5">
-        <!-- Access Management Card -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden">
-            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
-            </div>
-            <div class="card-body p-4">
-                {% if user %}
-                    <div class="p-3 mb-3 rounded-3 {% if user['is_active'] %}bg-success{% else %}bg-warning{% endif %} bg-opacity-10 border border-{% if user['is_active'] %}success{% else %}warning{% endif %} border-opacity-25 d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="badge {% if user['is_active'] %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if user['is_active'] %}ACTIVE{% else %}DISABLED{% endif %}</span>
-                            <span class="fw-bold">@{{ user['username'] }}</span>
-                        </div>
-                        <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm {% if user['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill px-3">
-                                {% if user['is_active'] %}Disable{% else %}Enable{% endif %}
-                            </button>
-                        </form>
-                    </div>
-                    <hr class="border-secondary border-opacity-50 my-4">
-                    <h6 class="smallest text-uppercase fw-bold text-info mb-3">Update Credentials</h6>
-                {% else %}
-                    <div class="text-center py-4 bg-white bg-opacity-10 rounded-3 mb-4">
-                        <i class="bi bi-person-plus fs-1 opacity-25 d-block mb-2"></i>
-                        <p class="small mb-0">No patient account created.</p>
-                    </div>
-                    <h6 class="smallest text-uppercase fw-bold text-info mb-3">Initialize Account</h6>
-                {% endif %}
-
-                <form method="post" action="{{ url_for('manage_access', patient_id=patient['id']) }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Username" required value="{{ user['username'] if user else '' }}">
-                    </div>
-                    <div class="mb-3">
-                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Password" required>
-                    </div>
-                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Files Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>Medical Files</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group input-group-sm">
-                        <input type="file" name="file" class="form-control rounded-start-3" id="inputGroupFile" required>
-                        <button class="btn btn-primary px-3 fw-bold" type="submit">Upload</button>
-                    </div>
-                </form>
-                <div class="list-group list-group-flush border-top border-bottom">
-                    {% for file in files %}
-                        <div class="list-group-item px-0 py-3 bg-transparent d-flex align-items-center">
-                            <div class="bg-primary bg-opacity-10 p-2 rounded text-primary me-3">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </div>
-                            <div class="overflow-hidden">
-                                <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark fw-medium d-block text-truncate">{{ file['filename'] }}</a>
-                                <span class="text-muted smallest">{{ file['created_at'].split(' ')[0] }}</span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="py-4 text-center text-muted small">No documents found.</div>
-                    {% endfor %}
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Update</button>
                 </div>
-            </div>
-        </div>
-
-        <!-- Receipts Management -->
-        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Financial Receipts</h5>
-            </div>
-            <div class="card-body p-4 bg-light bg-opacity-25">
-                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="row g-2 mb-2">
-                        <div class="col-5">
-                            <input type="number" step="0.01" name="amount" class="form-control form-control-sm border-0 shadow-sm" required placeholder="Amount ($)">
-                        </div>
-                        <div class="col-7">
-                            <input type="text" name="description" class="form-control form-control-sm border-0 shadow-sm" placeholder="Description">
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-outline-primary w-100 fw-bold rounded-pill">Create New Receipt</button>
-                </form>
-                <div class="receipts-list bg-white rounded-3 shadow-sm overflow-hidden border">
-                    {% for receipt in receipts %}
-                        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="fw-bold text-success d-block">${{ "%.2f"|format(receipt['amount']) }}</span>
-                                <span class="text-muted smaller">{{ receipt['description'] or 'Medical Service' }}</span>
-                            </div>
-                            <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
-                        </div>
-                    {% else %}
-                        <div class="p-4 text-center text-muted small">No financial records.</div>
-                    {% endfor %}
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 </div>
@@ -383,12 +323,10 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let attendanceChart, topicsChart;
-
 function loadCharts() {
     fetch(`/api/patient/{{ patient['id'] }}/progress`)
         .then(response => response.json())
         .then(data => {
-            // Attendance Chart
             const ctxA = document.getElementById('attendanceChart').getContext('2d');
             if (attendanceChart) attendanceChart.destroy();
             attendanceChart = new Chart(ctxA, {
@@ -399,15 +337,12 @@ function loadCharts() {
                         label: 'Sessions',
                         data: data.attendance.map(r => r.count),
                         borderColor: '#0d6efd',
-                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                        fill: true,
                         tension: 0.4
                     }]
                 },
-                options: { responsive: true, plugins: { legend: { display: false } } }
+                options: { plugins: { legend: { display: false } } }
             });
 
-            // Topics Chart
             const ctxT = document.getElementById('topicsChart').getContext('2d');
             if (topicsChart) topicsChart.destroy();
             topicsChart = new Chart(ctxT, {
@@ -420,36 +355,24 @@ function loadCharts() {
                         backgroundColor: '#198754'
                     }]
                 },
-                options: { 
-                    indexAxis: 'y',
-                    responsive: true,
-                    plugins: { legend: { display: false } }
-                }
+                options: { indexAxis: 'y', plugins: { legend: { display: false } } }
             });
         });
 }
-
 document.addEventListener('DOMContentLoaded', loadCharts);
-
 function editNote(note) {
     const modal = new bootstrap.Modal(document.getElementById('editNoteModal'));
     const form = document.getElementById('editNoteForm');
     form.action = `/note/${note.id}/edit`;
-    
-    document.getElementById('edit_session_number').value = note.session_number || '';
-    document.getElementById('edit_patient_appearance').value = note.patient_appearance || '';
-    document.getElementById('edit_key_topics').value = note.key_topics || '';
     document.getElementById('edit_content').value = note.content || '';
-    
     modal.show();
 }
 </script>
 
 <style>
+.nav-tabs .nav-link { border: none; color: #6c757d; }
+.nav-tabs .nav-link.active { border-bottom: 3px solid #0d6efd; color: #0d6efd; }
 .note-item { transition: all 0.2s ease; border-left-width: 5px !important; }
-.note-item:hover { transform: translateX(5px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.08)!important; }
-.placeholder-light::placeholder { color: rgba(255,255,255,0.5); }
-.smallest { font-size: 0.7rem; }
-.bg-light { background-color: #f8f9fa!important; }
+.smallest { font-size: 0.75rem; }
 </style>
 {% endblock %}

@@ -1,66 +1,66 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0 text-primary">
-        <i class="bi bi-people-fill me-2"></i>{{ status|capitalize }} Patients
-    </h2>
-    <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} Total</span>
-</div>
-
-<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-    {% for patient in patients %}
-        <div class="col">
-            <div class="card h-100 border-0 shadow-sm patient-card">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
-                            <i class="bi bi-person-fill fs-4"></i>
-                        </div>
-                        <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                            {{ patient['status']|capitalize }}
-                        </span>
-                    </div>
-                    <h5 class="card-title fw-bold mb-1">{{ patient['name'] }}</h5>
-                    <p class="text-muted small mb-3">ID: #{{ patient['id'] }}</p>
-                    
-                    <div class="mb-4">
-                        {% if patient['email'] %}
-                            <div class="d-flex align-items-center mb-1 text-muted small">
-                                <i class="bi bi-envelope me-2"></i> {{ patient['email'] }}
-                            </div>
-                        {% endif %}
-                        {% if patient['phone'] %}
-                            <div class="d-flex align-items-center text-muted small">
-                                <i class="bi bi-telephone me-2"></i> {{ patient['phone'] }}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
-                        View Profile
-                    </a>
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-people me-2"></i>Patients Management</h4>
+                <div class="btn-group rounded-pill overflow-hidden border shadow-sm">
+                    <a href="{{ url_for('patients', status='ongoing') }}" class="btn btn-sm {% if status == 'ongoing' %}btn-primary{% else %}btn-white{% endif %}">Ongoing</a>
+                    <a href="{{ url_for('patients', status='candidate') }}" class="btn btn-sm {% if status == 'candidate' %}btn-primary{% else %}btn-white{% endif %}">Candidates</a>
+                    <a href="{{ url_for('patients', status='archived') }}" class="btn btn-sm {% if status == 'archived' %}btn-primary{% else %}btn-white{% endif %}">Archived</a>
                 </div>
             </div>
-        </div>
-    {% else %}
-        <div class="col-12 w-100 text-center py-5">
-            <div class="bg-white p-5 rounded-4 shadow-sm">
-                <i class="bi bi-person-exclamation fs-1 text-muted mb-3 d-block"></i>
-                <h5 class="text-muted">No patients found in this category.</h5>
-                <a href="{{ url_for('add_patient') }}" class="btn btn-primary mt-3">Add First Patient</a>
+
+            <div class="list-group list-group-flush">
+                {% for patient in patients %}
+                <div class="list-group-item px-0 py-3 d-flex justify-content-between align-items-center border-bottom">
+                    <div>
+                        <h6 class="mb-1 fw-bold"><a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="text-decoration-none text-dark">{{ patient['name'] }}</a></h6>
+                        <small class="text-muted"><i class="bi bi-envelope me-1"></i> {{ patient['email'] or 'N/A' }} | <i class="bi bi-telephone me-1"></i> {{ patient['phone'] or 'N/A' }}</small>
+                    </div>
+                    <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">View Details</a>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-person-x fs-1 opacity-25"></i>
+                    <p class="text-muted mt-3">No patients found in this category.</p>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="mt-4 text-center">
+                <a href="{{ url_for('add_patient') }}" class="btn btn-primary fw-bold rounded-pill px-4"><i class="bi bi-person-plus me-2"></i>Add New Patient</a>
             </div>
         </div>
-    {% endfor %}
-</div>
+    </div>
 
-<style>
-.patient-card {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.patient-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-}
-</style>
+    <div class="col-lg-4">
+        <!-- Upcoming Reminders -->
+        <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-light">
+            <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-bell-fill me-2 text-warning"></i>Upcoming Reminders</h5>
+            <div class="reminders-list">
+                {% for r in reminders %}
+                    <div class="p-3 mb-2 rounded-3 bg-white border shadow-sm">
+                        <div class="fw-bold mb-1">{{ r['patient_name'] }}</div>
+                        <div class="smallest text-muted mb-2">
+                            <i class="bi bi-calendar-event me-1"></i> {{ r['appointment_date'] }} @ {{ r['appointment_time'] }}
+                        </div>
+                        <div class="d-flex gap-2">
+                            {% if r['phone'] %}
+                                <a href="tel:{{ r['phone'] }}" class="btn btn-sm btn-light p-2 lh-1 rounded-pill"><i class="bi bi-telephone"></i></a>
+                            {% endif %}
+                            {% if r['email'] %}
+                                <a href="mailto:{{ r['email'] }}" class="btn btn-sm btn-light p-2 lh-1 rounded-pill"><i class="bi bi-envelope"></i></a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="small text-muted py-4 text-center">No appointments in the next 24 hours.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

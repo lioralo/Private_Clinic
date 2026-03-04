@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import pyotp
 import subprocess
 
@@ -71,16 +71,32 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-        # Schema migration to add secret_token to users if it doesn't exist
+        # Schema migrations
         try:
             db.execute('SELECT secret_token FROM users LIMIT 1')
         except sqlite3.OperationalError:
             print("Migrating database: Adding secret_token column to users table...")
-            try:
-                db.execute('ALTER TABLE users ADD COLUMN secret_token TEXT')
-                db.commit()
-            except sqlite3.OperationalError as e:
-                print(f"Migration failed: {e}")
+            db.execute('ALTER TABLE users ADD COLUMN secret_token TEXT')
+            db.commit()
+
+        try:
+            db.execute('SELECT background FROM patients LIMIT 1')
+        except sqlite3.OperationalError:
+            print("Migrating database: Adding background and treatment_info columns to patients table...")
+            db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
+            db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+            db.commit()
+
+        # Recurring Slots Table
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS slots_recurring (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                weekday INTEGER NOT NULL, -- 0 (Mon) to 6 (Sun)
+                time TIME NOT NULL,
+                is_blocked BOOLEAN DEFAULT 0
+            )
+        ''')
+        db.commit()
 
         # Check if admin exists
         admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
@@ -189,7 +205,11 @@ def patients():
     status = request.args.get('status', 'ongoing')
     db = get_db()
     patients = db.execute('SELECT * FROM patients WHERE status = ?', (status,)).fetchall()
-    return render_template('index.html', patients=patients, status=status)
+    
+    # Get reminders for admin dashboard
+    reminders = send_appointment_reminders()
+    
+    return render_template('index.html', patients=patients, status=status, reminders=reminders)
 
 @app.route('/add_patient', methods=('GET', 'POST'))
 @login_required
@@ -232,7 +252,9 @@ def patient_detail(patient_id):
     # Fetch user account if exists
     user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
 
-    notes = db.execute('SELECT * FROM notes WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    notes_raw = db.execute('SELECT * FROM notes WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    notes = [dict(row) for row in notes_raw]
+    
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
@@ -412,13 +434,10 @@ def dashboard():
     total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
     balance = total_cost - total_paid
 
-    # Slots
-    slots = db.execute('SELECT * FROM slots WHERE is_booked = 0 AND start_time > datetime("now") ORDER BY start_time ASC').fetchall()
-    
     # Resources (Global or assigned to patient)
     resources = db.execute('SELECT * FROM resources WHERE is_global = 1 OR patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
 
-    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, slots=slots, resources=resources)
+    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, resources=resources)
 
 @app.route('/contact_admin', methods=('POST',))
 @login_required
@@ -605,7 +624,23 @@ def revenue():
                            monthly_revenue=monthly_revenue,
                            current_month=current_month_name)
 
-# Slots Management
+@app.route('/patient/<int:patient_id>/update_info', methods=('POST',))
+@login_required
+def update_patient_info(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    
+    background = request.form.get('background')
+    treatment_info = request.form.get('treatment_info')
+    
+    db = get_db()
+    db.execute('UPDATE patients SET background = ?, treatment_info = ? WHERE id = ?',
+               (background, treatment_info, patient_id))
+    db.commit()
+    flash('Patient information updated.')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+# Recurring Slots Management
 @app.route('/admin/slots', methods=('GET', 'POST'))
 @login_required
 def manage_slots():
@@ -613,59 +648,85 @@ def manage_slots():
         return redirect(url_for('dashboard'))
 
     db = get_db()
-    slots = db.execute('SELECT * FROM slots ORDER BY start_time ASC').fetchall()
+    slots = db.execute('SELECT * FROM slots_recurring ORDER BY weekday ASC, time ASC').fetchall()
     return render_template('manage_slots.html', slots=slots)
 
 @app.route('/api/slots')
 @login_required
 def get_slots():
     db = get_db()
-    if current_user.role == 'admin':
-        # Admin sees all slots and their booking status
-        # Note: We join with appointments to find the patient name if booked. 
-        # Since appointments are date/time based and slots are datetime-local (ISO strings like 2026-03-03T21:47),
-        # we need careful comparison.
-        slots = db.execute('''
-            SELECT s.*, p.name as patient_name
-            FROM slots s
-            LEFT JOIN appointments a ON (a.appointment_date || 'T' || a.appointment_time) = s.start_time
-            LEFT JOIN patients p ON a.patient_id = p.id
-        ''').fetchall()
-    else:
-        # Patient sees open slots OR their own booked slots
-        slots = db.execute('''
-            SELECT s.*, 
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = ? AND (a.appointment_date || 'T' || a.appointment_time) = s.start_time) as is_mine
-            FROM slots s
-            WHERE s.is_booked = 0 OR is_mine > 0
-        ''', (current_user.patient_id,)).fetchall()
-
+    
+    # Define time range: current week and next 3 weeks
+    start_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(days=28)
+    
+    # 1. Fetch recurring slots
+    recurring = db.execute('SELECT * FROM slots_recurring').fetchall()
+    
+    # 2. Fetch all appointments in this range to mark booked
+    appts = db.execute('SELECT * FROM appointments WHERE appointment_date >= ? AND appointment_date <= ?',
+                       (start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))).fetchall()
+    booked_set = set()
+    for a in appts:
+        # Match format with generated slot: YYYY-MM-DDTHH:MM
+        booked_set.add(f"{a['appointment_date']}T{a['appointment_time'][:5]}")
+        
     events = []
-    for s in slots:
-        is_booked = bool(s['is_booked'])
-        title = "Open Slot"
-        color = "#28a745" # Green
+    curr = start_dt
+    while curr < end_dt:
+        # curr.weekday() returns 0 for Monday, 6 for Sunday
+        weekday = curr.weekday()
+        day_slots = [s for s in recurring if s['weekday'] == weekday]
         
-        if is_booked:
-            if current_user.role == 'admin':
-                title = f"Booked: {s['patient_name'] or 'Patient'}"
-                color = "#dc3545" # Red
-            else:
-                title = "My Appointment"
-                color = "#007bff" # Blue
+        for s in day_slots:
+            # s['time'] is 'HH:MM'
+            start_iso = f"{curr.strftime('%Y-%m-%d')}T{s['time']}"
+            is_booked = start_iso in booked_set
+            
+            # For end time, assume 50 min session if not specified, or just add 1 hour
+            dt_start = datetime.strptime(start_iso, '%Y-%m-%dT%H:%M')
+            dt_end = dt_start + timedelta(hours=1)
+            end_iso = dt_end.strftime('%Y-%m-%dT%H:%M')
+            
+            title = "Open Slot"
+            color = "#28a745" # Green
+            is_blocked = bool(s['is_blocked'])
+            
+            if is_blocked:
+                title = "Blocked"
+                color = "#6c757d" # Gray
+            elif is_booked:
+                # Find the patient name for admin
+                appt = next((a for a in appts if f"{a['appointment_date']}T{a['appointment_time'][:5]}" == start_iso), None)
+                if current_user.role == 'admin':
+                    patient = db.execute('SELECT name FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone() if appt else None
+                    title = f"Booked: {patient['name'] if patient else 'Patient'}"
+                    color = "#dc3545" # Red
+                else:
+                    if appt and appt['patient_id'] == current_user.patient_id:
+                        title = "My Appointment"
+                        color = "#007bff" # Blue
+                    else:
+                        # For other patients, hide booked slots or show as unavailable
+                        continue
+            
+            events.append({
+                'id': f"rec_{s['id']}_{curr.strftime('%Y%m%d')}",
+                'title': title,
+                'start': start_iso,
+                'end': end_iso,
+                'backgroundColor': color,
+                'borderColor': color,
+                'textColor': '#ffffff',
+                'extendedProps': {
+                    'is_booked': is_booked,
+                    'is_blocked': is_blocked,
+                    'recurring_id': s['id']
+                }
+            })
+            
+        curr += timedelta(days=1)
         
-        events.append({
-            'id': s['id'],
-            'title': title,
-            'start': s['start_time'],
-            'end': s['end_time'],
-            'backgroundColor': color,
-            'borderColor': color,
-            'textColor': '#ffffff',
-            'extendedProps': {
-                'is_booked': is_booked
-            }
-        })
     return jsonify(events)
 
 @app.route('/admin/add_slot', methods=('POST',))
@@ -674,15 +735,16 @@ def add_slot():
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    start_time = request.form['start_time']
-    end_time = request.form['end_time']
+    weekday = int(request.form['weekday'])
+    time = request.form['time']
+    is_blocked = 1 if 'is_blocked' in request.form else 0
     
-    if start_time and end_time:
+    if time:
         db = get_db()
-        db.execute('INSERT INTO slots (start_time, end_time) VALUES (?, ?)', (start_time, end_time))
+        db.execute('INSERT INTO slots_recurring (weekday, time, is_blocked) VALUES (?, ?, ?)', (weekday, time, is_blocked))
         db.commit()
-        log_audit(f"Created slot {start_time} - {end_time}")
-        flash('Slot created.')
+        log_audit(f"Created recurring slot: Day {weekday} at {time}")
+        flash('Recurring slot created.')
     
     return redirect(url_for('manage_slots'))
 
@@ -693,48 +755,43 @@ def delete_slot(slot_id):
         return "Unauthorized", 403
     
     db = get_db()
-    db.execute('DELETE FROM slots WHERE id = ?', (slot_id,))
+    db.execute('DELETE FROM slots_recurring WHERE id = ?', (slot_id,))
     db.commit()
-    log_audit(f"Deleted slot ID {slot_id}")
-    flash('Slot deleted.')
+    log_audit(f"Deleted recurring slot ID {slot_id}")
+    flash('Recurring slot deleted.')
     return redirect(url_for('manage_slots'))
 
-@app.route('/request_slot/<int:slot_id>', methods=('POST',))
+@app.route('/request_slot', methods=('POST',))
 @login_required
-def request_slot(slot_id):
+def request_slot():
     if current_user.role != 'patient':
         return "Unauthorized", 403
 
-    db = get_db()
-    slot = db.execute('SELECT * FROM slots WHERE id = ? AND is_booked = 0', (slot_id,)).fetchone()
-    
-    if slot:
-        # Convert to appointment
-        # slot['start_time'] format is likely 'YYYY-MM-DDTHH:MM' (HTML datetime-local)
-        # Appointments table needs date and time separate
-        try:
-            dt = datetime.strptime(slot['start_time'], '%Y-%m-%dT%H:%M')
-            date_str = dt.strftime('%Y-%m-%d')
-            time_str = dt.strftime('%H:%M')
-            
+    start_iso = request.form.get('start') # 'YYYY-MM-DDTHH:MM'
+    if not start_iso:
+        flash('Invalid slot selection.')
+        return redirect(url_for('dashboard'))
+
+    try:
+        dt = datetime.strptime(start_iso, '%Y-%m-%dT%H:%M')
+        date_str = dt.strftime('%Y-%m-%d')
+        time_str = dt.strftime('%H:%M')
+        
+        db = get_db()
+        # Check if already booked
+        existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (date_str, time_str)).fetchone()
+        if existing:
+            flash('This slot was just booked by someone else.')
+        else:
             db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)',
                        (current_user.patient_id, date_str, time_str, 'scheduled'))
-            
-            # Mark slot as booked (or delete it? Let's mark booked to keep record, or delete. 
-            # Requirement says "converts the slot", so maybe delete or mark booked.
-            # If we mark booked, we need to handle it in display.
-            # Let's delete it or mark it. Marking booked is safer for history.)
-            db.execute('UPDATE slots SET is_booked = 1 WHERE id = ?', (slot_id,))
             db.commit()
-            log_audit(f"Patient {current_user.patient_id} requested slot {slot_id}")
-            flash('Appointment requested successfully.')
-        except ValueError:
-             flash('Error processing date time format.')
-    else:
-        flash('Slot not available.')
+            log_audit(f"Patient {current_user.patient_id} booked slot at {start_iso}")
+            flash('Appointment booked successfully.')
+    except ValueError:
+         flash('Error processing date time format.')
 
     return redirect(url_for('dashboard'))
-
 
 # Resources Management
 @app.route('/admin/resources', methods=('GET',))
@@ -895,11 +952,19 @@ def patient_progress_data(patient_id):
     })
 
 def send_appointment_reminders():
-    # Simple logic to be called manually or via a cron-like trigger
     db = get_db()
-    # Find appointments in next 24 hours that haven't been reminded
-    # For now, let's just show the logic. In a real app, this would be a background task.
-    pass
+    # Find appointments in next 24 hours
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    reminders = db.execute('''
+        SELECT a.*, p.name as patient_name, p.phone, p.email 
+        FROM appointments a 
+        JOIN patients p ON a.patient_id = p.id 
+        WHERE a.appointment_date IN (?, ?) AND a.status = 'scheduled'
+    ''', (today, tomorrow)).fetchall()
+    
+    return reminders
 
 def log_audit(action, user_id=None):
     if user_id is None and current_user.is_authenticated:
@@ -911,4 +976,4 @@ def log_audit(action, user_id=None):
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=False)
