@@ -1,50 +1,122 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-             <h2 class="text-primary fw-bold mb-0"><i class="bi bi-inbox me-2"></i>My Messages</h2>
-             <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary rounded-pill btn-sm px-3">Back to Dashboard</a>
+<div class="row g-0 h-100 shadow-sm border rounded-4 overflow-hidden bg-white" style="min-height: 70vh;">
+    <!-- Sidebar: Conversations (Admin only) -->
+    {% if current_user.role == 'admin' %}
+    <div class="col-md-4 border-end bg-light d-flex flex-column">
+        <div class="p-3 bg-white border-bottom">
+            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chats</h5>
         </div>
-       
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4">
-                <div class="list-group list-group-flush border rounded-3">
-                    {% for msg in messages %}
-                        <div class="list-group-item p-3 {% if not msg['is_read'] %}bg-light border-start border-4 border-primary{% endif %}">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="fw-bold text-dark">
-                                    {% if msg['sender_role'] == 'admin' %}
-                                        <i class="bi bi-person-badge-fill text-primary me-1"></i> Clinic Admin
-                                    {% else %}
-                                        User #{{ msg['sender_id'] }}
-                                    {% endif %}
-                                </span>
-                                <small class="text-muted">{{ msg['timestamp'] }}</small>
-                            </div>
-                            <p class="mb-3 text-secondary">{{ msg['content'] }}</p>
-                            
-                            {% if not msg['is_read'] %}
-                                <div class="text-end">
-                                    <form method="post" action="{{ url_for('mark_read', message_id=msg['id']) }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">Mark Read</button>
-                                    </form>
-                                </div>
-                            {% else %}
-                                <div class="text-end text-success small opacity-75"><i class="bi bi-check2-all me-1"></i>Seen</div>
+        <div class="flex-grow-1 overflow-auto">
+            <div class="list-group list-group-flush">
+                {% for conv in conversations %}
+                <a href="{{ url_for('messages', user_id=conv['user_id']) }}" 
+                   class="list-group-item list-group-item-action p-3 border-0 border-bottom d-flex align-items-center {% if selected_user_id == conv['user_id'] %}bg-white border-start border-4 border-primary{% endif %}">
+                    <div class="bg-primary bg-opacity-10 p-2 rounded-circle me-3">
+                        <i class="bi bi-person-fill text-primary"></i>
+                    </div>
+                    <div class="w-100">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h6 class="mb-0 fw-bold">{{ conv['username'] }}</h6>
+                            <small class="text-muted smallest">{{ conv['last_message_time'].split(' ')[0] }}</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted smallest text-truncate" style="max-width: 150px;">Last interaction...</span>
+                            {% if conv['unread_count'] > 0 %}
+                            <span class="badge bg-danger rounded-pill">{{ conv['unread_count'] }}</span>
                             {% endif %}
                         </div>
-                    {% else %}
-                        <div class="text-center py-5">
-                            <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 d-block mb-3"></i>
-                            <p class="text-muted mb-0">No messages yet.</p>
-                        </div>
-                    {% endfor %}
-                </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="p-4 text-center text-muted">No conversations found.</div>
+                {% endfor %}
             </div>
         </div>
     </div>
+    {% endif %}
+
+    <!-- Chat Area -->
+    <div class="col d-flex flex-column bg-white">
+        {% if (current_user.role == 'admin' and selected_user_id) or current_user.role == 'patient' %}
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <div class="bg-success bg-opacity-10 p-2 rounded-circle me-2">
+                    <i class="bi bi-person-fill text-success"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0 fw-bold">
+                        {% if current_user.role == 'admin' %}
+                            Patient ID #{{ selected_user_id }}
+                        {% else %}
+                            Clinic Administration
+                        {% endif %}
+                    </h6>
+                    <small class="text-success smallest"><i class="bi bi-circle-fill me-1 small" style="font-size: 0.5rem;"></i> Online for support</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-grow-1 p-4 overflow-auto bg-light bg-opacity-25 d-flex flex-column" id="chat-box">
+            {% for msg in thread_messages %}
+            <div class="mb-3 d-flex flex-column {% if msg['sender_id'] == current_user.id %}align-items-end{% else %}align-items-start{% endif %}">
+                <div class="p-3 rounded-4 shadow-sm" style="max-width: 75%; {% if msg['sender_id'] == current_user.id %}background-color: #0d6efd; color: white; border-bottom-right-radius: 0;{% else %}background-color: white; border-bottom-left-radius: 0;{% endif %}">
+                    <div class="small mb-1 opacity-75 fw-bold">{{ msg['sender_name'] }}</div>
+                    <div>{{ msg['content'] }}</div>
+                </div>
+                <small class="text-muted mt-1" style="font-size: 0.6rem;">{{ msg['timestamp'] }}</small>
+            </div>
+            {% else %}
+            <div class="flex-grow-1 d-flex align-items-center justify-content-center opacity-50">
+                <div class="text-center">
+                    <i class="bi bi-chat-heart fs-1 d-block mb-2"></i>
+                    <p>Start a supportive conversation.</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="p-3 border-top bg-white">
+            <form action="{{ url_for('send_message') }}" method="post" class="input-group">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if current_user.role == 'admin' %}
+                <input type="hidden" name="recipient_id" value="{{ selected_user_id }}">
+                {% endif %}
+                <input type="text" name="content" class="form-control border-0 bg-light rounded-pill px-4" placeholder="Type your message..." required>
+                <button type="submit" class="btn btn-primary rounded-circle ms-2" style="width: 45px; height: 45px;">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </form>
+        </div>
+
+        {% else %}
+        <!-- Selection Prompt for Admin -->
+        <div class="flex-grow-1 d-flex align-items-center justify-content-center bg-light">
+            <div class="text-center">
+                <div class="bg-primary bg-opacity-10 p-4 rounded-circle d-inline-block mb-3">
+                    <i class="bi bi-chat-dots-fill text-primary fs-1"></i>
+                </div>
+                <h5 class="fw-bold">Welcome to Clinic Messaging</h5>
+                <p class="text-muted">Select a patient from the sidebar to start a conversation.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 </div>
+
+<script>
+    // Auto-scroll to bottom of chat
+    const chatBox = document.getElementById('chat-box');
+    if (chatBox) {
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+
+<style>
+.smallest { font-size: 0.75rem; }
+#chat-box::-webkit-scrollbar { width: 6px; }
+#chat-box::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 10px; }
+.list-group-item-action:hover { background-color: #f8f9fa; }
+</style>
 {% endblock %}

@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -130,8 +130,13 @@ def login():
                     secret = pyotp.random_base32()
                     db.execute('UPDATE users SET secret_token = ? WHERE id = ?', (secret, user['id']))
                     db.commit()
-                    # Show QR code setup page (or just the secret for now)
-                    return render_template('setup_2fa.html', secret=secret, user_id=user['id'])
+                    
+                    # Generate provisioning URI for QR Code
+                    totp = pyotp.TOTP(secret)
+                    provisioning_uri = totp.provisioning_uri(name=user['username'], issuer_name="Private Clinic")
+                    
+                    # Show QR code setup page
+                    return render_template('setup_2fa.html', secret=secret, uri=provisioning_uri, user_id=user['id'])
                 
                 if not otp:
                     flash('Enter 2FA Code')
@@ -241,13 +246,62 @@ def add_note(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form['content']
+    content = request.form.get('content')
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
+    
+    db = get_db()
+    
     if content:
-        db = get_db()
-        db.execute('INSERT INTO notes (patient_id, content) VALUES (?, ?)', (patient_id, content))
+        # 1. Insert Note
+        cursor = db.execute(
+            'INSERT INTO notes (patient_id, content, session_number, patient_appearance, key_topics) VALUES (?, ?, ?, ?, ?)', 
+            (patient_id, content, session_number, patient_appearance, key_topics)
+        )
+        note_id = cursor.lastrowid
         db.commit()
-        log_audit(f"Created note for patient ID {patient_id}")
+        log_audit(f"Created note #{session_number} for patient ID {patient_id}")
+
+        # 2. Handle File Upload within Note
+        file = request.files.get('note_file')
+        if file and file.filename != '':
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            
+            # Add to files table (linked to note)
+            db.execute('INSERT INTO files (patient_id, filename, note_id) VALUES (?, ?, ?)', 
+                       (patient_id, filename, note_id))
+            db.commit()
+            log_audit(f"Uploaded file {filename} attached to note {note_id}")
+
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/note/<int:note_id>/edit', methods=('POST',))
+@login_required
+def edit_note(note_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    content = request.form.get('content')
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
+    
+    db = get_db()
+    note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
+    
+    if note:
+        db.execute(
+            'UPDATE notes SET content = ?, session_number = ?, patient_appearance = ?, key_topics = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            (content, session_number, patient_appearance, key_topics, note_id)
+        )
+        db.commit()
+        log_audit(f"Edited note ID {note_id}")
+        return redirect(url_for('patient_detail', patient_id=note['patient_id']))
+    
+    return "Note not found", 404
 
 @app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
 @login_required
@@ -559,13 +613,60 @@ def manage_slots():
         return redirect(url_for('dashboard'))
 
     db = get_db()
-    
-    if request.method == 'POST':
-        # Deletion handled by separate route, but maybe addition here?
-        pass
-
     slots = db.execute('SELECT * FROM slots ORDER BY start_time ASC').fetchall()
     return render_template('manage_slots.html', slots=slots)
+
+@app.route('/api/slots')
+@login_required
+def get_slots():
+    db = get_db()
+    if current_user.role == 'admin':
+        # Admin sees all slots and their booking status
+        # Note: We join with appointments to find the patient name if booked. 
+        # Since appointments are date/time based and slots are datetime-local (ISO strings like 2026-03-03T21:47),
+        # we need careful comparison.
+        slots = db.execute('''
+            SELECT s.*, p.name as patient_name
+            FROM slots s
+            LEFT JOIN appointments a ON (a.appointment_date || 'T' || a.appointment_time) = s.start_time
+            LEFT JOIN patients p ON a.patient_id = p.id
+        ''').fetchall()
+    else:
+        # Patient sees open slots OR their own booked slots
+        slots = db.execute('''
+            SELECT s.*, 
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = ? AND (a.appointment_date || 'T' || a.appointment_time) = s.start_time) as is_mine
+            FROM slots s
+            WHERE s.is_booked = 0 OR is_mine > 0
+        ''', (current_user.patient_id,)).fetchall()
+
+    events = []
+    for s in slots:
+        is_booked = bool(s['is_booked'])
+        title = "Open Slot"
+        color = "#28a745" # Green
+        
+        if is_booked:
+            if current_user.role == 'admin':
+                title = f"Booked: {s['patient_name'] or 'Patient'}"
+                color = "#dc3545" # Red
+            else:
+                title = "My Appointment"
+                color = "#007bff" # Blue
+        
+        events.append({
+            'id': s['id'],
+            'title': title,
+            'start': s['start_time'],
+            'end': s['end_time'],
+            'backgroundColor': color,
+            'borderColor': color,
+            'textColor': '#ffffff',
+            'extendedProps': {
+                'is_booked': is_booked
+            }
+        })
+    return jsonify(events)
 
 @app.route('/admin/add_slot', methods=('POST',))
 @login_required
@@ -688,28 +789,117 @@ def delete_resource(resource_id):
 def messages():
     db = get_db()
     
-    # Fetch messages where recipient is current user
-    messages = db.execute('''
-        SELECT m.*, u.username as sender_name, u.role as sender_role 
-        FROM messages m 
-        JOIN users u ON m.sender_id = u.id 
-        WHERE m.recipient_id = ? 
-        ORDER BY m.timestamp DESC
-    ''', (current_user.id,)).fetchall()
+    # Clustering logic:
+    # If admin: show all conversations grouped by user
+    # If patient: show their own conversation thread with admin
     
-    return render_template('messages.html', messages=messages)
+    if current_user.role == 'admin':
+        # Get all users who have exchanged messages with admin
+        conversations = db.execute('''
+            SELECT u.id as user_id, u.username, u.role, 
+            MAX(m.timestamp) as last_message_time,
+            (SELECT COUNT(*) FROM messages WHERE sender_id = u.id AND recipient_id = ? AND is_read = 0) as unread_count
+            FROM users u
+            JOIN messages m ON (m.sender_id = u.id OR m.recipient_id = u.id)
+            WHERE u.id != ?
+            GROUP BY u.id
+            ORDER BY last_message_time DESC
+        ''', (current_user.id, current_user.id)).fetchall()
+        
+        selected_user_id = request.args.get('user_id', type=int)
+        thread_messages = []
+        if selected_user_id:
+            thread_messages = db.execute('''
+                SELECT m.*, u.username as sender_name 
+                FROM messages m 
+                JOIN users u ON m.sender_id = u.id 
+                WHERE (m.sender_id = ? AND m.recipient_id = ?) 
+                   OR (m.sender_id = ? AND m.recipient_id = ?)
+                ORDER BY m.timestamp ASC
+            ''', (selected_user_id, current_user.id, current_user.id, selected_user_id)).fetchall()
+            
+            # Mark as read
+            db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (selected_user_id, current_user.id))
+            db.commit()
 
-@app.route('/message/<int:message_id>/read', methods=('POST',))
+        return render_template('messages.html', conversations=conversations, thread_messages=thread_messages, selected_user_id=selected_user_id)
+    
+    else:
+        # Patient view: just their thread with admin
+        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        thread_messages = []
+        if admin:
+            thread_messages = db.execute('''
+                SELECT m.*, u.username as sender_name 
+                FROM messages m 
+                JOIN users u ON m.sender_id = u.id 
+                WHERE (m.sender_id = ? AND m.recipient_id = ?) 
+                   OR (m.sender_id = ? AND m.recipient_id = ?)
+                ORDER BY m.timestamp ASC
+            ''', (current_user.id, admin['id'], admin['id'], current_user.id)).fetchall()
+            
+            # Mark as read
+            db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (admin['id'], current_user.id))
+            db.commit()
+
+        return render_template('messages.html', thread_messages=thread_messages)
+
+@app.route('/messages/send', methods=('POST',))
 @login_required
-def mark_read(message_id):
-    db = get_db()
-    msg = db.execute('SELECT * FROM messages WHERE id = ? AND recipient_id = ?', (message_id, current_user.id)).fetchone()
+def send_message():
+    recipient_id = request.form.get('recipient_id', type=int)
+    content = request.form.get('content')
+    thread_id = request.form.get('thread_id', type=int)
     
-    if msg:
-        db.execute('UPDATE messages SET is_read = 1 WHERE id = ?', (message_id,))
+    if not recipient_id and current_user.role != 'admin':
+        # Patients always send to admin
+        db = get_db()
+        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        recipient_id = admin['id'] if admin else None
+
+    if recipient_id and content:
+        db = get_db()
+        db.execute('INSERT INTO messages (sender_id, recipient_id, content, thread_id) VALUES (?, ?, ?, ?)',
+                   (current_user.id, recipient_id, content, thread_id))
         db.commit()
+        
+    return redirect(url_for('messages', user_id=recipient_id if current_user.role == 'admin' else None))
+
+@app.route('/api/patient/<int:patient_id>/progress')
+@login_required
+def patient_progress_data(patient_id):
+    if current_user.role != 'admin' and current_user.patient_id != patient_id:
+        return "Unauthorized", 403
     
-    return redirect(url_for('messages'))
+    db = get_db()
+    # 1. Attendance over last 6 months
+    attendance = db.execute('''
+        SELECT strftime('%Y-%m', appointment_date) as month, COUNT(*) as count 
+        FROM appointments 
+        WHERE patient_id = ? AND status = 'completed'
+        GROUP BY month ORDER BY month DESC LIMIT 6
+    ''', (patient_id,)).fetchall()
+    
+    # 2. Key topics frequency (simple extraction from notes)
+    notes = db.execute('SELECT key_topics FROM notes WHERE patient_id = ?', (patient_id,)).fetchall()
+    topic_counts = {}
+    for n in notes:
+        if n['key_topics']:
+            for topic in n['key_topics'].split(','):
+                t = topic.strip().capitalize()
+                topic_counts[t] = topic_counts.get(t, 0) + 1
+    
+    return jsonify({
+        'attendance': [{'month': r['month'], 'count': r['count']} for r in reversed(attendance)],
+        'topics': [{'topic': k, 'count': v} for k, v in topic_counts.items()]
+    })
+
+def send_appointment_reminders():
+    # Simple logic to be called manually or via a cron-like trigger
+    db = get_db()
+    # Find appointments in next 24 hours that haven't been reminded
+    # For now, let's just show the logic. In a real app, this would be a background task.
+    pass
 
 def log_audit(action, user_id=None):
     if user_id is None and current_user.is_authenticated:
