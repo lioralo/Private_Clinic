@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS patients (
     email TEXT,
     phone TEXT,
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
+    can_self_schedule BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -63,4 +64,17 @@ CREATE TABLE IF NOT EXISTS messages (
     is_read BOOLEAN DEFAULT 0,
     FOREIGN KEY (sender_id) REFERENCES users (id),
     FOREIGN KEY (recipient_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS slots_recurring (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6), -- 0=Sunday, 6=Saturday
+    time TEXT NOT NULL -- HH:MM format
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

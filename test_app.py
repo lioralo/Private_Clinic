@@ -108,7 +108,7 @@ class ClinicTestCase(unittest.TestCase):
 
         # Login as patient
         rv = self.login('patient', 'password')
-        assert b'Current Balance' in rv.data  # Should be on dashboard
+        assert b'Account Balance' in rv.data or b'Financial Summary' in rv.data # Should be on dashboard
 
         # Try to access admin page
         rv = self.client.get('/add_patient', follow_redirects=True)

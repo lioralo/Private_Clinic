@@ -1,10 +1,15 @@
 import os
 import sqlite3
+import socket
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+import re
+from docx import Document
+from datetime import datetime, timedelta
+from flask import jsonify
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -46,6 +51,13 @@ def close_connection(exception):
         db.close()
 
 def init_db():
+    if is_port_in_use(5000):
+        print("\nERROR: Port 5000 is already in use!")
+        print("Please kill the existing process occupying port 5000.")
+        print("You can try: kill $(lsof -t -i :5000) 2>/dev/null || true")
+        print("Exiting...\n")
+        exit(1)
+
     database = app.config.get('DATABASE', DATABASE)
     # Always run schema to ensure tables exist
     with app.app_context():
@@ -53,6 +65,14 @@ def init_db():
         with app.open_resource('schema.sql', mode='r') as f:
             db.cursor().executescript(f.read())
         db.commit()
+
+        # Automatic column migrations
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
+            db.commit()
+            print("Added can_self_schedule column to patients table")
+        except sqlite3.OperationalError:
+            pass # Column already exists
 
         # Check if admin exists
         admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
@@ -196,10 +216,73 @@ def add_file(patient_id):
         return redirect(url_for('patient_detail', patient_id=patient_id))
     if file:
         filename = secure_filename(file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
         db = get_db()
         db.execute('INSERT INTO files (patient_id, filename) VALUES (?, ?)', (patient_id, filename))
         db.commit()
+
+        if filename.endswith('.docx'):
+            try:
+                doc = Document(filepath)
+                date_str = None
+                meeting_number = None
+                content_paragraphs = []
+
+                date_regex = re.compile(r'(\d{1,2}[\./]\d{1,2}[\./]\d{2,4})')
+                meeting_regex = re.compile(r'(פגישה מס|פגישה|Meeting)\s*[:#\s]*(\d+)')
+
+                extracting_content = False
+
+                for para in doc.paragraphs:
+                    text = para.text.strip()
+                    if not text:
+                        continue
+
+                    if not date_str:
+                        date_match = date_regex.search(text)
+                        if date_match:
+                            date_str = date_match.group(1)
+                            # Convert to YYYY-MM-DD if possible
+                            date_str = date_str.replace('.', '/')
+                            parts = date_str.split('/')
+                            if len(parts) == 3:
+                                day, month, year = parts
+                                if len(year) == 2:
+                                    year = '20' + year
+                                date_str = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+                    if not meeting_number:
+                        meeting_match = meeting_regex.search(text)
+                        if meeting_match:
+                            meeting_number = meeting_match.group(2)
+                            extracting_content = True
+                            continue # skip the line with meeting number if we want to just capture content afterwards
+
+                    if extracting_content:
+                        content_paragraphs.append(text)
+                    elif date_str and meeting_number: # fallback if regex matched same line or similar
+                         content_paragraphs.append(text)
+
+                if date_str or content_paragraphs:
+                    final_content = ""
+                    if meeting_number:
+                        final_content += f"Meeting #{meeting_number}\n\n"
+                    final_content += "\n".join(content_paragraphs)
+
+                    if final_content.strip():
+                        db.execute('INSERT INTO notes (patient_id, content) VALUES (?, ?)', (patient_id, final_content.strip()))
+                        db.commit()
+
+                    if date_str:
+                        db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status, cost) VALUES (?, ?, ?, ?, ?)',
+                                   (patient_id, date_str, '00:00', 'completed', 0))
+                        db.commit()
+                        flash('Document parsed successfully. Note and appointment created.')
+            except Exception as e:
+                print(f"Error parsing docx: {e}")
+                pass
+
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/add_receipt', methods=('POST',))
@@ -301,12 +384,13 @@ def edit_patient(patient_id):
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
 
         if not name:
             flash('Name is required!')
         else:
-            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ? WHERE id = ?',
-                       (name, status, email, phone, patient_id))
+            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ? WHERE id = ?',
+                       (name, status, email, phone, can_self_schedule, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -405,6 +489,190 @@ def delete_appointment(appointment_id):
 
     return "Appointment not found", 404
 
+@app.route('/api/appointments', methods=['POST'])
+@login_required
+def api_add_appointment():
+    if current_user.role != 'patient':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    if not patient or not patient['can_self_schedule']:
+        return jsonify({'error': 'Self-scheduling disabled'}), 403
+
+    date_str = request.json.get('date')
+    time_str = request.json.get('time')
+
+    if not date_str or not time_str:
+        return jsonify({'error': 'Missing date or time'}), 400
+
+    # Check if slot exists and is available
+    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (date_str, time_str)).fetchone()
+    if existing:
+        return jsonify({'error': 'Slot is already occupied'}), 400
+
+    # Insert appointment
+    db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
+               (current_user.patient_id, date_str, time_str, 0)) # Default cost 0 for now
+    db.commit()
+
+    # Create notification for admin
+    message = f"Patient {patient['name']} booked a new appointment for {date_str} at {time_str}"
+    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
+    db.commit()
+
+    return jsonify({'success': True})
+
+@app.route('/api/appointments/<int:appointment_id>/reschedule', methods=['POST'])
+@login_required
+def api_reschedule_appointment(appointment_id):
+    if current_user.role != 'patient':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    if not patient or not patient['can_self_schedule']:
+        return jsonify({'error': 'Self-scheduling disabled'}), 403
+
+    # Ensure appointment belongs to patient
+    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appointment_id, current_user.patient_id)).fetchone()
+    if not appt:
+        return jsonify({'error': 'Appointment not found'}), 404
+
+    new_date = request.json.get('new_date')
+    new_time = request.json.get('new_time')
+
+    if not new_date or not new_time:
+        return jsonify({'error': 'Missing new date or time'}), 400
+
+    # Check if new slot is available
+    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (new_date, new_time)).fetchone()
+    if existing:
+        return jsonify({'error': 'New slot is already occupied'}), 400
+
+    old_date = appt['appointment_date']
+    old_time = appt['appointment_time']
+
+    # Update appointment
+    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appointment_id))
+    db.commit()
+
+    # Create notification for admin
+    message = f"Patient {patient['name']} rescheduled from {old_date} {old_time} to {new_date} {new_time}"
+    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
+    db.commit()
+
+    return jsonify({'success': True})
+
+@app.route('/api/notifications')
+@login_required
+def get_notifications():
+    if current_user.role != 'admin':
+        return jsonify([])
+
+    db = get_db()
+    notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
+
+    # Mark as read immediately after fetching
+    for n in notifications:
+        db.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', (n['id'],))
+    db.commit()
+
+    # Convert to dict for JSON serialization
+    notif_list = [dict(n) for n in notifications]
+    return jsonify(notif_list)
+
+@app.route('/api/slots')
+@login_required
+def get_slots():
+    db = get_db()
+
+    # Generate slots for next 8 weeks
+    today = datetime.now()
+    end_date = today + timedelta(weeks=8)
+
+    recurring_slots = db.execute('SELECT * FROM slots_recurring').fetchall()
+    appointments = db.execute('SELECT appointment_date, appointment_time, id, patient_id FROM appointments WHERE appointment_date >= ? AND appointment_date <= ?',
+                              (today.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))).fetchall()
+
+    appt_dict = {}
+    for appt in appointments:
+        key = f"{appt['appointment_date']}_{appt['appointment_time']}"
+        appt_dict[key] = appt['id']
+
+    events = []
+
+    # 0=Sunday, 6=Saturday in our DB schema,
+    # Python datetime.weekday(): 0=Monday, 6=Sunday
+    # So we need to map our DB weekday to Python weekday
+    db_to_py_weekday = {
+        0: 6, # Sun
+        1: 0, # Mon
+        2: 1, # Tue
+        3: 2, # Wed
+        4: 3, # Thu
+        5: 4, # Fri
+        6: 5  # Sat
+    }
+
+    current_date = today
+    while current_date <= end_date:
+        py_weekday = current_date.weekday()
+        # Find corresponding db weekday
+        db_weekday = None
+        for k, v in db_to_py_weekday.items():
+            if v == py_weekday:
+                db_weekday = k
+                break
+
+        if db_weekday is not None:
+            # Find all recurring slots for this weekday
+            slots_for_day = [s for s in recurring_slots if s['weekday'] == db_weekday]
+
+            for slot in slots_for_day:
+                date_str = current_date.strftime('%Y-%m-%d')
+                time_str = slot['time']
+                key = f"{date_str}_{time_str}"
+
+                event_start = f"{date_str}T{time_str}:00"
+
+                # Assume 50 min sessions for end time
+                hour, minute = map(int, time_str.split(':'))
+                end_time = datetime(current_date.year, current_date.month, current_date.day, hour, minute) + timedelta(minutes=50)
+                event_end = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+
+                if key in appt_dict:
+                    events.append({
+                        'title': 'Occupied',
+                        'start': event_start,
+                        'end': event_end,
+                        'color': 'red',
+                        'extendedProps': {
+                            'status': 'Occupied',
+                            'appointment_id': appt_dict[key]
+                        }
+                    })
+                else:
+                    events.append({
+                        'title': 'Free',
+                        'start': event_start,
+                        'end': event_end,
+                        'color': 'green',
+                        'extendedProps': {
+                            'status': 'Free',
+                            'time': time_str,
+                            'date': date_str
+                        }
+                    })
+
+        current_date += timedelta(days=1)
+
+    return jsonify(events)
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('0.0.0.0', port)) == 0
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
