@@ -32,32 +32,14 @@
             </div>
         </div>
 
-        <!-- Appointments Section -->
+        <!-- Calendar Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Schedule</h5>
                 <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
             </div>
             <div class="card-body p-4">
-                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
-                    {% for appt in appointments %}
-                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
-                            <div>
-                                <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
-                                <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="py-5 text-center text-muted">
-                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
-                            <p class="small mb-0">No therapy sessions scheduled.</p>
-                        </div>
-                    {% endfor %}
-                </div>
+                <div id="calendar"></div>
             </div>
         </div>
 
@@ -147,5 +129,90 @@
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
+#calendar {
+    min-height: 500px;
+}
 </style>
+
+<!-- FullCalendar JS & CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        editable: true,
+        droppable: true,
+        eventOverlap: function(stillEvent, movingEvent) {
+            // Can only drop an appointment onto a free slot
+            return stillEvent.extendedProps.type === 'slot' && stillEvent.backgroundColor === 'green';
+        },
+        eventDrop: function(info) {
+            if (info.event.extendedProps.type !== 'appointment') {
+                info.revert();
+                return;
+            }
+
+            // Find overlapping event to ensure it's a free slot
+            var isFreeSlot = false;
+            var events = calendar.getEvents();
+            for (var i = 0; i < events.length; i++) {
+                if (events[i].extendedProps.type === 'slot' && events[i].backgroundColor === 'green') {
+                    if (info.event.start >= events[i].start && info.event.end <= events[i].end) {
+                        isFreeSlot = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!isFreeSlot) {
+                alert('You can only reschedule an appointment to a "Free" slot.');
+                info.revert();
+                return;
+            }
+
+            var start = info.event.start;
+            var newDate = start.getFullYear() + '-' + String(start.getMonth() + 1).padStart(2, '0') + '-' + String(start.getDate()).padStart(2, '0');
+            var newTime = String(start.getHours()).padStart(2, '0') + ':' + String(start.getMinutes()).padStart(2, '0');
+
+            if (confirm('Reschedule appointment to ' + newDate + ' at ' + newTime + '?')) {
+                fetch('/api/appointments/' + info.event.id + '/reschedule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        date: newDate,
+                        time: newTime
+                    })
+                }).then(response => response.json())
+                .then(data => {
+                    if(data.success) {
+                        alert('Rescheduled successfully!');
+                        calendar.refetchEvents();
+                    } else {
+                        alert('Failed to reschedule: ' + data.error);
+                        info.revert();
+                    }
+                }).catch(err => {
+                    alert('Error rescheduling');
+                    info.revert();
+                });
+            } else {
+                info.revert();
+            }
+        }
+    });
+    calendar.render();
+});
+</script>
 {% endblock %}

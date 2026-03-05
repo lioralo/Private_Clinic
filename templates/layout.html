@@ -35,6 +35,9 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('manage_slots') }}">Manage Slots</a>
+                        </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
                                 <i class="bi bi-person-plus-fill me-1"></i> Add Patient
@@ -44,6 +47,16 @@
                 </ul>
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
+                        {% if current_user.role == 'admin' %}
+                        <li class="nav-item me-3">
+                            <a class="nav-link position-relative text-white" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-bell-fill fs-5"></i>
+                                <span class="position-absolute top-1 start-100 translate-middle p-1 bg-danger border border-light rounded-circle d-none" id="notificationBadge">
+                                    <span class="visually-hidden">New alerts</span>
+                                </span>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li class="nav-item me-3">
                             <span class="nav-link text-white-50 small">
                                 <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
@@ -81,7 +94,58 @@
         </div>
     </footer>
 
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container" style="z-index: 1100;"></div>
+
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+    <script>
+        function fetchNotifications() {
+            fetch('/api/notifications')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        const badge = document.getElementById('notificationBadge');
+                        if (badge) badge.classList.remove('d-none');
+
+                        data.forEach(notification => {
+                            showToast(notification.message);
+                        });
+                    }
+                })
+                .catch(err => console.error('Error fetching notifications:', err));
+        }
+
+        function showToast(message) {
+            const toastContainer = document.getElementById('toast-container');
+            const toastEl = document.createElement('div');
+            toastEl.className = 'toast align-items-center text-bg-primary border-0 show';
+            toastEl.setAttribute('role', 'alert');
+            toastEl.setAttribute('aria-live', 'assertive');
+            toastEl.setAttribute('aria-atomic', 'true');
+
+            toastEl.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi bi-info-circle-fill me-2"></i> ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+
+            toastContainer.appendChild(toastEl);
+
+            setTimeout(() => {
+                toastEl.classList.remove('show');
+                setTimeout(() => toastEl.remove(), 300);
+            }, 5000);
+        }
+
+        // Poll every 5 seconds
+        setInterval(fetchNotifications, 5000);
+    </script>
+    {% endif %}
 </body>
 </html>

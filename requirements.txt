@@ -3,3 +3,4 @@ Flask-WTF
 Flask-Login
 werkzeug
 email_validator
+python-docx

@@ -1,0 +1,97 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0 text-primary">
+        <i class="bi bi-calendar-range me-2"></i>Manage Slots
+    </h2>
+</div>
+
+<div class="card mb-4 border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<style>
+#calendar {
+    min-height: 600px;
+}
+</style>
+
+<!-- FullCalendar JS & CSS -->
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css' rel='stylesheet' />
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js'></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        editable: true,
+        selectable: true,
+        select: function(info) {
+            var start = info.start;
+            var end = info.end;
+
+            var date = start.getFullYear() + '-' + String(start.getMonth() + 1).padStart(2, '0') + '-' + String(start.getDate()).padStart(2, '0');
+            var startTime = String(start.getHours()).padStart(2, '0') + ':' + String(start.getMinutes()).padStart(2, '0');
+            var endTime = String(end.getHours()).padStart(2, '0') + ':' + String(end.getMinutes()).padStart(2, '0');
+
+            var statusStr = prompt('Enter status: "free", "occupied", or "blocked"', 'free');
+            if (statusStr && ['free', 'occupied', 'blocked'].includes(statusStr.toLowerCase())) {
+                fetch('/api/slots', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        date: date,
+                        start_time: startTime,
+                        end_time: endTime,
+                        status: statusStr.toLowerCase()
+                    })
+                }).then(res => res.json()).then(data => {
+                    if(data.success) {
+                        calendar.refetchEvents();
+                    } else {
+                        alert(data.error);
+                    }
+                });
+            }
+            calendar.unselect();
+        },
+        eventClick: function(info) {
+            if (confirm('Delete this slot?')) {
+                var type = info.event.extendedProps.type;
+                var id = info.event.id.split('_')[1];
+
+                // My appointment might be shown to patient, but admin sees 'slot' or 'blocked'
+                if (type === 'slot' || type === 'blocked') {
+                    fetch('/api/slots/' + type + '/' + id, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        }
+                    }).then(res => res.json()).then(data => {
+                        if(data.success) {
+                            calendar.refetchEvents();
+                        } else {
+                            alert(data.error);
+                        }
+                    });
+                }
+            }
+        }
+    });
+    calendar.render();
+});
+</script>
+{% endblock %}

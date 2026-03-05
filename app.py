@@ -1,10 +1,12 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+import docx
+import re
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -196,9 +198,55 @@ def add_file(patient_id):
         return redirect(url_for('patient_detail', patient_id=patient_id))
     if file:
         filename = secure_filename(file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
         db = get_db()
         db.execute('INSERT INTO files (patient_id, filename) VALUES (?, ?)', (patient_id, filename))
+
+        # Parse docx if uploaded
+        if filename.endswith('.docx'):
+            try:
+                doc = docx.Document(filepath)
+                full_text = []
+                for para in doc.paragraphs:
+                    full_text.append(para.text)
+                text = '\n'.join(full_text)
+
+                # Basic extraction logic
+                date_match = re.search(r'\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2}', text)
+                meeting_match = re.search(r'(פגישה מס|meeting number|session number)[\'"]?\s*:?\s*(\d+)', text, re.IGNORECASE)
+
+                date = date_match.group(0) if date_match else None
+                meeting_num = meeting_match.group(2) if meeting_match else None
+
+                content = f"Parsed from {filename}:\n"
+                if meeting_num:
+                    content += f"Meeting Number: {meeting_num}\n"
+                content += f"\nContent:\n{text}"
+
+                db.execute('INSERT INTO notes (patient_id, content) VALUES (?, ?)', (patient_id, content))
+
+                if date:
+                    # Optional: Add appointment if not exists or update.
+                    # We'll just add an appointment for the parsed date at 00:00.
+                    # Standardize date format to YYYY-MM-DD for consistency
+                    if '/' in date:
+                        parts = date.split('/')
+                        if len(parts[2]) == 4: # DD/MM/YYYY
+                           date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                    db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)',
+                               (patient_id, date, '00:00', 'completed'))
+
+                    patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+                    msg = f"New Booking: Appointment created for {patient['name']} from parsed document on {date} at 00:00"
+                    db.execute('INSERT INTO notifications (message) VALUES (?)', (msg,))
+
+                flash('File uploaded and parsed successfully.')
+            except Exception as e:
+                flash(f'File uploaded, but parsing failed: {str(e)}')
+        else:
+            flash('File uploaded successfully.')
+
         db.commit()
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
@@ -384,10 +432,183 @@ def add_appointment(patient_id):
         db = get_db()
         db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
                    (patient_id, date, time, cost))
+
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        msg = f"New Booking: Appointment manually created for {patient['name']} on {date} at {time}"
+        db.execute('INSERT INTO notifications (message) VALUES (?)', (msg,))
+
         db.commit()
         flash('Appointment added.')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/manage_slots')
+@login_required
+def manage_slots():
+    if current_user.role != 'admin':
+        return redirect(url_for('dashboard'))
+    return render_template('manage_slots.html')
+
+@app.route('/api/slots')
+@login_required
+def api_slots():
+    db = get_db()
+    events = []
+
+    # Free and Occupied slots
+    slots = db.execute('SELECT * FROM slots').fetchall()
+    for s in slots:
+        start_datetime = f"{s['slot_date']}T{s['start_time']}"
+        end_datetime = f"{s['slot_date']}T{s['end_time']}"
+        color = 'green' if s['status'] == 'free' else 'red'
+        events.append({
+            'id': f"slot_{s['id']}",
+            'title': s['status'].capitalize(),
+            'start': start_datetime,
+            'end': end_datetime,
+            'color': color,
+            'type': 'slot'
+        })
+
+    # Blocked slots
+    blocked = db.execute('SELECT * FROM blocked_slots').fetchall()
+    for b in blocked:
+        start_datetime = f"{b['slot_date']}T{b['start_time']}"
+        end_datetime = f"{b['slot_date']}T{b['end_time']}"
+        events.append({
+            'id': f"blocked_{b['id']}",
+            'title': b['reason'] or 'Blocked',
+            'start': start_datetime,
+            'end': end_datetime,
+            'color': 'gray',
+            'type': 'blocked'
+        })
+
+    # Patient's own appointments if requested from dashboard
+    if current_user.role == 'patient':
+        appts = db.execute('SELECT * FROM appointments WHERE patient_id = ?', (current_user.patient_id,)).fetchall()
+        for a in appts:
+            start_datetime = f"{a['appointment_date']}T{a['appointment_time']}"
+            events.append({
+                'id': a['id'],
+                'title': 'My Appointment',
+                'start': start_datetime,
+                'color': 'blue',
+                'type': 'appointment'
+            })
+    elif current_user.role == 'admin':
+        # Admin sees all appointments mapped to occupied slots, but maybe we want them distinct
+        # For this requirement, color coding green/red/gray is enough. Occupied handles it.
+        pass
+
+    return jsonify(events)
+
+@app.route('/api/appointments/<int:appt_id>/reschedule', methods=['POST'])
+@login_required
+def reschedule_appointment(appt_id):
+    if current_user.role != 'patient':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.get_json()
+    new_date = data.get('date')
+    new_time = data.get('time')
+
+    if not new_date or not new_time:
+        return jsonify({'error': 'Missing date or time'}), 400
+
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appt_id, current_user.patient_id)).fetchone()
+
+    if not appt:
+        return jsonify({'error': 'Appointment not found'}), 404
+
+    # Free the old slot
+    old_slot_time = appt['appointment_time']
+    # If the database returns HH:MM:SS, we need to handle it.
+    # The frontend sends HH:MM. Let's try matching exactly or with :00
+    old_slot = db.execute('SELECT * FROM slots WHERE slot_date = ? AND (start_time = ? OR start_time = ?) AND status = "occupied"',
+                          (appt['appointment_date'], old_slot_time, old_slot_time[:5] + ':00' if len(old_slot_time) == 5 else old_slot_time[:5])).fetchone()
+    if old_slot:
+        db.execute('UPDATE slots SET status = "free" WHERE id = ?', (old_slot['id'],))
+
+    # Occupy the new slot
+    new_slot = db.execute('SELECT * FROM slots WHERE slot_date = ? AND (start_time = ? OR start_time = ?) AND status = "free"',
+                          (new_date, new_time, new_time[:5] + ':00' if len(new_time) == 5 else new_time[:5])).fetchone()
+    if new_slot:
+        db.execute('UPDATE slots SET status = "occupied" WHERE id = ?', (new_slot['id'],))
+
+    # Update appointment
+    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appt_id))
+
+    # Log notification for admin
+    patient = db.execute('SELECT name FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    msg = f"Appointment rescheduled by {patient['name']} to {new_date} {new_time}"
+    db.execute('INSERT INTO notifications (message) VALUES (?)', (msg,))
+
+    db.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/slots', methods=['POST'])
+@login_required
+def add_slot():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.get_json()
+    slot_date = data.get('date')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    status = data.get('status', 'free')
+
+    if not slot_date or not start_time or not end_time:
+        return jsonify({'error': 'Missing date or times'}), 400
+
+    db = get_db()
+
+    if status in ['free', 'occupied']:
+        db.execute('INSERT INTO slots (slot_date, start_time, end_time, status) VALUES (?, ?, ?, ?)',
+                   (slot_date, start_time, end_time, status))
+    elif status == 'blocked':
+        db.execute('INSERT INTO blocked_slots (slot_date, start_time, end_time, reason) VALUES (?, ?, ?, ?)',
+                   (slot_date, start_time, end_time, 'Blocked'))
+
+    db.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/slots/<string:slot_type>/<int:slot_id>', methods=['DELETE'])
+@login_required
+def delete_slot(slot_type, slot_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    if slot_type == 'slot':
+        db.execute('DELETE FROM slots WHERE id = ?', (slot_id,))
+    elif slot_type == 'blocked':
+        db.execute('DELETE FROM blocked_slots WHERE id = ?', (slot_id,))
+    else:
+        return jsonify({'error': 'Invalid slot type'}), 400
+
+    db.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/notifications')
+@login_required
+def api_notifications():
+    if current_user.role != 'admin':
+        return jsonify([])
+
+    db = get_db()
+    nots = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at DESC').fetchall()
+
+    # Mark as read (simple approach: clear them once fetched)
+    if nots:
+        ids = [n['id'] for n in nots]
+        placeholders = ','.join('?' * len(ids))
+        db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', ids)
+        db.commit()
+
+    return jsonify([dict(n) for n in nots])
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
