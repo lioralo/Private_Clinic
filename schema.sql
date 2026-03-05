@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS patients (
     email TEXT,
     phone TEXT,
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
+    can_self_schedule BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -63,4 +64,19 @@ CREATE TABLE IF NOT EXISTS messages (
     is_read BOOLEAN DEFAULT 0,
     FOREIGN KEY (sender_id) REFERENCES users (id),
     FOREIGN KEY (recipient_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS blocked_slots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    blocked_date DATE NOT NULL,
+    blocked_time TIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    action TEXT NOT NULL,
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

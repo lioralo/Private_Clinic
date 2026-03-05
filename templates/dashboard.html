@@ -32,32 +32,14 @@
             </div>
         </div>
 
-        <!-- Appointments Section -->
+        <!-- Appointments Section (FullCalendar) -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments Calendar</h5>
                 <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
             </div>
             <div class="card-body p-4">
-                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
-                    {% for appt in appointments %}
-                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
-                            <div>
-                                <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
-                                <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="py-5 text-center text-muted">
-                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
-                            <p class="small mb-0">No therapy sessions scheduled.</p>
-                        </div>
-                    {% endfor %}
-                </div>
+                <div id="calendar"></div>
             </div>
         </div>
 
@@ -148,4 +130,63 @@
 .tracking-wider { letter-spacing: 0.05em; }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        slotMinTime: '08:00:00',
+        slotMaxTime: '18:00:00',
+        allDaySlot: false,
+        events: '/api/slots',
+        eventDrop: function(info) {
+            var eventId = info.event.id.replace('appt_', '');
+
+            // To avoid timezone offset issues (since FullCalendar creates a local Date object
+            // but toISOString() uses UTC), we manually construct the date string in the local timezone
+            var d = info.event.start;
+            var year = d.getFullYear();
+            var month = ('0' + (d.getMonth() + 1)).slice(-2);
+            var day = ('0' + d.getDate()).slice(-2);
+            var hours = ('0' + d.getHours()).slice(-2);
+            var minutes = ('0' + d.getMinutes()).slice(-2);
+
+            var newDate = year + '-' + month + '-' + day;
+            var newTime = hours + ':' + minutes;
+
+            fetch('/api/appointments/' + eventId + '/reschedule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    date: newDate,
+                    time: newTime
+                })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    alert('Error rescheduling: ' + data.message);
+                    info.revert();
+                } else {
+                    alert('Appointment moved successfully!');
+                }
+            }).catch(error => {
+                alert('Network error. Reverting change.');
+                info.revert();
+            });
+        }
+    });
+    calendar.render();
+});
+</script>
 {% endblock %}

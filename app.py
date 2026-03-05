@@ -1,6 +1,7 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify
+import datetime
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -52,6 +53,34 @@ def init_db():
         db = get_db()
         with app.open_resource('schema.sql', mode='r') as f:
             db.cursor().executescript(f.read())
+
+        # Add columns if missing
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                blocked_date DATE NOT NULL,
+                blocked_time TIME NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER,
+                action TEXT NOT NULL,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
         db.commit()
 
         # Check if admin exists
@@ -301,12 +330,13 @@ def edit_patient(patient_id):
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
 
         if not name:
             flash('Name is required!')
         else:
-            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ? WHERE id = ?',
-                       (name, status, email, phone, patient_id))
+            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ? WHERE id = ?',
+                       (name, status, email, phone, can_self_schedule, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -384,10 +414,137 @@ def add_appointment(patient_id):
         db = get_db()
         db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
                    (patient_id, date, time, cost))
+
+        # We need patient info to log notification properly
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if patient:
+            details = f"Patient {patient['name']} has scheduled a meeting to {date} at {time}."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (patient_id, 'schedule', details))
+
         db.commit()
         flash('Appointment added.')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/api/slots')
+@login_required
+def api_slots():
+    db = get_db()
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+
+    events = []
+
+    # Get blocked slots
+    blocked = db.execute('SELECT * FROM blocked_slots').fetchall()
+    for b in blocked:
+        dt_start = f"{b['blocked_date']}T{b['blocked_time']}"
+        events.append({
+            'title': 'Blocked',
+            'start': dt_start,
+            'color': '#808080',
+            'display': 'background'
+        })
+
+    # Get occupied slots (all appointments)
+    all_appts = db.execute('SELECT * FROM appointments').fetchall()
+    for appt in all_appts:
+        dt_start = f"{appt['appointment_date']}T{appt['appointment_time']}"
+        # If admin, can see details or just occupied. If patient, only see own details, others are "Occupied"
+        if current_user.role == 'admin':
+            patient = db.execute('SELECT name FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
+            title = f"{patient['name']} (Occupied)"
+            color = '#dc3545'
+            editable = False
+        else:
+            if current_user.patient_id == appt['patient_id']:
+                title = 'My Appointment'
+                color = '#0d6efd'
+                patient_info = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+                editable = bool(patient_info['can_self_schedule'])
+            else:
+                title = 'Occupied'
+                color = '#dc3545'
+                editable = False
+
+        events.append({
+            'id': f"appt_{appt['id']}",
+            'title': title,
+            'start': dt_start,
+            'color': color,
+            'editable': editable
+        })
+
+    return jsonify(events)
+
+
+@app.route('/api/notifications')
+@login_required
+def get_notifications():
+    if current_user.role != 'admin':
+        return jsonify([])
+
+    last_id = request.args.get('last_id', 0, type=int)
+    db = get_db()
+
+    logs = db.execute('SELECT * FROM audit_logs WHERE id > ? AND action IN ("schedule", "reschedule") ORDER BY id ASC', (last_id,)).fetchall()
+
+    notifications = []
+    for log in logs:
+        notifications.append({
+            'id': log['id'],
+            'message': log['details'],
+            'created_at': log['created_at']
+        })
+
+    return jsonify(notifications)
+
+@app.route('/api/appointments/<int:appointment_id>/reschedule', methods=('POST',))
+@login_required
+def reschedule_appointment(appointment_id):
+    if current_user.role != 'patient':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+
+    # Check permissions
+    patient_id = current_user.patient_id
+    patient = db.execute('SELECT can_self_schedule, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+
+    if not patient or not patient['can_self_schedule']:
+        return jsonify({'status': 'error', 'message': 'You do not have permission to reschedule appointments.'}), 403
+
+    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appointment_id, patient_id)).fetchone()
+    if not appt:
+        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
+
+    data = request.get_json()
+    new_date = data.get('date')
+    new_time = data.get('time')
+
+    if not new_date or not new_time:
+        return jsonify({'status': 'error', 'message': 'Missing date or time.'}), 400
+
+    # Check if slot is blocked
+    blocked = db.execute('SELECT * FROM blocked_slots WHERE blocked_date = ? AND blocked_time = ?', (new_date, new_time)).fetchone()
+    if blocked:
+        return jsonify({'status': 'error', 'message': 'This slot is unavailable.'}), 400
+
+    # Check if slot is occupied
+    occupied = db.execute('SELECT * FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (new_date, new_time)).fetchone()
+    if occupied:
+        return jsonify({'status': 'error', 'message': 'This slot is already booked.'}), 400
+
+    # Reschedule
+    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appointment_id))
+
+    # Audit log
+    details = f"Patient {patient['name']} has moved a meeting to {new_date} at {new_time}."
+    db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (patient_id, 'reschedule', details))
+
+    db.commit()
+
+    return jsonify({'status': 'success'})
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
@@ -407,4 +564,5 @@ def delete_appointment(appointment_id):
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    print("Click here to open the app: http://127.0.0.1:5000")
+    app.run(host='127.0.0.1', port=5000, debug=True)
