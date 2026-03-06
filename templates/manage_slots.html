@@ -1,0 +1,100 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-range me-2 text-primary"></i>Manage Slots</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id="admin-calendar"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for slot management -->
+<div class="modal fade" id="slotModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Manage Slot</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Manage slot for <span id="slotDateTime" class="fw-bold"></span>.</p>
+        <form id="slotForm" method="POST" action="{{ url_for('admin_manage_slots') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="date" id="slotDate">
+            <input type="hidden" name="time" id="slotTime">
+            <div class="mb-3">
+                <label for="status" class="form-label">Slot Status</label>
+                <select class="form-select" name="status" id="slotStatus" required>
+                    <option value="open">Open (Clickable for patients)</option>
+                    <option value="occupied">Occupied (Busy)</option>
+                    <option value="blocked">Blocked (Unavailable)</option>
+                </select>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('slotForm').submit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('admin-calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        hiddenDays: [5, 6], // Hide Friday and Saturday
+        slotMinTime: '08:00:00',
+        slotMaxTime: '20:00:00',
+        allDaySlot: false,
+        firstDay: 0, // Sunday
+        height: 'auto',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek'
+        },
+        events: '/api/slots', // Use same endpoint for admin to see slots
+        selectable: true,
+        select: function(info) {
+            // Selecting an empty area opens modal to create new slot override
+            var d = info.start;
+            var dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+            document.getElementById('slotDate').value = dateStr;
+            document.getElementById('slotTime').value = timeStr;
+            document.getElementById('slotDateTime').innerText = dateStr + ' at ' + timeStr;
+            document.getElementById('slotStatus').value = 'open'; // default
+
+            var modal = new bootstrap.Modal(document.getElementById('slotModal'));
+            modal.show();
+        },
+        eventClick: function(info) {
+            // Clicking existing event to edit
+            var d = info.event.start;
+            var dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+            document.getElementById('slotDate').value = dateStr;
+            document.getElementById('slotTime').value = timeStr;
+            document.getElementById('slotDateTime').innerText = dateStr + ' at ' + timeStr;
+            document.getElementById('slotStatus').value = info.event.extendedProps.status;
+
+            var modal = new bootstrap.Modal(document.getElementById('slotModal'));
+            modal.show();
+        }
+    });
+    calendar.render();
+});
+</script>
+{% endblock %}

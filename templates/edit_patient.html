@@ -32,6 +32,7 @@
                                 <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
                                 <option value="candidate" {% if patient['status'] == 'candidate' %}selected{% endif %}>Candidate</option>
                                 <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
+                                <option value="waiting for scheduling" {% if patient['status'] == 'waiting for scheduling' %}selected{% endif %}>Waiting for Scheduling</option>
                             </select>
                         </div>
 

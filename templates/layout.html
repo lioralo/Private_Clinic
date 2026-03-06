@@ -33,7 +33,15 @@
                             <a class="nav-link" href="{{ url_for('patients', status='candidate') }}">Candidates</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('patients', status='waiting for scheduling') }}">Waiting</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
+                        </li>
+                        <li class="nav-item ms-lg-2">
+                            <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('manage_slots') }}">
+                                <i class="bi bi-calendar-range me-1"></i> Manage Slots
+                            </a>
                         </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
