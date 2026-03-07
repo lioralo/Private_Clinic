@@ -3,16 +3,21 @@ CREATE TABLE IF NOT EXISTS patients (
     name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
-    status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
+    status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate', 'waiting for scheduling'
+    can_self_schedule BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    appointment_id INTEGER,
+    session_number TEXT,
+    needs_review BOOLEAN DEFAULT 0,
     content TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients (id)
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (appointment_id) REFERENCES appointments (id)
 );
 
 CREATE TABLE IF NOT EXISTS files (
@@ -63,4 +68,11 @@ CREATE TABLE IF NOT EXISTS messages (
     is_read BOOLEAN DEFAULT 0,
     FOREIGN KEY (sender_id) REFERENCES users (id),
     FOREIGN KEY (recipient_id) REFERENCES users (id)
+);
+
+CREATE TABLE IF NOT EXISTS slots_override (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slot_date DATE NOT NULL,
+    slot_time TIME NOT NULL,
+    status TEXT NOT NULL -- 'open', 'occupied', 'blocked'
 );

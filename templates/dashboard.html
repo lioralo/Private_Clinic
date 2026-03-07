@@ -61,6 +61,23 @@
             </div>
         </div>
 
+        <!-- Self-Scheduling Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-plus me-2 text-primary"></i>Schedule a Session</h5>
+            </div>
+            <div class="card-body p-4">
+                {% if patient.status == 'waiting for scheduling' or patient.can_self_schedule %}
+                    <div id="calendar"></div>
+                {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-info-circle fs-2 d-block mb-2 opacity-50"></i>
+                        <p class="mb-0">Scheduling is only available for patients currently awaiting placement.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Financial Documents Section -->
         <div class="row g-4 mb-4">
             <div class="col-md-6">
@@ -114,21 +131,42 @@
     </div>
 
     <div class="col-lg-4">
-        <!-- Contact Therapist Card -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px;">
-            <div class="card-body p-4 p-lg-5">
+        <!-- Contact Therapist Card / Chat -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px; max-height: calc(100vh - 120px); display: flex; flex-direction: column;">
+            <div class="card-body p-4 p-lg-5 d-flex flex-column h-100">
                 <div class="text-center mb-4">
                     <div class="bg-white bg-opacity-20 d-inline-block p-3 rounded-circle mb-3">
-                        <i class="bi bi-envelope-fill text-white fs-3"></i>
+                        <i class="bi bi-chat-dots-fill text-white fs-3"></i>
                     </div>
                     <h5 class="fw-bold mb-1">Contact Therapist</h5>
-                    <p class="small text-white-50">Send a direct message to your clinical provider.</p>
+                    <p class="small text-white-50">Direct messages with your clinical provider.</p>
+                </div>
+
+                <!-- Chat history -->
+                <div class="chat-history mb-4 flex-grow-1" style="overflow-y: auto; display: flex; flex-direction: column;">
+                    {% for msg in messages %}
+                        {% if msg['sender_id'] == current_user.id %}
+                            <div class="align-self-end text-end mb-2 w-75">
+                                <span class="d-inline-block p-2 bg-white bg-opacity-25 text-white rounded-3">{{ msg['content'] }}</span>
+                                <small class="text-white-50 d-block smallest mt-1">{{ msg['timestamp'] }}</small>
+                            </div>
+                        {% else %}
+                            <div class="align-self-start text-start mb-2 w-75">
+                                <span class="d-inline-block p-2 bg-white text-primary rounded-3">{{ msg['content'] }}</span>
+                                <small class="text-white-50 d-block smallest mt-1">{{ msg['timestamp'] }}</small>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center my-auto">
+                            <p class="small text-white-50 mb-0">Send a message to start.</p>
+                        </div>
+                    {% endfor %}
                 </div>
                 
-                <form method="post" action="{{ url_for('contact_admin') }}">
+                <form method="post" action="{{ url_for('contact_admin') }}" class="mt-auto">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-4">
-                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-3 rounded-3" rows="6" placeholder="Type your message here..." required></textarea>
+                    <div class="mb-3">
+                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-2 rounded-3" rows="2" placeholder="Type your message here..." required style="resize: none;"></textarea>
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-light py-2 fw-bold rounded-3 text-primary">
@@ -136,16 +174,83 @@
                         </button>
                     </div>
                 </form>
-                <div class="text-center mt-4 pt-2">
-                    <p class="smallest text-white-50 mb-0">Responses are typically received within 24-48 business hours.</p>
-                </div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- Modal for booking -->
+<div class="modal fade" id="bookingModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Book Session</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Would you like to schedule a session for <span id="bookingDateTime" class="fw-bold"></span>?</p>
+        <form id="bookingForm" method="POST" action="{{ url_for('patient_book_slot') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="date" id="bookingDate">
+            <input type="hidden" name="time" id="bookingTime">
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('bookingForm').submit()">Confirm Booking</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
 </style>
+
+<!-- FullCalendar Integration -->
+{% if patient.status == 'waiting for scheduling' or patient.can_self_schedule %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    if (calendarEl) {
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'timeGridWeek',
+            hiddenDays: [5, 6], // Hide Friday and Saturday
+            slotMinTime: '08:00:00',
+            slotMaxTime: '20:00:00',
+            allDaySlot: false,
+            firstDay: 0, // Sunday
+            height: 'auto',
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'timeGridWeek'
+            },
+            events: '/api/slots',
+            eventClick: function(info) {
+                if (info.event.extendedProps.status === 'open') {
+                    // Show booking modal
+                    var d = info.event.start;
+                    var dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+                    document.getElementById('bookingDate').value = dateStr;
+                    document.getElementById('bookingTime').value = timeStr;
+                    document.getElementById('bookingDateTime').innerText = dateStr + ' at ' + timeStr;
+
+                    var modal = new bootstrap.Modal(document.getElementById('bookingModal'));
+                    modal.show();
+                } else {
+                    alert('This slot is not available for booking.');
+                }
+            }
+        });
+        calendar.render();
+    }
+});
+</script>
+{% endif %}
+
 {% endblock %}
