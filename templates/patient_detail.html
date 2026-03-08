@@ -104,6 +104,9 @@
                             <div class="text-dark mb-2">{{ note['content'] }}</div>
                             <div class="text-muted smaller d-flex align-items-center">
                                 <i class="bi bi-clock me-1"></i> {{ note['created_at'] }}
+                                {% if note['session_number'] %}
+                                    <span class="badge bg-info text-dark ms-2 rounded-pill small">Meeting #{{ note['session_number'] }}</span>
+                                {% endif %}
                             </div>
                         </div>
                     {% else %}

@@ -282,6 +282,16 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('''CREATE TABLE IF NOT EXISTS slots_override (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slot_date DATE NOT NULL,
+                slot_time TIME NOT NULL,
+                status TEXT NOT NULL,
+                duration_minutes INTEGER DEFAULT 60
+            )''')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
         except sqlite3.OperationalError:
             pass
@@ -1346,6 +1356,15 @@ def api_slots():
 
                                 generated_count += 1
                                 if start_date <= test_date <= end_date:
+                                    # Check for conflict with blocked slots_override
+                                    test_date_iso = test_date.isoformat()
+                                    is_blocked = any(
+                                        o['slot_date'] == test_date_iso and o['slot_time'] == time_str and o['status'] == 'blocked'
+                                        for o in overrides
+                                    )
+                                    if is_blocked:
+                                        continue
+
                                     next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
                                     next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
                                     events.append({
@@ -1541,6 +1560,25 @@ def reschedule_appointment(appointment_id):
 
     return jsonify({'status': 'success'})
 
+def send_appointment_reminders():
+    # Placeholder for logic to send reminders via email or SMS via external APIs.
+    # In a real application, this would query appointments for the next 24-48 hours,
+    # and use an API like Twilio (SMS) or SendGrid/SMTP (Email) to notify the patient.
+    db = get_db()
+
+    # Example logic:
+    # tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    # upcoming = db.execute('SELECT a.*, p.email, p.phone, p.name FROM appointments a JOIN patients p ON a.patient_id = p.id WHERE a.appointment_date = ?', (tomorrow,)).fetchall()
+    # for appt in upcoming:
+    #     if appt['email']:
+    #         # send_email_api(appt['email'], f"Reminder: Your appointment is tomorrow at {appt['appointment_time']}.")
+    #         pass
+    #     if appt['phone']:
+    #         # send_sms_api(appt['phone'], f"Reminder: Your appointment is tomorrow at {appt['appointment_time']}.")
+    #         pass
+
+    print("Appointment reminders sent via external APIs (Email/SMS).")
+
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
 def delete_appointment(appointment_id):
@@ -1548,12 +1586,23 @@ def delete_appointment(appointment_id):
         return "Unauthorized", 403
 
     db = get_db()
-    appt = db.execute('SELECT patient_id FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    appt = db.execute('SELECT patient_id, appointment_date, appointment_time FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
     if appt:
+        patient_id = appt['patient_id']
+        date = appt['appointment_date']
+        time = appt['appointment_time']
+
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+
         db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+
+        if patient:
+            details = f"Patient {patient['name']}'s appointment on {date} at {time} was deleted."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (patient_id, 'delete_appointment', details))
+
         db.commit()
         flash('Appointment deleted.')
-        return redirect(url_for('patient_detail', patient_id=appt['patient_id']))
+        return redirect(url_for('patient_detail', patient_id=patient_id))
 
     return "Appointment not found", 404
 

@@ -11,14 +11,20 @@ CREATE TABLE IF NOT EXISTS patients (
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    appointment_id INTEGER,
+    session_number TEXT,
+    needs_review BOOLEAN DEFAULT 0,
     content TEXT NOT NULL,
+    content_hebrew TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients (id)
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (appointment_id) REFERENCES appointments (id)
 );
 
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    treatment_id INTEGER,
     filename TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
@@ -49,6 +55,14 @@ CREATE TABLE IF NOT EXISTS appointments (
     patient_id INTEGER NOT NULL,
     appointment_date DATE NOT NULL,
     appointment_time TIME NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
+    is_recurring BOOLEAN DEFAULT 0,
+    recurrence_interval INTEGER,
+    recurrence_days TEXT,
+    recurrence_end_date DATE,
+    recurrence_count INTEGER,
+    meeting_type TEXT DEFAULT 'in-person',
+    meeting_link TEXT,
     status TEXT NOT NULL DEFAULT 'scheduled', -- 'scheduled', 'completed', 'cancelled'
     cost REAL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -79,4 +93,23 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     action TEXT NOT NULL,
     details TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    url TEXT,
+    is_public BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS patient_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (resource_id) REFERENCES resources (id),
+    UNIQUE(patient_id, resource_id)
 );
