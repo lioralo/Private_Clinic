@@ -651,6 +651,7 @@ def add_file(patient_id):
 @app.route('/patient/<int:patient_id>/export', methods=('GET',))
 @login_required
 def export_patient_history(patient_id):
+
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
@@ -795,6 +796,7 @@ def import_calendar():
 @app.route('/patient/<int:patient_id>/import', methods=('POST',))
 @login_required
 def import_patient_history(patient_id):
+
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
@@ -1056,6 +1058,7 @@ def contact_admin():
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
 @login_required
 def convert_patient(patient_id):
+
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
@@ -1095,6 +1098,22 @@ def convert_patient(patient_id):
 
     db.commit()
     flash('Patient converted to ongoing successfully.')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
+@login_required
+def update_patient_info(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    background = request.form.get('background', '')
+    treatment_info = request.form.get('treatment_info', '')
+
+    db = get_db()
+    db.execute('UPDATE patients SET background = ?, treatment_info = ? WHERE id = ?',
+               (background, treatment_info, patient_id))
+    db.commit()
+    flash('Patient information updated.')
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
