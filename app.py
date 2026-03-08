@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
 import datetime
 from flask_wtf.csrf import CSRFProtect
@@ -13,9 +13,110 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 csrf = CSRFProtect(app)
 DATABASE = 'clinic.db'
 
+@app.template_filter('rjust')
+def rjust_filter(s, width, fillchar=' '):
+    return str(s).rjust(width, fillchar)
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+HEBREW_TRANSLATIONS = {
+    "Dashboard": "לוח בקרה",
+    "Ongoing": "בטיפול",
+    "Candidates": "מועמדים",
+    "Waiting": "ממתינים",
+    "Archived": "בארכיון",
+    "Manage Slots": "ניהול יומן",
+    "Add Patient": "הוספת מטופל",
+    "Messages": "הודעות",
+    "Logout": "התנתק",
+    "Login": "התחבר",
+    "Public Resources": "משאבים ציבוריים",
+    "Resources": "משאבים",
+    "Search": "חיפוש",
+    "Summary": "סיכום",
+    "Appointments": "פגישות",
+    "Clinical Notes": "רשומות קליניות",
+    "Billing": "חיובים",
+    "Internal Chat": "צ'אט פנימי",
+    "Send Email": "שלח דוא״ל",
+    "WhatsApp": "וואטסאפ",
+    "Edit": "ערוך",
+    "Convert to Ongoing": "הפוך למטופל פעיל",
+    "Email": "דוא״ל",
+    "Phone": "טלפון",
+    "Date": "תאריך",
+    "Time": "שעה",
+    "Cost": "עלות",
+    "Meeting Type": "סוג פגישה",
+    "Meeting Link": "קישור לפגישה",
+    "Add": "הוסף",
+    "In-Person": "פרונטלי",
+    "Online": "מקוון",
+    "Remove appointment?": "להסיר את הפגישה?",
+    "Treatment Log": "יומן טיפולים",
+    "Content (English)": "תוכן (אנגלית)",
+    "תוכן (Hebrew)": "תוכן (עברית)",
+    "Attach Files": "צרף קבצים",
+    "Post Treatment Log": "שמור רשומה",
+    "Needs Review": "דורש בדיקה",
+    "Attached Files:": "קבצים מצורפים:",
+    "No clinical history recorded.": "לא תועדה היסטוריה קלינית.",
+    "Financial Receipts": "קבלות פיננסיות",
+    "Amount ($)": "סכום",
+    "Description": "תיאור",
+    "Create New Receipt": "צור קבלה חדשה",
+    "Medical Service": "שירות רפואי",
+    "No financial records.": "אין רשומות פיננסיות.",
+    "Type a message...": "הקלד הודעה...",
+    "No messages yet.": "אין הודעות עדיין.",
+    "Assign Resource": "הקצה משאב",
+    "Select a Private Resource...": "בחר משאב פרטי...",
+    "Assign": "הקצה",
+    "Assigned Resources": "משאבים שהוקצו",
+    "No resources assigned.": "לא הוקצו משאבים.",
+    "Financial Summary": "סיכום פיננסי",
+    "Total Outstanding": "סך חוב",
+    "Credit Balance": "יתרת זכות",
+    "Account Balance": "יתרת חשבון",
+    "Outstanding balance for therapeutic services.": "יתרת חוב עבור שירותים טיפוליים.",
+    "You have credit in your account.": "יש לך יתרת זכות בחשבון.",
+    "Your account is fully settled!": "החשבון שלך מוסדר במלואו!",
+    "My Appointments": "הפגישות שלי",
+    "Sessions": "פגישות",
+    "Scheduled at": "נקבע לשעה",
+    "Join Meeting": "הצטרף לפגישה",
+    "No therapy sessions scheduled.": "לא נקבעו פגישות טיפוליות.",
+    "Schedule a Session": "קבע פגישה",
+    "Scheduling is only available for patients currently awaiting placement.": "קביעת פגישות זמינה רק למטופלים הממתינים לשיבוץ.",
+    "Receipts": "קבלות",
+    "Print": "הדפס",
+    "Service Receipt": "קבלת שירות",
+    "No receipts.": "אין קבלות.",
+    "Shared Files": "קבצים משותפים",
+    "No shared files.": "אין קבצים משותפים.",
+    "Open": "פתח",
+    "No resources assigned to you.": "לא הוקצו לך משאבים.",
+    "Contact Therapist": "צור קשר עם המטפל",
+    "Direct messages with your clinical provider.": "הודעות ישירות עם המטפל שלך.",
+    "Send a message to start.": "שלח הודעה כדי להתחיל.",
+    "Send Securely": "שלח בצורה מאובטחת"
+}
+
+@app.context_processor
+def inject_translations():
+    def t(text):
+        if session.get('lang') == 'he':
+            return HEBREW_TRANSLATIONS.get(text, text)
+        return text
+    return dict(t=t, lang=session.get('lang', 'en'))
+
+@app.route('/set_lang/<lang>')
+def set_lang(lang):
+    if lang in ['en', 'he']:
+        session['lang'] = lang
+    return redirect(request.referrer or url_for('index'))
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None):
@@ -86,6 +187,14 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
         except sqlite3.OperationalError:
             pass
@@ -123,6 +232,53 @@ def index():
         elif current_user.role == 'patient':
             return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+
+@app.route('/resources')
+def public_resources():
+    db = get_db()
+    resources = db.execute('SELECT * FROM resources WHERE is_public = 1 ORDER BY created_at DESC').fetchall()
+    return render_template('resources.html', resources=resources, is_admin=False)
+
+@app.route('/admin/resources', methods=['GET', 'POST'])
+@login_required
+def manage_resources():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form.get('description', '')
+        url = request.form.get('url', '')
+        is_public = 1 if request.form.get('is_public') else 0
+
+        db.execute('INSERT INTO resources (title, description, url, is_public) VALUES (?, ?, ?, ?)',
+                   (title, description, url, is_public))
+        db.commit()
+        flash('Resource added.')
+        return redirect(url_for('manage_resources'))
+
+    resources = db.execute('SELECT * FROM resources ORDER BY created_at DESC').fetchall()
+    return render_template('manage_resources.html', resources=resources)
+
+@app.route('/patient/<int:patient_id>/assign_resource', methods=['POST'])
+@login_required
+def assign_resource(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    resource_id = request.form['resource_id']
+    if resource_id:
+        db = get_db()
+        try:
+            db.execute('INSERT INTO patient_resources (patient_id, resource_id) VALUES (?, ?)', (patient_id, resource_id))
+            db.commit()
+            flash('Resource assigned to patient.')
+        except sqlite3.IntegrityError:
+            flash('Resource already assigned to this patient.')
+
+    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -239,7 +395,18 @@ def patient_detail(patient_id):
             ORDER BY timestamp ASC
         ''', (user['id'], user['id'])).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages)
+    # Get resources for assignment
+    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
+
+    # Get assigned resources
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+    ''', (patient_id,)).fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources)
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -434,7 +601,16 @@ def dashboard():
     total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
     balance = total_cost - total_paid
 
-    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages)
+    # Get assigned resources
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+        ORDER BY pr.assigned_at DESC
+    ''', (patient_id,)).fetchall()
+
+    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages, assigned_resources=assigned_resources)
 
 @app.route('/api/messages', methods=['GET'])
 @login_required
@@ -551,11 +727,14 @@ def convert_patient(patient_id):
 
     db.execute("UPDATE patients SET status = 'ongoing' WHERE id = ?", (patient_id,))
 
+    meeting_type = request.form.get('meeting_type', 'in-person')
+    meeting_link = request.form.get('meeting_link', '')
+
     if start_date and time:
         db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days)
-                      VALUES (?, ?, ?, ?, ?, 1, ?, ?)''',
-                   (patient_id, start_date, time, cost, duration, interval, days_str))
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link)
+                      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)''',
+                   (patient_id, start_date, time, cost, duration, interval, days_str, meeting_type, meeting_link))
 
     db.commit()
     flash('Patient converted to ongoing successfully.')
@@ -655,11 +834,13 @@ def add_appointment(patient_id):
     date = request.form['date']
     time = request.form['time']
     cost = request.form.get('cost', 0)
+    meeting_type = request.form.get('meeting_type', 'in-person')
+    meeting_link = request.form.get('meeting_link', '')
 
     if date and time:
         db = get_db()
-        db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
-                   (patient_id, date, time, cost))
+        db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, meeting_type, meeting_link) VALUES (?, ?, ?, ?, ?, ?)',
+                   (patient_id, date, time, cost, meeting_type, meeting_link))
         db.commit()
         flash('Appointment added.')
 
@@ -714,75 +895,87 @@ def api_slots():
         elif status == 'blocked':
             color = 'gray'
 
-        events.append({
-            'id': f"slot_{override['id']}",
-            'title': status.capitalize(),
-            'start': slot_datetime_start,
-            'end': slot_datetime_end,
-            'color': color,
-            'extendedProps': {'status': status, 'duration_minutes': duration}
-        })
+        if current_user.role == 'patient':
+            if status == 'open':
+                events.append({
+                    'id': f"slot_{override['id']}",
+                    'title': status.capitalize(),
+                    'start': slot_datetime_start,
+                    'end': slot_datetime_end,
+                    'color': color,
+                    'extendedProps': {'status': status, 'duration_minutes': duration}
+                })
+        else:
+            events.append({
+                'id': f"slot_{override['id']}",
+                'title': status.capitalize(),
+                'start': slot_datetime_start,
+                'end': slot_datetime_end,
+                'color': color,
+                'extendedProps': {'status': status, 'duration_minutes': duration}
+            })
 
-    for appt in appointments:
-        # Use padded time
-        time_str = appt['appointment_time']
-        if len(time_str) == 4: # e.g., 9:00
-             time_str = "0" + time_str
+    if current_user.role != 'patient':
+        for appt in appointments:
+            # Use padded time
+            time_str = appt['appointment_time']
+            if len(time_str) == 4: # e.g., 9:00
+                 time_str = "0" + time_str
 
-        slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
-        duration = appt['duration_minutes'] or 60
-        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
-        dt_end = dt_start + datetime.timedelta(minutes=duration)
-        slot_datetime_end = dt_end.isoformat()
+            slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+            duration = appt['duration_minutes'] or 60
+            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+            dt_end = dt_start + datetime.timedelta(minutes=duration)
+            slot_datetime_end = dt_end.isoformat()
 
-        events.append({
-            'id': f"appt_{appt['id']}",
-            'title': 'Occupied (Appt)',
-            'start': slot_datetime_start,
-            'end': slot_datetime_end,
-            'color': 'red',
-            'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
-        })
+            events.append({
+                'id': f"appt_{appt['id']}",
+                'title': 'Occupied (Appt)',
+                'start': slot_datetime_start,
+                'end': slot_datetime_end,
+                'color': 'red',
+                'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
+            })
 
-        # Project recurring appointments
-        if appt['is_recurring'] and appt['recurrence_interval']:
-            current_date = dt_start.date()
-            interval_weeks = appt['recurrence_interval']
-            # Days of week: e.g. "0,2" for Sunday, Tuesday. Python weekday() is Monday=0, Sunday=6
-            # We map 0=Sunday, 1=Monday ... 6=Saturday for FullCalendar consistency
-            days_str = appt['recurrence_days']
-            recurrence_days = []
-            if days_str:
-                recurrence_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
-            else:
-                # default to the day of the original appointment if not specified
-                # fullcalendar: sunday=0. python: monday=0. python -> fullcalendar: (weekday + 1) % 7
-                recurrence_days = [(current_date.weekday() + 1) % 7]
+            # Project recurring appointments
+            if appt['is_recurring'] and appt['recurrence_interval']:
+                current_date = dt_start.date()
+                interval_weeks = appt['recurrence_interval']
+                # Days of week: e.g. "0,2" for Sunday, Tuesday. Python weekday() is Monday=0, Sunday=6
+                # We map 0=Sunday, 1=Monday ... 6=Saturday for FullCalendar consistency
+                days_str = appt['recurrence_days']
+                recurrence_days = []
+                if days_str:
+                    recurrence_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
+                else:
+                    # default to the day of the original appointment if not specified
+                    # fullcalendar: sunday=0. python: monday=0. python -> fullcalendar: (weekday + 1) % 7
+                    recurrence_days = [(current_date.weekday() + 1) % 7]
 
-            # Project up to 8 weeks ahead
-            for i in range(1, 8 // interval_weeks + 1):
-                base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
-                # Now project for each day in recurrence_days
-                for day_offset in range(7):
-                    test_date = base_next_date - datetime.timedelta(days=base_next_date.weekday()) + datetime.timedelta(days=day_offset) # Start of week (Monday) + day_offset
-                    # Wait, FullCalendar weeks start on Sunday usually, but Python's weekday() starts on Monday.
-                    # Let's map FullCalendar day to Python weekday: 0->6, 1->0, 2->1, 3->2, 4->3, 5->4, 6->5
-                    test_fc_day = (test_date.weekday() + 1) % 7
+                # Project up to 8 weeks ahead
+                for i in range(1, 8 // interval_weeks + 1):
+                    base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
+                    # Now project for each day in recurrence_days
+                    for day_offset in range(7):
+                        test_date = base_next_date - datetime.timedelta(days=base_next_date.weekday()) + datetime.timedelta(days=day_offset) # Start of week (Monday) + day_offset
+                        # Wait, FullCalendar weeks start on Sunday usually, but Python's weekday() starts on Monday.
+                        # Let's map FullCalendar day to Python weekday: 0->6, 1->0, 2->1, 3->2, 4->3, 5->4, 6->5
+                        test_fc_day = (test_date.weekday() + 1) % 7
 
-                    if test_fc_day in recurrence_days:
-                        # Only project if the test_date is on or after the original appointment date (for the very first week)
-                        if test_date >= current_date:
-                            if start_date <= test_date <= end_date:
-                                next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
-                                next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
-                                events.append({
-                                    'id': f"appt_recur_{appt['id']}_{i}_{test_fc_day}",
-                                    'title': 'Occupied (Recurring)',
-                                    'start': next_dt_start.isoformat(),
-                                    'end': next_dt_end.isoformat(),
-                                    'color': 'red',
-                                    'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
-                                })
+                        if test_fc_day in recurrence_days:
+                            # Only project if the test_date is on or after the original appointment date (for the very first week)
+                            if test_date >= current_date:
+                                if start_date <= test_date <= end_date:
+                                    next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
+                                    next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
+                                    events.append({
+                                        'id': f"appt_recur_{appt['id']}_{i}_{test_fc_day}",
+                                        'title': 'Occupied (Recurring)',
+                                        'start': next_dt_start.isoformat(),
+                                        'end': next_dt_end.isoformat(),
+                                        'color': 'red',
+                                        'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
+                                    })
 
     return jsonify(events)
 
@@ -845,6 +1038,55 @@ def patient_book_slot():
         flash('This slot is no longer available.')
 
     return redirect(url_for('dashboard'))
+
+@app.route('/appointment/<int:appointment_id>/ical')
+@login_required
+def export_ical(appointment_id):
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return "Not found", 404
+
+    # Security check: only allow admin or the patient who owns the appointment
+    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
+        return "Unauthorized", 403
+
+    import uuid
+    from datetime import datetime, timedelta
+
+    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time']}")
+    end_datetime = start_datetime + timedelta(minutes=appt['duration_minutes'] or 60)
+
+    dtstart = start_datetime.strftime("%Y%m%dT%H%M%S")
+    dtend = end_datetime.strftime("%Y%m%dT%H%M%S")
+    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+    ical_content = f"""BEGIN:VCALENDAR\r
+VERSION:2.0\r
+PRODID:-//Private Clinic CRM//EN\r
+BEGIN:VEVENT\r
+UID:{uuid.uuid4()}@clinic\r
+DTSTAMP:{dtstamp}\r
+DTSTART:{dtstart}\r
+DTEND:{dtend}\r
+SUMMARY:Therapy Session\r
+DESCRIPTION:Therapy session\r
+"""
+    if appt['meeting_link']:
+        ical_content += f"URL:{appt['meeting_link']}\r\n"
+        ical_content += f"LOCATION:{appt['meeting_link']}\r\n"
+    elif appt['meeting_type'] == 'in-person':
+        ical_content += f"LOCATION:Clinic\r\n"
+
+    ical_content += """END:VEVENT\r
+END:VCALENDAR\r
+"""
+
+    from flask import make_response
+    response = make_response(ical_content)
+    response.headers["Content-Disposition"] = f"attachment; filename=appointment_{appointment_id}.ics"
+    response.headers["Content-type"] = "text/calendar"
+    return response
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required

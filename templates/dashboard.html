@@ -6,28 +6,28 @@
         <!-- Balance / Debt Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold text-primary">Financial Summary</h5>
+                <h5 class="mb-0 fw-bold text-primary">{{ t('Financial Summary') }}</h5>
                 <i class="bi bi-wallet2 text-primary fs-5"></i>
             </div>
             <div class="card-body p-4 text-center border-top">
                 {% if balance > 0 %}
                     <div class="p-4 bg-danger bg-opacity-10 rounded-4 border border-danger border-opacity-10 mb-2">
-                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">Total Outstanding</small>
+                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Total Outstanding') }}</small>
                         <h2 class="display-5 text-danger fw-bold mb-0">${{ "%.2f"|format(balance) }}</h2>
                     </div>
-                    <p class="text-muted small">Outstanding balance for therapeutic services.</p>
+                    <p class="text-muted small">{{ t('Outstanding balance for therapeutic services.') }}</p>
                 {% elif balance < 0 %}
                     <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Credit Balance</small>
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Credit Balance') }}</small>
                         <h2 class="display-5 text-success fw-bold mb-0">-${{ "%.2f"|format(balance|abs) }}</h2>
                     </div>
-                    <p class="text-muted small">You have credit in your account.</p>
+                    <p class="text-muted small">{{ t('You have credit in your account.') }}</p>
                 {% else %}
                     <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Account Balance</small>
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Account Balance') }}</small>
                         <h2 class="display-5 text-success fw-bold mb-0">$0.00</h2>
                     </div>
-                    <p class="text-muted small">Your account is fully settled!</p>
+                    <p class="text-muted small">{{ t('Your account is fully settled!') }}</p>
                 {% endif %}
             </div>
         </div>
@@ -35,8 +35,8 @@
         <!-- Appointments Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments</h5>
-                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>{{ t('My Appointments') }}</h5>
+                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} {{ t('Sessions') }}</span>
             </div>
             <div class="card-body p-4">
                 <div class="list-group list-group-flush border rounded-3 overflow-hidden">
@@ -44,17 +44,32 @@
                         <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
                             <div>
                                 <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
+                                <span class="text-muted smallest d-block">{{ t('Scheduled at') }} {{ appt['appointment_time'] }}</span>
+                                {% if appt['meeting_type'] == 'online' and appt['meeting_link'] %}
+                                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                                        <i class="bi bi-camera-video"></i> {{ t('Join Meeting') }}
+                                    </a>
+                                {% else %}
+                                    <span class="badge bg-secondary mt-2">{{ t('In-Person') }}</span>
+                                {% endif %}
                             </div>
                             <div class="text-end">
                                 <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
                                 <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
+                                <div class="mt-2">
+                                    <a href="{{ url_for('export_ical', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary smallest p-1" title="Download iCal">
+                                        <i class="bi bi-calendar-arrow-down"></i>
+                                    </a>
+                                    <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session" target="_blank" class="btn btn-sm btn-outline-secondary smallest p-1" title="Add to Google Calendar">
+                                        <i class="bi bi-google"></i>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     {% else %}
                         <div class="py-5 text-center text-muted">
                             <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
-                            <p class="small mb-0">No therapy sessions scheduled.</p>
+                            <p class="small mb-0">{{ t('No therapy sessions scheduled.') }}</p>
                         </div>
                     {% endfor %}
                 </div>
@@ -64,7 +79,7 @@
         <!-- Self-Scheduling Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-plus me-2 text-primary"></i>Schedule a Session</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-plus me-2 text-primary"></i>{{ t('Schedule a Session') }}</h5>
             </div>
             <div class="card-body p-4">
                 {% if patient.status == 'waiting for scheduling' or patient.can_self_schedule %}
@@ -72,7 +87,7 @@
                 {% else %}
                     <div class="text-center py-5 text-muted">
                         <i class="bi bi-info-circle fs-2 d-block mb-2 opacity-50"></i>
-                        <p class="mb-0">Scheduling is only available for patients currently awaiting placement.</p>
+                        <p class="mb-0">{{ t('Scheduling is only available for patients currently awaiting placement.') }}</p>
                     </div>
                 {% endif %}
             </div>
@@ -83,7 +98,7 @@
             <div class="col-md-6">
                 <div class="card h-100 border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Receipts</h5>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Receipts') }}</h5>
                     </div>
                     <div class="card-body p-4">
                         <div class="list-group list-group-flush border rounded-3">
@@ -91,13 +106,13 @@
                                 <div class="list-group-item py-3">
                                     <div class="d-flex justify-content-between mb-1">
                                         <span class="fw-bold text-success">${{ "%.2f"|format(receipt['amount']) }}</span>
-                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
+                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">{{ t('Print') }}</button>
                                     </div>
-                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
+                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or t('Service Receipt') }}</p>
                                     <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">No receipts.</div>
+                                <div class="p-4 text-center text-muted smallest">{{ t('No receipts.') }}</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -106,7 +121,7 @@
             <div class="col-md-6">
                 <div class="card h-100 border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>Shared Files</h5>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>{{ t('Shared Files') }}</h5>
                     </div>
                     <div class="card-body p-4">
                         <div class="list-group list-group-flush border rounded-3">
@@ -121,10 +136,40 @@
                                     </div>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">No shared files.</div>
+                                <div class="p-4 text-center text-muted smallest">{{ t('No shared files.') }}</div>
                             {% endfor %}
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assigned Resources Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-bookmark me-2 text-primary"></i>{{ t('Assigned Resources') }}</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    {% for resource in assigned_resources %}
+                    <div class="col-md-6">
+                        <div class="card h-100 border shadow-sm rounded-3">
+                            <div class="card-body p-3">
+                                <h6 class="fw-bold mb-1">{{ resource['title'] }}</h6>
+                                <p class="text-muted small mb-2">{{ resource['description'] }}</p>
+                                {% if resource['url'] %}
+                                    <a href="{{ resource['url'] }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                                        {{ t('Open') }} <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-12 py-3 text-center text-muted">
+                        <p class="small mb-0">{{ t('No resources assigned to you.') }}</p>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -138,8 +183,8 @@
                     <div class="bg-white bg-opacity-20 d-inline-block p-3 rounded-circle mb-3">
                         <i class="bi bi-chat-dots-fill text-white fs-3"></i>
                     </div>
-                    <h5 class="fw-bold mb-1">Contact Therapist</h5>
-                    <p class="small text-white-50">Direct messages with your clinical provider.</p>
+                    <h5 class="fw-bold mb-1">{{ t('Contact Therapist') }}</h5>
+                    <p class="small text-white-50">{{ t('Direct messages with your clinical provider.') }}</p>
                 </div>
 
                 <!-- Chat history -->
@@ -158,7 +203,7 @@
                         {% endif %}
                     {% else %}
                         <div class="text-center my-auto">
-                            <p class="small text-white-50 mb-0">Send a message to start.</p>
+                            <p class="small text-white-50 mb-0">{{ t('Send a message to start.') }}</p>
                         </div>
                     {% endfor %}
                 </div>
@@ -170,7 +215,7 @@
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-light py-2 fw-bold rounded-3 text-primary">
-                            Send Securely <i class="bi bi-send-fill ms-2"></i>
+                            {{ t('Send Securely') }} <i class="bi bi-send-fill ms-2"></i>
                         </button>
                     </div>
                 </form>
