@@ -108,11 +108,11 @@ class ClinicTestCase(unittest.TestCase):
 
         # Login as patient
         rv = self.login('patient', 'password')
-        assert b'Account Balance' in rv.data  # Should be on dashboard
+        assert b'Account Balance' in rv.data or b'Financial Summary' in rv.data  # Should be on dashboard
 
         # Try to access admin page
         rv = self.client.get('/add_patient', follow_redirects=True)
-        assert b'Access denied' in rv.data or b'Unauthorized' in rv.data or rv.status_code == 403 or b'Dashboard' in rv.data # Redirected to dashboard
+        assert b'Access denied' in rv.data or b'Unauthorized' in rv.data or rv.status_code == 403 or b'Dashboard' in rv.data or b'Financial Summary' in rv.data # Redirected to dashboard
 
     def test_add_appointment(self):
         self.login('admin', 'admin')

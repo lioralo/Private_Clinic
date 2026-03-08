@@ -6,90 +6,40 @@
         <!-- Balance / Debt Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold text-primary">{{ t('Financial Summary') }}</h5>
+                <h5 class="mb-0 fw-bold text-primary">Financial Summary</h5>
                 <i class="bi bi-wallet2 text-primary fs-5"></i>
             </div>
             <div class="card-body p-4 text-center border-top">
                 {% if balance > 0 %}
                     <div class="p-4 bg-danger bg-opacity-10 rounded-4 border border-danger border-opacity-10 mb-2">
-                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Total Outstanding') }}</small>
+                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">Total Outstanding</small>
                         <h2 class="display-5 text-danger fw-bold mb-0">${{ "%.2f"|format(balance) }}</h2>
                     </div>
-                    <p class="text-muted small">{{ t('Outstanding balance for therapeutic services.') }}</p>
+                    <p class="text-muted small">Outstanding balance for therapeutic services.</p>
                 {% elif balance < 0 %}
                     <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Credit Balance') }}</small>
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Credit Balance</small>
                         <h2 class="display-5 text-success fw-bold mb-0">-${{ "%.2f"|format(balance|abs) }}</h2>
                     </div>
-                    <p class="text-muted small">{{ t('You have credit in your account.') }}</p>
+                    <p class="text-muted small">You have credit in your account.</p>
                 {% else %}
                     <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">{{ t('Account Balance') }}</small>
+                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Account Balance</small>
                         <h2 class="display-5 text-success fw-bold mb-0">$0.00</h2>
                     </div>
-                    <p class="text-muted small">{{ t('Your account is fully settled!') }}</p>
+                    <p class="text-muted small">Your account is fully settled!</p>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Appointments Section -->
+        <!-- Appointments Section (FullCalendar) -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>{{ t('My Appointments') }}</h5>
-                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} {{ t('Sessions') }}</span>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments Calendar</h5>
+                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
             </div>
             <div class="card-body p-4">
-                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
-                    {% for appt in appointments %}
-                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
-                            <div>
-                                <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted smallest d-block">{{ t('Scheduled at') }} {{ appt['appointment_time'] }}</span>
-                                {% if appt['meeting_type'] == 'online' and appt['meeting_link'] %}
-                                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
-                                        <i class="bi bi-camera-video"></i> {{ t('Join Meeting') }}
-                                    </a>
-                                {% else %}
-                                    <span class="badge bg-secondary mt-2">{{ t('In-Person') }}</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-end">
-                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
-                                <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
-                                <div class="mt-2">
-                                    <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary smallest p-1" title="Download iCal (.ics)">
-                                        <i class="bi bi-calendar-arrow-down"></i>
-                                    </a>
-                                    <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session{% if appt['meeting_link'] %}&location={{ appt['meeting_link'] }}{% endif %}" target="_blank" class="btn btn-sm btn-outline-secondary smallest p-1" title="Add to Google Calendar">
-                                        <i class="bi bi-google"></i>
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    {% else %}
-                        <div class="py-5 text-center text-muted">
-                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
-                            <p class="small mb-0">{{ t('No therapy sessions scheduled.') }}</p>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Self-Scheduling Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-plus me-2 text-primary"></i>{{ t('Schedule a Session') }}</h5>
-            </div>
-            <div class="card-body p-4">
-                {% if patient.status == 'waiting for scheduling' or patient.can_self_schedule %}
-                    <div id="calendar"></div>
-                {% else %}
-                    <div class="text-center py-5 text-muted">
-                        <i class="bi bi-info-circle fs-2 d-block mb-2 opacity-50"></i>
-                        <p class="mb-0">{{ t('Scheduling is only available for patients currently awaiting placement.') }}</p>
-                    </div>
-                {% endif %}
+                <div id="calendar"></div>
             </div>
         </div>
 
@@ -98,7 +48,7 @@
             <div class="col-md-6">
                 <div class="card h-100 border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Receipts') }}</h5>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Receipts</h5>
                     </div>
                     <div class="card-body p-4">
                         <div class="list-group list-group-flush border rounded-3">
@@ -106,13 +56,13 @@
                                 <div class="list-group-item py-3">
                                     <div class="d-flex justify-content-between mb-1">
                                         <span class="fw-bold text-success">${{ "%.2f"|format(receipt['amount']) }}</span>
-                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">{{ t('Print') }}</button>
+                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
                                     </div>
-                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or t('Service Receipt') }}</p>
+                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
                                     <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">{{ t('No receipts.') }}</div>
+                                <div class="p-4 text-center text-muted smallest">No receipts.</div>
                             {% endfor %}
                         </div>
                     </div>
@@ -121,7 +71,7 @@
             <div class="col-md-6">
                 <div class="card h-100 border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>{{ t('Shared Files') }}</h5>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>Shared Files</h5>
                     </div>
                     <div class="card-body p-4">
                         <div class="list-group list-group-flush border rounded-3">
@@ -136,166 +86,107 @@
                                     </div>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">{{ t('No shared files.') }}</div>
+                                <div class="p-4 text-center text-muted smallest">No shared files.</div>
                             {% endfor %}
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Assigned Resources Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-bookmark me-2 text-primary"></i>{{ t('Assigned Resources') }}</h5>
-            </div>
-            <div class="card-body p-4">
-                <div class="row g-3">
-                    {% for resource in assigned_resources %}
-                    <div class="col-md-6">
-                        <div class="card h-100 border shadow-sm rounded-3">
-                            <div class="card-body p-3">
-                                <h6 class="fw-bold mb-1">{{ resource['title'] }}</h6>
-                                <p class="text-muted small mb-2">{{ resource['description'] }}</p>
-                                {% if resource['url'] %}
-                                    <a href="{{ resource['url'] }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
-                                        {{ t('Open') }} <i class="bi bi-box-arrow-up-right ms-1"></i>
-                                    </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="col-12 py-3 text-center text-muted">
-                        <p class="small mb-0">{{ t('No resources assigned to you.') }}</p>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="col-lg-4">
-        <!-- Contact Therapist Card / Chat -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px; max-height: calc(100vh - 120px); display: flex; flex-direction: column;">
-            <div class="card-body p-4 p-lg-5 d-flex flex-column h-100">
+        <!-- Contact Therapist Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px;">
+            <div class="card-body p-4 p-lg-5">
                 <div class="text-center mb-4">
                     <div class="bg-white bg-opacity-20 d-inline-block p-3 rounded-circle mb-3">
-                        <i class="bi bi-chat-dots-fill text-white fs-3"></i>
+                        <i class="bi bi-envelope-fill text-white fs-3"></i>
                     </div>
-                    <h5 class="fw-bold mb-1">{{ t('Contact Therapist') }}</h5>
-                    <p class="small text-white-50">{{ t('Direct messages with your clinical provider.') }}</p>
-                </div>
-
-                <!-- Chat history -->
-                <div class="chat-history mb-4 flex-grow-1" style="overflow-y: auto; display: flex; flex-direction: column;">
-                    {% for msg in messages %}
-                        {% if msg['sender_id'] == current_user.id %}
-                            <div class="align-self-end text-end mb-2 w-75">
-                                <span class="d-inline-block p-2 bg-white bg-opacity-25 text-white rounded-3">{{ msg['content'] }}</span>
-                                <small class="text-white-50 d-block smallest mt-1">{{ msg['timestamp'] }}</small>
-                            </div>
-                        {% else %}
-                            <div class="align-self-start text-start mb-2 w-75">
-                                <span class="d-inline-block p-2 bg-white text-primary rounded-3">{{ msg['content'] }}</span>
-                                <small class="text-white-50 d-block smallest mt-1">{{ msg['timestamp'] }}</small>
-                            </div>
-                        {% endif %}
-                    {% else %}
-                        <div class="text-center my-auto">
-                            <p class="small text-white-50 mb-0">{{ t('Send a message to start.') }}</p>
-                        </div>
-                    {% endfor %}
+                    <h5 class="fw-bold mb-1">Contact Therapist</h5>
+                    <p class="small text-white-50">Send a direct message to your clinical provider.</p>
                 </div>
                 
-                <form method="post" action="{{ url_for('contact_admin') }}" class="mt-auto">
+                <form method="post" action="{{ url_for('contact_admin') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-2 rounded-3" rows="2" placeholder="Type your message here..." required style="resize: none;"></textarea>
+                    <div class="mb-4">
+                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-3 rounded-3" rows="6" placeholder="Type your message here..." required></textarea>
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-light py-2 fw-bold rounded-3 text-primary">
-                            {{ t('Send Securely') }} <i class="bi bi-send-fill ms-2"></i>
+                            Send Securely <i class="bi bi-send-fill ms-2"></i>
                         </button>
                     </div>
                 </form>
+                <div class="text-center mt-4 pt-2">
+                    <p class="smallest text-white-50 mb-0">Responses are typically received within 24-48 business hours.</p>
+                </div>
             </div>
         </div>
     </div>
-</div>
-
-<!-- Modal for booking -->
-<div class="modal fade" id="bookingModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Book Session</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <p>Would you like to schedule a session for <span id="bookingDateTime" class="fw-bold"></span>?</p>
-        <form id="bookingForm" method="POST" action="{{ url_for('patient_book_slot') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="date" id="bookingDate">
-            <input type="hidden" name="time" id="bookingTime">
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary rounded-pill fw-bold" onclick="document.getElementById('bookingForm').submit()">Confirm Booking</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
 </style>
+{% endblock %}
 
-<!-- FullCalendar Integration -->
-{% if patient.status == 'waiting for scheduling' or patient.can_self_schedule %}
-<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+{% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var calendarEl = document.getElementById('calendar');
-    if (calendarEl) {
-        var calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'timeGridWeek',
-            hiddenDays: [5, 6], // Hide Friday and Saturday
-            slotMinTime: '08:00:00',
-            slotMaxTime: '20:00:00',
-            allDaySlot: false,
-            firstDay: 0, // Sunday
-            height: 'auto',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'timeGridWeek'
-            },
-            events: '/api/slots',
-            eventClick: function(info) {
-                if (info.event.extendedProps.status === 'open') {
-                    // Show booking modal
-                    var d = info.event.start;
-                    var dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-                    var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        slotMinTime: '08:00:00',
+        slotMaxTime: '18:00:00',
+        allDaySlot: false,
+        events: '/api/slots',
+        eventDrop: function(info) {
+            var eventId = info.event.id.replace('appt_', '');
 
-                    document.getElementById('bookingDate').value = dateStr;
-                    document.getElementById('bookingTime').value = timeStr;
-                    document.getElementById('bookingDateTime').innerText = dateStr + ' at ' + timeStr;
+            // To avoid timezone offset issues (since FullCalendar creates a local Date object
+            // but toISOString() uses UTC), we manually construct the date string in the local timezone
+            var d = info.event.start;
+            var year = d.getFullYear();
+            var month = ('0' + (d.getMonth() + 1)).slice(-2);
+            var day = ('0' + d.getDate()).slice(-2);
+            var hours = ('0' + d.getHours()).slice(-2);
+            var minutes = ('0' + d.getMinutes()).slice(-2);
 
-                    var modal = new bootstrap.Modal(document.getElementById('bookingModal'));
-                    modal.show();
+            var newDate = year + '-' + month + '-' + day;
+            var newTime = hours + ':' + minutes;
+
+            fetch('/api/appointments/' + eventId + '/reschedule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    date: newDate,
+                    time: newTime
+                })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.status !== 'success') {
+                    alert('Error rescheduling: ' + data.message);
+                    info.revert();
                 } else {
-                    alert('This slot is not available for booking.');
+                    alert('Appointment moved successfully!');
                 }
-            }
-        });
-        calendar.render();
-    }
+            }).catch(error => {
+                alert('Network error. Reverting change.');
+                info.revert();
+            });
+        }
+    });
+    calendar.render();
 });
 </script>
-{% endif %}
-
 {% endblock %}

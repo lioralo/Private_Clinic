@@ -63,4 +63,69 @@
     box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
 }
 </style>
+<!-- Notification Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1055;">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let lastNotificationId = 0;
+
+    function fetchNotifications() {
+        fetch('/api/notifications?last_id=' + lastNotificationId)
+            .then(response => response.json())
+            .then(data => {
+                if (data.length > 0) {
+                    data.forEach(notification => {
+                        showToast(notification.message);
+                        if (notification.id > lastNotificationId) {
+                            lastNotificationId = notification.id;
+                        }
+                    });
+                }
+            })
+            .catch(err => console.error('Error fetching notifications:', err));
+    }
+
+    function showToast(message) {
+        const container = document.getElementById('toastContainer');
+        const toastEl = document.createElement('div');
+        toastEl.className = 'toast align-items-center text-bg-primary border-0';
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'assertive');
+        toastEl.setAttribute('aria-atomic', 'true');
+
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-bell-fill me-2"></i> ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        `;
+
+        container.appendChild(toastEl);
+        const toast = new bootstrap.Toast(toastEl, { delay: 10000 });
+        toast.show();
+
+        toastEl.addEventListener('hidden.bs.toast', () => {
+            toastEl.remove();
+        });
+    }
+
+    // Initial fetch to get the latest ID so we don't spam on load
+    fetch('/api/notifications')
+        .then(response => response.json())
+        .then(data => {
+            if (data.length > 0) {
+                lastNotificationId = Math.max(...data.map(n => n.id));
+            }
+            // Start polling every 5 seconds
+            setInterval(fetchNotifications, 5000);
+        })
+        .catch(err => console.error(err));
+});
+</script>
 {% endblock %}

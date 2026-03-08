@@ -9,292 +9,111 @@
                 <h4 class="mb-0 text-primary fw-bold">
                     <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
                 </h4>
-                <div class="d-flex align-items-center">
-                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 me-2">
+                <div>
+                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3">
                         {{ patient['status']|capitalize }}
                     </span>
-                    {% if patient['status'] == 'candidate' %}
-                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3 me-2" data-bs-toggle="modal" data-bs-target="#convertModal">
-                        <i class="bi bi-arrow-right-circle me-1"></i>Convert to Ongoing
-                    </button>
-                    {% endif %}
-                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-2">
+                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary ms-2 rounded-pill px-3">
                         <i class="bi bi-pencil-square me-1"></i>Edit
-                    </a>
-                    <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-                        <i class="bi bi-download me-1"></i>{{ t('Export History') }}
                     </a>
                 </div>
             </div>
-
-            <div class="card-header bg-light border-0 p-0">
-                <ul class="nav nav-tabs border-0" id="patientTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button" role="tab" aria-controls="summary" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="appointments-tab" data-bs-toggle="tab" data-bs-target="#appointments" type="button" role="tab" aria-controls="appointments" aria-selected="false"><i class="bi bi-calendar-event me-2"></i>{{ t('Appointments') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes" type="button" role="tab" aria-controls="notes" aria-selected="false"><i class="bi bi-journal-text me-2"></i>{{ t('Clinical Notes') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="billing-tab" data-bs-toggle="tab" data-bs-target="#billing" type="button" role="tab" aria-controls="billing" aria-selected="false"><i class="bi bi-receipt me-2"></i>{{ t('Billing') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}</button>
-                    </li>
-                </ul>
+            <div class="card-body p-4 bg-light bg-opacity-10 border-top">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="p-3 bg-white rounded-3 shadow-sm border">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Email</small>
+                            <div class="fw-medium text-dark">{{ patient['email'] or 'Not provided' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 bg-white rounded-3 shadow-sm border">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">Phone</small>
+                            <div class="fw-medium text-dark">{{ patient['phone'] or 'Not provided' }}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="tab-content" id="patientTabsContent">
-            <!-- SUMMARY TAB -->
-            <div class="tab-pane fade show active" id="summary" role="tabpanel" aria-labelledby="summary-tab">
-                <div class="card border-0 shadow-sm rounded-4 mb-4">
-                    <div class="card-body p-4 bg-light bg-opacity-10">
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                    <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Email') }}</small>
-                                    <div class="fw-medium text-dark mb-2">{{ patient['email'] or 'Not provided' }}</div>
-                                    {% if patient['email'] %}
-                                        <a href="mailto:{{ patient['email'] }}?subject=Therapy Session Follow-up" class="btn btn-sm btn-outline-primary d-block w-100">
-                                            <i class="bi bi-envelope me-1"></i>{{ t('Send Email') }}
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                    <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Phone') }}</small>
-                                    <div class="fw-medium text-dark mb-2">{{ patient['phone'] or 'Not provided' }}</div>
-                                    {% if patient['phone'] %}
-                                        <a href="https://wa.me/{{ patient['phone']|replace('-','')|replace(' ','') }}?text=Hello {{ patient['name'] }}, " target="_blank" class="btn btn-sm btn-success d-block w-100">
-                                            <i class="bi bi-whatsapp me-1"></i>{{ t('WhatsApp') }}
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
+        <!-- Appointments Management -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id="calendar" class="mb-4"></div>
+                <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label smallest text-uppercase fw-bold">Date</label>
+                        <input type="date" name="date" class="form-control" required>
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label smallest text-uppercase fw-bold">Time</label>
+                        <input type="time" name="time" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
+                        <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
+                    </div>
+                </form>
+
+                <div class="appointments-list">
+                    {% for appt in appointments %}
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
+                            <div>
+                                <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
+                                <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
+                                <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']|float) }}</span>
+                            </div>
+                            <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4 bg-light rounded-3">
+                            <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
+                        </div>
+                    {% endfor %}
                 </div>
             </div>
+        </div>
 
-            <!-- APPOINTMENTS TAB -->
-            <div class="tab-pane fade" id="appointments" role="tabpanel" aria-labelledby="appointments-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
+        <!-- Treatment Notes Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" class="mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group bg-light rounded-3 p-1">
+                        <textarea name="content" class="form-control border-0 bg-transparent py-3" rows="2" required placeholder="Add a new clinical note..."></textarea>
+                        <button type="submit" class="btn btn-primary px-4 ms-2 rounded-3 fw-bold">Post Note</button>
                     </div>
-                    <div class="card-body p-4">
-                        <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-md-4">
-                                <label class="form-label smallest text-uppercase fw-bold">{{ t('Date') }}</label>
-                                <input type="date" name="date" class="form-control" required>
+                </form>
+                <div class="notes-timeline">
+                    {% for note in notes %}
+                        <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3">
+                            <div class="text-dark mb-2">{{ note['content'] }}</div>
+                            <div class="text-muted smaller d-flex align-items-center">
+                                <i class="bi bi-clock me-1"></i> {{ note['created_at'] }}
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label smallest text-uppercase fw-bold">{{ t('Time') }}</label>
-                                <input type="time" name="time" class="form-control" required>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label smallest text-uppercase fw-bold">{{ t('Cost') }}</label>
-                                <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Type') }}</label>
-                                <select name="meeting_type" class="form-select">
-                                    <option value="in-person">{{ t('In-Person') }}</option>
-                                    <option value="online">{{ t('Online') }}</option>
-                                </select>
-                            </div>
-                            <div class="col-md-5">
-                                <label class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Link') }}</label>
-                                <input type="url" name="meeting_link" class="form-control" placeholder="https://zoom.us/...">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label d-none d-md-block">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary w-100 fw-bold">{{ t('Add') }}</button>
-                            </div>
-                        </form>
-
-                        <div class="appointments-list">
-                            {% for appt in appointments %}
-                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
-                                    <div>
-                                        <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
-                                        <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
-                                        <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
-                                    </div>
-                                    <div class="d-flex align-items-center">
-                                        <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary border-0 rounded-circle p-2 lh-1 me-1" title="{{ t('Download iCal (.ics)') }}">
-                                            <i class="bi bi-calendar-arrow-down small"></i>
-                                        </a>
-                                        <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session{% if appt['meeting_link'] %}&location={{ appt['meeting_link'] }}{% endif %}" target="_blank" class="btn btn-sm btn-outline-secondary border-0 rounded-circle p-2 lh-1 me-1" title="{{ t('Add to Google Calendar') }}">
-                                            <i class="bi bi-google small"></i>
-                                        </a>
-                                        <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('{{ t('Remove appointment?') }}');">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1" title="{{ t('Remove') }}"><i class="bi bi-trash-fill small"></i></button>
-                                        </form>
-                                    </div>
-                                </div>
-                            {% else %}
-                                <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>{{ t('No appointments found.') }}</p>
-                                </div>
-                            {% endfor %}
                         </div>
-                    </div>
+                    {% else %}
+                        <div class="text-center py-4 bg-light rounded-3">
+                            <p class="text-muted mb-0 small">No clinical history recorded.</p>
+                        </div>
+                    {% endfor %}
                 </div>
             </div>
-
-            <!-- CLINICAL NOTES TAB -->
-            <div class="tab-pane fade" id="notes" role="tabpanel" aria-labelledby="notes-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>{{ t('Treatment Log') }}</h5>
-                    </div>
-                    <div class="card-body p-4">
-                        <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="bg-light rounded-3 p-3 mb-3">
-                                <div class="mb-2">
-                                    <label class="form-label smallest text-uppercase fw-bold">{{ t('Content (English)') }}</label>
-                                    <textarea name="content" class="form-control border-0 bg-white" rows="2" placeholder="Clinical note (English)..."></textarea>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label smallest text-uppercase fw-bold">{{ t('תוכן (Hebrew)') }}</label>
-                                    <textarea name="content_hebrew" class="form-control border-0 bg-white" rows="2" dir="rtl" style="font-family: 'Assistant', sans-serif;" placeholder="הוסף הערה קלינית..."></textarea>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label smallest text-uppercase fw-bold">{{ t('Attach Files') }}</label>
-                                    <input type="file" name="files" class="form-control form-control-sm" multiple>
-                                </div>
-                                <div class="text-end mt-2">
-                                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold">{{ t('Post Treatment Log') }}</button>
-                                </div>
-                            </div>
-                        </form>
-                        <div class="notes-timeline">
-                            {% for note in notes %}
-                                <div class="note-item border-start border-4 {% if note['needs_review'] %}border-warning{% else %}border-primary{% endif %} bg-white shadow-sm rounded-end mb-3 p-3">
-                                    <div class="d-flex justify-content-between">
-                                        {% if note['session_number'] %}<span class="badge bg-light text-dark mb-2 border">Meeting #{{ note['session_number'] }}</span>{% endif %}
-                                        {% if note['needs_review'] %}<span class="badge bg-warning text-dark mb-2">{{ t('Needs Review') }}</span>{% endif %}
-                                    </div>
-                                    {% if note['content'] %}
-                                        <div class="text-dark mb-2">{{ note['content'] }}</div>
-                                    {% endif %}
-                                    {% if note['content_hebrew'] %}
-                                        <div class="text-dark mb-2" dir="rtl" style="font-family: 'Assistant', sans-serif;">{{ note['content_hebrew'] }}</div>
-                                    {% endif %}
-
-                                    {% set ns = namespace(found=false) %}
-                                    {% for file in files %}
-                                        {% if file['treatment_id'] == note['id'] %}
-                                            {% if not ns.found %}
-                                                <div class="mt-2 pt-2 border-top smallest">
-                                                <strong>{{ t('Attached Files:') }}</strong>
-                                                <ul class="mb-0 ps-3">
-                                                {% set ns.found = true %}
-                                            {% endif %}
-                                            <li><a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank">{{ file['filename'] }}</a></li>
-                                        {% endif %}
-                                    {% endfor %}
-                                    {% if ns.found %}
-                                        </ul></div>
-                                    {% endif %}
-
-                                    <div class="text-muted smaller d-flex align-items-center mt-2">
-                                        <i class="bi bi-clock me-1"></i> {{ note['created_at'] }}
-                                    </div>
-                                </div>
-                            {% else %}
-                                <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small">{{ t('No clinical history recorded.') }}</p>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- BILLING TAB (Moved Receipts here) -->
-            <div class="tab-pane fade" id="billing" role="tabpanel" aria-labelledby="billing-tab">
-                <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Financial Receipts') }}</h5>
-                    </div>
-                    <div class="card-body p-4 bg-light bg-opacity-25">
-                        <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-4">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="row g-2 mb-2">
-                                <div class="col-5">
-                                    <input type="number" step="0.01" name="amount" class="form-control form-control-sm border-0 shadow-sm" required placeholder="{{ t('Amount ($)') }}">
-                                </div>
-                                <div class="col-7">
-                                    <input type="text" name="description" class="form-control form-control-sm border-0 shadow-sm" placeholder="{{ t('Description') }}">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-sm btn-outline-primary w-100 fw-bold rounded-pill">{{ t('Create New Receipt') }}</button>
-                        </form>
-                        <div class="receipts-list bg-white rounded-3 shadow-sm overflow-hidden border">
-                            {% for receipt in receipts %}
-                                <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <span class="fw-bold text-success d-block">${{ "%.2f"|format(receipt['amount']) }}</span>
-                                        <span class="text-muted smaller">{{ receipt['description'] or t('Medical Service') }}</span>
-                                    </div>
-                                    <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
-                                </div>
-                            {% else %}
-                                <div class="p-4 text-center text-muted small">{{ t('No financial records.') }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MESSAGES TAB (Moved Chat History here) -->
-            <div class="tab-pane fade" id="messages" role="tabpanel" aria-labelledby="messages-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots me-2 text-primary"></i>{{ t('Internal Chat') }}</h5>
-                    </div>
-                    <div class="card-body p-4">
-                        <div class="chat-history mb-3" style="max-height: 400px; overflow-y: auto;">
-                            {% for msg in messages %}
-                                {% if msg['sender_id'] == current_user.id %}
-                                    <div class="text-end mb-2">
-                                        <span class="d-inline-block p-2 bg-primary text-white rounded-3">{{ msg['content'] }}</span>
-                                        <small class="text-muted d-block smallest">{{ msg['timestamp'] }}</small>
-                                    </div>
-                                {% else %}
-                                    <div class="text-start mb-2">
-                                        <span class="d-inline-block p-2 bg-light border rounded-3">{{ msg['content'] }}</span>
-                                        <small class="text-muted d-block smallest">{{ msg['timestamp'] }}</small>
-                                    </div>
-                                {% endif %}
-                            {% else %}
-                                <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small">{{ t('No messages yet.') }}</p>
-                                </div>
-                            {% endfor %}
-                        </div>
-                        <form method="post" action="{{ url_for('admin_reply_message', patient_id=patient['id']) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="input-group">
-                                <input type="text" name="content" class="form-control" placeholder="{{ t('Type a message...') }}" required>
-                                <button type="submit" class="btn btn-primary px-3"><i class="bi bi-send-fill"></i></button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-        </div> <!-- End of Tab Content -->
+        </div>
     </div>
 
     <div class="col-lg-5">
@@ -335,7 +154,7 @@
                     <div class="mb-3">
                         <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Password" required>
                     </div>
-                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
+                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
                 </form>
             </div>
         </div>
@@ -346,21 +165,11 @@
                 <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>Medical Files</h5>
             </div>
             <div class="card-body p-4">
-                <h6 class="smallest text-uppercase fw-bold text-muted mb-2">{{ t('Upload File or DOCX Treatment Log') }}</h6>
                 <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="input-group input-group-sm">
                         <input type="file" name="file" class="form-control rounded-start-3" id="inputGroupFile" required>
-                        <button class="btn btn-primary px-3 fw-bold rounded-end-pill" type="submit">Upload</button>
-                    </div>
-                </form>
-
-                <h6 class="smallest text-uppercase fw-bold text-muted mb-2">{{ t('Import Patient History (JSON)') }}</h6>
-                <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group input-group-sm">
-                        <input type="file" name="file" class="form-control rounded-start-3" accept=".json" required>
-                        <button class="btn btn-secondary px-3 fw-bold rounded-end-pill" type="submit">{{ t('Import') }}</button>
+                        <button class="btn btn-primary px-3 fw-bold" type="submit">Upload</button>
                     </div>
                 </form>
                 <div class="list-group list-group-flush border-top border-bottom">
@@ -381,36 +190,35 @@
             </div>
         </div>
 
-        <!-- Manage Resources -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
+        <!-- Receipts Management -->
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-bookmark me-2 text-primary"></i>{{ t('Assign Resource') }}</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Financial Receipts</h5>
             </div>
-            <div class="card-body p-4">
-                <form method="POST" action="{{ url_for('assign_resource', patient_id=patient['id']) }}" class="mb-4">
+            <div class="card-body p-4 bg-light bg-opacity-25">
+                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group">
-                        <select name="resource_id" class="form-select" required>
-                            <option value="">{{ t('Select a Private Resource...') }}</option>
-                            {% for resource in all_resources %}
-                            <option value="{{ resource['id'] }}">{{ resource['title'] }}</option>
-                            {% endfor %}
-                        </select>
-                        <button class="btn btn-primary rounded-end-pill" type="submit">{{ t('Assign') }}</button>
-                    </div>
-                </form>
-
-                <h6 class="smallest text-uppercase fw-bold text-muted mb-3">{{ t('Assigned Resources') }}</h6>
-                <div class="list-group list-group-flush border rounded-3">
-                    {% for resource in assigned_resources %}
-                    <div class="list-group-item py-2 d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="d-block fw-bold text-dark">{{ resource['title'] }}</span>
-                            <span class="smallest text-muted">{{ resource['description'] }}</span>
+                    <div class="row g-2 mb-2">
+                        <div class="col-5">
+                            <input type="number" step="0.01" name="amount" class="form-control form-control-sm border-0 shadow-sm" required placeholder="Amount ($)">
+                        </div>
+                        <div class="col-7">
+                            <input type="text" name="description" class="form-control form-control-sm border-0 shadow-sm" placeholder="Description">
                         </div>
                     </div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100 fw-bold rounded-pill">Create New Receipt</button>
+                </form>
+                <div class="receipts-list bg-white rounded-3 shadow-sm overflow-hidden border">
+                    {% for receipt in receipts %}
+                        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="fw-bold text-success d-block">${{ "%.2f"|format(receipt['amount']) }}</span>
+                                <span class="text-muted smaller">{{ receipt['description'] or 'Medical Service' }}</span>
+                            </div>
+                            <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
+                        </div>
                     {% else %}
-                    <div class="p-3 text-center text-muted small">{{ t('No resources assigned.') }}</div>
+                        <div class="p-4 text-center text-muted small">No financial records.</div>
                     {% endfor %}
                 </div>
             </div>
@@ -418,125 +226,31 @@
     </div>
 </div>
 
-{% if patient['status'] == 'candidate' %}
-<div class="modal fade" id="convertModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">{{ t('Convert to Ongoing: Assign Recurring Slot') }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form id="convertForm" method="POST" action="{{ url_for('convert_patient', patient_id=patient['id']) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="mb-3">
-                <label for="start_date" class="form-label smallest text-uppercase fw-bold">{{ t('First Appointment Date') }}</label>
-                <input type="date" name="start_date" id="start_date" class="form-control" required>
-            </div>
-            <div class="mb-3">
-                <label for="time" class="form-label smallest text-uppercase fw-bold">{{ t('Time') }}</label>
-                <select name="time" class="form-select" required>
-                    {% for h in range(8, 22) %}
-                        <option value="{{ '%02d' % h }}:00">{{ '%02d' % h }}:00</option>
-                        <option value="{{ '%02d' % h }}:30">{{ '%02d' % h }}:30</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="mb-3">
-                <label for="duration" class="form-label smallest text-uppercase fw-bold">{{ t('Duration (Minutes)') }}</label>
-                <select name="duration" class="form-select" required>
-                    <option value="30">30</option>
-                    <option value="60" selected>60</option>
-                    <option value="90">90</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label for="interval" class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence Interval (Weeks)') }}</label>
-                <select name="interval" class="form-select" required>
-                    <option value="1" selected>{{ t('Every Week') }}</option>
-                    <option value="2">{{ t('Every 2 Weeks') }}</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence End Limit') }}</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date" checked>
-                    <label class="form-check-label w-100" for="limitDate">
-                        {{ t('Repeat until specific date:') }}
-                        <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
-                    </label>
-                </div>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count">
-                    <label class="form-check-label w-100" for="limitCount">
-                        {{ t('Repeat for X meetings:') }}
-                        <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" min="1" placeholder="{{ t('Number of meetings') }}">
-                    </label>
-                </div>
-            </div>
-            <script>
-                document.getElementById('start_date').addEventListener('change', function() {
-                    const startDate = new Date(this.value);
-                    if (!isNaN(startDate)) {
-                        startDate.setMonth(startDate.getMonth() + 3);
-                        document.getElementById('recurrence_end_date').value = startDate.toISOString().split('T')[0];
-                    }
-                });
-            </script>
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold">{{ t('Days of Week') }}</label><br>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="checkbox" name="days" value="0">
-                  <label class="form-check-label">{{ t('Sun') }}</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="checkbox" name="days" value="1">
-                  <label class="form-check-label">{{ t('Mon') }}</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="checkbox" name="days" value="2">
-                  <label class="form-check-label">{{ t('Tue') }}</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="checkbox" name="days" value="3">
-                  <label class="form-check-label">{{ t('Wed') }}</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="checkbox" name="days" value="4">
-                  <label class="form-check-label">{{ t('Thu') }}</label>
-                </div>
-            </div>
-            <div class="text-muted smallest mb-3">{{ t('Check the days that apply. If none checked, defaults to the day of the first appointment.') }}</div>
-            <div class="mb-3">
-                <label for="cost" class="form-label smallest text-uppercase fw-bold">{{ t('Cost per Session ($)') }}</label>
-                <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
-            </div>
-            <div class="mb-3">
-                <label for="meeting_type" class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Type') }}</label>
-                <select name="meeting_type" id="meeting_type" class="form-select">
-                    <option value="in-person">{{ t('In-Person') }}</option>
-                    <option value="online">{{ t('Online') }}</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label for="meeting_link" class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Link (if Online)') }}</label>
-                <input type="url" name="meeting_link" id="meeting_link" class="form-control" placeholder="https://zoom.us/...">
-            </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
-        <button type="button" class="btn btn-primary rounded-pill fw-bold" onclick="document.getElementById('convertForm').submit()">{{ t('Save & Convert') }}</button>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
 <style>
 .note-item { transition: transform 0.2s; }
 .note-item:hover { transform: translateX(5px); }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.5); }
 .smallest { font-size: 0.7rem; }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        slotMinTime: '08:00:00',
+        slotMaxTime: '18:00:00',
+        allDaySlot: false,
+        events: '/api/slots',
+    });
+    calendar.render();
+});
+</script>
 {% endblock %}
