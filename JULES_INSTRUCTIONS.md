@@ -13,6 +13,13 @@ This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. I
     *   It handles the mapping between appointments and notes during import.
 
 ## Change Log
+- **Date/Time**: Tuesday, 10 March 2026, 10:00
+- **Update**:
+    - **Conflict Resolution**: Added logic to `api/slots` to prevent generating recurring appointments if the day/time overlaps with a "blocked" status in `slots_override`.
+    - **UI Timeline**: Updated `patient_detail.html` to display the "Meeting Number" next to the clinical notes to make progress tracking easier.
+    - **Audit Logging**: Ensured that when an appointment is deleted, an entry is created in the `audit_logs` table via the `delete_appointment` route.
+    - **Email Reminders**: Created a stub function `send_appointment_reminders()` in `app.py` intended for external Email/SMS API integrations.
+    - **Time Inputs**: Replaced `<input type="time">` in `patient_detail.html` with `<select>` dropdowns (30-minute increments, 08:00 - 21:00).
 - **Date/Time**: Sunday, 8 March 2026, 13:55
 - **Update**: 
     - Enhanced calendar booking to show specific client names (Admin view) or "My Appointment" (Patient view).
