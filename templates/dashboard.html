@@ -57,10 +57,10 @@
                                 <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
                                 <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
                                 <div class="mt-2">
-                                    <a href="{{ url_for('export_ical', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary smallest p-1" title="Download iCal">
+                                    <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary smallest p-1" title="Download iCal (.ics)">
                                         <i class="bi bi-calendar-arrow-down"></i>
                                     </a>
-                                    <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session" target="_blank" class="btn btn-sm btn-outline-secondary smallest p-1" title="Add to Google Calendar">
+                                    <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session{% if appt['meeting_link'] %}&location={{ appt['meeting_link'] }}{% endif %}" target="_blank" class="btn btn-sm btn-outline-secondary smallest p-1" title="Add to Google Calendar">
                                         <i class="bi bi-google"></i>
                                     </a>
                                 </div>
@@ -241,8 +241,8 @@
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('bookingForm').submit()">Confirm Booking</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary rounded-pill fw-bold" onclick="document.getElementById('bookingForm').submit()">Confirm Booking</button>
       </div>
     </div>
   </div>
