@@ -127,10 +127,18 @@
                                         <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
                                         <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
                                     </div>
-                                    <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
-                                    </form>
+                                    <div class="d-flex align-items-center">
+                                        <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary border-0 rounded-circle p-2 lh-1 me-1" title="{{ t('Download iCal (.ics)') }}">
+                                            <i class="bi bi-calendar-arrow-down small"></i>
+                                        </a>
+                                        <a href="https://calendar.google.com/calendar/r/eventedit?text=Therapy+Session&dates={{ appt['appointment_date'] | replace('-', '') }}T{{ appt['appointment_time'] | replace(':', '') }}00/{{ appt['appointment_date'] | replace('-', '') }}T{{ (appt['appointment_time'].split(':')[0]|int + 1)|string|rjust(2, '0') }}{{ appt['appointment_time'].split(':')[1] }}00&details=Therapy+Session{% if appt['meeting_link'] %}&location={{ appt['meeting_link'] }}{% endif %}" target="_blank" class="btn btn-sm btn-outline-secondary border-0 rounded-circle p-2 lh-1 me-1" title="{{ t('Add to Google Calendar') }}">
+                                            <i class="bi bi-google small"></i>
+                                        </a>
+                                        <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('{{ t('Remove appointment?') }}');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1" title="{{ t('Remove') }}"><i class="bi bi-trash-fill small"></i></button>
+                                        </form>
+                                    </div>
                                 </div>
                             {% else %}
                                 <div class="text-center py-4 bg-light rounded-3">
@@ -165,7 +173,7 @@
                                     <input type="file" name="files" class="form-control form-control-sm" multiple>
                                 </div>
                                 <div class="text-end mt-2">
-                                    <button type="submit" class="btn btn-primary px-4 rounded-3 fw-bold">{{ t('Post Treatment Log') }}</button>
+                                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold">{{ t('Post Treatment Log') }}</button>
                                 </div>
                             </div>
                         </form>
@@ -327,7 +335,7 @@
                     <div class="mb-3">
                         <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white placeholder-light" placeholder="New Password" required>
                     </div>
-                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
+                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
                 </form>
             </div>
         </div>
@@ -343,7 +351,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="input-group input-group-sm">
                         <input type="file" name="file" class="form-control rounded-start-3" id="inputGroupFile" required>
-                        <button class="btn btn-primary px-3 fw-bold" type="submit">Upload</button>
+                        <button class="btn btn-primary px-3 fw-bold rounded-end-pill" type="submit">Upload</button>
                     </div>
                 </form>
 
@@ -352,7 +360,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="input-group input-group-sm">
                         <input type="file" name="file" class="form-control rounded-start-3" accept=".json" required>
-                        <button class="btn btn-secondary px-3 fw-bold" type="submit">{{ t('Import') }}</button>
+                        <button class="btn btn-secondary px-3 fw-bold rounded-end-pill" type="submit">{{ t('Import') }}</button>
                     </div>
                 </form>
                 <div class="list-group list-group-flush border-top border-bottom">
@@ -388,7 +396,7 @@
                             <option value="{{ resource['id'] }}">{{ resource['title'] }}</option>
                             {% endfor %}
                         </select>
-                        <button class="btn btn-primary" type="submit">{{ t('Assign') }}</button>
+                        <button class="btn btn-primary rounded-end-pill" type="submit">{{ t('Assign') }}</button>
                     </div>
                 </form>
 
@@ -415,18 +423,18 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Convert to Ongoing: Assign Recurring Slot</h5>
+        <h5 class="modal-title">{{ t('Convert to Ongoing: Assign Recurring Slot') }}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <form id="convertForm" method="POST" action="{{ url_for('convert_patient', patient_id=patient['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
-                <label for="start_date" class="form-label smallest text-uppercase fw-bold">First Appointment Date</label>
+                <label for="start_date" class="form-label smallest text-uppercase fw-bold">{{ t('First Appointment Date') }}</label>
                 <input type="date" name="start_date" id="start_date" class="form-control" required>
             </div>
             <div class="mb-3">
-                <label for="time" class="form-label smallest text-uppercase fw-bold">Time</label>
+                <label for="time" class="form-label smallest text-uppercase fw-bold">{{ t('Time') }}</label>
                 <select name="time" class="form-select" required>
                     {% for h in range(8, 22) %}
                         <option value="{{ '%02d' % h }}:00">{{ '%02d' % h }}:00</option>
@@ -435,7 +443,7 @@
                 </select>
             </div>
             <div class="mb-3">
-                <label for="duration" class="form-label smallest text-uppercase fw-bold">Duration (Minutes)</label>
+                <label for="duration" class="form-label smallest text-uppercase fw-bold">{{ t('Duration (Minutes)') }}</label>
                 <select name="duration" class="form-select" required>
                     <option value="30">30</option>
                     <option value="60" selected>60</option>
@@ -443,56 +451,82 @@
                 </select>
             </div>
             <div class="mb-3">
-                <label for="interval" class="form-label smallest text-uppercase fw-bold">Recurrence Interval (Weeks)</label>
+                <label for="interval" class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence Interval (Weeks)') }}</label>
                 <select name="interval" class="form-select" required>
-                    <option value="1" selected>Every Week</option>
-                    <option value="2">Every 2 Weeks</option>
+                    <option value="1" selected>{{ t('Every Week') }}</option>
+                    <option value="2">{{ t('Every 2 Weeks') }}</option>
                 </select>
             </div>
             <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold">Days of Week</label><br>
+                <label class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence End Limit') }}</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date" checked>
+                    <label class="form-check-label w-100" for="limitDate">
+                        {{ t('Repeat until specific date:') }}
+                        <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count">
+                    <label class="form-check-label w-100" for="limitCount">
+                        {{ t('Repeat for X meetings:') }}
+                        <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" min="1" placeholder="{{ t('Number of meetings') }}">
+                    </label>
+                </div>
+            </div>
+            <script>
+                document.getElementById('start_date').addEventListener('change', function() {
+                    const startDate = new Date(this.value);
+                    if (!isNaN(startDate)) {
+                        startDate.setMonth(startDate.getMonth() + 3);
+                        document.getElementById('recurrence_end_date').value = startDate.toISOString().split('T')[0];
+                    }
+                });
+            </script>
+            <div class="mb-3">
+                <label class="form-label smallest text-uppercase fw-bold">{{ t('Days of Week') }}</label><br>
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="days" value="0">
-                  <label class="form-check-label">Sun</label>
+                  <label class="form-check-label">{{ t('Sun') }}</label>
                 </div>
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="days" value="1">
-                  <label class="form-check-label">Mon</label>
+                  <label class="form-check-label">{{ t('Mon') }}</label>
                 </div>
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="days" value="2">
-                  <label class="form-check-label">Tue</label>
+                  <label class="form-check-label">{{ t('Tue') }}</label>
                 </div>
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="days" value="3">
-                  <label class="form-check-label">Wed</label>
+                  <label class="form-check-label">{{ t('Wed') }}</label>
                 </div>
                 <div class="form-check form-check-inline">
                   <input class="form-check-input" type="checkbox" name="days" value="4">
-                  <label class="form-check-label">Thu</label>
+                  <label class="form-check-label">{{ t('Thu') }}</label>
                 </div>
             </div>
-            <div class="text-muted smallest mb-3">Check the days that apply. If none checked, defaults to the day of the first appointment.</div>
+            <div class="text-muted smallest mb-3">{{ t('Check the days that apply. If none checked, defaults to the day of the first appointment.') }}</div>
             <div class="mb-3">
-                <label for="cost" class="form-label smallest text-uppercase fw-bold">Cost per Session ($)</label>
+                <label for="cost" class="form-label smallest text-uppercase fw-bold">{{ t('Cost per Session ($)') }}</label>
                 <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
             </div>
             <div class="mb-3">
-                <label for="meeting_type" class="form-label smallest text-uppercase fw-bold">Meeting Type</label>
+                <label for="meeting_type" class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Type') }}</label>
                 <select name="meeting_type" id="meeting_type" class="form-select">
-                    <option value="in-person">In-Person</option>
-                    <option value="online">Online</option>
+                    <option value="in-person">{{ t('In-Person') }}</option>
+                    <option value="online">{{ t('Online') }}</option>
                 </select>
             </div>
             <div class="mb-3">
-                <label for="meeting_link" class="form-label smallest text-uppercase fw-bold">Meeting Link (if Online)</label>
+                <label for="meeting_link" class="form-label smallest text-uppercase fw-bold">{{ t('Meeting Link (if Online)') }}</label>
                 <input type="url" name="meeting_link" id="meeting_link" class="form-control" placeholder="https://zoom.us/...">
             </div>
         </form>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="document.getElementById('convertForm').submit()">Save & Convert</button>
+        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+        <button type="button" class="btn btn-primary rounded-pill fw-bold" onclick="document.getElementById('convertForm').submit()">{{ t('Save & Convert') }}</button>
       </div>
     </div>
   </div>

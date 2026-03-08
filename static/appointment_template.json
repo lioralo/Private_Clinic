@@ -1,0 +1,28 @@
+[
+  {
+    "appointment_date": "2026-10-01",
+    "appointment_time": "10:00",
+    "meeting_type": "in-person",
+    "meeting_link": "",
+    "is_recurring": 1,
+    "recurrence_interval": 1,
+    "recurrence_days": "1",
+    "recurrence_end_date": "2027-01-01",
+    "recurrence_count": null,
+    "cost": 150.00,
+    "duration_minutes": 60
+  },
+  {
+    "appointment_date": "2026-10-02",
+    "appointment_time": "14:00",
+    "meeting_type": "online",
+    "meeting_link": "https://zoom.us/j/123456789",
+    "is_recurring": 0,
+    "recurrence_interval": null,
+    "recurrence_days": null,
+    "recurrence_end_date": null,
+    "recurrence_count": null,
+    "cost": 100.00,
+    "duration_minutes": 30
+  }
+]

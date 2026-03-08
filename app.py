@@ -105,7 +105,74 @@ HEBREW_TRANSLATIONS = {
     "Export History": "יצא היסטוריה",
     "Import": "ייבא",
     "Import Patient History (JSON)": "ייבוא היסטוריית מטופל (JSON)",
-    "Upload File or DOCX Treatment Log": "העלאת קובץ או יומן טיפולים DOCX"
+    "Upload File or DOCX Treatment Log": "העלאת קובץ או יומן טיפולים DOCX",
+    "Calendar Actions": "פעולות יומן",
+    "Export Calendar to JSON": "ייצא יומן ל-JSON",
+    "Import Calendar from JSON": "ייבא יומן מ-JSON",
+    "Import Calendar": "ייבא יומן",
+    "Repeat until specific date:": "חזור עד תאריך מסוים:",
+    "Repeat for X meetings:": "חזור עבור X פגישות:",
+    "Number of meetings": "מספר פגישות",
+    "First Appointment Date": "תאריך פגישה ראשון",
+    "Duration (Minutes)": "משך (דקות)",
+    "Recurrence Interval (Weeks)": "תדירות חזרה (שבועות)",
+    "Every Week": "כל שבוע",
+    "Every 2 Weeks": "כל שבועיים",
+    "Recurrence End Limit": "גבול סיום חזרה",
+    "Days of Week": "ימי השבוע",
+    "Sun": "א'",
+    "Mon": "ב'",
+    "Tue": "ג'",
+    "Wed": "ד'",
+    "Thu": "ה'",
+    "Check the days that apply. If none checked, defaults to the day of the first appointment.": "סמן את הימים הרלוונטיים. אם לא סומן, יקבע לפי יום הפגישה הראשון.",
+    "Cost per Session ($)": "עלות לפגישה ($)",
+    "Meeting Link (if Online)": "קישור לפגישה (אם מקוון)",
+    "Cancel": "ביטול",
+    "Save & Convert": "שמור והמר",
+    "Welcome Back": "ברוכים השבים",
+    "Please sign in to access the clinic CRM": "אנא היכנס כדי לגשת למערכת הניהול",
+    "Username": "שם משתמש",
+    "Password": "ססמה",
+    "Forgot?": "שכחת?",
+    "New patient?": "מטופל חדש?",
+    "Register here": "הירשם כאן",
+    "Book Session": "קבע פגישה",
+    "Would you like to schedule a session for": "האם תרצה לקבוע פגישה ל-",
+    "Confirm Booking": "אשר קביעה",
+    "Add New Resource": "הוסף משאב חדש",
+    "Title": "כותרת",
+    "URL": "קישור",
+    "Public (visible to everyone)": "פומבי (גלוי לכולם)",
+    "Add Resource": "הוסף משאב",
+    "Manage Resources": "נהל משאבים",
+    "Access": "גישה",
+    "Date Added": "תאריך הוספה",
+    "Actions": "פעולות",
+    "Public": "פומבי",
+    "Private": "פרטי",
+    "No resources found.": "לא נמצאו משאבים.",
+    "Edit Patient": "ערוך מטופל",
+    "Update patient information": "עדכן פרטי מטופל",
+    "Full Name": "שם מלא",
+    "Status": "סטטוס",
+    "Email Address": "כתובת דוא״ל",
+    "Phone Number": "מספר טלפון",
+    "Save Changes": "שמור שינויים",
+    "Add New Patient": "הוסף מטופל חדש",
+    "Initial Status": "סטטוס התחלתי",
+    "Add Patient": "הוסף מטופל",
+    "Manage Slot": "נהל משבצת הזמן",
+    "Manage slot for": "נהל משבצת זמן עבור",
+    "Duration": "משך זמן",
+    "Slot Status": "סטטוס משבצת הזמן",
+    "Open (Clickable for patients)": "פתוח (זמין למטופלים)",
+    "Occupied (Busy)": "תפוס (עסוק)",
+    "Blocked (Unavailable)": "חסום (לא זמין)",
+    "Save": "שמור",
+    "Enter username": "הכנס שם משתמש",
+    "Sign In": "התחבר",
+    "Register": "הירשם"
 }
 
 @app.context_processor
@@ -196,6 +263,14 @@ def init_db():
             pass
         try:
             db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
         except sqlite3.OperationalError:
             pass
         try:
@@ -580,6 +655,122 @@ def export_patient_history(patient_id):
     response.headers['Content-Disposition'] = f'attachment; filename=patient_{patient_id}_history.json'
     return response
 
+@app.route('/api/admin/export_calendar')
+@login_required
+def export_calendar():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    appointments = db.execute('''
+        SELECT appointment_date, appointment_time, meeting_type, meeting_link,
+               is_recurring, recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count,
+               duration_minutes, cost
+        FROM appointments
+        ORDER BY appointment_date ASC, appointment_time ASC
+    ''').fetchall()
+
+    import json
+    from flask import Response
+
+    data = [dict(row) for row in appointments]
+    response = Response(json.dumps(data, indent=4), mimetype='application/json')
+    response.headers['Content-Disposition'] = 'attachment; filename=calendar_export.json'
+    return response
+
+@app.route('/admin/seed_data', methods=('POST',))
+@login_required
+def seed_data():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+
+    # 1 Ongoing patient
+    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('John Doe (Ongoing)', 'ongoing', 'john.doe@example.com', '555-0101')")
+    ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    past_date = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+    db.execute('''INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, status, meeting_type)
+                  VALUES (?, ?, '10:00', 150, 60, 'completed', 'in-person')''', (ongoing_id, past_date))
+    appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    db.execute('''INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                  VALUES (?, ?, '1', 'Initial session. Patient presented with anxiety.')''', (ongoing_id, appt_id))
+
+    # 1 Candidate patient
+    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Jane Smith (Candidate)', 'candidate', 'jane.smith@example.com', '555-0102')")
+
+    # 1 Waiting for scheduling patient
+    db.execute("INSERT INTO patients (name, status, email, phone, can_self_schedule) VALUES ('Alice Johnson (Waiting)', 'waiting for scheduling', 'alice.j@example.com', '555-0103', 1)")
+    waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+               ('alice', generate_password_hash('password123'), waiting_id))
+
+    # 1 Archived patient
+    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Bob Brown (Archived)', 'archived', 'bob.b@example.com', '555-0104')")
+
+    db.commit()
+    flash('Sample data seeded successfully.')
+    return redirect(url_for('dashboard'))
+
+@app.route('/api/admin/import_calendar', methods=('POST',))
+@login_required
+def import_calendar():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    if 'file' not in request.files:
+        flash('No file part')
+        return redirect(url_for('dashboard'))
+
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file')
+        return redirect(url_for('dashboard'))
+
+    if file and file.filename.endswith('.json'):
+        import json
+        try:
+            data = json.load(file)
+            # Sort by date and time
+            data.sort(key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
+
+            db = get_db()
+
+            # For simplicity we import these under a "dummy" patient or the first ongoing patient
+            # In a real app we'd map them, but we need a patient_id. We'll find any ongoing.
+            patient = db.execute("SELECT id FROM patients WHERE status='ongoing' LIMIT 1").fetchone()
+            if not patient:
+                # create one
+                db.execute("INSERT INTO patients (name, status) VALUES ('Imported Patient', 'ongoing')")
+                patient_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+            else:
+                patient_id = patient['id']
+
+            count = 0
+            for appt in data:
+                db.execute('''INSERT INTO appointments
+                    (patient_id, appointment_date, appointment_time, meeting_type, meeting_link,
+                     is_recurring, recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count,
+                     cost, duration_minutes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (patient_id, appt.get('appointment_date'), appt.get('appointment_time'),
+                     appt.get('meeting_type', 'in-person'), appt.get('meeting_link'),
+                     appt.get('is_recurring', 0), appt.get('recurrence_interval'), appt.get('recurrence_days'),
+                     appt.get('recurrence_end_date'), appt.get('recurrence_count'),
+                     appt.get('cost', 0), appt.get('duration_minutes', 60)))
+                count += 1
+            db.commit()
+            flash(f'Successfully imported {count} appointments.')
+        except Exception as e:
+            print("Import error:", e)
+            flash('Error parsing JSON file.')
+    else:
+        flash('Please upload a JSON file.')
+
+    return redirect(url_for('dashboard'))
+
 @app.route('/patient/<int:patient_id>/import', methods=('POST',))
 @login_required
 def import_patient_history(patient_id):
@@ -851,6 +1042,17 @@ def convert_patient(patient_id):
     interval = request.form.get('interval', 1)
     cost = request.form.get('cost', 0)
 
+    limit_type = request.form.get('recurrence_limit_type')
+    recurrence_end_date = None
+    recurrence_count = None
+    if limit_type == 'date':
+        recurrence_end_date = request.form.get('recurrence_end_date')
+    elif limit_type == 'count':
+        try:
+            recurrence_count = int(request.form.get('recurrence_count'))
+        except (ValueError, TypeError):
+            recurrence_count = None
+
     # Get checked days (multiple values)
     days_list = request.form.getlist('days')
     days_str = ','.join(days_list) if days_list else None
@@ -862,9 +1064,9 @@ def convert_patient(patient_id):
 
     if start_date and time:
         db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link)
-                      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)''',
-                   (patient_id, start_date, time, cost, duration, interval, days_str, meeting_type, meeting_link))
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count)
+                      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
+                   (patient_id, start_date, time, cost, duration, interval, days_str, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
 
     db.commit()
     flash('Patient converted to ongoing successfully.')
@@ -1083,6 +1285,16 @@ def api_slots():
                     recurrence_days = [(current_date.weekday() + 1) % 7]
 
                 # Project up to 8 weeks ahead
+                generated_count = 1 # The original appointment counts as 1
+                limit_date = None
+                if appt.get('recurrence_end_date'):
+                    try:
+                        limit_date = datetime.datetime.fromisoformat(appt['recurrence_end_date']).date()
+                    except ValueError:
+                        pass
+
+                limit_count = appt.get('recurrence_count')
+
                 for i in range(1, 8 // interval_weeks + 1):
                     base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
                     # Now project for each day in recurrence_days
@@ -1094,7 +1306,13 @@ def api_slots():
 
                         if test_fc_day in recurrence_days:
                             # Only project if the test_date is on or after the original appointment date (for the very first week)
-                            if test_date >= current_date:
+                            if test_date > current_date:
+                                if limit_date and test_date > limit_date:
+                                    continue
+                                if limit_count and generated_count >= limit_count:
+                                    continue
+
+                                generated_count += 1
                                 if start_date <= test_date <= end_date:
                                     next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
                                     next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
@@ -1169,9 +1387,9 @@ def patient_book_slot():
 
     return redirect(url_for('dashboard'))
 
-@app.route('/appointment/<int:appointment_id>/ical')
+@app.route('/export_ics/<int:appointment_id>')
 @login_required
-def export_ical(appointment_id):
+def export_ics(appointment_id):
     db = get_db()
     appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
     if not appt:
@@ -1217,6 +1435,11 @@ END:VCALENDAR\r
     response.headers["Content-Disposition"] = f"attachment; filename=appointment_{appointment_id}.ics"
     response.headers["Content-type"] = "text/calendar"
     return response
+
+@app.route('/appointment/<int:appointment_id>/ical')
+@login_required
+def export_ical(appointment_id):
+    return redirect(url_for('export_ics', appointment_id=appointment_id))
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
