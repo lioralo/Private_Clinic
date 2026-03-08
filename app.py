@@ -1261,9 +1261,21 @@ def api_slots():
     appointments = db.execute('SELECT * FROM appointments WHERE appointment_date >= ? AND appointment_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
 
     events = []
+    blocked_ranges = []
 
     for override in overrides:
         slot_datetime_start = f"{override['slot_date']}T{override['slot_time']}"
+        duration = override['duration_minutes'] or 60
+
+        if override['status'] == 'blocked':
+            t_str = override['slot_time']
+            if len(t_str) == 4: t_str = "0" + t_str
+            try:
+                b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{t_str}")
+                b_end = b_start + datetime.timedelta(minutes=duration)
+                blocked_ranges.append((b_start, b_end))
+            except ValueError:
+                pass
         duration = override['duration_minutes'] or 60
         dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
         dt_end = dt_start + datetime.timedelta(minutes=duration)
@@ -1367,6 +1379,16 @@ def api_slots():
                                 if start_date <= test_date <= end_date:
                                     next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
                                     next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
+
+                                    is_blocked = False
+                                    for b_start, b_end in blocked_ranges:
+                                        if max(next_dt_start, b_start) < min(next_dt_end, b_end):
+                                            is_blocked = True
+                                            break
+
+                                    if is_blocked:
+                                        continue
+
                                     events.append({
                                         'id': f"appt_recur_{appt['id']}_{i}_{test_fc_day}",
                                         'title': 'Occupied (Recurring)',
@@ -1560,6 +1582,38 @@ def reschedule_appointment(appointment_id):
 
     return jsonify({'status': 'success'})
 
+def send_appointment_reminders():
+    """
+    Stub function intended for external Email/SMS API integrations.
+    This function should be called periodically (e.g., via cron or a scheduler).
+    It queries for appointments happening soon and sends reminders to the patients.
+    """
+    with app.app_context():
+        db = get_db()
+        # Find appointments in the next 24 hours that haven't had a reminder sent
+        now = datetime.datetime.now()
+        tomorrow = now + datetime.timedelta(days=1)
+
+        # Example query (assuming a simple time check, in reality you'd track if a reminder was already sent)
+        # upcoming_appts = db.execute('''
+        #     SELECT a.*, p.name, p.email, p.phone
+        #     FROM appointments a
+        #     JOIN patients p ON a.patient_id = p.id
+        #     WHERE a.appointment_date = ?
+        # ''', (tomorrow.strftime('%Y-%m-%d'),)).fetchall()
+
+        # for appt in upcoming_appts:
+        #     # Implement Email API here (e.g., SendGrid, Mailgun)
+        #     if appt['email']:
+        #         print(f"Sending email reminder to {appt['email']} for appointment on {appt['appointment_date']} at {appt['appointment_time']}")
+        #
+        #     # Implement SMS API here (e.g., Twilio)
+        #     if appt['phone']:
+        #         print(f"Sending SMS reminder to {appt['phone']} for appointment on {appt['appointment_date']} at {appt['appointment_time']}")
+
+        print(f"Checked for appointment reminders at {now}")
+
+
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
 def delete_appointment(appointment_id):
@@ -1567,8 +1621,13 @@ def delete_appointment(appointment_id):
         return "Unauthorized", 403
 
     db = get_db()
-    appt = db.execute('SELECT patient_id FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
     if appt:
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
+        if patient:
+            details = f"Patient {patient['name']} appointment on {appt['appointment_date']} at {appt['appointment_time']} was deleted."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (appt['patient_id'], 'delete', details))
+
         db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
         db.commit()
         flash('Appointment deleted.')

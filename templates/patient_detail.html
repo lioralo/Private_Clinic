@@ -11,7 +11,7 @@
                 </h4>
                 <div class="d-flex align-items-center">
                     <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 me-2">
-                        {{ patient['status']|capitalize }}
+                        {{ t(patient['status']|capitalize) }}
                     </span>
                     {% if patient['status'] == 'candidate' %}
                     <button type="button" class="btn btn-sm btn-success rounded-pill px-3 me-2" data-bs-toggle="modal" data-bs-target="#convertModal">
@@ -90,9 +90,9 @@
                                 <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
-                                        <textarea name="background" class="form-control" rows="8" placeholder="Enter clinical history...">{{ patient['background'] or '' }}</textarea>
+                                        <textarea name="background" class="form-control" rows="8" placeholder="{{ t('Enter clinical history...') }}">{{ patient['background'] or '' }}</textarea>
                                     </div>
-                                    <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold rounded-pill">Update Background</button>
+                                    <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold rounded-pill">{{ t('Update Background') }}</button>
                                 </form>
                             </div>
                         </div>
@@ -102,7 +102,7 @@
                         <!-- Portal Access -->
                         <div class="card border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden mb-4">
                             <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
-                                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>{{ t('Portal Access') }}</h5>
                             </div>
                             <div class="card-body p-4">
                                 {% if user %}
@@ -114,7 +114,7 @@
                                         <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-sm {% if user['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill px-3">
-                                                {% if user['is_active'] %}Disable{% else %}Enable{% endif %}
+                                                {% if user['is_active'] %}{{ t('Disable') }}{% else %}{{ t('Enable') }}{% endif %}
                                             </button>
                                         </form>
                                     </div>
@@ -123,12 +123,12 @@
                                 <form method="post" action="{{ url_for('manage_access', patient_id=patient['id']) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
-                                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="Username" required value="{{ user['username'] if user else '' }}">
+                                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="{{ t('Username') }}" required value="{{ user['username'] if user else '' }}">
                                     </div>
                                     <div class="mb-3">
-                                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="Password" required>
+                                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="{{ t('Password') }}" required>
                                     </div>
-                                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}Update Access{% else %}Grant Access{% endif %}</button>
+                                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}{{ t('Update Access') }}{% else %}{{ t('Grant Access') }}{% endif %}</button>
                                 </form>
                             </div>
                         </div>
@@ -136,14 +136,14 @@
                         <!-- Files Section -->
                         <div class="card mb-4 border-0 shadow-sm rounded-4">
                             <div class="card-header bg-white py-3 border-0">
-                                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>Medical Files</h5>
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>{{ t('Medical Files') }}</h5>
                             </div>
                             <div class="card-body p-4">
                                 <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="input-group input-group-sm">
                                         <input type="file" name="file" class="form-control rounded-start-3" required>
-                                        <button class="btn btn-primary px-3 fw-bold rounded-end-pill" type="submit">Upload</button>
+                                        <button class="btn btn-primary px-3 fw-bold rounded-end-pill" type="submit">{{ t('Upload') }}</button>
                                     </div>
                                 </form>
 
@@ -162,7 +162,7 @@
                                             <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark small text-truncate">{{ file['filename'] }}</a>
                                         </div>
                                     {% else %}
-                                        <div class="py-3 text-center text-muted small">No documents found.</div>
+                                        <div class="py-3 text-center text-muted small">{{ t('No documents found.') }}</div>
                                     {% endfor %}
                                 </div>
                             </div>
@@ -175,7 +175,7 @@
             <div class="tab-pane fade" id="appointments" role="tabpanel" aria-labelledby="appointments-tab">
                 <div class="card mb-4 border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>{{ t('Appointments') }}</h5>
                     </div>
                     <div class="card-body p-4">
                         <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="mb-4 p-3 bg-light rounded-4 border shadow-sm">
@@ -187,7 +187,12 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Time') }}</label>
-                                    <input type="time" name="time" class="form-control border-0 shadow-sm" required>
+                                    <select name="time" class="form-select border-0 shadow-sm" required>
+                                        {% for h in range(8, 22) %}
+                                            <option value="{{ '%02d' % h }}:00">{{ '%02d' % h }}:00</option>
+                                            <option value="{{ '%02d' % h }}:30">{{ '%02d' % h }}:30</option>
+                                        {% endfor %}
+                                    </select>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Cost') }}</label>
@@ -210,9 +215,9 @@
                                             {{ t('Add') }}
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2" aria-labelledby="addApptDropdown">
-                                            <li><button type="submit" name="is_recurring" value="0" class="dropdown-item rounded-2 py-2"><i class="bi bi-calendar-event me-2"></i>Single Appointment</button></li>
+                                            <li><button type="submit" name="is_recurring" value="0" class="dropdown-item rounded-2 py-2"><i class="bi bi-calendar-event me-2"></i>{{ t('Single Appointment') }}</button></li>
                                             <li><hr class="dropdown-divider"></li>
-                                            <li><button type="button" class="dropdown-item rounded-2 py-2 text-primary fw-bold" data-bs-toggle="collapse" data-bs-target="#recurrenceFields"><i class="bi bi-arrow-repeat me-2"></i>Add Recurring...</button></li>
+                                            <li><button type="button" class="dropdown-item rounded-2 py-2 text-primary fw-bold" data-bs-toggle="collapse" data-bs-target="#recurrenceFields"><i class="bi bi-arrow-repeat me-2"></i>{{ t('Add Recurring...') }}</button></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -220,7 +225,7 @@
 
                             <div class="collapse mt-3" id="recurrenceFields">
                                 <div class="p-3 bg-white rounded-3 border">
-                                    <h6 class="smallest text-uppercase fw-bold text-primary mb-3">Recurrence Settings</h6>
+                                    <h6 class="smallest text-uppercase fw-bold text-primary mb-3">{{ t('Recurrence Settings') }}</h6>
                                     <div class="row g-3">
                                         <div class="col-md-6">
                                             <label class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence Interval (Weeks)') }}</label>
@@ -233,17 +238,17 @@
                                             <label class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence End Limit') }}</label>
                                             <div class="form-check">
                                                 <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitDate" value="date" checked>
-                                                <label class="form-check-label smallest" for="addLimitDate">Until Date</label>
+                                                <label class="form-check-label smallest" for="addLimitDate">{{ t('Until Date') }}</label>
                                                 <input type="date" name="recurrence_end_date" class="form-control form-control-sm mt-1">
                                             </div>
                                             <div class="form-check mt-1">
                                                 <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitCount" value="count">
-                                                <label class="form-check-label smallest" for="addLimitCount">Number of Meetings</label>
+                                                <label class="form-check-label smallest" for="addLimitCount">{{ t('Number of Meetings') }}</label>
                                                 <input type="number" name="recurrence_count" class="form-control form-control-sm mt-1" min="1">
                                             </div>
                                         </div>
                                         <div class="col-12 text-end">
-                                            <button type="submit" name="is_recurring" value="1" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Save Recurring</button>
+                                            <button type="submit" name="is_recurring" value="1" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">{{ t('Save Recurring') }}</button>
                                         </div>
                                     </div>
                                 </div>
@@ -254,7 +259,7 @@
                             {% for appt in appointments %}
                                 <div class="d-flex justify-content-between align-items-center mb-3 p-3 border-0 shadow-sm rounded-4 bg-white position-relative">
                                     {% if appt['is_recurring'] %}
-                                        <span class="position-absolute top-0 start-0 translate-middle badge rounded-pill bg-primary border border-light" title="Recurring">
+                                        <span class="position-absolute top-0 start-0 translate-middle badge rounded-pill bg-primary border border-light" title="{{ t('Recurring') }}">
                                             <i class="bi bi-arrow-repeat"></i>
                                         </span>
                                     {% endif %}
@@ -267,10 +272,10 @@
                                             <div class="fw-bold text-dark">{{ appt['appointment_date'] }} @ {{ appt['appointment_time'] }}</div>
                                             {% if appt['meeting_link'] %}
                                                 <a href="{{ appt['meeting_link'] }}" target="_blank" class="smallest text-primary text-decoration-none fw-bold">
-                                                    <i class="bi bi-link-45deg me-1">Join Meeting</i>
+                                                    <i class="bi bi-link-45deg me-1"></i>{{ t('Join Meeting') }}
                                                 </a>
                                             {% else %}
-                                                <span class="smallest text-muted"><i class="bi bi-geo-alt me-1"></i>{{ appt['meeting_type']|capitalize }}</span>
+                                                <span class="smallest text-muted"><i class="bi bi-geo-alt me-1"></i>{{ t(appt['meeting_type']|capitalize) }}</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -311,11 +316,11 @@
                                 </div>
                                 <div class="col-md-10">
                                     <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content (English)') }}</label>
-                                    <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="Note content..."></textarea>
+                                    <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="{{ t('Note content...') }}"></textarea>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('תוכן (Hebrew)') }}</label>
-                                    <textarea name="content_hebrew" class="form-control border-0 shadow-sm" rows="2" dir="rtl" placeholder="תוכן בעברית..."></textarea>
+                                    <textarea name="content_hebrew" class="form-control border-0 shadow-sm" rows="2" dir="rtl" placeholder="{{ t('תוכן בעברית...') }}"></textarea>
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
@@ -325,9 +330,9 @@
                         </form>
                         <div class="notes-timeline">
                             {% for note in notes %}
-                                <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3">
+                                <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
                                     <div class="d-flex justify-content-between align-items-start mb-2">
-                                        {% if note['session_number'] %}<span class="badge bg-light text-dark border">Meeting #{{ note['session_number'] }}</span>{% endif %}
+                                        {% if note['session_number'] %}<span class="badge bg-primary rounded-pill px-2">Session #{{ note['session_number'] }}</span>{% endif %}
                                         <span class="text-muted smaller"><i class="bi bi-clock me-1"></i> {{ note['created_at'] }}</span>
                                     </div>
                                     {% if note['content'] %}<div class="text-dark mb-2">{{ note['content'] }}</div>{% endif %}
@@ -432,7 +437,12 @@
             <div class="row g-2 mb-3">
                 <div class="col-6">
                     <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Time') }}</label>
-                    <input type="time" name="time" class="form-control" required>
+                    <select name="time" class="form-select" required>
+                        {% for h in range(8, 22) %}
+                            <option value="{{ '%02d' % h }}:00">{{ '%02d' % h }}:00</option>
+                            <option value="{{ '%02d' % h }}:30">{{ '%02d' % h }}:30</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="col-6">
                     <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Cost') }}</label>
@@ -442,8 +452,8 @@
             <div class="mb-3">
                 <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence Interval') }}</label>
                 <select name="interval" class="form-select">
-                    <option value="1">Every Week</option>
-                    <option value="2">Every 2 Weeks</option>
+                    <option value="1">{{ t('Every Week') }}</option>
+                    <option value="2">{{ t('Every 2 Weeks') }}</option>
                 </select>
             </div>
             <div class="mb-3">
@@ -454,7 +464,7 @@
                 </div>
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count">
-                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" placeholder="Number of sessions">
+                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" placeholder="{{ t('Number of sessions') }}">
                 </div>
             </div>
             <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold mt-3">{{ t('Save & Convert') }}</button>
@@ -466,7 +476,7 @@
 {% endif %}
 
 <style>
-.note-item { transition: transform 0.2s; }
+.note-item { transition: transform 0.2s; border-left-width: 5px !important; }
 .note-item:hover { transform: translateX(5px); }
 .smallest { font-size: 0.7rem; }
 .nav-tabs .nav-link.active { border-bottom: 3px solid #0d6efd !important; color: #0d6efd !important; }
