@@ -29,6 +29,15 @@
             <input type="hidden" name="date" id="slotDate">
             <input type="hidden" name="time" id="slotTime">
             <div class="mb-3">
+                <label for="duration" class="form-label">Duration</label>
+                <select class="form-select" name="duration" id="slotDuration">
+                    <option value="30">30 minutes</option>
+                    <option value="60" selected>60 minutes</option>
+                    <option value="90">90 minutes</option>
+                    <option value="120">120 minutes</option>
+                </select>
+            </div>
+            <div class="mb-3">
                 <label for="status" class="form-label">Slot Status</label>
                 <select class="form-select" name="status" id="slotStatus" required>
                     <option value="open">Open (Clickable for patients)</option>
@@ -75,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('slotTime').value = timeStr;
             document.getElementById('slotDateTime').innerText = dateStr + ' at ' + timeStr;
             document.getElementById('slotStatus').value = 'open'; // default
+            document.getElementById('slotDuration').value = '60'; // default
 
             var modal = new bootstrap.Modal(document.getElementById('slotModal'));
             modal.show();
@@ -89,6 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('slotTime').value = timeStr;
             document.getElementById('slotDateTime').innerText = dateStr + ' at ' + timeStr;
             document.getElementById('slotStatus').value = info.event.extendedProps.status;
+            document.getElementById('slotDuration').value = info.event.extendedProps.duration_minutes || '60';
 
             var modal = new bootstrap.Modal(document.getElementById('slotModal'));
             modal.show();

@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS notes (
     session_number TEXT,
     needs_review BOOLEAN DEFAULT 0,
     content TEXT NOT NULL,
+    content_hebrew TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id),
     FOREIGN KEY (appointment_id) REFERENCES appointments (id)
@@ -23,9 +24,11 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    treatment_id INTEGER,
     filename TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients (id)
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (treatment_id) REFERENCES notes (id)
 );
 
 CREATE TABLE IF NOT EXISTS receipts (
@@ -55,6 +58,10 @@ CREATE TABLE IF NOT EXISTS appointments (
     appointment_time TIME NOT NULL,
     status TEXT NOT NULL DEFAULT 'scheduled', -- 'scheduled', 'completed', 'cancelled'
     cost REAL DEFAULT 0,
+    duration_minutes INTEGER DEFAULT 60,
+    is_recurring BOOLEAN DEFAULT 0,
+    recurrence_interval INTEGER,
+    recurrence_days TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
@@ -74,5 +81,6 @@ CREATE TABLE IF NOT EXISTS slots_override (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slot_date DATE NOT NULL,
     slot_time TIME NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
     status TEXT NOT NULL -- 'open', 'occupied', 'blocked'
 );
