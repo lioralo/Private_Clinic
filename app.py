@@ -55,6 +55,50 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id INTEGER NOT NULL,
+                recipient_id INTEGER,
+                content TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_read BOOLEAN DEFAULT 0,
+                FOREIGN KEY (sender_id) REFERENCES users (id),
+                FOREIGN KEY (recipient_id) REFERENCES users (id)
+            )
+        ''')
+
+        # Handle column migrations
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+        except sqlite3.OperationalError:
+            pass # Column exists
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+        except sqlite3.OperationalError:
+            pass
+        db.commit()
+
         # Check if admin exists
         admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
         if not admin:
@@ -145,6 +189,25 @@ def add_patient():
 
     return render_template('add_patient.html')
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+
+        if not name:
+            flash('Name is required!')
+        else:
+            db = get_db()
+            db.execute('INSERT INTO patients (name, status, email, phone) VALUES (?, ?, ?, ?)',
+                       (name, 'candidate', email, phone))
+            db.commit()
+            flash('Registration successful! We will contact you soon.')
+            return redirect(url_for('login'))
+
+    return render_template('register.html')
+
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
@@ -184,11 +247,30 @@ def add_note(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form['content']
-    if content:
+    content = request.form.get('content', '')
+    content_hebrew = request.form.get('content_hebrew', '')
+
+    if content or content_hebrew:
         db = get_db()
-        db.execute('INSERT INTO notes (patient_id, content) VALUES (?, ?)', (patient_id, content))
+        cur = db.execute('INSERT INTO notes (patient_id, content, content_hebrew) VALUES (?, ?, ?)', (patient_id, content, content_hebrew))
+        note_id = cur.lastrowid
         db.commit()
+
+        files = request.files.getlist('files')
+        for file in files:
+            if file and file.filename != '':
+                filename = secure_filename(file.filename)
+
+                patient_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'treatments', str(patient_id))
+                if not os.path.exists(patient_dir):
+                    os.makedirs(patient_dir)
+
+                filepath = os.path.join(patient_dir, filename)
+                file.save(filepath)
+
+                db.execute('INSERT INTO files (patient_id, treatment_id, filename) VALUES (?, ?, ?)', (patient_id, note_id, filename))
+                db.commit()
+
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
@@ -296,7 +378,7 @@ def download_file(name):
     # The 'files' table maps filename to patient_id.
 
     db = get_db()
-    file_record = db.execute('SELECT patient_id FROM files WHERE filename = ?', (name,)).fetchone()
+    file_record = db.execute('SELECT patient_id, treatment_id FROM files WHERE filename = ?', (name,)).fetchone()
 
     if not file_record:
         # Maybe it's not in DB (dummy file). Allow admin.
@@ -306,6 +388,9 @@ def download_file(name):
              return "File not found or access denied", 403
 
     if current_user.role == 'admin' or (current_user.role == 'patient' and current_user.patient_id == file_record['patient_id']):
+        if file_record['treatment_id']:
+            patient_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'treatments', str(file_record['patient_id']))
+            return send_from_directory(patient_dir, name)
         return send_from_directory(app.config['UPLOAD_FOLDER'], name)
 
     return "Access denied", 403
@@ -313,11 +398,24 @@ def download_file(name):
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    if current_user.role != 'patient':
-        return redirect(url_for('patients'))
-
-    patient_id = current_user.patient_id
     db = get_db()
+
+    if current_user.role == 'admin':
+        # Admin Dashboard View
+        # Get candidates without recurring appointments
+        candidates = db.execute('''
+            SELECT p.*
+            FROM patients p
+            WHERE p.status = 'candidate' AND p.id NOT IN (
+                SELECT DISTINCT patient_id
+                FROM appointments
+                WHERE is_recurring = 1
+            )
+        ''').fetchall()
+        return render_template('admin_dashboard.html', candidates=candidates)
+
+    # Patient Dashboard View
+    patient_id = current_user.patient_id
 
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
@@ -337,6 +435,56 @@ def dashboard():
     balance = total_cost - total_paid
 
     return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages)
+
+@app.route('/api/messages', methods=['GET'])
+@login_required
+def api_get_messages():
+    db = get_db()
+    if current_user.role == 'admin':
+        # Admin gets all messages for now, or maybe just a combined inbox.
+        # Ideally, it would be per-patient, but for a simple "Messages sidebar"
+        # we can show all messages sent to/from the admin or a global list.
+        # If we had a selected patient in the UI, we'd filter. Here we just return all.
+        messages = db.execute('''
+            SELECT m.*, u.username as sender_name
+            FROM messages m
+            LEFT JOIN users u ON m.sender_id = u.id
+            ORDER BY m.timestamp ASC
+        ''').fetchall()
+    else:
+        # Patient gets messages to/from them
+        messages = db.execute('''
+            SELECT m.*, u.username as sender_name
+            FROM messages m
+            LEFT JOIN users u ON m.sender_id = u.id
+            WHERE m.sender_id = ? OR m.recipient_id = ?
+            ORDER BY m.timestamp ASC
+        ''', (current_user.id, current_user.id)).fetchall()
+
+    return jsonify([dict(m) for m in messages])
+
+@app.route('/api/messages/send', methods=['POST'])
+@login_required
+def api_send_message():
+    content = request.form.get('content')
+    if not content:
+        return jsonify({'status': 'error'})
+
+    db = get_db()
+
+    # Simple logic: If patient, send to admin. If admin, send as broadcast or to a specific user?
+    # For a general "messages sidebar" where admin sees everything, sending a message from admin might need a recipient.
+    # We will just insert it with NULL recipient for broadcast or if patient is sending.
+    recipient_id = None
+
+    if current_user.role == 'patient':
+        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+        recipient_id = admin['id'] if admin else None
+
+    db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+               (current_user.id, recipient_id, content))
+    db.commit()
+    return jsonify({'status': 'success'})
 
 @app.route('/admin_reply_message/<int:patient_id>', methods=['POST'])
 @login_required
@@ -382,6 +530,36 @@ def contact_admin():
         flash('Message sent to your therapist.')
 
     return redirect(url_for('dashboard'))
+
+@app.route('/patient/<int:patient_id>/convert', methods=('POST',))
+@login_required
+def convert_patient(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+
+    start_date = request.form.get('start_date')
+    time = request.form.get('time')
+    duration = request.form.get('duration', 60)
+    interval = request.form.get('interval', 1)
+    cost = request.form.get('cost', 0)
+
+    # Get checked days (multiple values)
+    days_list = request.form.getlist('days')
+    days_str = ','.join(days_list) if days_list else None
+
+    db.execute("UPDATE patients SET status = 'ongoing' WHERE id = ?", (patient_id,))
+
+    if start_date and time:
+        db.execute('''INSERT INTO appointments
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days)
+                      VALUES (?, ?, ?, ?, ?, 1, ?, ?)''',
+                   (patient_id, start_date, time, cost, duration, interval, days_str))
+
+    db.commit()
+    flash('Patient converted to ongoing successfully.')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
 @login_required
@@ -521,7 +699,12 @@ def api_slots():
     events = []
 
     for override in overrides:
-        slot_datetime = f"{override['slot_date']}T{override['slot_time']}"
+        slot_datetime_start = f"{override['slot_date']}T{override['slot_time']}"
+        duration = override['duration_minutes'] or 60
+        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+        dt_end = dt_start + datetime.timedelta(minutes=duration)
+        slot_datetime_end = dt_end.isoformat()
+
         status = override['status']
         color = 'gray'
         if status == 'open':
@@ -534,9 +717,10 @@ def api_slots():
         events.append({
             'id': f"slot_{override['id']}",
             'title': status.capitalize(),
-            'start': slot_datetime,
+            'start': slot_datetime_start,
+            'end': slot_datetime_end,
             'color': color,
-            'extendedProps': {'status': status}
+            'extendedProps': {'status': status, 'duration_minutes': duration}
         })
 
     for appt in appointments:
@@ -545,14 +729,60 @@ def api_slots():
         if len(time_str) == 4: # e.g., 9:00
              time_str = "0" + time_str
 
-        slot_datetime = f"{appt['appointment_date']}T{time_str}"
+        slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+        duration = appt['duration_minutes'] or 60
+        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+        dt_end = dt_start + datetime.timedelta(minutes=duration)
+        slot_datetime_end = dt_end.isoformat()
+
         events.append({
             'id': f"appt_{appt['id']}",
             'title': 'Occupied (Appt)',
-            'start': slot_datetime,
+            'start': slot_datetime_start,
+            'end': slot_datetime_end,
             'color': 'red',
-            'extendedProps': {'status': 'occupied'}
+            'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
         })
+
+        # Project recurring appointments
+        if appt['is_recurring'] and appt['recurrence_interval']:
+            current_date = dt_start.date()
+            interval_weeks = appt['recurrence_interval']
+            # Days of week: e.g. "0,2" for Sunday, Tuesday. Python weekday() is Monday=0, Sunday=6
+            # We map 0=Sunday, 1=Monday ... 6=Saturday for FullCalendar consistency
+            days_str = appt['recurrence_days']
+            recurrence_days = []
+            if days_str:
+                recurrence_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
+            else:
+                # default to the day of the original appointment if not specified
+                # fullcalendar: sunday=0. python: monday=0. python -> fullcalendar: (weekday + 1) % 7
+                recurrence_days = [(current_date.weekday() + 1) % 7]
+
+            # Project up to 8 weeks ahead
+            for i in range(1, 8 // interval_weeks + 1):
+                base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
+                # Now project for each day in recurrence_days
+                for day_offset in range(7):
+                    test_date = base_next_date - datetime.timedelta(days=base_next_date.weekday()) + datetime.timedelta(days=day_offset) # Start of week (Monday) + day_offset
+                    # Wait, FullCalendar weeks start on Sunday usually, but Python's weekday() starts on Monday.
+                    # Let's map FullCalendar day to Python weekday: 0->6, 1->0, 2->1, 3->2, 4->3, 5->4, 6->5
+                    test_fc_day = (test_date.weekday() + 1) % 7
+
+                    if test_fc_day in recurrence_days:
+                        # Only project if the test_date is on or after the original appointment date (for the very first week)
+                        if test_date >= current_date:
+                            if start_date <= test_date <= end_date:
+                                next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
+                                next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
+                                events.append({
+                                    'id': f"appt_recur_{appt['id']}_{i}_{test_fc_day}",
+                                    'title': 'Occupied (Recurring)',
+                                    'start': next_dt_start.isoformat(),
+                                    'end': next_dt_end.isoformat(),
+                                    'color': 'red',
+                                    'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
+                                })
 
     return jsonify(events)
 
@@ -572,14 +802,15 @@ def admin_manage_slots():
     date = request.form['date']
     time = request.form['time']
     status = request.form['status']
+    duration = int(request.form.get('duration', 60))
 
     db = get_db()
     existing = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', (date, time)).fetchone()
 
     if existing:
-        db.execute('UPDATE slots_override SET status = ? WHERE id = ?', (status, existing['id']))
+        db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', (status, duration, existing['id']))
     else:
-        db.execute('INSERT INTO slots_override (slot_date, slot_time, status) VALUES (?, ?, ?)', (date, time, status))
+        db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)', (date, time, status, duration))
 
     db.commit()
     flash('Slot updated.')
