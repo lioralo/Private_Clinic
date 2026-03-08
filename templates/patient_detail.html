@@ -18,8 +18,11 @@
                         <i class="bi bi-arrow-right-circle me-1"></i>Convert to Ongoing
                     </button>
                     {% endif %}
-                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-2">
                         <i class="bi bi-pencil-square me-1"></i>Edit
+                    </a>
+                    <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                        <i class="bi bi-download me-1"></i>{{ t('Export History') }}
                     </a>
                 </div>
             </div>
@@ -335,11 +338,21 @@
                 <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>Medical Files</h5>
             </div>
             <div class="card-body p-4">
+                <h6 class="smallest text-uppercase fw-bold text-muted mb-2">{{ t('Upload File or DOCX Treatment Log') }}</h6>
                 <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="input-group input-group-sm">
                         <input type="file" name="file" class="form-control rounded-start-3" id="inputGroupFile" required>
                         <button class="btn btn-primary px-3 fw-bold" type="submit">Upload</button>
+                    </div>
+                </form>
+
+                <h6 class="smallest text-uppercase fw-bold text-muted mb-2">{{ t('Import Patient History (JSON)') }}</h6>
+                <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group input-group-sm">
+                        <input type="file" name="file" class="form-control rounded-start-3" accept=".json" required>
+                        <button class="btn btn-secondary px-3 fw-bold" type="submit">{{ t('Import') }}</button>
                     </div>
                 </form>
                 <div class="list-group list-group-flush border-top border-bottom">

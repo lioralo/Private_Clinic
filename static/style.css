@@ -17,6 +17,10 @@ body {
     flex-direction: column;
 }
 
+[dir="rtl"] body {
+    font-family: 'Assistant', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 .navbar {
     background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
     padding: 0.8rem 0;
@@ -84,11 +88,18 @@ h1, h2, h3, h4, h5 {
 .note-item {
     border-radius: 12px !important;
     border: 1px solid var(--border-color) !important;
-    border-left: 4px solid var(--primary-color) !important;
+    border-inline-start: 4px solid var(--primary-color) !important;
     background: white;
     padding: 1rem;
     margin-bottom: 1rem;
 }
+
+[dir="rtl"] .me-1 { margin-inline-end: 0.25rem !important; margin-right: 0 !important; }
+[dir="rtl"] .me-2 { margin-inline-end: 0.5rem !important; margin-right: 0 !important; }
+[dir="rtl"] .me-3 { margin-inline-end: 1rem !important; margin-right: 0 !important; }
+[dir="rtl"] .ms-1 { margin-inline-start: 0.25rem !important; margin-left: 0 !important; }
+[dir="rtl"] .ms-2 { margin-inline-start: 0.5rem !important; margin-left: 0 !important; }
+[dir="rtl"] .ms-3 { margin-inline-start: 1rem !important; margin-left: 0 !important; }
 
 .smaller { font-size: 0.8rem; }
 .smallest { font-size: 0.75rem; }
