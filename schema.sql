@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     is_recurring BOOLEAN DEFAULT 0,
     recurrence_interval INTEGER,
     recurrence_days TEXT,
+    meeting_type TEXT DEFAULT 'in-person', -- 'in-person', 'online'
+    meeting_link TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
@@ -83,4 +85,22 @@ CREATE TABLE IF NOT EXISTS slots_override (
     slot_time TIME NOT NULL,
     duration_minutes INTEGER DEFAULT 60,
     status TEXT NOT NULL -- 'open', 'occupied', 'blocked'
+);
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    url TEXT,
+    is_public BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS patient_resources (
+    patient_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (resource_id) REFERENCES resources (id),
+    PRIMARY KEY (patient_id, resource_id)
 );

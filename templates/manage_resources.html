@@ -1,0 +1,84 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-plus-circle me-2 text-primary"></i>Add New Resource</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('manage_resources') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label smallest text-uppercase fw-bold">Title</label>
+                        <input type="text" name="title" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label smallest text-uppercase fw-bold">Description</label>
+                        <textarea name="description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label smallest text-uppercase fw-bold">URL</label>
+                        <input type="url" name="url" class="form-control" placeholder="https://...">
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="is_public" class="form-check-input" id="isPublicCheck">
+                        <label class="form-check-label" for="isPublicCheck">Public (visible to everyone)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">Add Resource</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>Manage Resources</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Title</th>
+                                <th>Access</th>
+                                <th>Date Added</th>
+                                <th class="pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for resource in resources %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold">{{ resource['title'] }}</div>
+                                    <div class="small text-muted text-truncate" style="max-width: 200px;">{{ resource['description'] }}</div>
+                                </td>
+                                <td>
+                                    {% if resource['is_public'] %}
+                                        <span class="badge bg-success">Public</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Private</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">{{ resource['created_at'].split(' ')[0] }}</td>
+                                <td class="pe-4">
+                                    {% if resource['url'] %}
+                                    <a href="{{ resource['url'] }}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-link-45deg"></i></a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">No resources found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
