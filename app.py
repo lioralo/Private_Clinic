@@ -101,7 +101,11 @@ HEBREW_TRANSLATIONS = {
     "Contact Therapist": "צור קשר עם המטפל",
     "Direct messages with your clinical provider.": "הודעות ישירות עם המטפל שלך.",
     "Send a message to start.": "שלח הודעה כדי להתחיל.",
-    "Send Securely": "שלח בצורה מאובטחת"
+    "Send Securely": "שלח בצורה מאובטחת",
+    "Export History": "יצא היסטוריה",
+    "Import": "ייבא",
+    "Import Patient History (JSON)": "ייבוא היסטוריית מטופל (JSON)",
+    "Upload File or DOCX Treatment Log": "העלאת קובץ או יומן טיפולים DOCX"
 }
 
 @app.context_processor
@@ -470,57 +474,183 @@ def add_file(patient_id):
                 doc = Document(filepath)
                 text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
 
-                # Look for meeting number, date, content
-                meeting_no_match = re.search(r'(?:Meeting #|פגישה מספר)[:\s]*(\w+)', text, re.IGNORECASE)
-                date_match = re.search(r'(?:Date|תאריך)[:\s]*([\d\./\-]+)', text, re.IGNORECASE)
-                content_match = re.search(r'(?:Content|תוכן)[:\s]*(.*)', text, re.IGNORECASE | re.DOTALL)
+                # Split the text by meeting header to support multiple entries
+                # Look for "Meeting #" or "פגישה מספר" and split, keeping the delimiter if needed or just finditer
+                # A good way is to use finditer to find the start of each section
 
-                meeting_no = meeting_no_match.group(1).strip() if meeting_no_match else None
-                date_str = date_match.group(1).strip() if date_match else None
-                content = content_match.group(1).strip() if content_match else text # default to all text
+                # Match start of meeting section
+                meeting_pattern = re.compile(r'(?:Meeting #|פגישה מספר)[:\s]*\w+', re.IGNORECASE)
+                matches = list(meeting_pattern.finditer(text))
 
-                needs_review = False
-                if not meeting_no or not date_str:
-                    needs_review = True
+                if not matches:
+                    # Fallback to the whole text if no explicit meeting markers
+                    blocks = [text]
+                else:
+                    blocks = []
+                    for i, match in enumerate(matches):
+                        start_idx = match.start()
+                        end_idx = matches[i+1].start() if i + 1 < len(matches) else len(text)
+                        blocks.append(text[start_idx:end_idx])
 
-                # Check for existing appointment
-                appointment_id = None
-                if date_str:
-                    try:
-                        # Try parsing Israeli format DD/MM/YYYY or DD.MM.YYYY
-                        parsed_date = None
-                        if '.' in date_str or '/' in date_str:
-                            parts = re.split(r'[\./]', date_str)
-                            if len(parts) == 3:
-                                d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
-                                if y < 100:
-                                    y += 2000
-                                parsed_date = f"{y:04d}-{m:02d}-{d:02d}"
-                        if not parsed_date:
-                            # Try YYYY-MM-DD
-                            if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
-                                parsed_date = date_str
+                notes_created = 0
+                notes_review = 0
 
-                        if parsed_date:
-                            appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, parsed_date)).fetchone()
-                            if appt:
-                                appointment_id = appt['id']
-                    except Exception as e:
-                        print("Error parsing date:", e)
+                for block in blocks:
+                    meeting_no_match = re.search(r'(?:Meeting #|פגישה מספר)[:\s]*(\w+)', block, re.IGNORECASE)
+                    date_match = re.search(r'(?:Date|תאריך)[:\s]*([\d\./\-]+)', block, re.IGNORECASE)
+                    content_match = re.search(r'(?:Content|תוכן)[:\s]*(.*)', block, re.IGNORECASE | re.DOTALL)
+
+                    meeting_no = meeting_no_match.group(1).strip() if meeting_no_match else None
+                    date_str = date_match.group(1).strip() if date_match else None
+                    content = content_match.group(1).strip() if content_match else block.strip() # default to all text if no content marker
+
+                    needs_review = False
+                    if not meeting_no or not date_str:
                         needs_review = True
 
-                db.execute('INSERT INTO notes (patient_id, appointment_id, session_number, needs_review, content) VALUES (?, ?, ?, ?, ?)',
-                           (patient_id, appointment_id, meeting_no, needs_review, content))
+                    # Check for existing appointment
+                    appointment_id = None
+                    if date_str:
+                        try:
+                            # Try parsing Israeli format DD/MM/YYYY or DD.MM.YYYY
+                            parsed_date = None
+                            if '.' in date_str or '/' in date_str:
+                                parts = re.split(r'[\./]', date_str)
+                                if len(parts) == 3:
+                                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                                    if y < 100:
+                                        y += 2000
+                                    parsed_date = f"{y:04d}-{m:02d}-{d:02d}"
+                            if not parsed_date:
+                                # Try YYYY-MM-DD
+                                if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+                                    parsed_date = date_str
+
+                            if parsed_date:
+                                appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, parsed_date)).fetchone()
+                                if appt:
+                                    appointment_id = appt['id']
+                        except Exception as e:
+                            print("Error parsing date:", e)
+                            needs_review = True
+
+                    db.execute('INSERT INTO notes (patient_id, appointment_id, session_number, needs_review, content) VALUES (?, ?, ?, ?, ?)',
+                               (patient_id, appointment_id, meeting_no, needs_review, content))
+                    if needs_review:
+                        notes_review += 1
+                    else:
+                        notes_created += 1
+
                 db.commit()
-                if needs_review:
-                    flash('DOCX parsed, but some fields were missing. Marked for review.')
+                if notes_review > 0:
+                    flash(f'DOCX parsed. {notes_created} notes created, {notes_review} marked for review.')
                 else:
-                    flash('DOCX parsed successfully. Note created.')
+                    flash(f'DOCX parsed successfully. {notes_created} notes created.')
             except Exception as e:
                 print(f"Error parsing DOCX: {e}")
                 flash('Error parsing DOCX file.')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/patient/<int:patient_id>/export', methods=('GET',))
+@login_required
+def export_patient_history(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient is None:
+        return "Patient not found", 404
+
+    appointments = [dict(row) for row in db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date ASC, appointment_time ASC', (patient_id,)).fetchall()]
+    notes = [dict(row) for row in db.execute('SELECT * FROM notes WHERE patient_id = ? ORDER BY created_at ASC', (patient_id,)).fetchall()]
+    receipts = [dict(row) for row in db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at ASC', (patient_id,)).fetchall()]
+
+    data = {
+        'patient': dict(patient),
+        'appointments': appointments,
+        'notes': notes,
+        'receipts': receipts
+    }
+
+    import json
+    from flask import Response
+    response = Response(json.dumps(data, indent=4), mimetype='application/json')
+    response.headers['Content-Disposition'] = f'attachment; filename=patient_{patient_id}_history.json'
+    return response
+
+@app.route('/patient/<int:patient_id>/import', methods=('POST',))
+@login_required
+def import_patient_history(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    if 'file' not in request.files:
+        flash('No file part')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    if file and file.filename.endswith('.json'):
+        import json
+        try:
+            data = json.load(file)
+            db = get_db()
+
+            # Optionally validate data format here
+            appointments_added = 0
+            notes_added = 0
+            receipts_added = 0
+
+            # Import appointments
+            appt_id_map = {}
+            for appt in data.get('appointments', []):
+                # Check for existing
+                existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
+                    (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
+                if not existing:
+                    cursor = db.execute('''INSERT INTO appointments
+                        (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
+                         appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
+                         appt.get('meeting_link'), appt.get('status')))
+                    appt_id_map[appt.get('id')] = cursor.lastrowid
+                    appointments_added += 1
+                else:
+                    appt_id_map[appt.get('id')] = existing['id']
+
+            # Import notes
+            for note in data.get('notes', []):
+                new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+                db.execute('''INSERT INTO notes
+                    (patient_id, appointment_id, session_number, content, content_hebrew, needs_review, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                    (patient_id, new_appt_id, note.get('session_number'), note.get('content'), note.get('content_hebrew'), note.get('needs_review'), note.get('created_at')))
+                notes_added += 1
+
+            # Import receipts
+            for receipt in data.get('receipts', []):
+                db.execute('''INSERT INTO receipts
+                    (patient_id, amount, description, created_at)
+                    VALUES (?, ?, ?, ?)''',
+                    (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
+                receipts_added += 1
+
+            db.commit()
+            flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
+        except Exception as e:
+            print("Import error:", e)
+            flash('Error parsing JSON file.')
+    else:
+        flash('Please upload a JSON file.')
+
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
 
 @app.route('/patient/<int:patient_id>/add_receipt', methods=('POST',))
 @login_required
