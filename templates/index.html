@@ -13,6 +13,14 @@
         {% endif %}
     </h2>
     <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} {{ t('Total') }}</span>
+    {% if patients|length == 0 %}
+    <form method="POST" action="{{ url_for('seed_data') }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-database-add me-1"></i> Load Example Patients
+        </button>
+    </form>
+    {% endif %}
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
