@@ -2,6 +2,46 @@
 
 ---
 
+## Session 3 — Feature Branch Analysis & Integration
+
+### Overview
+Analyzed all 8 remote feature branches, identified valuable code, and selectively merged/extracted improvements while discarding conflicting or low-quality changes.
+
+### Branch Decisions
+| Branch | Decision | Reason |
+|--------|----------|--------|
+| `feature-crm-refactoring` | ✅ Merged | Port detection, `can_self_schedule`, notifications system, goals table, DOCX improvements |
+| `enhance-clinic-crm` | ✅ Extracted | Goals CRUD, edit_note, Revenue dashboard, unread message context processor |
+| `feature-calendar-doc-integration` | ❌ Discarded | Conflicting `/api/slots` schema |
+| `feature-clinic-crm-updates` | ❌ Discarded | Test file only, no app code |
+| `jules-clinic-app` | ❌ Discarded | 125-line skeleton (incomplete rewrite) |
+
+### New Features Added
+
+#### From `feature-crm-refactoring` (merged)
+- **`can_self_schedule` flag** on patients — controls self-scheduling UI visibility; dashboard always shows calendar, shows info alert when self-scheduling is disabled
+- **Notifications system** — `notifications` table populated when patients self-schedule/reschedule; admin gets toast alerts every 10s via `/api/notifications`
+- **`goals` table** in schema + migrations
+- **`is_port_in_use()` startup check** — warns if port 5000 is already occupied
+- **`import socket`** added to imports
+- **Fixed `datetime` import conflict** — removed bare `import datetime` module (was shadowing `from datetime import datetime, timedelta`)
+
+#### From `enhance-clinic-crm` (extracted)
+- **`inject_global_vars` context processor** — injects `unread_messages` count into all templates
+- **`edit_note` route** (`POST /note/<id>/edit`) — admin can edit session note content, appearance, topics
+- **Goals CRUD routes** — `add_goal` (`POST /patient/<id>/add_goal`) and `toggle_goal_status` (`POST /goal/<id>/toggle_status`)
+- **Revenue dashboard** (`GET /admin/revenue`) — shows total revenue, pending debt, monthly breakdown; linked in admin navbar
+
+### Files Changed
+- `app.py` — added 5 new routes, 2 context processors, fixed datetime naming conflict
+- `templates/admin_revenue.html` — new revenue dashboard template
+- `templates/layout.html` — Revenue nav link added; notification toast container + polling script
+- `templates/edit_patient.html` — better styled `can_self_schedule` toggle
+- `schema.sql` — `notifications`, `goals`, `can_self_schedule` column added
+- `requirements.txt` — added `psutil`, `python-docx`
+
+---
+
 ## Session 2 — March 9, 2026 (Recurring Calendar Overhaul)
 
 ### Overview

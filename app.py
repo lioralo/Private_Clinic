@@ -199,6 +199,17 @@ def inject_translations():
         return text
     return dict(t=t, lang=session.get('lang', 'en'))
 
+@app.context_processor
+def inject_global_vars():
+    unread_messages = 0
+    if current_user.is_authenticated:
+        db = get_db()
+        unread_messages = db.execute(
+            'SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = 0',
+            (current_user.id,)
+        ).fetchone()['count']
+    return dict(unread_messages=unread_messages)
+
 @app.route('/set_lang/<lang>')
 def set_lang(lang):
     if lang in ['en', 'he']:
@@ -615,6 +626,59 @@ def add_note(patient_id):
                 db.commit()
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/note/<int:note_id>/edit', methods=('POST',))
+@login_required
+def edit_note(note_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    content = request.form.get('content')
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
+
+    db = get_db()
+    note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
+    if note:
+        db.execute(
+            'UPDATE notes SET content = ?, session_number = ?, patient_appearance = ?, key_topics = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            (content, session_number, patient_appearance, key_topics, note_id)
+        )
+        db.commit()
+        log_audit(f"Edited note ID {note_id}")
+        return redirect(url_for('patient_detail', patient_id=note['patient_id']))
+    return "Note not found", 404
+
+@app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
+@login_required
+def add_goal(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    description = request.form.get('description', '').strip()
+    if description:
+        db = get_db()
+        db.execute('INSERT INTO goals (patient_id, description) VALUES (?, ?)', (patient_id, description))
+        db.commit()
+        log_audit(f"Added goal for patient ID {patient_id}: {description}")
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/goal/<int:goal_id>/toggle_status', methods=('POST',))
+@login_required
+def toggle_goal_status(goal_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
+    if goal:
+        new_status = 'achieved' if goal['status'] == 'active' else 'active'
+        db.execute('UPDATE goals SET status = ? WHERE id = ?', (new_status, goal_id))
+        db.commit()
+        log_audit(f"Updated goal ID {goal_id} status to {new_status}")
+        return redirect(url_for('patient_detail', patient_id=goal['patient_id']))
+    return "Goal not found", 404
 
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
 @login_required
@@ -1642,6 +1706,37 @@ def api_slots():
                         events.append(evt)
 
     return jsonify(events)
+
+@app.route('/admin/revenue')
+@login_required
+def revenue():
+    if current_user.role != 'admin':
+        return redirect(url_for('dashboard'))
+
+    db = get_db()
+    total_revenue = db.execute('SELECT SUM(amount) as total FROM receipts').fetchone()['total'] or 0
+    total_cost = db.execute('SELECT SUM(cost) as total FROM appointments').fetchone()['total'] or 0
+    pending_debt = total_cost - total_revenue
+
+    monthly_data = db.execute('''
+        SELECT strftime('%Y-%m', created_at) as month, SUM(amount) as total
+        FROM receipts
+        GROUP BY month
+        ORDER BY month DESC
+        LIMIT 12
+    ''').fetchall()
+    monthly_growth = [(row['month'], row['total']) for row in monthly_data]
+
+    current_month_str = datetime.now().strftime('%Y-%m')
+    monthly_revenue = next((amount for month, amount in monthly_growth if month == current_month_str), 0)
+    current_month_name = datetime.now().strftime('%B %Y')
+
+    return render_template('admin_revenue.html',
+                           total_revenue=total_revenue,
+                           pending_debt=pending_debt,
+                           monthly_growth=monthly_growth,
+                           monthly_revenue=monthly_revenue,
+                           current_month=current_month_name)
 
 @app.route('/admin/slots', methods=['GET'])
 @login_required
