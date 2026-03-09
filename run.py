@@ -10,6 +10,8 @@ import os
 import argparse
 import signal
 import atexit
+import time
+import psutil
 from pathlib import Path
 
 
@@ -18,6 +20,7 @@ class AutoRunner:
         self.verbose = verbose
         self.root_dir = Path(__file__).parent
         self.app_process = None
+        self.shutting_down = False
         
         # Register cleanup on exit
         atexit.register(self.cleanup)
@@ -28,27 +31,76 @@ class AutoRunner:
         
     def log(self, message, level="INFO"):
         """Print log messages"""
-        print(f"[{level}] {message}")
+        print(f"[{level}] {message}", flush=True)
     
     def _signal_handler(self, signum, frame):
         """Handle interrupt signals gracefully"""
+        if self.shutting_down:
+            return
+        self.shutting_down = True
         self.log("Shutdown signal received, terminating application...", level="WARNING")
         self.cleanup()
         sys.exit(0)
     
     def cleanup(self):
         """Terminate the app process and close the port"""
-        if self.app_process and self.app_process.poll() is None:
-            self.log("Closing application and releasing port...")
-            try:
-                self.app_process.terminate()
-                self.app_process.wait(timeout=5)
-                self.log("✓ Application terminated gracefully", level="SUCCESS")
-            except subprocess.TimeoutExpired:
-                self.log("Process did not terminate, killing forcefully...", level="WARNING")
-                self.app_process.kill()
-                self.app_process.wait()
-                self.log("✓ Application killed", level="SUCCESS")
+        if not self.app_process:
+            return
+            
+        try:
+            # Check if process is still running
+            if self.app_process.poll() is None:
+                self.log("Closing application and releasing port...")
+                
+                # Try to terminate gracefully first
+                try:
+                    self.app_process.terminate()
+                    self.app_process.wait(timeout=3)
+                    self.log("✓ Application terminated gracefully", level="SUCCESS")
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
+                
+                # If that didn't work, kill the process group
+                try:
+                    # Get the process to find child processes
+                    parent = psutil.Process(self.app_process.pid)
+                    children = parent.children(recursive=True)
+                    
+                    # Kill children first
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    
+                    # Give them time to die
+                    gone, alive = psutil.wait_procs(children, timeout=2)
+                    
+                    # Force kill any remaining
+                    for child in alive:
+                        try:
+                            child.kill()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+                    
+                    # Kill parent
+                    self.app_process.kill()
+                    self.app_process.wait(timeout=2)
+                    self.log("✓ Application killed forcefully", level="SUCCESS")
+                    
+                except (psutil.NoSuchProcess, Exception) as e:
+                    self.log(f"Error killing process: {e}", level="WARNING")
+                    try:
+                        self.app_process.kill()
+                        self.app_process.wait()
+                    except:
+                        pass
+                
+                # Give the port time to be released
+                time.sleep(0.5)
+        except Exception as e:
+            self.log(f"Cleanup error: {e}", level="WARNING")
     
     def run_command(self, cmd, description):
         """Execute shell command with error handling"""

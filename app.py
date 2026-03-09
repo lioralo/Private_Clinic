@@ -747,32 +747,44 @@ def seed_data():
 
     db = get_db()
 
-    # 1 Ongoing patient
-    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('John Doe (Ongoing)', 'ongoing', 'john.doe@example.com', '555-0101')")
-    ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    try:
+        # 1 Ongoing patient
+        db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('John Doe (Ongoing)', 'ongoing', 'john.doe@example.com', '555-0101')")
+        ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    past_date = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
-    db.execute('''INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, status, meeting_type)
-                  VALUES (?, ?, '10:00', 150, 60, 'completed', 'in-person')''', (ongoing_id, past_date))
-    appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        past_date = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        db.execute('''INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, status, meeting_type)
+                      VALUES (?, ?, '10:00', 150, 60, 'completed', 'in-person')''', (ongoing_id, past_date))
+        appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    db.execute('''INSERT INTO notes (patient_id, appointment_id, session_number, content)
-                  VALUES (?, ?, '1', 'Initial session. Patient presented with anxiety.')''', (ongoing_id, appt_id))
+        db.execute('''INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                      VALUES (?, ?, '1', 'Initial session. Patient presented with anxiety.')''', (ongoing_id, appt_id))
 
-    # 1 Candidate patient
-    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Jane Smith (Candidate)', 'candidate', 'jane.smith@example.com', '555-0102')")
+        # 1 Candidate patient
+        db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Jane Smith (Candidate)', 'candidate', 'jane.smith@example.com', '555-0102')")
 
-    # 1 Waiting for scheduling patient
-    db.execute("INSERT INTO patients (name, status, email, phone, can_self_schedule) VALUES ('Alice Johnson (Waiting)', 'waiting for scheduling', 'alice.j@example.com', '555-0103', 1)")
-    waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-    db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
-               ('alice', generate_password_hash('password123'), waiting_id))
+        # 1 Waiting for scheduling patient
+        db.execute("INSERT INTO patients (name, status, email, phone, can_self_schedule) VALUES ('Alice Johnson (Waiting)', 'waiting for scheduling', 'alice.j@example.com', '555-0103', 1)")
+        waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        
+        # Check if alice user already exists
+        existing_alice = db.execute("SELECT id FROM users WHERE username = 'alice'").fetchone()
+        if not existing_alice:
+            db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+                       ('alice', generate_password_hash('password123'), waiting_id))
 
-    # 1 Archived patient
-    db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Bob Brown (Archived)', 'archived', 'bob.b@example.com', '555-0104')")
+        # 1 Archived patient
+        db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('Bob Brown (Archived)', 'archived', 'bob.b@example.com', '555-0104')")
 
-    db.commit()
-    flash('Sample data seeded successfully.')
+        db.commit()
+        flash('Sample data seeded successfully.')
+    except sqlite3.IntegrityError as e:
+        db.rollback()
+        flash(f'Sample data already exists or error occurred: {str(e)}')
+    except Exception as e:
+        db.rollback()
+        flash(f'Error seeding data: {str(e)}')
+        
     return redirect(url_for('dashboard'))
 
 @app.route('/api/admin/import_calendar', methods=('POST',))
@@ -1268,25 +1280,98 @@ def add_appointment(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    date = request.form['date']
-    time = request.form['time']
+    date = request.form.get('date', '').strip()
+    time = request.form.get('time', '').strip()
     cost = request.form.get('cost', 0)
     meeting_type = request.form.get('meeting_type', 'in-person')
     meeting_link = request.form.get('meeting_link', '')
+    is_recurring = int(request.form.get('is_recurring', 0))
+    duration = int(request.form.get('duration', 60))
 
-    if date and time:
-        db = get_db()
-        db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, meeting_type, meeting_link) VALUES (?, ?, ?, ?, ?, ?)',
-                   (patient_id, date, time, cost, meeting_type, meeting_link))
+    if not date or not time:
+        flash('Date and time are required!', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
 
-        # We need patient info to log notification properly
+    # Validate date format
+    try:
+        datetime.datetime.fromisoformat(date)
+    except ValueError:
+        flash('Invalid date format!', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    # Validate time format (should be HH:MM or H:MM)
+    try:
+        time_obj = datetime.datetime.strptime(time, '%H:%M')
+        time = time_obj.strftime('%H:%M')
+    except ValueError:
+        flash('Invalid time format! Expected HH:MM', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    db = get_db()
+
+    # Handle recurring appointment fields
+    recurrence_interval = None
+    recurrence_days = None
+    recurrence_end_date = None
+    recurrence_count = None
+
+    if is_recurring:
+        recurrence_interval = int(request.form.get('interval', 1))
+        
+        # Get recurrence limit type and values
+        limit_type = request.form.get('recurrence_limit_type')
+        if limit_type == 'date':
+            recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
+            if recurrence_end_date:
+                try:
+                    datetime.datetime.fromisoformat(recurrence_end_date)
+                except ValueError:
+                    flash('Invalid recurrence end date!', 'error')
+                    return redirect(url_for('patient_detail', patient_id=patient_id))
+        elif limit_type == 'count':
+            try:
+                recurrence_count = int(request.form.get('recurrence_count', 12))
+                if recurrence_count <= 0:
+                    recurrence_count = 12
+            except ValueError:
+                recurrence_count = 12
+        
+        # Get days (if provided, otherwise default will be set in the calendar)
+        days_list = request.form.getlist('days')
+        if days_list:
+            recurrence_days = ','.join(str(d) for d in days_list if d.strip().isdigit())
+
+    try:
+        if is_recurring:
+            db.execute('''INSERT INTO appointments 
+                          (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
+                           is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                           recurrence_end_date, recurrence_count) 
+                          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
+                       (patient_id, date, time, cost, duration, recurrence_interval, 
+                        recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
+        else:
+            db.execute('''INSERT INTO appointments 
+                          (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
+                           meeting_type, meeting_link) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                       (patient_id, date, time, cost, duration, meeting_type, meeting_link))
+
+        # Log the appointment
         patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
         if patient:
-            details = f"Patient {patient['name']} has scheduled a meeting to {date} at {time}."
-            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (patient_id, 'schedule', details))
+            appt_type = "recurring" if is_recurring else "single"
+            details = f"Patient {patient['name']} has scheduled a {appt_type} appointment on {date} at {time}."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', 
+                       (patient_id, 'schedule', details))
 
         db.commit()
-        flash('Appointment added.')
+        appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
+        flash(appt_msg)
+    except sqlite3.IntegrityError as e:
+        flash(f'Error adding appointment: {str(e)}', 'error')
+    except Exception as e:
+        flash(f'Unexpected error: {str(e)}', 'error')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
@@ -1324,21 +1409,29 @@ def api_slots():
     blocked_ranges = []
 
     for override in overrides:
-        slot_datetime_start = f"{override['slot_date']}T{override['slot_time'].zfill(5)}"
+        # Ensure time is in HH:MM format
+        time_str = override['slot_time'].strip()
+        if not isinstance(time_str, str) or ':' not in time_str:
+            # Skip malformed times
+            continue
+        
+        slot_datetime_start = f"{override['slot_date']}T{time_str}"
         duration = override['duration_minutes'] or 60
 
         if override['status'] == 'blocked':
-            t_str = override['slot_time'].zfill(5)
             try:
-                b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{t_str}")
+                b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
                 b_end = b_start + datetime.timedelta(minutes=duration)
                 blocked_ranges.append((b_start, b_end))
             except ValueError:
-                pass
-        duration = override['duration_minutes'] or 60
-        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
-        dt_end = dt_start + datetime.timedelta(minutes=duration)
-        slot_datetime_end = dt_end.isoformat()
+                continue
+        
+        try:
+            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+            dt_end = dt_start + datetime.timedelta(minutes=duration)
+            slot_datetime_end = dt_end.isoformat()
+        except ValueError:
+            continue
 
         status = override['status']
         color = 'gray'
@@ -1370,19 +1463,27 @@ def api_slots():
             })
 
     for appt in appointments:
-
-        appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
+        try:
+            appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
+        except (ValueError, TypeError):
+            continue
+            
         if not appt['is_recurring'] and (appt_date < start_date or appt_date > end_date):
             continue
 
-        # Use padded time
-        time_str = appt['appointment_time'].zfill(5)
+        # Ensure time is in HH:MM format
+        time_str = appt['appointment_time'].strip()
+        if not time_str or ':' not in time_str:
+            continue
 
-        slot_datetime_start = f"{appt['appointment_date']}T{time_str.zfill(5)}"
-        duration = appt['duration_minutes'] or 60
-        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
-        dt_end = dt_start + datetime.timedelta(minutes=duration)
-        slot_datetime_end = dt_end.isoformat()
+        try:
+            slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+            duration = appt['duration_minutes'] or 60
+            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+            dt_end = dt_start + datetime.timedelta(minutes=duration)
+            slot_datetime_end = dt_end.isoformat()
+        except ValueError:
+            continue
 
         if start_date <= dt_start.date() <= end_date:
             events.append({
