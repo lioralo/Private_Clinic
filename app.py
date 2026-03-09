@@ -246,12 +246,6 @@ def close_connection(exception):
         db.close()
 
 def init_db():
-    if is_port_in_use(5000):
-        print("\nERROR: Port 5000 is already in use!")
-        print("Please kill the existing process occupying port 5000.")
-        print("You can try: kill $(lsof -t -i :5000) 2>/dev/null || true")
-        print("Exiting...\n")
-        exit(1)
 
     database = app.config.get('DATABASE', DATABASE)
     # Always run schema to ensure tables exist
