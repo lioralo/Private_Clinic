@@ -398,8 +398,50 @@ def index():
         if current_user.role == 'admin':
             return redirect(url_for('patients'))
         elif current_user.role == 'patient':
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('patient_home'))
     return redirect(url_for('login'))
+
+@app.route('/patient/home')
+@login_required
+def patient_home():
+    if current_user.role != 'patient':
+        return redirect(url_for('patients'))
+
+    db = get_db()
+    patient_id = current_user.patient_id
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    upcoming = db.execute('''
+        SELECT * FROM appointments
+        WHERE patient_id = ? AND appointment_date >= ?
+        ORDER BY appointment_date ASC, appointment_time ASC
+        LIMIT 10
+    ''', (patient_id, today)).fetchall()
+
+    messages = db.execute('''
+        SELECT m.*, u.username as sender_name
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.id
+        WHERE m.sender_id = ? OR m.recipient_id = ?
+        ORDER BY m.timestamp DESC
+        LIMIT 20
+    ''', (current_user.id, current_user.id)).fetchall()
+
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+        ORDER BY pr.assigned_at DESC
+    ''', (patient_id,)).fetchall()
+
+    db.execute('UPDATE messages SET is_read = 1 WHERE recipient_id = ?', (current_user.id,))
+    db.commit()
+
+    return render_template('patient_home.html', patient=patient,
+                           upcoming=upcoming, messages=messages,
+                           assigned_resources=assigned_resources)
 
 @app.route('/resources')
 def public_resources():
@@ -466,7 +508,7 @@ def login():
             if user['role'] == 'admin':
                 return redirect(url_for('patients'))
             else:
-                return redirect(url_for('dashboard'))
+                return redirect(url_for('patient_home'))
         else:
             flash('Invalid username or password')
 
@@ -482,7 +524,7 @@ def logout():
 @login_required
 def patients():
     if current_user.role != 'admin':
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('patient_home'))
 
     status = request.args.get('status', 'all')
     db = get_db()
@@ -513,7 +555,7 @@ def patients():
 def add_patient():
     if current_user.role != 'admin':
         flash('Access denied.')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('patient_home'))
 
     if request.method == 'POST':
         name = request.form['name']
@@ -558,7 +600,7 @@ def patient_detail(patient_id):
          # Patients can only see their own profile? No, this view is the Admin view of the patient.
          # The patient dashboard is separate.
          flash('Access denied.')
-         return redirect(url_for('dashboard'))
+         return redirect(url_for('patient_home'))
 
     db = get_db()
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
@@ -875,7 +917,7 @@ def seed_data():
         db.rollback()
         flash(f'Error seeding data: {str(e)}')
         
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('patients'))
 
 @app.route('/api/admin/import_calendar', methods=('POST',))
 @login_required
@@ -885,12 +927,12 @@ def import_calendar():
 
     if 'file' not in request.files:
         flash('No file part')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('patients'))
 
     file = request.files['file']
     if file.filename == '':
         flash('No selected file')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('patients'))
 
     if file and file.filename.endswith('.json'):
         import json
@@ -932,7 +974,7 @@ def import_calendar():
     else:
         flash('Please upload a JSON file.')
 
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('patients'))
 
 @app.route('/patient/<int:patient_id>/import', methods=('POST',))
 @login_required
@@ -1073,56 +1115,6 @@ def download_file(name):
 
     return "Access denied", 403
 
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    db = get_db()
-
-    if current_user.role == 'admin':
-        # Admin Dashboard View
-        # Get candidates without recurring appointments
-        candidates = db.execute('''
-            SELECT p.*
-            FROM patients p
-            WHERE p.status = 'candidate' AND p.id NOT IN (
-                SELECT DISTINCT patient_id
-                FROM appointments
-                WHERE is_recurring = 1
-            )
-        ''').fetchall()
-        return render_template('admin_dashboard.html', candidates=candidates)
-
-    # Patient Dashboard View
-    patient_id = current_user.patient_id
-
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
-    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-
-    # Messages
-    messages = db.execute('''
-        SELECT * FROM messages
-        WHERE sender_id = ? OR recipient_id = ?
-        ORDER BY timestamp ASC
-    ''', (current_user.id, current_user.id)).fetchall()
-
-    # Calculate debt
-    total_cost = db.execute('SELECT SUM(cost) as total FROM appointments WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
-    total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
-    balance = total_cost - total_paid
-
-    # Get assigned resources
-    assigned_resources = db.execute('''
-        SELECT r.*
-        FROM resources r
-        JOIN patient_resources pr ON r.id = pr.resource_id
-        WHERE pr.patient_id = ?
-        ORDER BY pr.assigned_at DESC
-    ''', (patient_id,)).fetchall()
-
-    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages, assigned_resources=assigned_resources)
-
 @app.route('/api/messages', methods=['GET'])
 @login_required
 def api_get_messages():
@@ -1216,7 +1208,7 @@ def contact_admin():
         db.commit()
         flash('Message sent to your therapist.')
 
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('patient_home'))
 
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
 @login_required
@@ -1523,195 +1515,11 @@ def add_appointment(patient_id):
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
-@app.route('/api/slots')
-@login_required
-def api_slots():
-    db = get_db()
-
-    start_str = request.args.get('start')
-    end_str = request.args.get('end')
-
-    if not start_str or not end_str:
-        return jsonify([])
-
-    start_date = datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
-    end_date = datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
-
-    # Get slot overrides in range
-    overrides = db.execute(
-        'SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?',
-        (start_date.isoformat(), end_date.isoformat())
-    ).fetchall()
-
-    # Non-recurring appointments in range + ALL recurring appointment series (regardless of start date)
-    appointments = db.execute(
-        '''SELECT a.*, p.name as patient_name FROM appointments a
-           LEFT JOIN patients p ON a.patient_id = p.id
-           WHERE (a.is_recurring = 0 AND a.appointment_date >= ? AND a.appointment_date <= ?)
-              OR a.is_recurring = 1''',
-        (start_date.isoformat(), end_date.isoformat())
-    ).fetchall()
-
-    events = []
-    blocked_ranges = []
-
-    # First pass: build blocked ranges so we can filter recurring occurrences
-    for override in overrides:
-        time_str = (override['slot_time'] or '').strip()
-        if not time_str or ':' not in time_str:
-            continue
-        if override['status'] == 'blocked':
-            try:
-                b_start = datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
-                b_end = b_start + timedelta(minutes=override['duration_minutes'] or 60)
-                blocked_ranges.append((b_start, b_end))
-            except ValueError:
-                continue
-
-    # Process slot overrides into calendar events
-    for override in overrides:
-        time_str = (override['slot_time'] or '').strip()
-        if not time_str or ':' not in time_str:
-            continue
-        try:
-            dt_start = datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
-            duration = override['duration_minutes'] or 60
-            dt_end = dt_start + timedelta(minutes=duration)
-        except ValueError:
-            continue
-
-        status = override['status']
-        color = 'green' if status == 'open' else 'red' if status == 'occupied' else 'gray'
-
-        # Patients only see open slots (so they know when to book)
-        if current_user.role == 'patient' and status != 'open':
-            continue
-
-        events.append({
-            'id': f"slot_{override['id']}",
-            'title': status.capitalize(),
-            'start': dt_start.isoformat(),
-            'end': dt_end.isoformat(),
-            'color': color,
-            'extendedProps': {'status': status, 'duration_minutes': duration}
-        })
-
-    # Helper: build a FullCalendar event dict for one appointment occurrence
-    def make_appt_event(event_id, occ_date, appt_time, duration, appt):
-        dt_s = datetime.combine(occ_date, appt_time)
-        dt_e = dt_s + timedelta(minutes=duration)
-        # Skip if overlaps a blocked slot
-        for b_start, b_end in blocked_ranges:
-            if max(dt_s, b_start) < min(dt_e, b_end):
-                return None
-        if current_user.role == 'patient':
-            title = 'My Appointment' if appt['patient_id'] == current_user.patient_id else 'Occupied'
-        else:
-            title = appt['patient_name'] or 'Unknown Patient'
-        return {
-            'id': event_id,
-            'title': title,
-            'start': dt_s.isoformat(),
-            'end': dt_e.isoformat(),
-            'color': 'red',
-            'extendedProps': {
-                'status': 'occupied',
-                'duration_minutes': duration,
-                'is_recurring': bool(appt['is_recurring']),
-                'appointment_id': appt['id'],
-                'patient_name': appt['patient_name'] or ''
-            }
-        }
-
-    # Process appointments
-    for appt in appointments:
-        try:
-            appt_date = datetime.fromisoformat(appt['appointment_date']).date()
-        except (ValueError, TypeError):
-            continue
-
-        time_str = (appt['appointment_time'] or '').strip()
-        if not time_str or ':' not in time_str:
-            continue
-        try:
-            appt_time = datetime.time.fromisoformat(time_str[:5])  # HH:MM
-            duration = appt['duration_minutes'] or 60
-        except ValueError:
-            continue
-
-        if not appt['is_recurring']:
-            # Single appointment — show if it falls in the view range
-            if start_date <= appt_date <= end_date:
-                evt = make_appt_event(f"appt_{appt['id']}", appt_date, appt_time, duration, appt)
-                if evt:
-                    events.append(evt)
-        else:
-            # --- Recurring series ---
-            # Project every occurrence that falls within [start_date, end_date],
-            # regardless of how long ago the series began.
-            interval_weeks = appt['recurrence_interval'] or 1
-            days_str = appt['recurrence_days']
-            if days_str:
-                # Stored as FC day numbers: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu
-                recurrence_fc_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
-            else:
-                # Default to same weekday as the original appointment
-                # Python weekday() Mon=0..Sun=6 → FC day: (weekday+1)%7
-                recurrence_fc_days = [(appt_date.weekday() + 1) % 7]
-
-            limit_date = None
-            if appt.get('recurrence_end_date'):
-                try:
-                    limit_date = datetime.fromisoformat(appt['recurrence_end_date']).date()
-                except ValueError:
-                    pass
-            limit_count = appt.get('recurrence_count')
-
-            # Find the Sunday of the week that contains appt_date.
-            # Python weekday: Mon=0..Sun=6 → days since last Sunday = (weekday+1)%7
-            days_since_sunday = (appt_date.weekday() + 1) % 7
-            series_week_sunday = appt_date - timedelta(days=days_since_sunday)
-
-            # Walk forward week-by-week (in steps of interval_weeks) generating occurrences.
-            # We stop walking once a week's Sunday is past end_date (no more occurrences possible).
-            occurrences = []  # list of date objects in chronological order
-            week_num = 0
-            while True:
-                week_sunday = series_week_sunday + timedelta(weeks=week_num * interval_weeks)
-                if week_sunday > end_date + timedelta(days=7):
-                    break  # No occurrences can fall in view range from here on
-                week_num += 1
-                if week_num > 1040:  # safety cap (~20 years)
-                    break
-                for fc_day in sorted(recurrence_fc_days):
-                    # fc_day offset from Sunday of week: 0=Sun, 1=Mon, …, 4=Thu
-                    occ = week_sunday + timedelta(days=fc_day)
-                    if occ < appt_date:
-                        continue  # Before series start
-                    if limit_date and occ > limit_date:
-                        continue
-                    occurrences.append(occ)
-
-            occurrences.sort()
-            if limit_count:
-                occurrences = occurrences[:limit_count]
-
-            for occ_date in occurrences:
-                if start_date <= occ_date <= end_date:
-                    evt = make_appt_event(
-                        f"appt_{appt['id']}_{occ_date.isoformat()}",
-                        occ_date, appt_time, duration, appt
-                    )
-                    if evt:
-                        events.append(evt)
-
-    return jsonify(events)
-
 @app.route('/admin/revenue')
 @login_required
 def revenue():
     if current_user.role != 'admin':
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('patients'))
 
     db = get_db()
     total_revenue = db.execute('SELECT SUM(amount) as total FROM receipts').fetchone()['total'] or 0
@@ -1737,186 +1545,6 @@ def revenue():
                            monthly_growth=monthly_growth,
                            monthly_revenue=monthly_revenue,
                            current_month=current_month_name)
-
-@app.route('/admin/slots', methods=['GET'])
-@login_required
-def manage_slots():
-    if current_user.role != 'admin':
-        return redirect(url_for('dashboard'))
-    db = get_db()
-    all_patients = db.execute('SELECT id, name, status FROM patients ORDER BY name ASC').fetchall()
-    return render_template('manage_slots.html', all_patients=all_patients)
-
-@app.route('/api/admin/slots', methods=['POST'])
-@login_required
-def admin_manage_slots():
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    date = request.form.get('date', '').strip()
-    time = request.form.get('time', '').strip()
-    slot_mode = request.form.get('slot_mode', 'override')
-
-    if not date or not time:
-        flash('Date and time are required!', 'error')
-        return redirect(url_for('manage_slots'))
-
-    db = get_db()
-
-    # Mode 1: Regular slot override (availability management)
-    if slot_mode == 'override':
-        try:
-            status = request.form.get('status', 'open').strip()
-            duration = int(request.form.get('duration', 60))
-
-            existing = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', (date, time)).fetchone()
-
-            if existing:
-                db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', (status, duration, existing['id']))
-            else:
-                db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)', 
-                          (date, time, status, duration))
-
-            db.commit()
-            flash('Slot availability updated.', 'success')
-        except (ValueError, sqlite3.Error) as e:
-            db.rollback()
-            flash(f'Error updating slot: {str(e)}', 'error')
-
-    # Mode 2: Patient booking from schedule management
-    elif slot_mode == 'patient_booking':
-        patient_id = request.form.get('patient_id', '').strip()
-        
-        if not patient_id:
-            flash('Please select a patient!', 'error')
-            return redirect(url_for('manage_slots'))
-
-        try:
-            patient_id = int(patient_id)
-            duration = int(request.form.get('booking_duration', 60))
-            cost = float(request.form.get('booking_cost', 0))
-            meeting_type = request.form.get('meeting_type', 'in-person').strip()
-            meeting_link = request.form.get('meeting_link', '').strip()
-            is_recurring = int(request.form.get('is_recurring', 0))
-
-            # Validate time format
-            try:
-                time_obj = datetime.strptime(time, '%H:%M')
-                time = time_obj.strftime('%H:%M')
-            except ValueError:
-                flash('Invalid time format!', 'error')
-                return redirect(url_for('manage_slots'))
-
-            # Verify patient exists
-            patient = db.execute('SELECT id FROM patients WHERE id = ?', (patient_id,)).fetchone()
-            if not patient:
-                flash('Patient not found!', 'error')
-                return redirect(url_for('manage_slots'))
-
-            # Handle recurring appointments
-            recurrence_interval = None
-            recurrence_days = None
-            recurrence_end_date = None
-            recurrence_count = None
-
-            if is_recurring:
-                recurrence_interval = int(request.form.get('recurrence_interval', 1))
-                limit_type = request.form.get('recurrence_limit_type', 'count')
-
-                if limit_type == 'date':
-                    recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
-                    if recurrence_end_date:
-                        try:
-                            datetime.fromisoformat(recurrence_end_date)
-                        except ValueError:
-                            flash('Invalid recurrence end date!', 'error')
-                            return redirect(url_for('manage_slots'))
-                elif limit_type == 'count':
-                    try:
-                        recurrence_count = int(request.form.get('recurrence_count', 12))
-                        if recurrence_count <= 0:
-                            recurrence_count = 12
-                    except ValueError:
-                        recurrence_count = 12
-
-                # Get recurrence days
-                days_list = request.form.getlist('recurrence_days')
-                recurrence_days = ','.join(str(d) for d in days_list if d.strip().isdigit()) if days_list else None
-
-            # Create appointment
-            if is_recurring:
-                db.execute('''INSERT INTO appointments 
-                              (patient_id, appointment_date, appointment_time, cost, duration_minutes,
-                               is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                               recurrence_end_date, recurrence_count)
-                              VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
-                           (patient_id, date, time, cost, duration, recurrence_interval,
-                            recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
-            else:
-                db.execute('''INSERT INTO appointments 
-                              (patient_id, appointment_date, appointment_time, cost, duration_minutes,
-                               meeting_type, meeting_link)
-                              VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                           (patient_id, date, time, cost, duration, meeting_type, meeting_link))
-
-            # Mark the slot as occupied
-            existing_override = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', 
-                                          (date, time)).fetchone()
-            if existing_override:
-                db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', 
-                          ('occupied', duration, existing_override['id']))
-            else:
-                db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)',
-                          (date, time, 'occupied', duration))
-
-            # Log action
-            appt_type = "recurring" if is_recurring else "single"
-            details = f"Admin booked {appt_type} appointment for patient ID {patient_id} on {date} at {time}."
-            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-                       (patient_id, 'schedule', details))
-
-            db.commit()
-            appt_msg = "Recurring appointment series created!" if is_recurring else "Appointment booked successfully!"
-            flash(appt_msg, 'success')
-
-        except (ValueError, sqlite3.IntegrityError) as e:
-            db.rollback()
-            flash(f'Error booking appointment: {str(e)}', 'error')
-        except Exception as e:
-            db.rollback()
-            flash(f'Unexpected error: {str(e)}', 'error')
-
-    return redirect(url_for('manage_slots'))
-
-@app.route('/patient_book_slot', methods=['POST'])
-@login_required
-def patient_book_slot():
-    if current_user.role != 'patient':
-        return "Unauthorized", 403
-
-    db = get_db()
-    patient = db.execute('SELECT status, can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-    if patient['status'] != 'waiting for scheduling' and not patient['can_self_schedule']:
-        flash('You do not have permission to self-schedule.')
-        return redirect(url_for('dashboard'))
-
-    date = request.form['date']
-    time = request.form['time']
-
-    # Check if slot is open
-    slot = db.execute('SELECT id, status FROM slots_override WHERE slot_date = ? AND slot_time = ?', (date, time)).fetchone()
-    if slot and slot['status'] == 'open':
-        # Book it
-        db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)',
-                   (current_user.patient_id, date, time, 'scheduled'))
-        # Mark slot as occupied
-        db.execute("UPDATE slots_override SET status = 'occupied' WHERE id = ?", (slot['id'],))
-        db.commit()
-        flash('Session successfully scheduled.')
-    else:
-        flash('This slot is no longer available.')
-
-    return redirect(url_for('dashboard'))
 
 @app.route('/export_ics/<int:appointment_id>')
 @login_required
@@ -1987,85 +1615,6 @@ def get_notifications():
 
     return jsonify([dict(n) for n in notifications])
 
-@app.route('/api/appointments/<int:appointment_id>/reschedule', methods=('POST',))
-@login_required
-def reschedule_appointment(appointment_id):
-    if current_user.role != 'patient':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-
-    # Check permissions
-    patient_id = current_user.patient_id
-    patient = db.execute('SELECT can_self_schedule, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-
-    if not patient or not patient['can_self_schedule']:
-        return jsonify({'status': 'error', 'message': 'You do not have permission to reschedule appointments.'}), 403
-
-    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appointment_id, patient_id)).fetchone()
-    if not appt:
-        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
-
-    data = request.get_json()
-    new_date = data.get('date')
-    new_time = data.get('time')
-
-    if not new_date or not new_time:
-        return jsonify({'status': 'error', 'message': 'Missing date or time.'}), 400
-
-    # Check if slot is blocked
-    blocked = db.execute('SELECT * FROM blocked_slots WHERE blocked_date = ? AND blocked_time = ?', (new_date, new_time)).fetchone()
-    if blocked:
-        return jsonify({'status': 'error', 'message': 'This slot is unavailable.'}), 400
-
-    # Check if slot is occupied
-    occupied = db.execute('SELECT * FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (new_date, new_time)).fetchone()
-    if occupied:
-        return jsonify({'status': 'error', 'message': 'This slot is already booked.'}), 400
-
-    # Reschedule
-    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appointment_id))
-
-    # Audit log
-    details = f"Patient {patient['name']} has moved a meeting to {new_date} at {new_time}."
-    db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (patient_id, 'reschedule', details))
-
-    db.commit()
-
-    return jsonify({'status': 'success'})
-
-def send_appointment_reminders():
-    """
-    Stub function intended for external Email/SMS API integrations.
-    This function should be called periodically (e.g., via cron or a scheduler).
-    It queries for appointments happening soon and sends reminders to the patients.
-    """
-    with app.app_context():
-        db = get_db()
-        # Find appointments in the next 24 hours that haven't had a reminder sent
-        now = datetime.now()
-        tomorrow = now + timedelta(days=1)
-
-        # Example query (assuming a simple time check, in reality you'd track if a reminder was already sent)
-        # upcoming_appts = db.execute('''
-        #     SELECT a.*, p.name, p.email, p.phone
-        #     FROM appointments a
-        #     JOIN patients p ON a.patient_id = p.id
-        #     WHERE a.appointment_date = ?
-        # ''', (tomorrow.strftime('%Y-%m-%d'),)).fetchall()
-
-        # for appt in upcoming_appts:
-        #     # Implement Email API here (e.g., SendGrid, Mailgun)
-        #     if appt['email']:
-        #         print(f"Sending email reminder to {appt['email']} for appointment on {appt['appointment_date']} at {appt['appointment_time']}")
-        #
-        #     # Implement SMS API here (e.g., Twilio)
-        #     if appt['phone']:
-        #         print(f"Sending SMS reminder to {appt['phone']} for appointment on {appt['appointment_date']} at {appt['appointment_time']}")
-
-        print(f"Checked for appointment reminders at {now}")
-
-
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required
 def delete_appointment(appointment_id):
@@ -2087,83 +1636,6 @@ def delete_appointment(appointment_id):
 
     return "Appointment not found", 404
 
-@app.route('/api/appointments', methods=['POST'])
-@login_required
-def api_add_appointment():
-    if current_user.role != 'patient':
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-    if not patient or not patient['can_self_schedule']:
-        return jsonify({'error': 'Self-scheduling disabled'}), 403
-
-    date_str = request.json.get('date')
-    time_str = request.json.get('time')
-
-    if not date_str or not time_str:
-        return jsonify({'error': 'Missing date or time'}), 400
-
-    # Check if slot exists and is available
-    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (date_str, time_str)).fetchone()
-    if existing:
-        return jsonify({'error': 'Slot is already occupied'}), 400
-
-    # Insert appointment
-    db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
-               (current_user.patient_id, date_str, time_str, 0)) # Default cost 0 for now
-    db.commit()
-
-    # Create notification for admin
-    message = f"Patient {patient['name']} booked a new appointment for {date_str} at {time_str}"
-    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
-    db.commit()
-
-    return jsonify({'success': True})
-
-@app.route('/api/appointments/<int:appointment_id>/reschedule', methods=['POST'])
-@login_required
-def api_reschedule_appointment(appointment_id):
-    if current_user.role != 'patient':
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-    if not patient or not patient['can_self_schedule']:
-        return jsonify({'error': 'Self-scheduling disabled'}), 403
-
-    # Ensure appointment belongs to patient
-    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appointment_id, current_user.patient_id)).fetchone()
-    if not appt:
-        return jsonify({'error': 'Appointment not found'}), 404
-
-    new_date = request.json.get('new_date')
-    new_time = request.json.get('new_time')
-
-    if not new_date or not new_time:
-        return jsonify({'error': 'Missing new date or time'}), 400
-
-    # Check if new slot is available
-    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (new_date, new_time)).fetchone()
-    if existing:
-        return jsonify({'error': 'New slot is already occupied'}), 400
-
-    old_date = appt['appointment_date']
-    old_time = appt['appointment_time']
-
-    # Update appointment
-    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appointment_id))
-    db.commit()
-
-    # Create notification for admin
-    message = f"Patient {patient['name']} rescheduled from {old_date} {old_time} to {new_date} {new_time}"
-    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
-    db.commit()
-
-    return jsonify({'success': True})
-
-
-def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('0.0.0.0', port)) == 0
 

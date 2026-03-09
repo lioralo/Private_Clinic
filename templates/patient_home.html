@@ -1,0 +1,145 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0 text-primary fw-bold">
+            <i class="bi bi-house-heart-fill me-2"></i>{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}
+        </h2>
+        <p class="text-muted small mb-0 mt-1">{{ t('Here is your current status') }}</p>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- Upcoming Appointments -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-calendar-check text-primary me-2"></i>{{ t('Upcoming Appointments') }}
+                </h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                {% if upcoming %}
+                    <div class="list-group list-group-flush">
+                    {% for appt in upcoming %}
+                        <div class="list-group-item border-0 px-0 py-3 d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3 text-center" style="min-width:64px">
+                                <div class="fw-bold fs-5 lh-1">{{ appt['appointment_date'][8:10] }}</div>
+                                <div class="small text-uppercase" style="font-size:.65rem">
+                                    {% set months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+                                    {{ months[appt['appointment_date'][5:7]|int] }}
+                                </div>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold">
+                                    {% if appt['meeting_type'] == 'online' %}
+                                        <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
+                                    {% else %}
+                                        <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}
+                                    {% endif %}
+                                </div>
+                                <div class="text-muted small">
+                                    <i class="bi bi-clock me-1"></i>{{ appt['appointment_time'] }}
+                                    {% if appt['duration_minutes'] %}· {{ appt['duration_minutes'] }} min{% endif %}
+                                </div>
+                                {% if appt['meeting_link'] %}
+                                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="small text-info mt-1 d-inline-block">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join Link') }}
+                                    </a>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill" title="{{ t('Download .ics') }}">
+                                    <i class="bi bi-calendar-plus"></i>
+                                </a>
+                            </div>
+                        </div>
+                        {% if not loop.last %}<hr class="my-0 opacity-25">{% endif %}
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-50"></i>
+                        <p class="mb-0">{{ t('No upcoming appointments scheduled.') }}</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages & Resources -->
+    <div class="col-lg-5">
+
+        <!-- Messages -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-chat-dots-fill text-primary me-2"></i>{{ t('Messages') }}
+                </h5>
+                {% if unread_messages %}
+                    <span class="badge bg-danger rounded-pill">{{ unread_messages }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body px-4 pb-3" style="max-height:260px;overflow-y:auto">
+                {% if messages %}
+                    {% for msg in messages %}
+                        <div class="mb-2 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
+                            <div class="d-inline-block px-3 py-2 rounded-3 small
+                                {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-light text-dark{% endif %}"
+                                style="max-width:85%">
+                                {{ msg['content'] }}
+                            </div>
+                            <div class="text-muted" style="font-size:.65rem">
+                                {{ msg['timestamp'][:16] if msg['timestamp'] else '' }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center py-3 small mb-0">{{ t('No messages yet.') }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-white border-0 px-4 pb-4">
+                <form method="POST" action="{{ url_for('contact_admin') }}" class="d-flex gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="content" class="form-control form-control-sm rounded-pill"
+                           placeholder="{{ t('Type a message…') }}" required autocomplete="off">
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
+                        <i class="bi bi-send-fill"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Assigned Resources -->
+        {% if assigned_resources %}
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-journal-bookmark-fill text-primary me-2"></i>{{ t('Resources') }}
+                </h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <div class="list-group list-group-flush">
+                {% for res in assigned_resources %}
+                    <div class="list-group-item border-0 px-0 py-2">
+                        <div class="fw-semibold small">{{ res['title'] }}</div>
+                        {% if res['description'] %}
+                            <div class="text-muted" style="font-size:.8rem">{{ res['description'] }}</div>
+                        {% endif %}
+                        {% if res['url'] %}
+                            <a href="{{ res['url'] }}" target="_blank" class="text-primary small">
+                                <i class="bi bi-link-45deg me-1"></i>{{ t('Open') }}
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

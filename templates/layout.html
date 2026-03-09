@@ -35,9 +35,6 @@
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('dashboard') }}"><i class="bi bi-speedometer2"></i> {{ t('Dashboard') }}</a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='all') }}">{{ t('All Patients') }}</a>
                         </li>
                         <li class="nav-item">
@@ -48,11 +45,6 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='archived') }}">{{ t('Archived') }}</a>
-                        </li>
-                        <li class="nav-item ms-lg-2">
-                            <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('manage_slots') }}">
-                                <i class="bi bi-calendar-range me-1"></i> {{ t('Manage Slots') }}
-                            </a>
                         </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
