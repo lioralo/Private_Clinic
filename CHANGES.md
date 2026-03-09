@@ -1,4 +1,138 @@
-# Changes Documentation - March 9, 2026
+# Changes Documentation
+
+---
+
+## Session 2 — March 9, 2026 (Recurring Calendar Overhaul)
+
+### Overview
+Addressed the core recurring-appointment visibility problem: sessions belonging to long-running therapy patients were not appearing in the calendar. Also standardised both calendars to show only workdays (Sun–Thu) at the correct hours (08:00–20:00) with clean day-name-only column headers.
+
+---
+
+### 1. **Fixed Recurring Appointments Not Appearing in Calendar** ✅ — `app.py`
+
+**Problem:**  
+Recurring therapy sessions were invisible on any week that wasn't the week the series originally started. The entire projection loop was nested inside:
+
+```python
+if start_date <= original_appointment_date <= end_date:
+    # project recurring occurrences  ← never reached for older series
+```
+
+Because most ongoing patients have series that began weeks or months ago, their original appointment date sits outside the current view window — so zero occurrences were ever projected and the calendar appeared empty.
+
+**Root cause (secondary):**  
+Even when the original date happened to fall in range, the projection iterated only `12 // interval_weeks` cycles *from the original date*, not from the current date, so bi-weekly series starting long ago would also be missed.
+
+**Solution:**  
+Completely rewrote the `/api/slots` endpoint recurring-event section (`app.py`):
+
+- Fetches **all** recurring appointment series (not just those whose `appointment_date` falls in the view range).
+- For each series, finds the Sunday of the week containing the original appointment and steps forward in `interval_weeks` increments, collecting every matching weekday occurrence.
+- Stops walking only when the week's Sunday exceeds `end_date + 7 days` (no more occurrences can be in range).
+- Applies `recurrence_end_date` and `recurrence_count` limits in the correct chronological order.
+- Safety cap of 1040 week iterations (~20 years).
+
+**How it works step by step:**
+```
+series_week_sunday = appt_date - timedelta(days=(appt_date.weekday()+1) % 7)
+week_num = 0
+while week_sunday <= end_date + 7 days:
+    for each fc_day in recurrence_fc_days:       # 0=Sun, 1=Mon … 4=Thu
+        occ = week_sunday + timedelta(days=fc_day)
+        if occ >= appt_date: collect(occ)
+    week_num += 1 (advance by interval_weeks)
+apply limit_count / limit_date
+emit events where start_date <= occ <= end_date
+```
+
+**Files Modified:** `app.py` — `api_slots()` function
+
+---
+
+### 2. **Fixed Recurring Event Titles** ✅ — `app.py`
+
+**Problem:**  
+All recurring occurrences were labelled `"Occupied (Recurring)"` regardless of who the patient was. This made it impossible to identify sessions on the admin calendar.
+
+**Solution:**  
+Applied the same title logic used for single appointments:
+- **Admin view** → patient's name (e.g., `"Jane Cohen"`)
+- **Patient view (own appointment)** → `"My Appointment"`
+- **Patient view (other patient's slot)** → `"Occupied"`
+
+**Files Modified:** `app.py` — `make_appt_event()` helper inside `api_slots()`
+
+---
+
+### 3. **Removed Dates from Calendar Column Headers** ✅ — Both calendars
+
+**Problem:**  
+Day column headers showed specific dates (e.g., "Mon 3/10"), which was noisy and inconsistent with the desired "weekly schedule" view that focuses on time slots rather than specific dates.
+
+**Solution:**  
+Added `dayHeaderFormat: { weekday: 'long' }` to both FullCalendar instances.  
+Columns now read: **Sunday · Monday · Tuesday · Wednesday · Thursday**.
+
+**Files Modified:** `templates/manage_slots.html`, `templates/dashboard.html`
+
+---
+
+### 4. **Standardised Calendar to Workdays and Correct Hours** ✅ — Both calendars
+
+**Problem:**  
+- Dashboard calendar showed Friday and Saturday (non-working days for this clinic).  
+- Dashboard calendar cut off at **18:00** instead of the correct **20:00**.  
+- Both calendars had mismatched configurations.
+
+**Solution:**
+
+| Setting | Before | After |
+|---------|--------|-------|
+| `hiddenDays` (dashboard) | not set (all 7 days shown) | `[5, 6]` (Fri + Sat hidden) |
+| `slotMaxTime` (dashboard) | `18:00:00` | `20:00:00` |
+| `firstDay` (dashboard) | not set | `0` (Sunday) |
+| `headerToolbar center` | date range string | empty (no cluttered title) |
+
+Admin (`manage_slots.html`) already had correct `hiddenDays` and hours; only the `dayHeaderFormat` and toolbar title were updated.
+
+**Files Modified:** `templates/dashboard.html`, `templates/manage_slots.html`
+
+---
+
+### Files Modified — Session 2
+
+| File | What Changed |
+|------|-------------|
+| `app.py` | Rewrote `api_slots()` recurring projection; fixed event titles |
+| `templates/manage_slots.html` | `dayHeaderFormat`, removed center title |
+| `templates/dashboard.html` | `hiddenDays`, `slotMaxTime`, `firstDay`, `dayHeaderFormat`, removed center title |
+| `CHANGES.md` | This documentation |
+
+---
+
+### Testing Checklist — Session 2
+
+1. **Recurring series started in the past shows on current week**  
+   - Create a recurring weekly appointment starting 2+ months ago  
+   - Navigate to the current week on `/admin/slots`  
+   - ✅ Session must appear on the correct weekday
+
+2. **Admin sees patient name on recurring events**  
+   - Open `/admin/slots`, look at any recurring slot  
+   - ✅ Title should be the patient's name, not "Occupied (Recurring)"
+
+3. **Column headers show only weekday names**  
+   - Open both `/admin/slots` and patient dashboard  
+   - ✅ Columns should read "Sunday", "Monday", … — no numeric dates
+
+4. **Dashboard shows Sun–Thu only, 08:00–20:00**  
+   - Log in as a patient and open the dashboard  
+   - ✅ Only five columns visible; time grid ends at 20:00
+
+---
+
+# Changes Documentation - March 9, 2026 (Session 1)
 
 ## Overview
 Fixed multiple issues with ongoing patient crashes, color coding, calendar refresh, and unified booking interface.
