@@ -11,6 +11,7 @@ from docx import Document
 from datetime import datetime, timedelta
 from flask import jsonify
 
+
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
@@ -1737,12 +1738,31 @@ def delete_appointment(appointment_id):
 
     return "Appointment not found", 404
 
+def is_port_in_use(port, host='127.0.0.1'):
+    """Return True when a TCP port is already occupied."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('0.0.0.0', port)) == 0
+        s.settimeout(0.2)
+        return s.connect_ex((host, port)) == 0
+
+
+def find_available_port(start_port=5000, max_tries=100):
+    """Find an open TCP port, starting from start_port."""
+    for port in range(start_port, start_port + max_tries):
+        if not is_port_in_use(port):
+            return port
+    raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_tries - 1}")
 
 if __name__ == '__main__':
     init_db()
-    port = 5000
+    try:
+        requested_port = int(os.environ.get('PORT', '5000'))
+    except ValueError:
+        requested_port = 5000
+
+    port = requested_port
     if is_port_in_use(port):
-        print(f"[WARNING] Port {port} is already in use. Is the app already running?")
+        port = find_available_port(start_port=port + 1)
+        print(f"[WARNING] Port {requested_port} is in use. Falling back to {port}.")
+
+    print(f"[INFO] Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

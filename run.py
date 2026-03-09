@@ -12,6 +12,7 @@ import signal
 import atexit
 import time
 import psutil
+import socket
 from pathlib import Path
 
 
@@ -141,6 +142,19 @@ class AutoRunner:
             [sys.executable, str(test_file)],
             "run tests"
         )
+
+    def is_port_in_use(self, port, host="127.0.0.1"):
+        """Return True when a TCP port is already occupied."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            return s.connect_ex((host, port)) == 0
+
+    def find_available_port(self, start_port=5000, max_tries=100):
+        """Find an open TCP port, starting from start_port."""
+        for port in range(start_port, start_port + max_tries):
+            if not self.is_port_in_use(port):
+                return port
+        raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_tries - 1}")
     
     def run_app(self):
         """Start the Flask application"""
@@ -149,14 +163,26 @@ class AutoRunner:
         if not app_file.exists():
             self.log("app.py not found", level="ERROR")
             return False
+
+        try:
+            requested_port = int(os.environ.get("PORT", "5000"))
+        except ValueError:
+            requested_port = 5000
+
+        port = self.find_available_port(requested_port)
+        if port != requested_port:
+            self.log(f"Port {requested_port} is in use. Falling back to port {port}.", level="WARNING")
         
-        self.log("Starting application on http://127.0.0.1:5000")
+        self.log(f"Starting application on http://127.0.0.1:{port}")
         self.log("Press Ctrl+C to stop the application")
         
         try:
+            env = os.environ.copy()
+            env["PORT"] = str(port)
             self.app_process = subprocess.Popen(
                 [sys.executable, str(app_file)],
-                cwd=self.root_dir
+                cwd=self.root_dir,
+                env=env
             )
             self.log("✓ Application started (PID: {})".format(self.app_process.pid), level="SUCCESS")
             
