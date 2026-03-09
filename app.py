@@ -323,6 +323,18 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
         except sqlite3.OperationalError:
             pass
@@ -652,8 +664,26 @@ def patient_detail(patient_id):
         WHERE pr.patient_id = ?
     ''', (patient_id,)).fetchall()
 
+    behavior_options = [
+        'Calm', 'Anxious', 'Restless', 'Withdrawn', 'Cooperative', 'Engaged', 'Low Energy', 'Irritable'
+    ]
+    latest_behavior = {
+        'patient_appearance': '',
+        'behavior_checklist': set(),
+        'mood_summary': '',
+        'behavior_notes': ''
+    }
+    if notes:
+        latest_behavior['patient_appearance'] = notes[0]['patient_appearance'] or ''
+        latest_behavior['mood_summary'] = notes[0]['mood_summary'] or ''
+        latest_behavior['behavior_notes'] = notes[0]['behavior_notes'] or ''
+        checklist_raw = notes[0]['behavior_checklist'] or ''
+        latest_behavior['behavior_checklist'] = {
+            item.strip() for item in checklist_raw.split(',') if item.strip()
+        }
+
     active_tab = request.args.get('tab', 'info')
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior)
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):
@@ -670,6 +700,9 @@ def add_note(patient_id):
     session_number = request.form.get('session_number', '').strip()
     note_date = request.form.get('note_date', '').strip()
     patient_appearance = request.form.get('patient_appearance', '').strip()
+    behavior_flags = ','.join(request.form.getlist('behavior_flags'))
+    mood_summary = request.form.get('mood_summary', '').strip()
+    behavior_notes = request.form.get('behavior_notes', '').strip()
 
     if content:
         db = get_db()
@@ -683,9 +716,20 @@ def add_note(patient_id):
                 appointment_id = existing['id']
 
         cur = db.execute(
-            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content, patient_appearance)
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (patient_id, appointment_id, session_number or None, note_date or None, content, patient_appearance or None)
+            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
+                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                patient_id,
+                appointment_id,
+                session_number or None,
+                note_date or None,
+                content,
+                patient_appearance or None,
+                behavior_flags or None,
+                mood_summary or None,
+                behavior_notes or None
+            )
         )
         note_id = cur.lastrowid
         db.commit()
@@ -720,13 +764,28 @@ def edit_note(note_id):
     session_number = request.form.get('session_number', '').strip()
     note_date = request.form.get('note_date', '').strip()
     patient_appearance = request.form.get('patient_appearance', '').strip()
+    behavior_flags = ','.join(request.form.getlist('behavior_flags'))
+    mood_summary = request.form.get('mood_summary', '').strip()
+    behavior_notes = request.form.get('behavior_notes', '').strip()
 
     db = get_db()
     note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
     if note:
         db.execute(
-            'UPDATE notes SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            (content, session_number or None, note_date or None, patient_appearance or None, note_id)
+            '''UPDATE notes
+               SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?,
+                   behavior_checklist = ?, mood_summary = ?, behavior_notes = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?''',
+            (
+                content,
+                session_number or None,
+                note_date or None,
+                patient_appearance or None,
+                behavior_flags or None,
+                mood_summary or None,
+                behavior_notes or None,
+                note_id
+            )
         )
         db.commit()
         return redirect_to_patient_tab(note['patient_id'], 'notes')
@@ -1240,6 +1299,11 @@ def import_patient_history(patient_id):
                     date_str = item.get('date') or item.get('note_date')
                     content_text = item.get('content')
                     appearance_text = item.get('patient_appearance')
+                    checklist_text = item.get('behavior_checklist')
+                    if isinstance(checklist_text, list):
+                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
+                    mood_summary = item.get('mood_summary')
+                    behavior_notes = item.get('behavior_notes')
 
                     appt_id = None
                     if date_str:
@@ -1252,9 +1316,20 @@ def import_patient_history(patient_id):
                             appt_id = existing['id']
 
                     db.execute(
-                        '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content, patient_appearance)
-                           VALUES (?, ?, ?, ?, ?, ?)''',
-                        (patient_id, appt_id, meeting_number, date_str, content_text, appearance_text)
+                        '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
+                                              patient_appearance, behavior_checklist, mood_summary, behavior_notes)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (
+                            patient_id,
+                            appt_id,
+                            meeting_number,
+                            date_str,
+                            content_text,
+                            appearance_text,
+                            checklist_text,
+                            mood_summary,
+                            behavior_notes
+                        )
                     )
                     notes_added += 1
             else:
@@ -1290,9 +1365,13 @@ def import_patient_history(patient_id):
                 )
                 for note in sorted_notes:
                     new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+                    checklist_text = note.get('behavior_checklist')
+                    if isinstance(checklist_text, list):
+                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
                     db.execute('''INSERT INTO notes
-                        (patient_id, appointment_id, session_number, note_date, content, patient_appearance, needs_review, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
+                         behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                         (
                             patient_id,
                             new_appt_id,
@@ -1300,6 +1379,9 @@ def import_patient_history(patient_id):
                             note.get('note_date') or note.get('date'),
                             note.get('content'),
                             note.get('patient_appearance'),
+                            checklist_text,
+                            note.get('mood_summary'),
+                            note.get('behavior_notes'),
                             note.get('needs_review'),
                             note.get('created_at')
                         ))

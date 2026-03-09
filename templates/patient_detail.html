@@ -197,8 +197,29 @@
                                     <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="{{ t('Note content...') }}" required></textarea>
                                 </div>
                                 <div class="col-md-12">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Patient appearance/behavior (placeholder)</label>
-                                    <input type="text" name="patient_appearance" class="form-control form-control-sm border-0 shadow-sm" placeholder="Will be enabled in a future update" disabled>
+                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
+                                    <input type="text" name="patient_appearance" class="form-control form-control-sm border-0 shadow-sm" placeholder="General appearance notes" value="{{ latest_behavior['patient_appearance'] }}">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior checklist</label>
+                                    <div class="row g-2">
+                                        {% for item in behavior_options %}
+                                        <div class="col-md-3 col-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_new_{{ loop.index }}" {% if item in latest_behavior['behavior_checklist'] %}checked{% endif %}>
+                                                <label class="form-check-label small" for="behavior_new_{{ loop.index }}">{{ item }}</label>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Mood summary</label>
+                                    <input type="text" name="mood_summary" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short mood summary" value="{{ latest_behavior['mood_summary'] }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior notes</label>
+                                    <input type="text" name="behavior_notes" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short behavior note" value="{{ latest_behavior['behavior_notes'] }}">
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
@@ -217,6 +238,15 @@
                                         <span class="text-muted smaller"><i class="bi bi-clock me-1"></i> Created: {{ note['created_at'] }}</span>
                                     </div>
                                     {% if note['content'] %}<div class="text-dark mb-2">{{ note['content'] }}</div>{% endif %}
+                                    {% if note['behavior_checklist'] %}
+                                        <div class="mb-2">
+                                            {% for tag in note['behavior_checklist'].split(',') %}
+                                                {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    {% if note['mood_summary'] %}<div class="small text-muted">Mood: {{ note['mood_summary'] }}</div>{% endif %}
+                                    {% if note['behavior_notes'] %}<div class="small text-muted mb-1">Behavior: {{ note['behavior_notes'] }}</div>{% endif %}
                                     <div class="small text-muted mb-2">Edited at: {{ note['updated_at'] or 'Not edited yet' }}</div>
                                     <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ note['id'] }}">{{ t('Edit') }}</button>
                                     <div class="collapse mt-3" id="editNote{{ note['id'] }}">
@@ -232,8 +262,30 @@
                                                     <input type="date" name="note_date" class="form-control form-control-sm" value="{{ note['note_date'] or '' }}">
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label class="form-label smallest">Appearance/behavior (placeholder)</label>
-                                                    <input type="text" name="patient_appearance" class="form-control form-control-sm" value="{{ note['patient_appearance'] or '' }}" placeholder="Planned field" disabled>
+                                                    <label class="form-label smallest">Appearance overview</label>
+                                                    <input type="text" name="patient_appearance" class="form-control form-control-sm" value="{{ note['patient_appearance'] or '' }}">
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label smallest">Behavior checklist</label>
+                                                    <div class="row g-2">
+                                                        {% set note_checks = (note['behavior_checklist'] or '').split(',') %}
+                                                        {% for item in behavior_options %}
+                                                        <div class="col-md-3 col-6">
+                                                            <div class="form-check">
+                                                                <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_edit_{{ note['id'] }}_{{ loop.index }}" {% if item in note_checks %}checked{% endif %}>
+                                                                <label class="form-check-label small" for="behavior_edit_{{ note['id'] }}_{{ loop.index }}">{{ item }}</label>
+                                                            </div>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label smallest">Mood summary</label>
+                                                    <input type="text" name="mood_summary" class="form-control form-control-sm" value="{{ note['mood_summary'] or '' }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label smallest">Behavior notes</label>
+                                                    <input type="text" name="behavior_notes" class="form-control form-control-sm" value="{{ note['behavior_notes'] or '' }}">
                                                 </div>
                                                 <div class="col-12">
                                                     <label class="form-label smallest">Content</label>

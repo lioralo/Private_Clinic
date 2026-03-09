@@ -13,9 +13,15 @@ CREATE TABLE IF NOT EXISTS notes (
     patient_id INTEGER NOT NULL,
     appointment_id INTEGER,
     session_number TEXT,
+    note_date DATE,
     needs_review BOOLEAN DEFAULT 0,
     content TEXT NOT NULL,
     content_hebrew TEXT,
+    patient_appearance TEXT,
+    behavior_checklist TEXT,
+    mood_summary TEXT,
+    behavior_notes TEXT,
+    updated_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );

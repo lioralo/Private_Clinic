@@ -1,0 +1,26 @@
+[
+  {
+    "meeting_number": 1,
+    "date": "2026-02-10",
+    "content": "Initial session. Explored stress triggers and sleep pattern.",
+    "patient_appearance": "Well-groomed, slightly tense.",
+    "behavior_checklist": [
+      "Anxious",
+      "Cooperative"
+    ],
+    "mood_summary": "Anxious but hopeful",
+    "behavior_notes": "Maintained eye contact, responded openly."
+  },
+  {
+    "meeting_number": 2,
+    "date": "2026-02-17",
+    "content": "Reviewed homework and introduced grounding strategies.",
+    "patient_appearance": "Relaxed posture, improved affect.",
+    "behavior_checklist": [
+      "Calm",
+      "Engaged"
+    ],
+    "mood_summary": "More stable",
+    "behavior_notes": "Actively participated and asked clarifying questions."
+  }
+]

@@ -2,6 +2,62 @@
 
 ---
 
+## Session 5 — March 9, 2026 (Appearance/Behavior Questionnaire + JSON Template)
+
+### Overview
+Added structured appearance and behavior capture to the treatment log with auto-fill from the previous session. Also provided JSON template/example files and validated import against the live workflow.
+
+### Features Implemented
+
+#### 1. Appearance/Behavior questionnaire in Treatment Log
+- Added a structured section to treatment log create/edit forms:
+  - **Tick-box checklist** (`behavior_flags`)
+  - **Short answer**: appearance overview (`patient_appearance`)
+  - **Short answer**: mood summary (`mood_summary`)
+  - **Short answer**: behavior notes (`behavior_notes`)
+
+#### 2. Auto-fill from previous session
+- On patient detail load, the latest note is read.
+- Questionnaire values are pre-filled automatically into the next treatment log entry form.
+- This supports continuity from one session to the next.
+
+#### 3. Storage + migration support
+- Added note-level fields via migrations and base schema updates:
+  - `behavior_checklist`
+  - `mood_summary`
+  - `behavior_notes`
+- Existing note fields (`note_date`, `patient_appearance`, `updated_at`) continue to be used.
+
+#### 4. JSON template and example files
+- Added reusable template at:
+  - `static/treatment_log_template.json`
+- Added concrete sample at:
+  - `static/treatment_log_example.json`
+
+#### 5. JSON import enhancements
+- Import now accepts and maps questionnaire fields from JSON records:
+  - `behavior_checklist` (array or string)
+  - `mood_summary`
+  - `behavior_notes`
+  - `patient_appearance`
+- Sorting behavior remains by date and meeting number.
+
+### Verification
+- `python -m py_compile app.py` passed.
+- `python test_app.py` passed (`12` tests).
+- End-to-end live import check performed using `static/treatment_log_example.json`; records loaded with meeting/date/order and questionnaire fields.
+
+### Files Updated
+- `app.py`
+- `schema.sql`
+- `templates/patient_detail.html`
+- `test_app.py`
+- `static/treatment_log_template.json` (new)
+- `static/treatment_log_example.json` (new)
+- `CHANGES.md`
+
+---
+
 ## Session 4 — March 9, 2026 (Treatment Log Workflow + Patient Detail UX)
 
 ### Overview

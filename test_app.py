@@ -2,6 +2,7 @@ import os
 import unittest
 import tempfile
 import sqlite3
+import json
 from flask import g
 from app import app, init_db, get_db
 
@@ -194,6 +195,59 @@ class ClinicTestCase(unittest.TestCase):
             assert note['content'] == 'Updated content'
             assert note['note_date'] == '2025-01-02'
             assert note['updated_at'] is not None
+
+    def test_behavior_questionnaire_fields_persist(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Behavior Patient', status='ongoing'), follow_redirects=True)
+        self.client.post('/patient/1/add_note', data=dict(
+            content='Behavior-focused note',
+            session_number='3',
+            note_date='2026-03-01',
+            patient_appearance='Neat appearance',
+            behavior_flags=['Calm', 'Engaged'],
+            mood_summary='Stable mood',
+            behavior_notes='Collaborative and focused'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            note = db.execute('''
+                SELECT patient_appearance, behavior_checklist, mood_summary, behavior_notes
+                FROM notes WHERE patient_id = 1 ORDER BY id DESC LIMIT 1
+            ''').fetchone()
+            assert note['patient_appearance'] == 'Neat appearance'
+            assert note['behavior_checklist'] == 'Calm,Engaged'
+            assert note['mood_summary'] == 'Stable mood'
+            assert note['behavior_notes'] == 'Collaborative and focused'
+
+    def test_import_static_treatment_log_example(self):
+        import io
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Template Import Patient', status='ongoing'), follow_redirects=True)
+
+        with open('static/treatment_log_example.json', 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+
+        rv = self.client.post(
+            '/patient/1/import',
+            data={'file': (io.BytesIO(json.dumps(payload).encode('utf-8')), 'treatment_log_example.json')},
+            content_type='multipart/form-data',
+            follow_redirects=True
+        )
+        assert b'History imported' in rv.data
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT session_number, note_date, behavior_checklist, mood_summary
+                FROM notes WHERE patient_id = 1
+                ORDER BY note_date ASC, CAST(session_number AS INTEGER) ASC
+            ''').fetchall()
+            assert len(rows) == 2
+            assert rows[0]['session_number'] == '1'
+            assert rows[0]['note_date'] == '2026-02-10'
+            assert rows[1]['session_number'] == '2'
+            assert rows[1]['note_date'] == '2026-02-17'
 
 if __name__ == '__main__':
     unittest.main()

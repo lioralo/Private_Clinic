@@ -1,0 +1,26 @@
+[
+  {
+    "meeting_number": 1,
+    "date": "YYYY-MM-DD",
+    "content": "Session summary and key interventions.",
+    "patient_appearance": "General appearance observations.",
+    "behavior_checklist": [
+      "Calm",
+      "Anxious"
+    ],
+    "mood_summary": "Brief mood summary.",
+    "behavior_notes": "Short behavior notes."
+  },
+  {
+    "meeting_number": 2,
+    "date": "YYYY-MM-DD",
+    "content": "Follow-up session notes.",
+    "patient_appearance": "Updated appearance observations.",
+    "behavior_checklist": [
+      "Engaged",
+      "Cooperative"
+    ],
+    "mood_summary": "Mood trend update.",
+    "behavior_notes": "Behavior trend update."
+  }
+]
