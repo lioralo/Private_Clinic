@@ -1137,40 +1137,90 @@ def convert_patient(patient_id):
 
     db = get_db()
 
-    start_date = request.form.get('start_date')
-    time = request.form.get('time')
+    start_date = request.form.get('start_date', '').strip()
+    time = request.form.get('time', '').strip()
     duration = request.form.get('duration', 60)
     interval = request.form.get('interval', 1)
     cost = request.form.get('cost', 0)
-
-    limit_type = request.form.get('recurrence_limit_type')
-    recurrence_end_date = None
-    recurrence_count = None
-    if limit_type == 'date':
-        recurrence_end_date = request.form.get('recurrence_end_date')
-    elif limit_type == 'count':
-        try:
-            recurrence_count = int(request.form.get('recurrence_count'))
-        except (ValueError, TypeError):
-            recurrence_count = None
-
-    # Get checked days (multiple values)
-    days_list = request.form.getlist('days')
-    days_str = ','.join(days_list) if days_list else None
-
-    db.execute("UPDATE patients SET status = 'ongoing' WHERE id = ?", (patient_id,))
-
     meeting_type = request.form.get('meeting_type', 'in-person')
     meeting_link = request.form.get('meeting_link', '')
 
-    if start_date and time:
-        db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count)
-                      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
-                   (patient_id, start_date, time, cost, duration, interval, days_str, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
+    # Validate required fields
+    if not start_date or not time:
+        flash('Start date and time are required!', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
 
-    db.commit()
-    flash('Patient converted to ongoing successfully.')
+    # Validate date and time formats
+    try:
+        datetime.datetime.fromisoformat(start_date)
+        datetime.datetime.strptime(time, '%H:%M')
+    except ValueError as e:
+        flash(f'Invalid date or time format: {str(e)}', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    # Convert types
+    try:
+        duration = int(duration)
+        interval = int(interval)
+        cost = float(cost) if cost else 0
+    except (ValueError, TypeError):
+        flash('Invalid duration, interval, or cost value!', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+
+    # Get recurrence limit
+    limit_type = request.form.get('recurrence_limit_type')
+    recurrence_end_date = None
+    recurrence_count = None
+    
+    if limit_type == 'date':
+        recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
+        if recurrence_end_date:
+            try:
+                datetime.datetime.fromisoformat(recurrence_end_date)
+            except ValueError:
+                flash('Invalid recurrence end date!', 'error')
+                return redirect(url_for('patient_detail', patient_id=patient_id))
+    elif limit_type == 'count':
+        try:
+            recurrence_count = int(request.form.get('recurrence_count', 12))
+            if recurrence_count <= 0:
+                recurrence_count = 12
+        except ValueError:
+            recurrence_count = 12
+
+    # Get checked days (multiple values)
+    days_list = request.form.getlist('days')
+    days_str = ','.join(str(d) for d in days_list if d.strip().isdigit()) if days_list else None
+
+    try:
+        # Update patient status
+        db.execute("UPDATE patients SET status = 'ongoing' WHERE id = ?", (patient_id,))
+
+        # Create recurring appointment
+        db.execute('''INSERT INTO appointments
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
+                       is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, 
+                       recurrence_end_date, recurrence_count)
+                      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
+                   (patient_id, start_date, time, cost, duration, interval, days_str, 
+                    meeting_type, meeting_link, recurrence_end_date, recurrence_count))
+
+        # Log the action
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if patient:
+            details = f"Patient {patient['name']} converted to ongoing status with recurring appointment starting {start_date} at {time}."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', 
+                       (patient_id, 'convert', details))
+
+        db.commit()
+        flash('Patient converted to ongoing successfully with recurring appointments.', 'success')
+    except sqlite3.IntegrityError as e:
+        db.rollback()
+        flash(f'Database error: {str(e)}', 'error')
+    except Exception as e:
+        db.rollback()
+        flash(f'Error converting patient: {str(e)}', 'error')
+
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
@@ -1568,7 +1618,9 @@ def api_slots():
 def manage_slots():
     if current_user.role != 'admin':
         return redirect(url_for('dashboard'))
-    return render_template('manage_slots.html')
+    db = get_db()
+    all_patients = db.execute('SELECT id, name, status FROM patients ORDER BY name ASC').fetchall()
+    return render_template('manage_slots.html', all_patients=all_patients)
 
 @app.route('/api/admin/slots', methods=['POST'])
 @login_required
@@ -1576,21 +1628,139 @@ def admin_manage_slots():
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    date = request.form['date']
-    time = request.form['time']
-    status = request.form['status']
-    duration = int(request.form.get('duration', 60))
+    date = request.form.get('date', '').strip()
+    time = request.form.get('time', '').strip()
+    slot_mode = request.form.get('slot_mode', 'override')
+
+    if not date or not time:
+        flash('Date and time are required!', 'error')
+        return redirect(url_for('manage_slots'))
 
     db = get_db()
-    existing = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', (date, time)).fetchone()
 
-    if existing:
-        db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', (status, duration, existing['id']))
-    else:
-        db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)', (date, time, status, duration))
+    # Mode 1: Regular slot override (availability management)
+    if slot_mode == 'override':
+        try:
+            status = request.form.get('status', 'open').strip()
+            duration = int(request.form.get('duration', 60))
 
-    db.commit()
-    flash('Slot updated.')
+            existing = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', (date, time)).fetchone()
+
+            if existing:
+                db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', (status, duration, existing['id']))
+            else:
+                db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)', 
+                          (date, time, status, duration))
+
+            db.commit()
+            flash('Slot availability updated.', 'success')
+        except (ValueError, sqlite3.Error) as e:
+            db.rollback()
+            flash(f'Error updating slot: {str(e)}', 'error')
+
+    # Mode 2: Patient booking from schedule management
+    elif slot_mode == 'patient_booking':
+        patient_id = request.form.get('patient_id', '').strip()
+        
+        if not patient_id:
+            flash('Please select a patient!', 'error')
+            return redirect(url_for('manage_slots'))
+
+        try:
+            patient_id = int(patient_id)
+            duration = int(request.form.get('booking_duration', 60))
+            cost = float(request.form.get('booking_cost', 0))
+            meeting_type = request.form.get('meeting_type', 'in-person').strip()
+            meeting_link = request.form.get('meeting_link', '').strip()
+            is_recurring = int(request.form.get('is_recurring', 0))
+
+            # Validate time format
+            try:
+                time_obj = datetime.datetime.strptime(time, '%H:%M')
+                time = time_obj.strftime('%H:%M')
+            except ValueError:
+                flash('Invalid time format!', 'error')
+                return redirect(url_for('manage_slots'))
+
+            # Verify patient exists
+            patient = db.execute('SELECT id FROM patients WHERE id = ?', (patient_id,)).fetchone()
+            if not patient:
+                flash('Patient not found!', 'error')
+                return redirect(url_for('manage_slots'))
+
+            # Handle recurring appointments
+            recurrence_interval = None
+            recurrence_days = None
+            recurrence_end_date = None
+            recurrence_count = None
+
+            if is_recurring:
+                recurrence_interval = int(request.form.get('recurrence_interval', 1))
+                limit_type = request.form.get('recurrence_limit_type', 'count')
+
+                if limit_type == 'date':
+                    recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
+                    if recurrence_end_date:
+                        try:
+                            datetime.datetime.fromisoformat(recurrence_end_date)
+                        except ValueError:
+                            flash('Invalid recurrence end date!', 'error')
+                            return redirect(url_for('manage_slots'))
+                elif limit_type == 'count':
+                    try:
+                        recurrence_count = int(request.form.get('recurrence_count', 12))
+                        if recurrence_count <= 0:
+                            recurrence_count = 12
+                    except ValueError:
+                        recurrence_count = 12
+
+                # Get recurrence days
+                days_list = request.form.getlist('recurrence_days')
+                recurrence_days = ','.join(str(d) for d in days_list if d.strip().isdigit()) if days_list else None
+
+            # Create appointment
+            if is_recurring:
+                db.execute('''INSERT INTO appointments 
+                              (patient_id, appointment_date, appointment_time, cost, duration_minutes,
+                               is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                               recurrence_end_date, recurrence_count)
+                              VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
+                           (patient_id, date, time, cost, duration, recurrence_interval,
+                            recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
+            else:
+                db.execute('''INSERT INTO appointments 
+                              (patient_id, appointment_date, appointment_time, cost, duration_minutes,
+                               meeting_type, meeting_link)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                           (patient_id, date, time, cost, duration, meeting_type, meeting_link))
+
+            # Mark the slot as occupied
+            existing_override = db.execute('SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = ?', 
+                                          (date, time)).fetchone()
+            if existing_override:
+                db.execute('UPDATE slots_override SET status = ?, duration_minutes = ? WHERE id = ?', 
+                          ('occupied', duration, existing_override['id']))
+            else:
+                db.execute('INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes) VALUES (?, ?, ?, ?)',
+                          (date, time, 'occupied', duration))
+
+            # Log action
+            appt_type = "recurring" if is_recurring else "single"
+            details = f"Admin booked {appt_type} appointment for patient ID {patient_id} on {date} at {time}."
+            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+                       (patient_id, 'schedule', details))
+
+            db.commit()
+            appt_msg = "Recurring appointment series created!" if is_recurring else "Appointment booked successfully!"
+            flash(appt_msg, 'success')
+
+        except (ValueError, sqlite3.IntegrityError) as e:
+            db.rollback()
+            flash(f'Error booking appointment: {str(e)}', 'error')
+        except Exception as e:
+            db.rollback()
+            flash(f'Unexpected error: {str(e)}', 'error')
+
     return redirect(url_for('manage_slots'))
 
 @app.route('/patient_book_slot', methods=['POST'])

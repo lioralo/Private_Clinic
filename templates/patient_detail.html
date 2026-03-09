@@ -10,7 +10,7 @@
                     <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
                 </h4>
                 <div class="d-flex align-items-center">
-                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 me-2">
+                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% else %}bg-secondary{% endif %} rounded-pill px-3 me-2">
                         {{ t(patient['status']|capitalize) }}
                     </span>
                     {% if patient['status'] == 'candidate' %}
@@ -421,7 +421,7 @@
 
 {% if patient['status'] == 'candidate' %}
 <div class="modal fade" id="convertModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content border-0 shadow rounded-4">
       <div class="modal-header border-0 pb-0">
         <h5 class="modal-title fw-bold text-primary">{{ t('Convert to Ongoing') }}</h5>
@@ -430,12 +430,13 @@
       <div class="modal-body p-4">
         <form id="convertForm" method="POST" action="{{ url_for('convert_patient', patient_id=patient['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Start Date') }}</label>
-                <input type="date" name="start_date" id="start_date" class="form-control" required>
-            </div>
-            <div class="row g-2 mb-3">
-                <div class="col-6">
+            
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Start Date') }}</label>
+                    <input type="date" name="start_date" id="start_date" class="form-control" required>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Time') }}</label>
                     <select name="time" class="form-select" required>
                         {% for h in range(8, 22) %}
@@ -444,29 +445,84 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-6">
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Duration (Minutes)') }}</label>
+                    <select name="duration" class="form-select" required>
+                        <option value="30">30 minutes</option>
+                        <option value="60" selected>60 minutes</option>
+                        <option value="90">90 minutes</option>
+                        <option value="120">120 minutes</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Cost') }}</label>
-                    <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
+                    <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00" value="0">
                 </div>
             </div>
+
             <div class="mb-3">
                 <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence Interval') }}</label>
                 <select name="interval" class="form-select">
-                    <option value="1">{{ t('Every Week') }}</option>
+                    <option value="1" selected>{{ t('Every Week') }}</option>
                     <option value="2">{{ t('Every 2 Weeks') }}</option>
                 </select>
             </div>
+
             <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence End Limit') }}</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date">
-                    <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
-                </div>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count" checked>
-                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" value="12" placeholder="{{ t('Number of sessions') }}">
+                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence Days') }}</label>
+                <div class="p-3 bg-light rounded-2">
+                    <div class="row g-2">
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="days" value="0" id="day_sunday">
+                                <label class="form-check-label" for="day_sunday">{{ t('Sunday') }}</label>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="days" value="1" id="day_monday" checked>
+                                <label class="form-check-label" for="day_monday">{{ t('Monday') }}</label>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="days" value="2" id="day_tuesday">
+                                <label class="form-check-label" for="day_tuesday">{{ t('Tuesday') }}</label>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="days" value="3" id="day_wednesday">
+                                <label class="form-check-label" for="day_wednesday">{{ t('Wednesday') }}</label>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="days" value="4" id="day_thursday">
+                                <label class="form-check-label" for="day_thursday">{{ t('Thursday') }}</label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <div class="mb-3">
+                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence End Limit') }}</label>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date">
+                    <label class="form-check-label" for="limitDate">{{ t('Until Date') }}</label>
+                    <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count" checked>
+                    <label class="form-check-label" for="limitCount">{{ t('Number of Sessions') }}</label>
+                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" value="12" min="1">
+                </div>
+            </div>
+
             <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold mt-3">{{ t('Save & Convert') }}</button>
         </form>
       </div>
