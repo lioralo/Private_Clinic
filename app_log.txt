@@ -1,0 +1,77 @@
+Initialized the database at clinic.db.
+ * Serving Flask app 'app'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 410-907-091
+ * Detected change in '/app/app.py', reloading
+Initialized the database at clinic.db.
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 410-907-091
+ * Detected change in '/app/app.py', reloading
+Initialized the database at clinic.db.
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 410-907-091
+ * Detected change in '/app/app.py', reloading
+Initialized the database at clinic.db.
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 410-907-091
+ * Detected change in '/app/app.py', reloading
+Initialized the database at clinic.db.
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 410-907-091
+127.0.0.1 - - [09/Mar/2026 08:56:36] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:36] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:37] "[32mPOST /login HTTP/1.1[0m" 302 -
+127.0.0.1 - - [09/Mar/2026 08:56:37] "GET /patients HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:37] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [09/Mar/2026 08:56:38] "GET /api/notifications HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:38] "GET /dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:38] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "[35m[1mPOST /admin/seed_data HTTP/1.1[0m" 500 -
+Traceback (most recent call last):
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 1536, in __call__
+    return self.wsgi_app(environ, start_response)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 1514, in wsgi_app
+    response = self.handle_exception(e)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/flask_login/utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/app.py", line 760, in seed_data
+    db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+sqlite3.IntegrityError: UNIQUE constraint failed: users.username
+127.0.0.1 - - [09/Mar/2026 08:56:39] "GET /admin/seed_data?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "GET /admin/seed_data?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "GET /admin/seed_data?__debugger__=yes&cmd=resource&f=console.png&s=zkq8O18dY2XhYULER7Bd HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "GET /patients HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [09/Mar/2026 08:56:39] "GET /api/notifications HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:40] "[32mGET /set_lang/he HTTP/1.1[0m" 302 -
+127.0.0.1 - - [09/Mar/2026 08:56:40] "[32mGET / HTTP/1.1[0m" 302 -
+127.0.0.1 - - [09/Mar/2026 08:56:40] "GET /patients HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:40] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [09/Mar/2026 08:56:40] "GET /api/notifications HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:41] "GET /patients HTTP/1.1" 200 -
+127.0.0.1 - - [09/Mar/2026 08:56:41] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+127.0.0.1 - - [09/Mar/2026 08:56:41] "GET /api/notifications HTTP/1.1" 200 -

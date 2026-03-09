@@ -23,6 +23,18 @@ login_manager.login_view = 'login'
 
 HEBREW_TRANSLATIONS = {
     "Dashboard": "לוח בקרה",
+    "Add First Patient": "הוסף מטופל ראשון",
+    "No patients found in this category.": "לא נמצאו מטופלים בקטגוריה זו.",
+    "ID:": "ת.ז:",
+    "Total": "סה״כ",
+    "View Profile": "הצג פרופיל",
+
+    "All Patients": "כל המטופלים",
+    "Candidates & Waiting": "מועמדים וממתינים",
+    "Candidate/Waiting": "מועמד/ממתין",
+    "Patients": "מטופלים",
+    "Missing Recurring Appointment": "חסרה פגישה חוזרת",
+
     "Ongoing": "בטיפול",
     "Candidates": "מועמדים",
     "Waiting": "ממתינים",
@@ -416,9 +428,28 @@ def patients():
     if current_user.role != 'admin':
         return redirect(url_for('dashboard'))
 
-    status = request.args.get('status', 'ongoing')
+    status = request.args.get('status', 'all')
     db = get_db()
-    patients = db.execute('SELECT * FROM patients WHERE status = ?', (status,)).fetchall()
+
+    if status == 'all':
+        patients = db.execute('''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+            FROM patients p ORDER BY p.created_at DESC
+        ''').fetchall()
+    elif status in ['candidate', 'waiting for scheduling', 'waiting']:
+        patients = db.execute('''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+            FROM patients p WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
+        ''').fetchall()
+    else:
+        patients = db.execute('''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+            FROM patients p WHERE status = ?
+        ''', (status,)).fetchall()
+
     return render_template('index.html', patients=patients, status=status)
 
 @app.route('/add_patient', methods=('GET', 'POST'))
@@ -810,54 +841,76 @@ def import_patient_history(patient_id):
         return redirect(url_for('patient_detail', patient_id=patient_id))
 
     if file and file.filename.endswith('.json'):
+
         import json
         try:
             data = json.load(file)
             db = get_db()
 
-            # Optionally validate data format here
             appointments_added = 0
             notes_added = 0
             receipts_added = 0
 
-            # Import appointments
-            appt_id_map = {}
-            # Sort appointments by date and time
-            sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
-            for appt in sorted_appts:
-                # Check for existing
-                existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
-                    (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
-                if not existing:
-                    cursor = db.execute('''INSERT INTO appointments
-                        (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
-                         appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
-                         appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
-                    appt_id_map[appt.get('id')] = cursor.lastrowid
-                    appointments_added += 1
-                else:
-                    appt_id_map[appt.get('id')] = existing['id']
+            if isinstance(data, list):
+                # Handle flat list of treatment logs
+                for item in data:
+                    meeting_number = item.get('meeting_number')
+                    date_str = item.get('date')
+                    content_text = item.get('content')
 
-            # Import notes
-            # Sort notes by created_at or session_number if possible
-            sorted_notes = sorted(data.get('notes', []), key=lambda x: (x.get('created_at', ''), x.get('session_number', '')))
-            for note in sorted_notes:
-                new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
-                db.execute('''INSERT INTO notes
-                    (patient_id, appointment_id, session_number, content, content_hebrew, needs_review, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                    (patient_id, new_appt_id, note.get('session_number'), note.get('content'), note.get('content_hebrew'), note.get('needs_review'), note.get('created_at')))
-                notes_added += 1
+                    appt_id = None
+                    if date_str:
+                        existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, date_str)).fetchone()
+                        if not existing:
+                            cursor = db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)', (patient_id, date_str, '00:00', 'completed'))
+                            appt_id = cursor.lastrowid
+                            appointments_added += 1
+                        else:
+                            appt_id = existing['id']
 
-            # Import receipts
-            for receipt in data.get('receipts', []):
-                db.execute('''INSERT INTO receipts
-                    (patient_id, amount, description, created_at)
-                    VALUES (?, ?, ?, ?)''',
-                    (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
-                receipts_added += 1
+                    db.execute('INSERT INTO notes (patient_id, appointment_id, session_number, content) VALUES (?, ?, ?, ?)', (patient_id, appt_id, meeting_number, content_text))
+                    notes_added += 1
+            else:
+
+
+                # Import appointments
+                appt_id_map = {}
+                # Sort appointments by date and time
+                sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
+                for appt in sorted_appts:
+                    # Check for existing
+                    existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
+                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
+                    if not existing:
+                        cursor = db.execute('''INSERT INTO appointments
+                            (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
+                             appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
+                             appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
+                        appt_id_map[appt.get('id')] = cursor.lastrowid
+                        appointments_added += 1
+                    else:
+                        appt_id_map[appt.get('id')] = existing['id']
+
+                # Import notes
+                # Sort notes by created_at or session_number if possible
+                sorted_notes = sorted(data.get('notes', []), key=lambda x: (x.get('created_at', ''), x.get('session_number', '')))
+                for note in sorted_notes:
+                    new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+                    db.execute('''INSERT INTO notes
+                        (patient_id, appointment_id, session_number, content, content_hebrew, needs_review, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                        (patient_id, new_appt_id, note.get('session_number'), note.get('content'), note.get('content_hebrew'), note.get('needs_review'), note.get('created_at')))
+                    notes_added += 1
+
+                # Import receipts
+                for receipt in data.get('receipts', []):
+                    db.execute('''INSERT INTO receipts
+                        (patient_id, amount, description, created_at)
+                        VALUES (?, ?, ?, ?)''',
+                        (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
+                    receipts_added += 1
 
             db.commit()
             flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
@@ -1250,25 +1303,24 @@ def api_slots():
     if not start_str or not end_str:
         return jsonify([])
 
-    start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00')).date()
-    end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00')).date()
+    start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
+    end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
 
     # Get overrides
     overrides = db.execute('SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
 
     # Get existing appointments
-    appointments = db.execute('SELECT a.*, p.first_name, p.last_name FROM appointments a LEFT JOIN patients p ON a.patient_id = p.id WHERE (a.appointment_date >= ? AND a.appointment_date <= ?) OR a.is_recurring = 1', (start_date.isoformat(), end_date.isoformat())).fetchall()
+    appointments = db.execute('SELECT a.*, p.name as patient_name FROM appointments a LEFT JOIN patients p ON a.patient_id = p.id WHERE (a.appointment_date >= ? AND a.appointment_date <= ?) OR a.is_recurring = 1', (start_date.isoformat(), end_date.isoformat())).fetchall()
 
     events = []
     blocked_ranges = []
 
     for override in overrides:
-        slot_datetime_start = f"{override['slot_date']}T{override['slot_time']}"
+        slot_datetime_start = f"{override['slot_date']}T{override['slot_time'].zfill(5)}"
         duration = override['duration_minutes'] or 60
 
         if override['status'] == 'blocked':
-            t_str = override['slot_time']
-            if len(t_str) == 4: t_str = "0" + t_str
+            t_str = override['slot_time'].zfill(5)
             try:
                 b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{t_str}")
                 b_end = b_start + datetime.timedelta(minutes=duration)
@@ -1310,17 +1362,15 @@ def api_slots():
             })
 
     for appt in appointments:
-        import datetime
+
         appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
         if not appt['is_recurring'] and (appt_date < start_date or appt_date > end_date):
             continue
 
         # Use padded time
-        time_str = appt['appointment_time']
-        if len(time_str) == 4: # e.g., 9:00
-             time_str = "0" + time_str
+        time_str = appt['appointment_time'].zfill(5)
 
-        slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+        slot_datetime_start = f"{appt['appointment_date']}T{time_str.zfill(5)}"
         duration = appt['duration_minutes'] or 60
         dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
         dt_end = dt_start + datetime.timedelta(minutes=duration)
@@ -1329,7 +1379,7 @@ def api_slots():
         if start_date <= dt_start.date() <= end_date:
             events.append({
                 'id': f"appt_{appt['id']}",
-                'title': 'My Appointment' if current_user.role == 'patient' and appt['patient_id'] == current_user.patient_id else ('Occupied' if current_user.role == 'patient' else f"{appt['first_name'] or 'Unknown'} {appt['last_name'] or 'Patient'}"),
+                'title': 'My Appointment' if current_user.role == 'patient' and appt['patient_id'] == current_user.patient_id else ('Occupied' if current_user.role == 'patient' else f"{appt['patient_name'] or 'Unknown Patient'}"),
                 'start': slot_datetime_start,
                 'end': slot_datetime_end,
                 'color': 'red',
@@ -1479,7 +1529,7 @@ def export_ics(appointment_id):
     import uuid
     from datetime import datetime, timedelta
 
-    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time']}")
+    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time'].zfill(5)}")
     end_datetime = start_datetime + timedelta(minutes=appt['duration_minutes'] or 60)
 
     dtstart = start_datetime.strftime("%Y%m%dT%H%M%S")
