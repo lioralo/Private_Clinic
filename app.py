@@ -1303,8 +1303,8 @@ def api_slots():
     if not start_str or not end_str:
         return jsonify([])
 
-    start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00')).date()
-    end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00')).date()
+    start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
+    end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
 
     # Get overrides
     overrides = db.execute('SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
@@ -1316,12 +1316,11 @@ def api_slots():
     blocked_ranges = []
 
     for override in overrides:
-        slot_datetime_start = f"{override['slot_date']}T{override['slot_time']}"
+        slot_datetime_start = f"{override['slot_date']}T{override['slot_time'].zfill(5)}"
         duration = override['duration_minutes'] or 60
 
         if override['status'] == 'blocked':
-            t_str = override['slot_time']
-            if len(t_str) == 4: t_str = "0" + t_str
+            t_str = override['slot_time'].zfill(5)
             try:
                 b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{t_str}")
                 b_end = b_start + datetime.timedelta(minutes=duration)
@@ -1363,17 +1362,15 @@ def api_slots():
             })
 
     for appt in appointments:
-        import datetime
+
         appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
         if not appt['is_recurring'] and (appt_date < start_date or appt_date > end_date):
             continue
 
         # Use padded time
-        time_str = appt['appointment_time']
-        if len(time_str) == 4: # e.g., 9:00
-             time_str = "0" + time_str
+        time_str = appt['appointment_time'].zfill(5)
 
-        slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+        slot_datetime_start = f"{appt['appointment_date']}T{time_str.zfill(5)}"
         duration = appt['duration_minutes'] or 60
         dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
         dt_end = dt_start + datetime.timedelta(minutes=duration)
@@ -1532,7 +1529,7 @@ def export_ics(appointment_id):
     import uuid
     from datetime import datetime, timedelta
 
-    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time']}")
+    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time'].zfill(5)}")
     end_datetime = start_datetime + timedelta(minutes=appt['duration_minutes'] or 60)
 
     dtstart = start_datetime.strftime("%Y%m%dT%H%M%S")
