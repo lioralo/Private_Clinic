@@ -237,14 +237,14 @@
                                         <div class="col-md-6">
                                             <label class="form-label smallest text-uppercase fw-bold">{{ t('Recurrence End Limit') }}</label>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitDate" value="date" checked>
+                                                <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitDate" value="date">
                                                 <label class="form-check-label smallest" for="addLimitDate">{{ t('Until Date') }}</label>
                                                 <input type="date" name="recurrence_end_date" class="form-control form-control-sm mt-1">
                                             </div>
                                             <div class="form-check mt-1">
-                                                <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitCount" value="count">
+                                                <input class="form-check-input" type="radio" name="recurrence_limit_type" id="addLimitCount" value="count" checked>
                                                 <label class="form-check-label smallest" for="addLimitCount">{{ t('Number of Meetings') }}</label>
-                                                <input type="number" name="recurrence_count" class="form-control form-control-sm mt-1" min="1">
+                                                <input type="number" name="recurrence_count" class="form-control form-control-sm mt-1" min="1" value="12">
                                             </div>
                                         </div>
                                         <div class="col-12 text-end">
@@ -269,7 +269,7 @@
                                             <div class="h5 mb-0 fw-bold">{{ appt['appointment_date'].split('-')[2] }}</div>
                                         </div>
                                         <div>
-                                            <div class="fw-bold text-dark">{{ appt['appointment_date'] }} @ {{ appt['appointment_time'] }}</div>
+                                            <div class="fw-bold text-dark">{{ appt['appointment_date'].split('-')[2] }}/{{ appt['appointment_date'].split('-')[1] }}/{{ appt['appointment_date'].split('-')[0] }} @ {{ appt['appointment_time'] }}</div>
                                             {% if appt['meeting_link'] %}
                                                 <a href="{{ appt['meeting_link'] }}" target="_blank" class="smallest text-primary text-decoration-none fw-bold">
                                                     <i class="bi bi-link-45deg me-1"></i>{{ t('Join Meeting') }}
@@ -459,12 +459,12 @@
             <div class="mb-3">
                 <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence End Limit') }}</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date" checked>
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date">
                     <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
                 </div>
                 <div class="form-check mt-2">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count">
-                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" placeholder="{{ t('Number of sessions') }}">
+                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count" checked>
+                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" value="12" placeholder="{{ t('Number of sessions') }}">
                 </div>
             </div>
             <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold mt-3">{{ t('Save & Convert') }}</button>

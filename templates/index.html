@@ -3,9 +3,16 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0 text-primary">
-        <i class="bi bi-people-fill me-2"></i>{{ status|capitalize }} Patients
+        <i class="bi bi-people-fill me-2"></i>
+        {% if status == 'all' %}
+            {{ t('All Patients') }}
+        {% elif status in ['candidate', 'waiting for scheduling'] %}
+            {{ t('Candidates & Waiting') }}
+        {% else %}
+            {{ t(status|capitalize) }} {{ t('Patients') }}
+        {% endif %}
     </h2>
-    <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} Total</span>
+    <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} {{ t('Total') }}</span>
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
@@ -18,11 +25,22 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                            {{ patient['status']|capitalize }}
+
+                            {% if patient['status'] in ['candidate', 'waiting for scheduling'] %}
+                                {{ t('Candidate/Waiting') }}
+                            {% else %}
+                                {{ t(patient['status']|capitalize) }}
+                            {% endif %}
+
                         </span>
                     </div>
-                    <h5 class="card-title fw-bold mb-1">{{ patient['name'] }}</h5>
-                    <p class="text-muted small mb-3">ID: #{{ patient['id'] }}</p>
+                    <h5 class="card-title fw-bold mb-1">
+                        {{ patient['name'] }}
+                        {% if patient['status'] == 'ongoing' and not patient['has_recurring'] %}
+                            <i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="{{ t('Missing Recurring Appointment') }}"></i>
+                        {% endif %}
+                    </h5>
+                    <p class="text-muted small mb-3">{{ t('ID:') }} #{{ patient['id'] }}</p>
                     
                     <div class="mb-4">
                         {% if patient['email'] %}
@@ -38,7 +56,7 @@
                     </div>
                     
                     <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
-                        View Profile
+                        {{ t('View Profile') }}
                     </a>
                 </div>
             </div>

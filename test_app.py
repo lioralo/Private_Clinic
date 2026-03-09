@@ -126,7 +126,7 @@ class ClinicTestCase(unittest.TestCase):
             time='10:00',
             cost='100.00'
         ), follow_redirects=True)
-        assert b'2024-01-01' in rv.data
+        assert b'01/01/2024' in rv.data
         assert b'100.0' in rv.data
 
 if __name__ == '__main__':
