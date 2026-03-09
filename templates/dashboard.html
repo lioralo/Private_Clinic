@@ -142,14 +142,18 @@ document.addEventListener('DOMContentLoaded', function() {
         locale: localeCode,
 
         initialView: 'timeGridWeek',
+        hiddenDays: [5, 6], // Show only Sun–Thu
+        slotMinTime: '08:00:00',
+        slotMaxTime: '20:00:00',
+        allDaySlot: false,
+        firstDay: 0, // Week starts on Sunday
+        // Show only weekday names — no date numbers in column headers
+        dayHeaderFormat: { weekday: 'long' },
         headerToolbar: {
             left: 'prev,next today',
-            center: 'title',
+            center: '',
             right: 'timeGridWeek,timeGridDay'
         },
-        slotMinTime: '08:00:00',
-        slotMaxTime: '18:00:00',
-        allDaySlot: false,
         events: '/api/slots',
         eventDrop: function(info) {
             var eventId = info.event.id.replace('appt_', '');

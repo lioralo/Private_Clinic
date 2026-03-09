@@ -1435,17 +1435,7 @@ def add_appointment(patient_id):
 @app.route('/api/slots')
 @login_required
 def api_slots():
-    # Only return slots for authorized patients or admins
-    if current_user.role == 'patient':
-        db = get_db()
-        patient = db.execute('SELECT status, can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-        pass # Allow all patients to see slots to view their own appointments
-
     db = get_db()
-    # Get all slots and appointments to figure out availability
-    # We will look ahead 8 weeks as standard.
-    # In a real system, you might have slots_recurring or generate them on the fly.
-    # For now, we will just pull slots_override and existing appointments.
 
     start_str = request.args.get('start')
     end_str = request.args.get('end')
@@ -1456,167 +1446,173 @@ def api_slots():
     start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
     end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
 
-    # Get overrides
-    overrides = db.execute('SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
+    # Get slot overrides in range
+    overrides = db.execute(
+        'SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?',
+        (start_date.isoformat(), end_date.isoformat())
+    ).fetchall()
 
-    # Get existing appointments
-    appointments = db.execute('SELECT a.*, p.name as patient_name FROM appointments a LEFT JOIN patients p ON a.patient_id = p.id WHERE (a.appointment_date >= ? AND a.appointment_date <= ?) OR a.is_recurring = 1', (start_date.isoformat(), end_date.isoformat())).fetchall()
+    # Non-recurring appointments in range + ALL recurring appointment series (regardless of start date)
+    appointments = db.execute(
+        '''SELECT a.*, p.name as patient_name FROM appointments a
+           LEFT JOIN patients p ON a.patient_id = p.id
+           WHERE (a.is_recurring = 0 AND a.appointment_date >= ? AND a.appointment_date <= ?)
+              OR a.is_recurring = 1''',
+        (start_date.isoformat(), end_date.isoformat())
+    ).fetchall()
 
     events = []
     blocked_ranges = []
 
+    # First pass: build blocked ranges so we can filter recurring occurrences
     for override in overrides:
-        # Ensure time is in HH:MM format
-        time_str = override['slot_time'].strip()
-        if not isinstance(time_str, str) or ':' not in time_str:
-            # Skip malformed times
+        time_str = (override['slot_time'] or '').strip()
+        if not time_str or ':' not in time_str:
             continue
-        
-        slot_datetime_start = f"{override['slot_date']}T{time_str}"
-        duration = override['duration_minutes'] or 60
-
         if override['status'] == 'blocked':
             try:
                 b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
-                b_end = b_start + datetime.timedelta(minutes=duration)
+                b_end = b_start + datetime.timedelta(minutes=override['duration_minutes'] or 60)
                 blocked_ranges.append((b_start, b_end))
             except ValueError:
                 continue
-        
+
+    # Process slot overrides into calendar events
+    for override in overrides:
+        time_str = (override['slot_time'] or '').strip()
+        if not time_str or ':' not in time_str:
+            continue
         try:
-            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+            dt_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
+            duration = override['duration_minutes'] or 60
             dt_end = dt_start + datetime.timedelta(minutes=duration)
-            slot_datetime_end = dt_end.isoformat()
         except ValueError:
             continue
 
         status = override['status']
-        color = 'gray'
-        if status == 'open':
-            color = 'green'
-        elif status == 'occupied':
-            color = 'red'
-        elif status == 'blocked':
-            color = 'gray'
+        color = 'green' if status == 'open' else 'red' if status == 'occupied' else 'gray'
 
+        # Patients only see open slots (so they know when to book)
+        if current_user.role == 'patient' and status != 'open':
+            continue
+
+        events.append({
+            'id': f"slot_{override['id']}",
+            'title': status.capitalize(),
+            'start': dt_start.isoformat(),
+            'end': dt_end.isoformat(),
+            'color': color,
+            'extendedProps': {'status': status, 'duration_minutes': duration}
+        })
+
+    # Helper: build a FullCalendar event dict for one appointment occurrence
+    def make_appt_event(event_id, occ_date, appt_time, duration, appt):
+        dt_s = datetime.datetime.combine(occ_date, appt_time)
+        dt_e = dt_s + datetime.timedelta(minutes=duration)
+        # Skip if overlaps a blocked slot
+        for b_start, b_end in blocked_ranges:
+            if max(dt_s, b_start) < min(dt_e, b_end):
+                return None
         if current_user.role == 'patient':
-            if status == 'open':
-                events.append({
-                    'id': f"slot_{override['id']}",
-                    'title': status.capitalize(),
-                    'start': slot_datetime_start,
-                    'end': slot_datetime_end,
-                    'color': color,
-                    'extendedProps': {'status': status, 'duration_minutes': duration}
-                })
+            title = 'My Appointment' if appt['patient_id'] == current_user.patient_id else 'Occupied'
         else:
-            events.append({
-                'id': f"slot_{override['id']}",
-                'title': status.capitalize(),
-                'start': slot_datetime_start,
-                'end': slot_datetime_end,
-                'color': color,
-                'extendedProps': {'status': status, 'duration_minutes': duration}
-            })
+            title = appt['patient_name'] or 'Unknown Patient'
+        return {
+            'id': event_id,
+            'title': title,
+            'start': dt_s.isoformat(),
+            'end': dt_e.isoformat(),
+            'color': 'red',
+            'extendedProps': {
+                'status': 'occupied',
+                'duration_minutes': duration,
+                'is_recurring': bool(appt['is_recurring']),
+                'appointment_id': appt['id'],
+                'patient_name': appt['patient_name'] or ''
+            }
+        }
 
+    # Process appointments
     for appt in appointments:
         try:
             appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
         except (ValueError, TypeError):
             continue
-            
-        if not appt['is_recurring'] and (appt_date < start_date or appt_date > end_date):
-            continue
 
-        # Ensure time is in HH:MM format
-        time_str = appt['appointment_time'].strip()
+        time_str = (appt['appointment_time'] or '').strip()
         if not time_str or ':' not in time_str:
             continue
-
         try:
-            slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+            appt_time = datetime.time.fromisoformat(time_str[:5])  # HH:MM
             duration = appt['duration_minutes'] or 60
-            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
-            dt_end = dt_start + datetime.timedelta(minutes=duration)
-            slot_datetime_end = dt_end.isoformat()
         except ValueError:
             continue
 
-        if start_date <= dt_start.date() <= end_date:
-            events.append({
-                'id': f"appt_{appt['id']}",
-                'title': 'My Appointment' if current_user.role == 'patient' and appt['patient_id'] == current_user.patient_id else ('Occupied' if current_user.role == 'patient' else f"{appt['patient_name'] or 'Unknown Patient'}"),
-                'start': slot_datetime_start,
-                'end': slot_datetime_end,
-                'color': 'red',
-                'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
-            })
+        if not appt['is_recurring']:
+            # Single appointment — show if it falls in the view range
+            if start_date <= appt_date <= end_date:
+                evt = make_appt_event(f"appt_{appt['id']}", appt_date, appt_time, duration, appt)
+                if evt:
+                    events.append(evt)
+        else:
+            # --- Recurring series ---
+            # Project every occurrence that falls within [start_date, end_date],
+            # regardless of how long ago the series began.
+            interval_weeks = appt['recurrence_interval'] or 1
+            days_str = appt['recurrence_days']
+            if days_str:
+                # Stored as FC day numbers: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu
+                recurrence_fc_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
+            else:
+                # Default to same weekday as the original appointment
+                # Python weekday() Mon=0..Sun=6 → FC day: (weekday+1)%7
+                recurrence_fc_days = [(appt_date.weekday() + 1) % 7]
 
-            # Project recurring appointments
-            if appt['is_recurring'] and appt['recurrence_interval']:
-                current_date = dt_start.date()
-                interval_weeks = appt['recurrence_interval']
-                # Days of week: e.g. "0,2" for Sunday, Tuesday. Python weekday() is Monday=0, Sunday=6
-                # We map 0=Sunday, 1=Monday ... 6=Saturday for FullCalendar consistency
-                days_str = appt['recurrence_days']
-                recurrence_days = []
-                if days_str:
-                    recurrence_days = [int(d) for d in days_str.split(',') if d.strip().isdigit()]
-                else:
-                    # default to the day of the original appointment if not specified
-                    # fullcalendar: sunday=0. python: monday=0. python -> fullcalendar: (weekday + 1) % 7
-                    recurrence_days = [(current_date.weekday() + 1) % 7]
+            limit_date = None
+            if appt.get('recurrence_end_date'):
+                try:
+                    limit_date = datetime.datetime.fromisoformat(appt['recurrence_end_date']).date()
+                except ValueError:
+                    pass
+            limit_count = appt.get('recurrence_count')
 
-                # Project up to 8 weeks ahead
-                generated_count = 1 # The original appointment counts as 1
-                limit_date = None
-                if appt.get('recurrence_end_date'):
-                    try:
-                        limit_date = datetime.datetime.fromisoformat(appt['recurrence_end_date']).date()
-                    except ValueError:
-                        pass
+            # Find the Sunday of the week that contains appt_date.
+            # Python weekday: Mon=0..Sun=6 → days since last Sunday = (weekday+1)%7
+            days_since_sunday = (appt_date.weekday() + 1) % 7
+            series_week_sunday = appt_date - datetime.timedelta(days=days_since_sunday)
 
-                limit_count = appt.get('recurrence_count')
+            # Walk forward week-by-week (in steps of interval_weeks) generating occurrences.
+            # We stop walking once a week's Sunday is past end_date (no more occurrences possible).
+            occurrences = []  # list of date objects in chronological order
+            week_num = 0
+            while True:
+                week_sunday = series_week_sunday + datetime.timedelta(weeks=week_num * interval_weeks)
+                if week_sunday > end_date + datetime.timedelta(days=7):
+                    break  # No occurrences can fall in view range from here on
+                week_num += 1
+                if week_num > 1040:  # safety cap (~20 years)
+                    break
+                for fc_day in sorted(recurrence_fc_days):
+                    # fc_day offset from Sunday of week: 0=Sun, 1=Mon, …, 4=Thu
+                    occ = week_sunday + datetime.timedelta(days=fc_day)
+                    if occ < appt_date:
+                        continue  # Before series start
+                    if limit_date and occ > limit_date:
+                        continue
+                    occurrences.append(occ)
 
-                for i in range(1, 12 // interval_weeks + 1):
-                    base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
-                    # Now project for each day in recurrence_days
-                    for day_offset in range(7):
-                        test_date = base_next_date - datetime.timedelta(days=base_next_date.weekday()) + datetime.timedelta(days=day_offset) # Start of week (Monday) + day_offset
-                        # Wait, FullCalendar weeks start on Sunday usually, but Python's weekday() starts on Monday.
-                        # Let's map FullCalendar day to Python weekday: 0->6, 1->0, 2->1, 3->2, 4->3, 5->4, 6->5
-                        test_fc_day = (test_date.weekday() + 1) % 7
+            occurrences.sort()
+            if limit_count:
+                occurrences = occurrences[:limit_count]
 
-                        if test_fc_day in recurrence_days:
-                            # Only project if the test_date is on or after the original appointment date (for the very first week)
-                            if test_date > current_date:
-                                if limit_date and test_date > limit_date:
-                                    continue
-                                if limit_count and generated_count >= limit_count:
-                                    continue
-
-                                generated_count += 1
-                                if start_date <= test_date <= end_date:
-                                    next_dt_start = datetime.datetime.combine(test_date, dt_start.time())
-                                    next_dt_end = next_dt_start + datetime.timedelta(minutes=duration)
-
-                                    is_blocked = False
-                                    for b_start, b_end in blocked_ranges:
-                                        if max(next_dt_start, b_start) < min(next_dt_end, b_end):
-                                            is_blocked = True
-                                            break
-
-                                    if is_blocked:
-                                        continue
-
-                                    events.append({
-                                        'id': f"appt_recur_{appt['id']}_{i}_{test_fc_day}",
-                                        'title': 'Occupied (Recurring)',
-                                        'start': next_dt_start.isoformat(),
-                                        'end': next_dt_end.isoformat(),
-                                        'color': 'red',
-                                        'extendedProps': {'status': 'occupied', 'duration_minutes': duration}
-                                    })
+            for occ_date in occurrences:
+                if start_date <= occ_date <= end_date:
+                    evt = make_appt_event(
+                        f"appt_{appt['id']}_{occ_date.isoformat()}",
+                        occ_date, appt_time, duration, appt
+                    )
+                    if evt:
+                        events.append(evt)
 
     return jsonify(events)
 
