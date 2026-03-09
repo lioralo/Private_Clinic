@@ -13,6 +13,13 @@ This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. I
     *   It handles the mapping between appointments and notes during import.
 
 ## Change Log
+- **Date/Time**: Sunday, 9 March 2026, 14:30
+- **Update**:
+    - **Schema Verification**: Confirmed all required database columns exist (background, treatment_info, recurrence fields).
+    - **Route Verification**: Verified all routes are properly defined and connected to their corresponding template form actions.
+    - **Database Migration**: Added missing ALTER TABLE migrations for `backgrounds` and `treatment_info` columns in the patients table to support patient background tracking.
+    - **Connection Audit**: Validated all url_for() calls in templates match function names in app.py.
+    - **Status**: All core features from previous updates are verified and connected. System is ready for comprehensive testing.
 - **Date/Time**: Sunday, 8 March 2026, 20:45
 - **Update**:
     - **UI/UX**: Synced routes and validated `patient_detail.html` forms.

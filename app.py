@@ -294,6 +294,14 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
         except sqlite3.OperationalError:
             pass
