@@ -8,6 +8,8 @@ import subprocess
 import sys
 import os
 import argparse
+import signal
+import atexit
 from pathlib import Path
 
 
@@ -15,10 +17,38 @@ class AutoRunner:
     def __init__(self, verbose=False):
         self.verbose = verbose
         self.root_dir = Path(__file__).parent
+        self.app_process = None
+        
+        # Register cleanup on exit
+        atexit.register(self.cleanup)
+        
+        # Register signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
         
     def log(self, message, level="INFO"):
         """Print log messages"""
         print(f"[{level}] {message}")
+    
+    def _signal_handler(self, signum, frame):
+        """Handle interrupt signals gracefully"""
+        self.log("Shutdown signal received, terminating application...", level="WARNING")
+        self.cleanup()
+        sys.exit(0)
+    
+    def cleanup(self):
+        """Terminate the app process and close the port"""
+        if self.app_process and self.app_process.poll() is None:
+            self.log("Closing application and releasing port...")
+            try:
+                self.app_process.terminate()
+                self.app_process.wait(timeout=5)
+                self.log("✓ Application terminated gracefully", level="SUCCESS")
+            except subprocess.TimeoutExpired:
+                self.log("Process did not terminate, killing forcefully...", level="WARNING")
+                self.app_process.kill()
+                self.app_process.wait()
+                self.log("✓ Application killed", level="SUCCESS")
     
     def run_command(self, cmd, description):
         """Execute shell command with error handling"""
@@ -69,10 +99,21 @@ class AutoRunner:
             return False
         
         self.log("Starting application on http://127.0.0.1:5000")
-        return self.run_command(
-            [sys.executable, str(app_file)],
-            "run application"
-        )
+        self.log("Press Ctrl+C to stop the application")
+        
+        try:
+            self.app_process = subprocess.Popen(
+                [sys.executable, str(app_file)],
+                cwd=self.root_dir
+            )
+            self.log("✓ Application started (PID: {})".format(self.app_process.pid), level="SUCCESS")
+            
+            # Wait for the process to complete
+            self.app_process.wait()
+            return self.app_process.returncode == 0
+        except Exception as e:
+            self.log(f"Failed to start application: {e}", level="ERROR")
+            return False
     
     def execute(self, install=True, test=False, run=True):
         """Execute the auto runner pipeline"""
