@@ -23,7 +23,7 @@ class SecurityTestCase(unittest.TestCase):
 
             from werkzeug.security import generate_password_hash
             hashed_pw = generate_password_hash('admin')
-            # Create admin without secret token first to test setup flow if needed, 
+            # Create admin without secret token first to test setup flow if needed,
             # or with it to test 2FA enforcement.
             self.admin_secret = pyotp.random_base32()
             db.execute("INSERT INTO users (username, password_hash, role, secret_token) VALUES (?, ?, ?, ?)",
@@ -54,7 +54,7 @@ class SecurityTestCase(unittest.TestCase):
             otp=otp
         ), follow_redirects=True)
         # Should be logged in (redirected to patients list)
-        assert b'Ongoing' in rv.data 
+        assert b'Ongoing' in rv.data
 
     def test_admin_2fa_invalid(self):
         # Login with invalid OTP

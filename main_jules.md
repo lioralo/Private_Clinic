@@ -4,7 +4,7 @@
 This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. It supports patient management, billing, scheduling, and localization.
 
 ## Latest Features Added
-1.  **Advanced Recurrence**: 
+1.  **Advanced Recurrence**:
     *   Appointments can now repeat until a `recurrence_end_date` or for a specific `recurrence_count`.
     *   The logic is handled in `app.route('/patient/<int:patient_id>/convert')` for setting the rules and `app.route('/api/slots')` for rendering them.
 2.  **Patient History JSON Import/Export**:
@@ -13,6 +13,13 @@ This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. I
     *   It handles the mapping between appointments and notes during import.
 
 ## Change Log
+- **Date/Time**: Sunday, 8 March 2026, 20:45
+- **Update**:
+    - **UI/UX**: Synced routes and validated `patient_detail.html` forms.
+    - **Calendar UI**: Modified `api_slots` to display the patient's name for Admins, and "My Appointment" or "Occupied" for Patients, regardless of self-scheduling permissions.
+    - **Recurrence**: Updated `api_slots` to properly project recurring appointments up to 12 weeks ahead by resolving a bug in the DB query logic.
+    - **Meeting Links**: Validated that `add_appointment` correctly extracts and persists `meeting_link`.
+    - **Verification**: Verified JSON import logic handles sorting and ID mapping correctly.
 - **Date/Time**: Tuesday, 10 March 2026, 10:00
 - **Update**:
     - **Conflict Resolution**: Added logic to `api/slots` to prevent generating recurring appointments if the day/time overlaps with a "blocked" status in `slots_override`.
@@ -21,14 +28,14 @@ This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. I
     - **Email Reminders**: Created a stub function `send_appointment_reminders()` in `app.py` intended for external Email/SMS API integrations.
     - **Time Inputs**: Replaced `<input type="time">` in `patient_detail.html` with `<select>` dropdowns (30-minute increments, 08:00 - 21:00).
 - **Date/Time**: Sunday, 8 March 2026, 13:55
-- **Update**: 
+- **Update**:
     - Enhanced calendar booking to show specific client names (Admin view) or "My Appointment" (Patient view).
     - Added "Unknown Patient" fallback for missing patient data.
     - Integrated meeting links directly into calendar event properties and patient dashboard.
     - Added "Add Recurring..." functionality to the appointment add dropdown.
     - Synchronized recurring projection logic across Admin and Patient views.
 - **Date/Time**: Sunday, 8 March 2026, 13:25
-- **Update**: 
+- **Update**:
     - Integrated Advanced Calendar with Notification system.
     - Implemented Recurrent Meeting limits (by Date or Count).
     - Added Chronological JSON Import/Export for patient history with automatic sorting.

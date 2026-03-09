@@ -13,6 +13,13 @@ This is a Psychotherapy Clinic CRM built with Flask, SQLite, and FullCalendar. I
     *   It handles the mapping between appointments and notes during import.
 
 ## Change Log
+- **Date/Time**: Sunday, 8 March 2026, 20:45
+- **Update**:
+    - **UI/UX**: Synced routes and validated `patient_detail.html` forms.
+    - **Calendar UI**: Modified `api_slots` to display the patient's name for Admins, and "My Appointment" or "Occupied" for Patients, regardless of self-scheduling permissions.
+    - **Recurrence**: Updated `api_slots` to properly project recurring appointments up to 12 weeks ahead by resolving a bug in the DB query logic.
+    - **Meeting Links**: Validated that `add_appointment` correctly extracts and persists `meeting_link`.
+    - **Verification**: Verified JSON import logic handles sorting and ID mapping correctly.
 - **Date/Time**: Tuesday, 10 March 2026, 10:00
 - **Update**:
     - **Conflict Resolution**: Added logic to `api/slots` to prevent generating recurring appointments if the day/time overlaps with a "blocked" status in `slots_override`.

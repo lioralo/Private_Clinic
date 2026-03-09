@@ -1236,8 +1236,7 @@ def api_slots():
     if current_user.role == 'patient':
         db = get_db()
         patient = db.execute('SELECT status, can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-        if patient['status'] != 'waiting for scheduling' and not patient['can_self_schedule']:
-            return jsonify([])
+        pass # Allow all patients to see slots to view their own appointments
 
     db = get_db()
     # Get all slots and appointments to figure out availability
@@ -1258,7 +1257,7 @@ def api_slots():
     overrides = db.execute('SELECT * FROM slots_override WHERE slot_date >= ? AND slot_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
 
     # Get existing appointments
-    appointments = db.execute('SELECT * FROM appointments WHERE appointment_date >= ? AND appointment_date <= ?', (start_date.isoformat(), end_date.isoformat())).fetchall()
+    appointments = db.execute('SELECT a.*, p.first_name, p.last_name FROM appointments a LEFT JOIN patients p ON a.patient_id = p.id WHERE (a.appointment_date >= ? AND a.appointment_date <= ?) OR a.is_recurring = 1', (start_date.isoformat(), end_date.isoformat())).fetchall()
 
     events = []
     blocked_ranges = []
@@ -1310,22 +1309,27 @@ def api_slots():
                 'extendedProps': {'status': status, 'duration_minutes': duration}
             })
 
-    if current_user.role != 'patient':
-        for appt in appointments:
-            # Use padded time
-            time_str = appt['appointment_time']
-            if len(time_str) == 4: # e.g., 9:00
-                 time_str = "0" + time_str
+    for appt in appointments:
+        import datetime
+        appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
+        if not appt['is_recurring'] and (appt_date < start_date or appt_date > end_date):
+            continue
 
-            slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
-            duration = appt['duration_minutes'] or 60
-            dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
-            dt_end = dt_start + datetime.timedelta(minutes=duration)
-            slot_datetime_end = dt_end.isoformat()
+        # Use padded time
+        time_str = appt['appointment_time']
+        if len(time_str) == 4: # e.g., 9:00
+             time_str = "0" + time_str
 
+        slot_datetime_start = f"{appt['appointment_date']}T{time_str}"
+        duration = appt['duration_minutes'] or 60
+        dt_start = datetime.datetime.fromisoformat(slot_datetime_start)
+        dt_end = dt_start + datetime.timedelta(minutes=duration)
+        slot_datetime_end = dt_end.isoformat()
+
+        if start_date <= dt_start.date() <= end_date:
             events.append({
                 'id': f"appt_{appt['id']}",
-                'title': 'Occupied (Appt)',
+                'title': 'My Appointment' if current_user.role == 'patient' and appt['patient_id'] == current_user.patient_id else ('Occupied' if current_user.role == 'patient' else f"{appt['first_name'] or 'Unknown'} {appt['last_name'] or 'Patient'}"),
                 'start': slot_datetime_start,
                 'end': slot_datetime_end,
                 'color': 'red',
@@ -1358,7 +1362,7 @@ def api_slots():
 
                 limit_count = appt.get('recurrence_count')
 
-                for i in range(1, 8 // interval_weeks + 1):
+                for i in range(1, 12 // interval_weeks + 1):
                     base_next_date = current_date + datetime.timedelta(weeks=interval_weeks * i)
                     # Now project for each day in recurrence_days
                     for day_offset in range(7):
