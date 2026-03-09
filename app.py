@@ -307,6 +307,22 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
         except sqlite3.OperationalError:
             pass
@@ -483,7 +499,7 @@ def assign_resource(patient_id):
         except sqlite3.IntegrityError:
             flash('Resource already assigned to this patient.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -605,7 +621,13 @@ def patient_detail(patient_id):
     # Fetch user account if exists
     user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
 
-    notes = db.execute('SELECT * FROM notes WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    notes = db.execute('''
+        SELECT * FROM notes
+        WHERE patient_id = ?
+        ORDER BY COALESCE(note_date, date(created_at)) DESC,
+                 CAST(COALESCE(session_number, '0') AS INTEGER) DESC,
+                 created_at DESC
+    ''', (patient_id,)).fetchall()
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
@@ -630,7 +652,13 @@ def patient_detail(patient_id):
         WHERE pr.patient_id = ?
     ''', (patient_id,)).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources)
+    active_tab = request.args.get('tab', 'info')
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab)
+
+
+def redirect_to_patient_tab(patient_id, default_tab='info'):
+    tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -638,12 +666,27 @@ def add_note(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form.get('content', '')
-    content_hebrew = request.form.get('content_hebrew', '')
+    content = request.form.get('content', '').strip()
+    session_number = request.form.get('session_number', '').strip()
+    note_date = request.form.get('note_date', '').strip()
+    patient_appearance = request.form.get('patient_appearance', '').strip()
 
-    if content or content_hebrew:
+    if content:
         db = get_db()
-        cur = db.execute('INSERT INTO notes (patient_id, content, content_hebrew) VALUES (?, ?, ?)', (patient_id, content, content_hebrew))
+        appointment_id = None
+        if note_date:
+            existing = db.execute(
+                'SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? LIMIT 1',
+                (patient_id, note_date)
+            ).fetchone()
+            if existing:
+                appointment_id = existing['id']
+
+        cur = db.execute(
+            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content, patient_appearance)
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (patient_id, appointment_id, session_number or None, note_date or None, content, patient_appearance or None)
+        )
         note_id = cur.lastrowid
         db.commit()
 
@@ -662,7 +705,10 @@ def add_note(patient_id):
                 db.execute('INSERT INTO files (patient_id, treatment_id, filename) VALUES (?, ?, ?)', (patient_id, note_id, filename))
                 db.commit()
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    else:
+        flash('Content is required for treatment log entries.')
+
+    return redirect_to_patient_tab(patient_id, 'notes')
 
 @app.route('/note/<int:note_id>/edit', methods=('POST',))
 @login_required
@@ -670,21 +716,20 @@ def edit_note(note_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form.get('content')
-    session_number = request.form.get('session_number')
-    patient_appearance = request.form.get('patient_appearance')
-    key_topics = request.form.get('key_topics')
+    content = request.form.get('content', '').strip()
+    session_number = request.form.get('session_number', '').strip()
+    note_date = request.form.get('note_date', '').strip()
+    patient_appearance = request.form.get('patient_appearance', '').strip()
 
     db = get_db()
     note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
     if note:
         db.execute(
-            'UPDATE notes SET content = ?, session_number = ?, patient_appearance = ?, key_topics = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            (content, session_number, patient_appearance, key_topics, note_id)
+            'UPDATE notes SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            (content, session_number or None, note_date or None, patient_appearance or None, note_id)
         )
         db.commit()
-        log_audit(f"Edited note ID {note_id}")
-        return redirect(url_for('patient_detail', patient_id=note['patient_id']))
+        return redirect_to_patient_tab(note['patient_id'], 'notes')
     return "Note not found", 404
 
 @app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
@@ -698,8 +743,7 @@ def add_goal(patient_id):
         db = get_db()
         db.execute('INSERT INTO goals (patient_id, description) VALUES (?, ?)', (patient_id, description))
         db.commit()
-        log_audit(f"Added goal for patient ID {patient_id}: {description}")
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/goal/<int:goal_id>/toggle_status', methods=('POST',))
 @login_required
@@ -713,8 +757,7 @@ def toggle_goal_status(goal_id):
         new_status = 'achieved' if goal['status'] == 'active' else 'active'
         db.execute('UPDATE goals SET status = ? WHERE id = ?', (new_status, goal_id))
         db.commit()
-        log_audit(f"Updated goal ID {goal_id} status to {new_status}")
-        return redirect(url_for('patient_detail', patient_id=goal['patient_id']))
+        return redirect_to_patient_tab(goal['patient_id'], 'info')
     return "Goal not found", 404
 
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
@@ -725,11 +768,11 @@ def add_file(patient_id):
 
     if 'file' not in request.files:
         flash('No file part')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'notes')
     file = request.files['file']
     if file.filename == '':
         flash('No selected file')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'notes')
     if file:
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -761,6 +804,7 @@ def add_file(patient_id):
                 notes_review = 0
 
                 for block in blocks:
+                    parsed_date = None
                     meeting_no_match = re.search(r'(?:Meeting #|פגישה מספר)[:\s]*(\w+)', block, re.IGNORECASE)
                     date_match = re.search(r'(?:Date|תאריך)[:\s]*([\d\./\-]+)', block, re.IGNORECASE)
                     content_match = re.search(r'(?:Content|תוכן)[:\s]*(.*)', block, re.IGNORECASE | re.DOTALL)
@@ -776,7 +820,6 @@ def add_file(patient_id):
                     appointment_id = None
                     if date_str:
                         try:
-                            parsed_date = None
                             if '.' in date_str or '/' in date_str:
                                 parts = re.split(r'[\./]', date_str)
                                 if len(parts) == 3:
@@ -796,8 +839,9 @@ def add_file(patient_id):
                             print("Error parsing date:", e)
                             needs_review = True
 
-                    db.execute('INSERT INTO notes (patient_id, appointment_id, session_number, needs_review, content) VALUES (?, ?, ?, ?, ?)',
-                               (patient_id, appointment_id, meeting_no, needs_review, content))
+                    db.execute('''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, needs_review, content)
+                                  VALUES (?, ?, ?, ?, ?, ?)''',
+                               (patient_id, appointment_id, meeting_no, parsed_date, needs_review, content))
                     if needs_review:
                         notes_review += 1
                     else:
@@ -812,7 +856,7 @@ def add_file(patient_id):
                 print(f"Error parsing DOCX: {e}")
                 flash('Error parsing DOCX file.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'notes')
 
 @app.route('/patient/<int:patient_id>/export', methods=('GET',))
 @login_required
@@ -1162,12 +1206,12 @@ def import_patient_history(patient_id):
 
     if 'file' not in request.files:
         flash('No file part')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'notes')
 
     file = request.files['file']
     if file.filename == '':
         flash('No selected file')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'notes')
 
     if file and file.filename.endswith('.json'):
 
@@ -1181,11 +1225,21 @@ def import_patient_history(patient_id):
             receipts_added = 0
 
             if isinstance(data, list):
-                # Handle flat list of treatment logs
-                for item in data:
+                def _sort_key(item):
+                    raw_date = (item.get('date') or item.get('note_date') or '').strip()
+                    meeting_raw = item.get('meeting_number') or item.get('session_number') or 0
+                    try:
+                        meeting_num = int(meeting_raw)
+                    except (TypeError, ValueError):
+                        meeting_num = 0
+                    return (raw_date, meeting_num)
+
+                # Handle flat list of treatment logs (meeting number, date, content)
+                for item in sorted(data, key=_sort_key):
                     meeting_number = item.get('meeting_number')
-                    date_str = item.get('date')
+                    date_str = item.get('date') or item.get('note_date')
                     content_text = item.get('content')
+                    appearance_text = item.get('patient_appearance')
 
                     appt_id = None
                     if date_str:
@@ -1197,7 +1251,11 @@ def import_patient_history(patient_id):
                         else:
                             appt_id = existing['id']
 
-                    db.execute('INSERT INTO notes (patient_id, appointment_id, session_number, content) VALUES (?, ?, ?, ?)', (patient_id, appt_id, meeting_number, content_text))
+                    db.execute(
+                        '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content, patient_appearance)
+                           VALUES (?, ?, ?, ?, ?, ?)''',
+                        (patient_id, appt_id, meeting_number, date_str, content_text, appearance_text)
+                    )
                     notes_added += 1
             else:
 
@@ -1222,15 +1280,29 @@ def import_patient_history(patient_id):
                     else:
                         appt_id_map[appt.get('id')] = existing['id']
 
-                # Import notes
-                # Sort notes by created_at or session_number if possible
-                sorted_notes = sorted(data.get('notes', []), key=lambda x: (x.get('created_at', ''), x.get('session_number', '')))
+                # Import notes sorted by date and meeting number.
+                sorted_notes = sorted(
+                    data.get('notes', []),
+                    key=lambda x: (
+                        x.get('note_date') or x.get('date') or x.get('created_at', ''),
+                        str(x.get('session_number') or x.get('meeting_number') or '')
+                    )
+                )
                 for note in sorted_notes:
                     new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
                     db.execute('''INSERT INTO notes
-                        (patient_id, appointment_id, session_number, content, content_hebrew, needs_review, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                        (patient_id, new_appt_id, note.get('session_number'), note.get('content'), note.get('content_hebrew'), note.get('needs_review'), note.get('created_at')))
+                        (patient_id, appointment_id, session_number, note_date, content, patient_appearance, needs_review, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (
+                            patient_id,
+                            new_appt_id,
+                            note.get('session_number') or note.get('meeting_number'),
+                            note.get('note_date') or note.get('date'),
+                            note.get('content'),
+                            note.get('patient_appearance'),
+                            note.get('needs_review'),
+                            note.get('created_at')
+                        ))
                     notes_added += 1
 
                 # Import receipts
@@ -1249,7 +1321,7 @@ def import_patient_history(patient_id):
     else:
         flash('Please upload a JSON file.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'notes')
 
 
 @app.route('/patient/<int:patient_id>/add_receipt', methods=('POST',))
@@ -1264,7 +1336,7 @@ def add_receipt(patient_id):
         db = get_db()
         db.execute('INSERT INTO receipts (patient_id, amount, description) VALUES (?, ?, ?)', (patient_id, amount, description))
         db.commit()
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'billing')
 
 @app.route('/uploads/<name>')
 @login_required
@@ -1360,7 +1432,7 @@ def admin_reply_message(patient_id):
         else:
             flash('Patient does not have an active user account to receive messages.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'messages')
 
 @app.route('/contact_admin', methods=('POST',))
 @login_required
@@ -1407,7 +1479,7 @@ def convert_patient(patient_id):
     # Validate required fields
     if not start_date or not time:
         flash('Start date and time are required!', 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'info')
 
     # Validate date and time formats
     try:
@@ -1415,7 +1487,7 @@ def convert_patient(patient_id):
         datetime.strptime(time, '%H:%M')
     except ValueError as e:
         flash(f'Invalid date or time format: {str(e)}', 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'info')
 
     # Convert types
     try:
@@ -1424,7 +1496,7 @@ def convert_patient(patient_id):
         cost = float(cost) if cost else 0
     except (ValueError, TypeError):
         flash('Invalid duration, interval, or cost value!', 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'info')
 
     # Get recurrence limit
     limit_type = request.form.get('recurrence_limit_type')
@@ -1438,7 +1510,7 @@ def convert_patient(patient_id):
                 datetime.fromisoformat(recurrence_end_date)
             except ValueError:
                 flash('Invalid recurrence end date!', 'error')
-                return redirect(url_for('patient_detail', patient_id=patient_id))
+                return redirect_to_patient_tab(patient_id, 'info')
     elif limit_type == 'count':
         try:
             recurrence_count = int(request.form.get('recurrence_count', 12))
@@ -1480,7 +1552,7 @@ def convert_patient(patient_id):
         db.rollback()
         flash(f'Error converting patient: {str(e)}', 'error')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
 @login_required
@@ -1496,7 +1568,7 @@ def update_patient_info(patient_id):
                (background, treatment_info, patient_id))
     db.commit()
     flash('Patient information updated.')
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
 @login_required
@@ -1538,7 +1610,7 @@ def manage_access(patient_id):
 
     if not username or not password:
         flash('Username and password are required.')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+        return redirect_to_patient_tab(patient_id, 'info')
 
     db = get_db()
 
@@ -1564,7 +1636,7 @@ def manage_access(patient_id):
         except sqlite3.IntegrityError:
             flash('Username already taken.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/patient/<int:patient_id>/toggle_access', methods=('POST',))
 @login_required
@@ -1582,7 +1654,7 @@ def toggle_access(patient_id):
     else:
         flash('No user account found for this patient.')
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/patient/<int:patient_id>/add_appointment', methods=('POST',))
 @login_required

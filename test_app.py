@@ -17,18 +17,7 @@ class ClinicTestCase(unittest.TestCase):
 
         # Initialize the database
         with app.app_context():
-            # Create tables
-            db = get_db()
-            with app.open_resource('schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            db.commit()
-
-            # Create admin user manually for testing if init_db logic isn't reused or to be explicit
-            from werkzeug.security import generate_password_hash
-            hashed_pw = generate_password_hash('admin')
-            db.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                       ('admin', hashed_pw, 'admin'))
-            db.commit()
+            init_db()
 
     def tearDown(self):
         os.close(self.db_fd)
@@ -126,8 +115,12 @@ class ClinicTestCase(unittest.TestCase):
             time='10:00',
             cost='100.00'
         ), follow_redirects=True)
-        assert b'01/01/2024' in rv.data
-        assert b'100.0' in rv.data
+        assert b'Single appointment added.' in rv.data
+        with app.app_context():
+            db = get_db()
+            appt = db.execute('SELECT appointment_date, appointment_time, cost FROM appointments WHERE patient_id = 1').fetchone()
+            assert appt is not None
+            assert appt['appointment_date'] == '2024-01-01'
 
     def test_seed_example_patients(self):
         self.login('admin', 'admin')
@@ -154,10 +147,53 @@ class ClinicTestCase(unittest.TestCase):
         ), follow_redirects=True)
 
         rv = self.client.get('/patient/1', follow_redirects=True)
-        assert b'id="appointments-tab"' in rv.data
+        assert b'id="appointments-tab"' not in rv.data
         assert b'id="notes-tab"' in rv.data
         assert b'id="billing-tab"' in rv.data
         assert b'id="messages-tab"' in rv.data
+
+    def test_import_treatment_log_json_list(self):
+        import json
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Import Patient', status='ongoing'), follow_redirects=True)
+
+        payload = [
+            {'meeting_number': 2, 'date': '2025-01-20', 'content': 'Second note'},
+            {'meeting_number': 1, 'date': '2025-01-10', 'content': 'First note'}
+        ]
+
+        import io
+        rv = self.client.post(
+            '/patient/1/import',
+            data={'file': (io.BytesIO(json.dumps(payload).encode('utf-8')), 'history.json')},
+            content_type='multipart/form-data',
+            follow_redirects=True
+        )
+        assert b'History imported' in rv.data
+
+        with app.app_context():
+            db = get_db()
+            notes = db.execute('SELECT session_number, note_date, content FROM notes WHERE patient_id = 1 ORDER BY note_date ASC, CAST(session_number AS INTEGER) ASC').fetchall()
+            assert len(notes) == 2
+            assert notes[0]['session_number'] == '1'
+            assert notes[0]['note_date'] == '2025-01-10'
+            assert notes[1]['session_number'] == '2'
+            assert notes[1]['note_date'] == '2025-01-20'
+
+    def test_edit_treatment_log_updates_timestamp(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Edit Note Patient', status='ongoing'), follow_redirects=True)
+        self.client.post('/patient/1/add_note', data=dict(content='Original content', session_number='1', note_date='2025-01-01'), follow_redirects=True)
+
+        rv = self.client.post('/note/1/edit', data=dict(content='Updated content', session_number='1', note_date='2025-01-02'), follow_redirects=True)
+        assert b'Updated content' in rv.data
+
+        with app.app_context():
+            db = get_db()
+            note = db.execute('SELECT content, note_date, updated_at FROM notes WHERE id = 1').fetchone()
+            assert note['content'] == 'Updated content'
+            assert note['note_date'] == '2025-01-02'
+            assert note['updated_at'] is not None
 
 if __name__ == '__main__':
     unittest.main()
