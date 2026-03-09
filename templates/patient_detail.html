@@ -1,35 +1,27 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
+<div class="row patient-page-shell g-4">
+    <div class="col-xl-9 order-2 order-xl-1">
         <!-- Patient Summary Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h4 class="mb-0 text-primary fw-bold">
-                    <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
-                </h4>
-                <div class="d-flex align-items-center">
-                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% else %}bg-secondary{% endif %} rounded-pill px-3 me-2">
+            <div class="card-header bg-white py-3 border-0 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                <div>
+                    <h4 class="mb-2 text-primary fw-bold">
+                        <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
+                    </h4>
+                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% else %}bg-secondary{% endif %} rounded-pill px-3">
                         {{ t(patient['status']|capitalize) }}
                     </span>
-                    {% if patient['status'] == 'candidate' %}
-                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3 me-2" data-bs-toggle="modal" data-bs-target="#convertModal">
-                        <i class="bi bi-arrow-right-circle me-1"></i>{{ t('Convert to Ongoing') }}
-                    </button>
-                    {% endif %}
-                    <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 me-2">
-                        <i class="bi bi-pencil-square me-1"></i>{{ t('Edit') }}
-                    </a>
-                    <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-                        <i class="bi bi-download me-1"></i>{{ t('Export History') }}
-                    </a>
+                </div>
+                <div class="text-muted smallest">
+                    {{ t('ID:') }} #{{ patient['id'] }}
                 </div>
             </div>
         </div>
 
         <!-- Tabbed Navigation -->
-        <ul class="nav nav-tabs mb-4 border-0" id="patientTabs" role="tablist">
+        <ul class="nav nav-tabs mb-4 border-0 flex-nowrap patient-tabs-scroll" id="patientTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
             </li>
@@ -418,6 +410,33 @@
                         </form>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 order-1 order-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 patient-actions-panel">
+            <div class="card-header bg-white border-0">
+                <h6 class="mb-0 text-primary fw-bold"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</h6>
+            </div>
+            <div class="card-body d-grid gap-2">
+                {% if patient['status'] == 'candidate' %}
+                <button type="button" class="btn btn-sm btn-success rounded-pill" data-bs-toggle="modal" data-bs-target="#convertModal">
+                    <i class="bi bi-arrow-right-circle me-1"></i>{{ t('Convert to Ongoing') }}
+                </button>
+                {% endif %}
+                <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                    <i class="bi bi-pencil-square me-1"></i>{{ t('Edit') }}
+                </a>
+                <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                    <i class="bi bi-download me-1"></i>{{ t('Export History') }}
+                </a>
+                <button class="btn btn-sm btn-outline-info rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#appointments">
+                    <i class="bi bi-calendar-event me-1"></i>{{ t('Appointments') }}
+                </button>
+                <button class="btn btn-sm btn-outline-info rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#notes">
+                    <i class="bi bi-journal-text me-1"></i>{{ t('Clinical Notes') }}
+                </button>
             </div>
         </div>
     </div>

@@ -129,5 +129,35 @@ class ClinicTestCase(unittest.TestCase):
         assert b'01/01/2024' in rv.data
         assert b'100.0' in rv.data
 
+    def test_seed_example_patients(self):
+        self.login('admin', 'admin')
+        rv = self.client.post('/admin/seed_data', data={}, follow_redirects=True)
+        assert b'Error seeding data' not in rv.data
+        with app.app_context():
+            db = get_db()
+            names = [row['name'] for row in db.execute(
+                "SELECT name FROM patients WHERE name IN (?, ?, ?, ?)",
+                ('Maya Cohen', 'Daniel Levy', 'Noa Shapiro', 'Eran Mizrahi')
+            ).fetchall()]
+        assert 'Maya Cohen' in names
+        assert 'Daniel Levy' in names
+        assert 'Noa Shapiro' in names
+        assert 'Eran Mizrahi' in names
+
+    def test_patient_detail_sections_render(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Detail Patient',
+            status='ongoing',
+            email='detail@example.com',
+            phone='555-2222'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/patient/1', follow_redirects=True)
+        assert b'id="appointments-tab"' in rv.data
+        assert b'id="notes-tab"' in rv.data
+        assert b'id="billing-tab"' in rv.data
+        assert b'id="messages-tab"' in rv.data
+
 if __name__ == '__main__':
     unittest.main()

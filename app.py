@@ -872,18 +872,37 @@ def seed_data():
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
+    # Ensure latest schema/migrations are applied before inserting example records.
+    init_db()
     db = get_db()
+
+    # Keep sample data loading safe and repeatable.
+    existing_examples = db.execute(
+        "SELECT COUNT(*) AS count FROM patients WHERE name IN (?, ?, ?, ?)",
+        ('Maya Cohen', 'Daniel Levy', 'Noa Shapiro', 'Eran Mizrahi')
+    ).fetchone()['count']
+    if existing_examples > 0:
+        flash('Example patients are already loaded. No duplicate records were created.', 'info')
+        return redirect(url_for('patients'))
 
     try:
         today = datetime.now()
 
         # ─── 1. ONGOING patient — active therapy, recurring weekly session ───
-        db.execute("""INSERT INTO patients (name, status, email, phone, background, treatment_info)
-                      VALUES ('Maya Cohen', 'ongoing', 'maya.cohen@example.com', '050-1234567',
-                              'Mid-30s professional. Referred by GP following prolonged work-related stress. '
-                              'Reports difficulty sleeping, concentration issues, and emotional exhaustion.',
-                              'Weekly CBT sessions. Focus areas: stress regulation, cognitive reframing, '
-                              'work-life boundaries. 8 sessions completed, good progress.')""")
+        db.execute(
+            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                'Maya Cohen',
+                'ongoing',
+                'maya.cohen@example.com',
+                '050-1234567',
+                'Mid-30s professional. Referred by GP following prolonged work-related stress. '
+                'Reports difficulty sleeping, concentration issues, and emotional exhaustion.',
+                'Weekly CBT sessions. Focus areas: stress regulation, cognitive reframing, '
+                'work-life boundaries. 8 sessions completed, good progress.'
+            )
+        )
         ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         # Past appointments (last 8 weeks)
@@ -909,10 +928,9 @@ def seed_data():
             (8, 'Strong session. Patient reported turning down optional weekend project without significant guilt. Sleep 7-8hrs consistently. Planning consolidation phase.', 'Settled, confident.', 'Consolidation, boundary-setting success'),
         ]
         for (appt_id, week, appt_date), (sn, content, appearance, topics) in zip(past_appt_ids, notes_data):
-            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content,
-                            patient_appearance, key_topics, updated_at)
-                          VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                       (ongoing_id, appt_id, str(sn), content, appearance, topics, appt_date))
+            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                          VALUES (?, ?, ?, ?)""",
+                       (ongoing_id, appt_id, str(sn), content))
 
         # Upcoming recurring appointment (next Monday)
         days_ahead = (7 - today.weekday()) % 7 or 7
@@ -951,10 +969,18 @@ def seed_data():
                        (admin_id, maya_user['id'], 'Confirmed! See you Monday at 10:00. Bring your thought record homework if you have it ready.'))
 
         # ─── 2. CANDIDATE patient — initial inquiry, no appointments yet ───
-        db.execute("""INSERT INTO patients (name, status, email, phone, background)
-                      VALUES ('Daniel Levy', 'candidate', 'daniel.levy@example.com', '052-9876543',
-                              'Late 20s, referred by his GP. Experiencing social anxiety and avoidance '
-                              'behaviour. First contact made via intake form. Awaiting initial assessment session.')""")
+        db.execute(
+            """INSERT INTO patients (name, status, email, phone, background)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                'Daniel Levy',
+                'candidate',
+                'daniel.levy@example.com',
+                '052-9876543',
+                'Late 20s, referred by his GP. Experiencing social anxiety and avoidance '
+                'behaviour. First contact made via intake form. Awaiting initial assessment session.'
+            )
+        )
         candidate_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         if admin_id:
             existing_daniel = db.execute("SELECT id FROM users WHERE username = 'daniel'").fetchone()
@@ -971,12 +997,20 @@ def seed_data():
                            (daniel_user['id'], admin_id, 'Yes, Sunday at 11:00 works perfectly. Thank you!'))
 
         # ─── 3. WAITING FOR SCHEDULING patient — assessed, slot being arranged ───
-        db.execute("""INSERT INTO patients (name, status, email, phone, background, treatment_info)
-                      VALUES ('Noa Shapiro', 'waiting for scheduling', 'noa.shapiro@example.com', '054-3456789',
-                              'Early 40s, presenting with grief and adjustment difficulties following loss of parent. '
-                              'Initial assessment completed. Psychoeducation around grief provided.',
-                              'Humanistic integrative approach planned. Weekly sessions. '
-                              'Awaiting mutually available recurring slot to be confirmed.')""")
+        db.execute(
+            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                'Noa Shapiro',
+                'waiting for scheduling',
+                'noa.shapiro@example.com',
+                '054-3456789',
+                'Early 40s, presenting with grief and adjustment difficulties following loss of parent. '
+                'Initial assessment completed. Psychoeducation around grief provided.',
+                'Humanistic integrative approach planned. Weekly sessions. '
+                'Awaiting mutually available recurring slot to be confirmed.'
+            )
+        )
         waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         # Initial assessment appointment (2 weeks ago)
@@ -986,13 +1020,17 @@ def seed_data():
                       VALUES (?, ?, '14:00', 350, 60, 'completed', 'in-person')""",
                    (waiting_id, assess_date))
         assess_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content,
-                        patient_appearance, key_topics)
-                      VALUES (?, ?, '0', 'Initial assessment session. Patient describes grief following mother''s '
-                              'passing 4 months ago. Reports low mood, social withdrawal, and difficulty '
-                              'returning to routine. No risk indicators present. Agreed on weekly therapy.',
-                              'Subdued, tearful at times, cooperative.', 'Grief, assessment, treatment planning')""",
-                   (waiting_id, assess_id))
+        db.execute(
+            """INSERT INTO notes (patient_id, appointment_id, session_number, content)
+               VALUES (?, ?, '0', ?)""",
+            (
+                waiting_id,
+                assess_id,
+                "Initial assessment session. Patient describes grief following mother's passing 4 months ago. "
+                "Reports low mood, social withdrawal, and difficulty returning to routine. "
+                "No risk indicators present. Agreed on weekly therapy."
+            )
+        )
         db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Assessment session', ?)",
                    (waiting_id, assess_date))
 
@@ -1008,12 +1046,20 @@ def seed_data():
                        (noa_user['id'], admin_id, 'Afternoons work better, anytime after 15:00. Thank you for checking.'))
 
         # ─── 4. ARCHIVED patient — completed treatment ───
-        db.execute("""INSERT INTO patients (name, status, email, phone, background, treatment_info)
-                      VALUES ('Eran Mizrahi', 'archived', 'eran.mizrahi@example.com', '053-7654321',
-                              'Early 50s. Presented with panic disorder and agoraphobia. '
-                              'Referred by psychiatrist. Treatment completed after 22 sessions.',
-                              'CBT for panic disorder. Completed January 2025. Full remission achieved. '
-                              'Discharged with relapse prevention plan. Follow-up offered in 6 months.')""")
+        db.execute(
+            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                'Eran Mizrahi',
+                'archived',
+                'eran.mizrahi@example.com',
+                '053-7654321',
+                'Early 50s. Presented with panic disorder and agoraphobia. '
+                'Referred by psychiatrist. Treatment completed after 22 sessions.',
+                'CBT for panic disorder. Completed January 2025. Full remission achieved. '
+                'Discharged with relapse prevention plan. Follow-up offered in 6 months.'
+            )
+        )
         archived_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         # 6 representative past sessions (spanning ~5 months, ending ~2 months ago)
@@ -1033,10 +1079,9 @@ def seed_data():
                           VALUES (?, ?, '09:00', 350, 50, 'completed', 'in-person')""",
                        (archived_id, appt_date))
             appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content,
-                            patient_appearance, key_topics, updated_at)
-                          VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                       (archived_id, appt_id, sn, content, appearance, topics, appt_date))
+            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                          VALUES (?, ?, ?, ?)""",
+                       (archived_id, appt_id, sn, content))
             db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Session payment', ?)",
                        (archived_id, appt_date))
 

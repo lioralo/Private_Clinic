@@ -1,26 +1,30 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0 text-primary">
-        <i class="bi bi-people-fill me-2"></i>
-        {% if status == 'all' %}
-            {{ t('All Patients') }}
-        {% elif status in ['candidate', 'waiting for scheduling'] %}
-            {{ t('Candidates & Waiting') }}
-        {% else %}
-            {{ t(status|capitalize) }} {{ t('Patients') }}
+<div class="row g-3 align-items-center mb-4">
+    <div class="col-lg-8">
+        <h2 class="mb-2 text-primary">
+            <i class="bi bi-people-fill me-2"></i>
+            {% if status == 'all' %}
+                {{ t('All Patients') }}
+            {% elif status in ['candidate', 'waiting for scheduling'] %}
+                {{ t('Candidates & Waiting') }}
+            {% else %}
+                {{ t(status|capitalize) }} {{ t('Patients') }}
+            {% endif %}
+        </h2>
+        <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} {{ t('Total') }}</span>
+    </div>
+    <div class="col-lg-4 text-lg-end">
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+        <form method="POST" action="{{ url_for('seed_data') }}" class="d-inline-block">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-database-add me-1"></i> Load Example Patients
+            </button>
+        </form>
         {% endif %}
-    </h2>
-    <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} {{ t('Total') }}</span>
-    {% if patients|length == 0 %}
-    <form method="POST" action="{{ url_for('seed_data') }}" style="display:inline;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">
-            <i class="bi bi-database-add me-1"></i> Load Example Patients
-        </button>
-    </form>
-    {% endif %}
+    </div>
 </div>
 
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">

@@ -171,3 +171,43 @@ footer {
     border-radius: 16px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
+
+.patient-tabs-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+}
+
+.patient-tabs-scroll .nav-item {
+    flex: 0 0 auto;
+}
+
+.patient-actions-panel {
+    position: sticky;
+    top: 88px;
+}
+
+.patient-actions-panel .btn {
+    text-align: start;
+}
+
+@media (max-width: 1199.98px) {
+    .patient-actions-panel {
+        position: static;
+    }
+
+    .patient-actions-panel .card-body {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .patient-actions-panel .btn {
+        text-align: center;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .patient-actions-panel .card-body {
+        grid-template-columns: 1fr;
+    }
+}
