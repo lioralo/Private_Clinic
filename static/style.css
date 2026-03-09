@@ -121,3 +121,53 @@ footer {
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* FullCalendar Modernization */
+.fc-theme-standard .fc-scrollgrid {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.fc-theme-standard td, .fc-theme-standard th {
+    border-color: var(--border-color);
+}
+
+.fc-event {
+    border-radius: 6px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fc-event:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    z-index: 5;
+}
+
+.fc-v-event .fc-event-main {
+    color: #fff;
+    font-weight: 500;
+    padding: 2px 4px;
+}
+
+/* Softer event colors */
+.fc-event[style*="background-color: red"] {
+    background-color: #ef4444 !important; /* softer red */
+}
+.fc-event[style*="background-color: green"] {
+    background-color: #22c55e !important; /* softer green */
+}
+.fc-event[style*="background-color: gray"] {
+    background-color: #94a3b8 !important; /* softer gray */
+}
+
+/* Add some shadow to calendar container */
+#calendar {
+    padding: 1rem;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+}
