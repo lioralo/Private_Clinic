@@ -40,6 +40,11 @@
             </div>
             <div class="card-body p-4">
                 <div id="calendar"></div>
+                {% if not patient['can_self_schedule'] %}
+                <div class="alert alert-info small mt-3 mb-0">
+                    <i class="bi bi-info-circle me-2"></i> To reschedule or book new sessions, please contact your therapist directly.
+                </div>
+                {% endif %}
             </div>
         </div>
 
@@ -129,7 +134,106 @@
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
 .placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
+
+#calendar {
+    max-height: 600px;
+    font-size: 0.85em;
+}
+.fc-event {
+    cursor: pointer;
+}
 </style>
+
+{% if patient['can_self_schedule'] %}
+<!-- FullCalendar Script and CSS -->
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    if (!calendarEl) return;
+
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        weekends: false,
+        slotMinTime: '08:00:00',
+        slotMaxTime: '21:00:00',
+        allDaySlot: false,
+        height: 'auto',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        eventClick: function(info) {
+            var props = info.event.extendedProps;
+            var eventTitle = info.event.title;
+
+            // Format dates locally
+            var startDate = info.event.start;
+            var year = startDate.getFullYear();
+            var month = String(startDate.getMonth() + 1).padStart(2, '0');
+            var day = String(startDate.getDate()).padStart(2, '0');
+            var hours = String(startDate.getHours()).padStart(2, '0');
+            var minutes = String(startDate.getMinutes()).padStart(2, '0');
+            var dateStr = year + '-' + month + '-' + day;
+            var timeStr = hours + ':' + minutes;
+
+            if (eventTitle === 'Free') {
+                if (confirm('Do you want to book an appointment for ' + dateStr + ' at ' + timeStr + '?')) {
+                    fetch('/api/appointments', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            date: dateStr,
+                            time: timeStr
+                        })
+                    }).then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Appointment booked successfully!');
+                            window.location.reload();
+                        } else {
+                            alert('Error: ' + data.error);
+                        }
+                    });
+                }
+            } else if (eventTitle === 'Occupied') {
+                if (confirm('You have an appointment scheduled here. Would you like to reschedule it?')) {
+                    let newDate = prompt("Enter new date (YYYY-MM-DD):");
+                    let newTime = prompt("Enter new time (HH:MM):");
+                    if (newDate && newTime) {
+                        fetch('/api/appointments/' + props.appointment_id + '/reschedule', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                new_date: newDate,
+                                new_time: newTime
+                            })
+                        }).then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Appointment rescheduled!');
+                                window.location.reload();
+                            } else {
+                                alert('Error: ' + data.error);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    });
+    calendar.render();
+});
+</script>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

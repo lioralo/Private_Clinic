@@ -52,14 +52,17 @@
                             </div>
                         </div>
 
-                        <div class="col-md-12">
-                            <div class="form-check form-switch mt-3">
-                                <input class="form-check-input" type="checkbox" role="switch" id="can_self_schedule" name="can_self_schedule" value="1" {% if patient['can_self_schedule'] %}checked{% endif %}>
-                                <label class="form-check-label fw-bold text-dark" for="can_self_schedule">Allow Patient to Self-Schedule</label>
+                        <div class="col-md-12 mt-4">
+                            <div class="form-check form-switch p-3 bg-light rounded-3 border">
+                                <input class="form-check-input ms-0 me-3 mt-1 fs-5" type="checkbox" role="switch" name="can_self_schedule" id="can_self_schedule" value="1" {% if patient['can_self_schedule'] %}checked{% endif %}>
+                                <label class="form-check-label fw-bold d-block" for="can_self_schedule">
+                                    Enable Interactive Calendar
+                                </label>
+                                <small class="text-muted d-block mt-1">Allow this patient to book and reschedule appointments from their dashboard.</small>
                             </div>
                         </div>
 
-                        <div class="col-12 mt-5">
+                        <div class="col-12 mt-4">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
                                 <i class="bi bi-save me-2"></i> Save Patient Record
                             </button>

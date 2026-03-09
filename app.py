@@ -1,11 +1,15 @@
 import os
 import sqlite3
+import socket
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
-import datetime
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+import re
+from docx import Document
+from datetime import datetime, timedelta
+from flask import jsonify
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -231,6 +235,13 @@ def close_connection(exception):
         db.close()
 
 def init_db():
+    if is_port_in_use(5000):
+        print("\nERROR: Port 5000 is already in use!")
+        print("Please kill the existing process occupying port 5000.")
+        print("You can try: kill $(lsof -t -i :5000) 2>/dev/null || true")
+        print("Exiting...\n")
+        exit(1)
+
     database = app.config.get('DATABASE', DATABASE)
     # Always run schema to ensure tables exist
     with app.app_context():
@@ -306,6 +317,10 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 blocked_date DATE NOT NULL,
@@ -322,6 +337,28 @@ def init_db():
                 action TEXT NOT NULL,
                 details TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
             )''')
         except sqlite3.OperationalError:
             pass
@@ -602,23 +639,15 @@ def add_file(patient_id):
 
         if filename.endswith('.docx'):
             # Attempt to parse document
-            import re
-            from docx import Document
-
             try:
                 doc = Document(filepath)
                 text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
 
                 # Split the text by meeting header to support multiple entries
-                # Look for "Meeting #" or "פגישה מספר" and split, keeping the delimiter if needed or just finditer
-                # A good way is to use finditer to find the start of each section
-
-                # Match start of meeting section
                 meeting_pattern = re.compile(r'(?:Meeting #|פגישה מספר)[:\s]*\w+', re.IGNORECASE)
                 matches = list(meeting_pattern.finditer(text))
 
                 if not matches:
-                    # Fallback to the whole text if no explicit meeting markers
                     blocks = [text]
                 else:
                     blocks = []
@@ -637,17 +666,15 @@ def add_file(patient_id):
 
                     meeting_no = meeting_no_match.group(1).strip() if meeting_no_match else None
                     date_str = date_match.group(1).strip() if date_match else None
-                    content = content_match.group(1).strip() if content_match else block.strip() # default to all text if no content marker
+                    content = content_match.group(1).strip() if content_match else block.strip()
 
                     needs_review = False
                     if not meeting_no or not date_str:
                         needs_review = True
 
-                    # Check for existing appointment
                     appointment_id = None
                     if date_str:
                         try:
-                            # Try parsing Israeli format DD/MM/YYYY or DD.MM.YYYY
                             parsed_date = None
                             if '.' in date_str or '/' in date_str:
                                 parts = re.split(r'[\./]', date_str)
@@ -657,7 +684,6 @@ def add_file(patient_id):
                                         y += 2000
                                     parsed_date = f"{y:04d}-{m:02d}-{d:02d}"
                             if not parsed_date:
-                                # Try YYYY-MM-DD
                                 if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
                                     parsed_date = date_str
 
@@ -752,7 +778,7 @@ def seed_data():
         db.execute("INSERT INTO patients (name, status, email, phone) VALUES ('John Doe (Ongoing)', 'ongoing', 'john.doe@example.com', '555-0101')")
         ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        past_date = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+        past_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         db.execute('''INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, status, meeting_type)
                       VALUES (?, ?, '10:00', 150, 60, 'completed', 'in-person')''', (ongoing_id, past_date))
         appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -1152,8 +1178,8 @@ def convert_patient(patient_id):
 
     # Validate date and time formats
     try:
-        datetime.datetime.fromisoformat(start_date)
-        datetime.datetime.strptime(time, '%H:%M')
+        datetime.fromisoformat(start_date)
+        datetime.strptime(time, '%H:%M')
     except ValueError as e:
         flash(f'Invalid date or time format: {str(e)}', 'error')
         return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -1176,7 +1202,7 @@ def convert_patient(patient_id):
         recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
         if recurrence_end_date:
             try:
-                datetime.datetime.fromisoformat(recurrence_end_date)
+                datetime.fromisoformat(recurrence_end_date)
             except ValueError:
                 flash('Invalid recurrence end date!', 'error')
                 return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -1255,12 +1281,13 @@ def edit_patient(patient_id):
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
 
         if not name:
             flash('Name is required!')
         else:
-            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ? WHERE id = ?',
-                       (name, status, email, phone, patient_id))
+            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ? WHERE id = ?',
+                       (name, status, email, phone, can_self_schedule, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -1351,14 +1378,14 @@ def add_appointment(patient_id):
 
     # Validate date format
     try:
-        datetime.datetime.fromisoformat(date)
+        datetime.fromisoformat(date)
     except ValueError:
         flash('Invalid date format!', 'error')
         return redirect(url_for('patient_detail', patient_id=patient_id))
 
     # Validate time format (should be HH:MM or H:MM)
     try:
-        time_obj = datetime.datetime.strptime(time, '%H:%M')
+        time_obj = datetime.strptime(time, '%H:%M')
         time = time_obj.strftime('%H:%M')
     except ValueError:
         flash('Invalid time format! Expected HH:MM', 'error')
@@ -1381,7 +1408,7 @@ def add_appointment(patient_id):
             recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
             if recurrence_end_date:
                 try:
-                    datetime.datetime.fromisoformat(recurrence_end_date)
+                    datetime.fromisoformat(recurrence_end_date)
                 except ValueError:
                     flash('Invalid recurrence end date!', 'error')
                     return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -1443,8 +1470,8 @@ def api_slots():
     if not start_str or not end_str:
         return jsonify([])
 
-    start_date = datetime.datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
-    end_date = datetime.datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
+    start_date = datetime.fromisoformat(start_str.replace('Z', '+00:00') if 'Z' in start_str else start_str).date()
+    end_date = datetime.fromisoformat(end_str.replace('Z', '+00:00') if 'Z' in end_str else end_str).date()
 
     # Get slot overrides in range
     overrides = db.execute(
@@ -1471,8 +1498,8 @@ def api_slots():
             continue
         if override['status'] == 'blocked':
             try:
-                b_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
-                b_end = b_start + datetime.timedelta(minutes=override['duration_minutes'] or 60)
+                b_start = datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
+                b_end = b_start + timedelta(minutes=override['duration_minutes'] or 60)
                 blocked_ranges.append((b_start, b_end))
             except ValueError:
                 continue
@@ -1483,9 +1510,9 @@ def api_slots():
         if not time_str or ':' not in time_str:
             continue
         try:
-            dt_start = datetime.datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
+            dt_start = datetime.fromisoformat(f"{override['slot_date']}T{time_str}")
             duration = override['duration_minutes'] or 60
-            dt_end = dt_start + datetime.timedelta(minutes=duration)
+            dt_end = dt_start + timedelta(minutes=duration)
         except ValueError:
             continue
 
@@ -1507,8 +1534,8 @@ def api_slots():
 
     # Helper: build a FullCalendar event dict for one appointment occurrence
     def make_appt_event(event_id, occ_date, appt_time, duration, appt):
-        dt_s = datetime.datetime.combine(occ_date, appt_time)
-        dt_e = dt_s + datetime.timedelta(minutes=duration)
+        dt_s = datetime.combine(occ_date, appt_time)
+        dt_e = dt_s + timedelta(minutes=duration)
         # Skip if overlaps a blocked slot
         for b_start, b_end in blocked_ranges:
             if max(dt_s, b_start) < min(dt_e, b_end):
@@ -1535,7 +1562,7 @@ def api_slots():
     # Process appointments
     for appt in appointments:
         try:
-            appt_date = datetime.datetime.fromisoformat(appt['appointment_date']).date()
+            appt_date = datetime.fromisoformat(appt['appointment_date']).date()
         except (ValueError, TypeError):
             continue
 
@@ -1571,7 +1598,7 @@ def api_slots():
             limit_date = None
             if appt.get('recurrence_end_date'):
                 try:
-                    limit_date = datetime.datetime.fromisoformat(appt['recurrence_end_date']).date()
+                    limit_date = datetime.fromisoformat(appt['recurrence_end_date']).date()
                 except ValueError:
                     pass
             limit_count = appt.get('recurrence_count')
@@ -1579,22 +1606,22 @@ def api_slots():
             # Find the Sunday of the week that contains appt_date.
             # Python weekday: Mon=0..Sun=6 → days since last Sunday = (weekday+1)%7
             days_since_sunday = (appt_date.weekday() + 1) % 7
-            series_week_sunday = appt_date - datetime.timedelta(days=days_since_sunday)
+            series_week_sunday = appt_date - timedelta(days=days_since_sunday)
 
             # Walk forward week-by-week (in steps of interval_weeks) generating occurrences.
             # We stop walking once a week's Sunday is past end_date (no more occurrences possible).
             occurrences = []  # list of date objects in chronological order
             week_num = 0
             while True:
-                week_sunday = series_week_sunday + datetime.timedelta(weeks=week_num * interval_weeks)
-                if week_sunday > end_date + datetime.timedelta(days=7):
+                week_sunday = series_week_sunday + timedelta(weeks=week_num * interval_weeks)
+                if week_sunday > end_date + timedelta(days=7):
                     break  # No occurrences can fall in view range from here on
                 week_num += 1
                 if week_num > 1040:  # safety cap (~20 years)
                     break
                 for fc_day in sorted(recurrence_fc_days):
                     # fc_day offset from Sunday of week: 0=Sun, 1=Mon, …, 4=Thu
-                    occ = week_sunday + datetime.timedelta(days=fc_day)
+                    occ = week_sunday + timedelta(days=fc_day)
                     if occ < appt_date:
                         continue  # Before series start
                     if limit_date and occ > limit_date:
@@ -1679,7 +1706,7 @@ def admin_manage_slots():
 
             # Validate time format
             try:
-                time_obj = datetime.datetime.strptime(time, '%H:%M')
+                time_obj = datetime.strptime(time, '%H:%M')
                 time = time_obj.strftime('%H:%M')
             except ValueError:
                 flash('Invalid time format!', 'error')
@@ -1705,7 +1732,7 @@ def admin_manage_slots():
                     recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
                     if recurrence_end_date:
                         try:
-                            datetime.datetime.fromisoformat(recurrence_end_date)
+                            datetime.fromisoformat(recurrence_end_date)
                         except ValueError:
                             flash('Invalid recurrence end date!', 'error')
                             return redirect(url_for('manage_slots'))
@@ -1856,20 +1883,14 @@ def get_notifications():
     if current_user.role != 'admin':
         return jsonify([])
 
-    last_id = request.args.get('last_id', 0, type=int)
     db = get_db()
+    notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
 
-    logs = db.execute('SELECT * FROM audit_logs WHERE id > ? AND action IN ("schedule", "reschedule") ORDER BY id ASC', (last_id,)).fetchall()
+    for n in notifications:
+        db.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', (n['id'],))
+    db.commit()
 
-    notifications = []
-    for log in logs:
-        notifications.append({
-            'id': log['id'],
-            'message': log['details'],
-            'created_at': log['created_at']
-        })
-
-    return jsonify(notifications)
+    return jsonify([dict(n) for n in notifications])
 
 @app.route('/api/appointments/<int:appointment_id>/reschedule', methods=('POST',))
 @login_required
@@ -1927,8 +1948,8 @@ def send_appointment_reminders():
     with app.app_context():
         db = get_db()
         # Find appointments in the next 24 hours that haven't had a reminder sent
-        now = datetime.datetime.now()
-        tomorrow = now + datetime.timedelta(days=1)
+        now = datetime.now()
+        tomorrow = now + timedelta(days=1)
 
         # Example query (assuming a simple time check, in reality you'd track if a reminder was already sent)
         # upcoming_appts = db.execute('''
@@ -1971,6 +1992,89 @@ def delete_appointment(appointment_id):
 
     return "Appointment not found", 404
 
+@app.route('/api/appointments', methods=['POST'])
+@login_required
+def api_add_appointment():
+    if current_user.role != 'patient':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    if not patient or not patient['can_self_schedule']:
+        return jsonify({'error': 'Self-scheduling disabled'}), 403
+
+    date_str = request.json.get('date')
+    time_str = request.json.get('time')
+
+    if not date_str or not time_str:
+        return jsonify({'error': 'Missing date or time'}), 400
+
+    # Check if slot exists and is available
+    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (date_str, time_str)).fetchone()
+    if existing:
+        return jsonify({'error': 'Slot is already occupied'}), 400
+
+    # Insert appointment
+    db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost) VALUES (?, ?, ?, ?)',
+               (current_user.patient_id, date_str, time_str, 0)) # Default cost 0 for now
+    db.commit()
+
+    # Create notification for admin
+    message = f"Patient {patient['name']} booked a new appointment for {date_str} at {time_str}"
+    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
+    db.commit()
+
+    return jsonify({'success': True})
+
+@app.route('/api/appointments/<int:appointment_id>/reschedule', methods=['POST'])
+@login_required
+def api_reschedule_appointment(appointment_id):
+    if current_user.role != 'patient':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    if not patient or not patient['can_self_schedule']:
+        return jsonify({'error': 'Self-scheduling disabled'}), 403
+
+    # Ensure appointment belongs to patient
+    appt = db.execute('SELECT * FROM appointments WHERE id = ? AND patient_id = ?', (appointment_id, current_user.patient_id)).fetchone()
+    if not appt:
+        return jsonify({'error': 'Appointment not found'}), 404
+
+    new_date = request.json.get('new_date')
+    new_time = request.json.get('new_time')
+
+    if not new_date or not new_time:
+        return jsonify({'error': 'Missing new date or time'}), 400
+
+    # Check if new slot is available
+    existing = db.execute('SELECT id FROM appointments WHERE appointment_date = ? AND appointment_time = ?', (new_date, new_time)).fetchone()
+    if existing:
+        return jsonify({'error': 'New slot is already occupied'}), 400
+
+    old_date = appt['appointment_date']
+    old_time = appt['appointment_time']
+
+    # Update appointment
+    db.execute('UPDATE appointments SET appointment_date = ?, appointment_time = ? WHERE id = ?', (new_date, new_time, appointment_id))
+    db.commit()
+
+    # Create notification for admin
+    message = f"Patient {patient['name']} rescheduled from {old_date} {old_time} to {new_date} {new_time}"
+    db.execute('INSERT INTO notifications (message) VALUES (?)', (message,))
+    db.commit()
+
+    return jsonify({'success': True})
+
+
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('0.0.0.0', port)) == 0
+
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    port = 5000
+    if is_port_in_use(port):
+        print(f"[WARNING] Port {port} is already in use. Is the app already running?")
+    app.run(host='0.0.0.0', port=port, debug=False)
