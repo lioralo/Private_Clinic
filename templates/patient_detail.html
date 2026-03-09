@@ -280,7 +280,11 @@
                                         </div>
                                     </div>
                                     <div class="d-flex align-items-center">
-                                        <span class="badge bg-light text-primary border rounded-pill me-2 px-3">${{ "%.2f"|format(appt['cost']) }}</span>
+                                        {% if appt['cost'] and appt['cost']|string|trim %}
+                                            <span class="badge bg-light text-primary border rounded-pill me-2 px-3">${{ "%.2f"|format(appt['cost']|float(0)) }}</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-muted border rounded-pill me-2 px-3">No charge</span>
+                                        {% endif %}
                                         <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary border-0 rounded-circle p-2 lh-1 me-1" title="{{ t('Download iCal (.ics)') }}">
                                             <i class="bi bi-calendar-arrow-down small"></i>
                                         </a>

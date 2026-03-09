@@ -1332,7 +1332,14 @@ def add_appointment(patient_id):
 
     date = request.form.get('date', '').strip()
     time = request.form.get('time', '').strip()
-    cost = request.form.get('cost', 0)
+    
+    # Properly handle cost - convert to float with default 0
+    cost_input = request.form.get('cost', '').strip()
+    try:
+        cost = float(cost_input) if cost_input else 0
+    except (ValueError, TypeError):
+        cost = 0
+    
     meeting_type = request.form.get('meeting_type', 'in-person')
     meeting_link = request.form.get('meeting_link', '')
     is_recurring = int(request.form.get('is_recurring', 0))
