@@ -2,6 +2,71 @@
 
 ---
 
+## Session 6 — March 10, 2026 (CRM Navigation + Meeting History UX + Multi-Patient Messaging)
+
+### Overview
+Implemented requested admin UX updates across the main ribbon, treatment log structure, and messaging workflows. Added a dedicated CRM management dashboard and upgraded treatment log history into a nested, collapsible meeting view.
+
+### Features Implemented
+
+#### 1. Previous meetings now shown as titled, collapsible entries
+- In the patient Treatment Log tab, each historical entry now renders as:
+  - `Meeting #<number> - <date>`
+- Clicking the meeting title expands meeting content.
+- Inside each expanded meeting, a nested `Behavior & Appearance` toggle reveals:
+  - appearance
+  - mood summary
+  - behavior notes
+  - behavior checklist tags
+
+#### 2. Treatment log split into two sections
+- Treatment Log tab now has two clear sections:
+  - `Last Meeting Record` (latest session snapshot)
+  - `Treatment Log` (import + new entry form + full history)
+
+#### 3. Public Resources removed from admin ribbon
+- Main ribbon now hides `Public Resources` for admin users.
+- Public resources link remains available for non-admin users.
+
+#### 4. All-patients moved under Clinic CRM management tool
+- Added new admin route: `/crm`.
+- Added dedicated template: `templates/crm.html`.
+- Admin homepage now redirects to CRM dashboard.
+- `/patients` remains as a compatibility route and now redirects to `/crm` with status.
+- CRM dashboard includes:
+  - patient list by selected status
+  - management cards (All/Ongoing/Candidates+Waiting/Archived)
+  - management actions (`Add Patient`, `Manage Resources`)
+  - **Download button for treatment log template** (`static/treatment_log_template.json`)
+
+#### 5. Main ribbon messages upgraded to navigate by patient conversation
+- Admin offcanvas messages now includes a patient conversation selector.
+- Admin can navigate between patient conversations instead of seeing a single mixed stream.
+- Backend `/api/messages` now returns admin conversation list + active thread.
+- Backend `/api/messages/send` now requires `recipient_id` for admin messages.
+- Existing patient message behavior remains unchanged.
+
+### Backend/Code Changes
+- Added helper `fetch_patients_by_status` in `app.py`.
+- Added route `crm_dashboard` in `app.py`.
+- Updated `index` route admin redirect to `crm_dashboard`.
+- Added `latest_note` context in `patient_detail` route for last-meeting section.
+- Enhanced `api_get_messages` and `api_send_message` for per-patient admin messaging.
+
+### Files Updated
+- `app.py`
+- `templates/layout.html`
+- `templates/patient_detail.html`
+- `templates/crm.html` (new)
+- `CHANGES.md`
+
+### Verification
+- `python -m py_compile app.py` passed.
+- `python test_app.py` passed (`12` tests).
+- `python test_security.py` failed due missing local dependency: `pyotp` (`ModuleNotFoundError`).
+
+---
+
 ## Session 5 — March 9, 2026 (Appearance/Behavior Questionnaire + JSON Template)
 
 ### Overview

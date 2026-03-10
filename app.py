@@ -419,10 +419,48 @@ def init_db():
 def index():
     if current_user.is_authenticated:
         if current_user.role == 'admin':
-            return redirect(url_for('patients'))
+            return redirect(url_for('crm_dashboard'))
         elif current_user.role == 'patient':
             return redirect(url_for('patient_home'))
     return redirect(url_for('login'))
+
+
+def fetch_patients_by_status(db, status):
+    if status == 'all':
+        return db.execute('''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+            FROM patients p ORDER BY p.created_at DESC
+        ''').fetchall()
+    if status in ['candidate', 'waiting for scheduling', 'waiting']:
+        return db.execute('''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+            FROM patients p WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
+        ''').fetchall()
+    return db.execute('''
+        SELECT p.*,
+        (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+        FROM patients p WHERE status = ?
+    ''', (status,)).fetchall()
+
+
+@app.route('/crm')
+@login_required
+def crm_dashboard():
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    status = request.args.get('status', 'all')
+    patients = fetch_patients_by_status(db, status)
+    counts = {
+        'all': db.execute('SELECT COUNT(*) AS c FROM patients').fetchone()['c'],
+        'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing'").fetchone()['c'],
+        'candidate_waiting': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')").fetchone()['c'],
+        'archived': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'archived'").fetchone()['c']
+    }
+    return render_template('crm.html', patients=patients, status=status, counts=counts)
 
 @app.route('/patient/home')
 @login_required
@@ -548,30 +586,8 @@ def logout():
 def patients():
     if current_user.role != 'admin':
         return redirect(url_for('patient_home'))
-
     status = request.args.get('status', 'all')
-    db = get_db()
-
-    if status == 'all':
-        patients = db.execute('''
-            SELECT p.*,
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p ORDER BY p.created_at DESC
-        ''').fetchall()
-    elif status in ['candidate', 'waiting for scheduling', 'waiting']:
-        patients = db.execute('''
-            SELECT p.*,
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
-        ''').fetchall()
-    else:
-        patients = db.execute('''
-            SELECT p.*,
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p WHERE status = ?
-        ''', (status,)).fetchall()
-
-    return render_template('index.html', patients=patients, status=status)
+    return redirect(url_for('crm_dashboard', status=status))
 
 @app.route('/add_patient', methods=('GET', 'POST'))
 @login_required
@@ -683,7 +699,9 @@ def patient_detail(patient_id):
         }
 
     active_tab = request.args.get('tab', 'info')
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior)
+    latest_note = notes[0] if notes else None
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note)
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):
@@ -1451,16 +1469,51 @@ def download_file(name):
 def api_get_messages():
     db = get_db()
     if current_user.role == 'admin':
-        # Admin gets all messages for now, or maybe just a combined inbox.
-        # Ideally, it would be per-patient, but for a simple "Messages sidebar"
-        # we can show all messages sent to/from the admin or a global list.
-        # If we had a selected patient in the UI, we'd filter. Here we just return all.
+        conversations = db.execute('''
+            SELECT
+                u.id AS user_id,
+                u.username,
+                p.name AS patient_name,
+                MAX(m.timestamp) AS last_message_at,
+                SUM(CASE
+                    WHEN m.recipient_id = ? AND m.is_read = 0 AND m.sender_id = u.id THEN 1
+                    ELSE 0
+                END) AS unread_count
+            FROM users u
+            JOIN patients p ON p.id = u.patient_id
+            LEFT JOIN messages m ON (
+                (m.sender_id = u.id AND m.recipient_id = ?) OR
+                (m.sender_id = ? AND m.recipient_id = u.id)
+            )
+            WHERE u.role = 'patient' AND u.is_active = 1
+            GROUP BY u.id, u.username, p.name
+            ORDER BY COALESCE(MAX(m.timestamp), '') DESC, p.name ASC
+        ''', (current_user.id, current_user.id, current_user.id)).fetchall()
+
+        requested_user = request.args.get('conversation_with', type=int)
+        if requested_user is None and conversations:
+            requested_user = conversations[0]['user_id']
+
+        if requested_user is not None:
+            db.execute(
+                'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?',
+                (current_user.id, requested_user)
+            )
+            db.commit()
+
         messages = db.execute('''
             SELECT m.*, u.username as sender_name
             FROM messages m
             LEFT JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
             ORDER BY m.timestamp ASC
-        ''').fetchall()
+        ''', (current_user.id, requested_user, requested_user, current_user.id)).fetchall() if requested_user else []
+
+        return jsonify({
+            'conversations': [dict(c) for c in conversations],
+            'active_conversation': requested_user,
+            'messages': [dict(m) for m in messages]
+        })
     else:
         # Patient gets messages to/from them
         messages = db.execute('''
@@ -1482,14 +1535,19 @@ def api_send_message():
 
     db = get_db()
 
-    # Simple logic: If patient, send to admin. If admin, send as broadcast or to a specific user?
-    # For a general "messages sidebar" where admin sees everything, sending a message from admin might need a recipient.
-    # We will just insert it with NULL recipient for broadcast or if patient is sending.
     recipient_id = None
 
     if current_user.role == 'patient':
         admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
         recipient_id = admin['id'] if admin else None
+    else:
+        recipient_id_raw = request.form.get('recipient_id')
+        try:
+            recipient_id = int(recipient_id_raw)
+        except (TypeError, ValueError):
+            recipient_id = None
+        if recipient_id is None:
+            return jsonify({'status': 'error', 'message': 'Recipient is required for admin messages.'}), 400
 
     db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
                (current_user.id, recipient_id, content))

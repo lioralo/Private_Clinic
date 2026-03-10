@@ -25,7 +25,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
         <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+            <a class="navbar-brand d-flex align-items-center" href="{% if current_user.is_authenticated and current_user.role == 'admin' %}{{ url_for('crm_dashboard') }}{% else %}{{ url_for('index') }}{% endif %}">
                 <i class="bi bi-heart-pulse-fill me-2"></i> CLINIC CRM
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,16 +35,16 @@
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='all') }}">{{ t('All Patients') }}</a>
+                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='all') }}">Clinic CRM</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='ongoing') }}">{{ t('Ongoing') }}</a>
+                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='ongoing') }}">{{ t('Ongoing') }}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='candidate') }}">{{ t('Candidates & Waiting') }}</a>
+                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='candidate') }}">{{ t('Candidates & Waiting') }}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='archived') }}">{{ t('Archived') }}</a>
+                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='archived') }}">{{ t('Archived') }}</a>
                         </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
@@ -59,11 +59,13 @@
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav ms-auto align-items-center">
-                    <li class="nav-item me-3">
-                        <a href="{{ url_for('public_resources') }}" class="nav-link text-white small">
-                            <i class="bi bi-journal-bookmark-fill me-1"></i> {{ t('Public Resources') }}
-                        </a>
-                    </li>
+                    {% if not (current_user.is_authenticated and current_user.role == 'admin') %}
+                        <li class="nav-item me-3">
+                            <a href="{{ url_for('public_resources') }}" class="nav-link text-white small">
+                                <i class="bi bi-journal-bookmark-fill me-1"></i> {{ t('Public Resources') }}
+                            </a>
+                        </li>
+                    {% endif %}
                     {% if current_user.is_authenticated %}
                         <li class="nav-item me-3">
                             <a href="#" class="nav-link text-white small" data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas">
@@ -119,6 +121,12 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
       </div>
       <div class="offcanvas-body d-flex flex-column">
+        {% if current_user.role == 'admin' %}
+        <div class="mb-3 border rounded-3 p-2 bg-light">
+            <label for="conversationSelect" class="form-label small text-muted mb-1">Patient Conversation</label>
+            <select id="conversationSelect" class="form-select form-select-sm"></select>
+        </div>
+        {% endif %}
         <div id="messagesContainer" class="flex-grow-1 overflow-auto mb-3 px-2">
             <div class="text-center py-5 text-muted small" id="messagesLoading">
                 <div class="spinner-border spinner-border-sm me-2" role="status"></div> Loading...
@@ -126,6 +134,9 @@
         </div>
         <form id="sendMessageForm">
             <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+            {% if current_user.role == 'admin' %}
+            <input type="hidden" id="messageRecipientId" value="">
+            {% endif %}
             <div class="input-group">
                 <input type="text" id="messageContent" class="form-control" placeholder="Type a message..." required>
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
@@ -137,10 +148,25 @@
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const offcanvas = document.getElementById('messagesOffcanvas');
+        const isAdmin = {{ 'true' if current_user.role == 'admin' else 'false' }};
+        const conversationSelect = document.getElementById('conversationSelect');
+        const recipientInput = document.getElementById('messageRecipientId');
+        let selectedConversation = null;
+
         if (offcanvas) {
             offcanvas.addEventListener('show.bs.offcanvas', function () {
                 loadMessages();
             });
+
+            if (conversationSelect) {
+                conversationSelect.addEventListener('change', function () {
+                    selectedConversation = conversationSelect.value || null;
+                    if (recipientInput) {
+                        recipientInput.value = selectedConversation || '';
+                    }
+                    loadMessages();
+                });
+            }
 
             document.getElementById('sendMessageForm').addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -148,13 +174,16 @@
                 const csrfToken = document.getElementById('csrf_token').value;
 
                 if (content.trim() !== '') {
+                    const formBody = 'content=' + encodeURIComponent(content)
+                        + (isAdmin && selectedConversation ? '&recipient_id=' + encodeURIComponent(selectedConversation) : '');
+
                     fetch('{{ url_for("api_send_message") }}', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'X-CSRFToken': csrfToken
                         },
-                        body: 'content=' + encodeURIComponent(content)
+                        body: formBody
                     })
                     .then(response => response.json())
                     .then(data => {
@@ -168,11 +197,51 @@
         }
 
         function loadMessages() {
-            fetch('{{ url_for("api_get_messages") }}')
+            const query = (isAdmin && selectedConversation)
+                ? ('?conversation_with=' + encodeURIComponent(selectedConversation))
+                : '';
+
+            fetch('{{ url_for("api_get_messages") }}' + query)
                 .then(response => response.json())
-                .then(messages => {
+                .then(payload => {
                     const container = document.getElementById('messagesContainer');
                     container.innerHTML = '';
+
+                    let messages = payload;
+
+                    if (isAdmin) {
+                        const conversations = payload.conversations || [];
+
+                        if (conversationSelect) {
+                            conversationSelect.innerHTML = '';
+
+                            if (conversations.length === 0) {
+                                conversationSelect.innerHTML = '<option value="">No patient conversations</option>';
+                            } else {
+                                conversations.forEach((conv) => {
+                                    const option = document.createElement('option');
+                                    option.value = String(conv.user_id);
+                                    option.textContent = conv.patient_name + (conv.unread_count ? ` (${conv.unread_count} unread)` : '');
+                                    conversationSelect.appendChild(option);
+                                });
+                            }
+                        }
+
+                        const activeConversation = payload.active_conversation ? String(payload.active_conversation) : null;
+                        if (!selectedConversation && activeConversation) {
+                            selectedConversation = activeConversation;
+                        }
+
+                        if (conversationSelect && selectedConversation) {
+                            conversationSelect.value = selectedConversation;
+                        }
+
+                        if (recipientInput) {
+                            recipientInput.value = selectedConversation || '';
+                        }
+
+                        messages = payload.messages || [];
+                    }
 
                     if (messages.length === 0) {
                         container.innerHTML = '<div class="text-center py-4 text-muted small">No messages yet.</div>';

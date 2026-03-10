@@ -173,127 +173,181 @@
                         <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>{{ t('Treatment Log') }}</h5>
                     </div>
                     <div class="card-body p-4">
-                        <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-white rounded-4 border">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <label class="form-label smallest text-uppercase fw-bold text-primary mb-2">Import treatment log (JSON)</label>
-                            <div class="input-group input-group-sm">
-                                <input type="file" name="file" class="form-control" accept=".json" required>
-                                <button class="btn btn-secondary fw-bold" type="submit">{{ t('Import') }}</button>
-                            </div>
-                        </form>
-                        <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-4 border">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-2">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Meeting #') }}</label>
-                                    <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Date') }}</label>
-                                    <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content') }}</label>
-                                    <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="{{ t('Note content...') }}" required></textarea>
-                                </div>
-                                <div class="col-md-12">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
-                                    <input type="text" name="patient_appearance" class="form-control form-control-sm border-0 shadow-sm" placeholder="General appearance notes" value="{{ latest_behavior['patient_appearance'] }}">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior checklist</label>
-                                    <div class="row g-2">
-                                        {% for item in behavior_options %}
-                                        <div class="col-md-3 col-6">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_new_{{ loop.index }}" {% if item in latest_behavior['behavior_checklist'] %}checked{% endif %}>
-                                                <label class="form-check-label small" for="behavior_new_{{ loop.index }}">{{ item }}</label>
+                        <div class="mb-4">
+                            <h6 class="text-uppercase smallest text-muted mb-3">Last Meeting Record</h6>
+                            {% if latest_note %}
+                                <div class="border rounded-4 p-3 bg-light">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0 fw-bold text-dark">
+                                            Meeting #{{ latest_note['session_number'] or 'N/A' }} - {{ latest_note['note_date'] or latest_note['created_at'][:10] }}
+                                        </h6>
+                                        <span class="small text-muted">Created: {{ latest_note['created_at'] }}</span>
+                                    </div>
+                                    <div class="small text-dark mb-2">{{ latest_note['content'] }}</div>
+                                    <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#latestBehaviorAppearance">
+                                        Behavior & Appearance
+                                    </button>
+                                    <div class="collapse mt-2" id="latestBehaviorAppearance">
+                                        <div class="border rounded-3 p-3 bg-white">
+                                            <div class="small mb-2"><strong>Appearance:</strong> {{ latest_note['patient_appearance'] or 'Not recorded' }}</div>
+                                            <div class="small mb-2"><strong>Mood:</strong> {{ latest_note['mood_summary'] or 'Not recorded' }}</div>
+                                            <div class="small mb-2"><strong>Behavior Notes:</strong> {{ latest_note['behavior_notes'] or 'Not recorded' }}</div>
+                                            <div class="small">
+                                                <strong>Behavior Checklist:</strong>
+                                                {% if latest_note['behavior_checklist'] %}
+                                                    {% for tag in latest_note['behavior_checklist'].split(',') %}
+                                                        {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
+                                                    {% endfor %}
+                                                {% else %}
+                                                    Not recorded
+                                                {% endif %}
                                             </div>
                                         </div>
-                                        {% endfor %}
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Mood summary</label>
-                                    <input type="text" name="mood_summary" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short mood summary" value="{{ latest_behavior['mood_summary'] }}">
+                            {% else %}
+                                <div class="text-center py-4 bg-light rounded-3">
+                                    <p class="text-muted mb-0 small">No meeting has been recorded yet.</p>
                                 </div>
-                                <div class="col-md-6">
-                                    <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior notes</label>
-                                    <input type="text" name="behavior_notes" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short behavior note" value="{{ latest_behavior['behavior_notes'] }}">
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-4">
+                            <h6 class="text-uppercase smallest text-muted mb-3">Treatment Log</h6>
+                            <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-white rounded-4 border">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label smallest text-uppercase fw-bold text-primary mb-2">Import treatment log (JSON)</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="file" name="file" class="form-control" accept=".json" required>
+                                    <button class="btn btn-secondary fw-bold" type="submit">{{ t('Import') }}</button>
                                 </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <input type="file" name="files" class="form-control form-control-sm w-50" multiple>
-                                <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold">{{ t('Post Treatment Log') }}</button>
-                            </div>
-                        </form>
-                        <div class="notes-timeline">
-                            {% for note in notes %}
-                                <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <div>
-                                            {% if note['session_number'] %}<span class="badge bg-primary rounded-pill px-2 me-2">Session #{{ note['session_number'] }}</span>{% endif %}
-                                            {% if note['note_date'] %}<span class="badge bg-light text-dark border rounded-pill px-2">{{ note['note_date'] }}</span>{% endif %}
-                                        </div>
-                                        <span class="text-muted smaller"><i class="bi bi-clock me-1"></i> Created: {{ note['created_at'] }}</span>
+                            </form>
+                            <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-4 border">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-2">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Meeting #') }}</label>
+                                        <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm">
                                     </div>
-                                    {% if note['content'] %}<div class="text-dark mb-2">{{ note['content'] }}</div>{% endif %}
-                                    {% if note['behavior_checklist'] %}
-                                        <div class="mb-2">
-                                            {% for tag in note['behavior_checklist'].split(',') %}
-                                                {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
+                                    <div class="col-md-4">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Date') }}</label>
+                                        <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content') }}</label>
+                                        <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="{{ t('Note content...') }}" required></textarea>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
+                                        <input type="text" name="patient_appearance" class="form-control form-control-sm border-0 shadow-sm" placeholder="General appearance notes" value="{{ latest_behavior['patient_appearance'] }}">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior checklist</label>
+                                        <div class="row g-2">
+                                            {% for item in behavior_options %}
+                                            <div class="col-md-3 col-6">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_new_{{ loop.index }}" {% if item in latest_behavior['behavior_checklist'] %}checked{% endif %}>
+                                                    <label class="form-check-label small" for="behavior_new_{{ loop.index }}">{{ item }}</label>
+                                                </div>
+                                            </div>
                                             {% endfor %}
                                         </div>
-                                    {% endif %}
-                                    {% if note['mood_summary'] %}<div class="small text-muted">Mood: {{ note['mood_summary'] }}</div>{% endif %}
-                                    {% if note['behavior_notes'] %}<div class="small text-muted mb-1">Behavior: {{ note['behavior_notes'] }}</div>{% endif %}
-                                    <div class="small text-muted mb-2">Edited at: {{ note['updated_at'] or 'Not edited yet' }}</div>
-                                    <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ note['id'] }}">{{ t('Edit') }}</button>
-                                    <div class="collapse mt-3" id="editNote{{ note['id'] }}">
-                                        <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="p-3 border rounded-3 bg-light">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <div class="row g-2">
-                                                <div class="col-md-2">
-                                                    <label class="form-label smallest">Meeting #</label>
-                                                    <input type="number" name="session_number" class="form-control form-control-sm" value="{{ note['session_number'] or '' }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label smallest">Date</label>
-                                                    <input type="date" name="note_date" class="form-control form-control-sm" value="{{ note['note_date'] or '' }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label smallest">Appearance overview</label>
-                                                    <input type="text" name="patient_appearance" class="form-control form-control-sm" value="{{ note['patient_appearance'] or '' }}">
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label smallest">Behavior checklist</label>
-                                                    <div class="row g-2">
-                                                        {% set note_checks = (note['behavior_checklist'] or '').split(',') %}
-                                                        {% for item in behavior_options %}
-                                                        <div class="col-md-3 col-6">
-                                                            <div class="form-check">
-                                                                <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_edit_{{ note['id'] }}_{{ loop.index }}" {% if item in note_checks %}checked{% endif %}>
-                                                                <label class="form-check-label small" for="behavior_edit_{{ note['id'] }}_{{ loop.index }}">{{ item }}</label>
-                                                            </div>
-                                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Mood summary</label>
+                                        <input type="text" name="mood_summary" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short mood summary" value="{{ latest_behavior['mood_summary'] }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior notes</label>
+                                        <input type="text" name="behavior_notes" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short behavior note" value="{{ latest_behavior['behavior_notes'] }}">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <input type="file" name="files" class="form-control form-control-sm w-50" multiple>
+                                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold">{{ t('Post Treatment Log') }}</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="notes-timeline">
+                            {% for note in notes %}
+                                {% set note_title_date = note['note_date'] or note['created_at'][:10] %}
+                                <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
+                                    <button class="btn btn-link text-decoration-none p-0 fw-bold text-dark w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#meetingContent{{ note['id'] }}">
+                                        Meeting #{{ note['session_number'] or 'N/A' }} - {{ note_title_date }}
+                                    </button>
+
+                                    <div class="collapse mt-3" id="meetingContent{{ note['id'] }}">
+                                        <div class="small text-dark mb-2">{{ note['content'] }}</div>
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#behaviorAppearance{{ note['id'] }}">
+                                            Behavior & Appearance
+                                        </button>
+                                        <div class="collapse mb-3" id="behaviorAppearance{{ note['id'] }}">
+                                            <div class="border rounded-3 p-3 bg-light">
+                                                <div class="small mb-1"><strong>Appearance:</strong> {{ note['patient_appearance'] or 'Not recorded' }}</div>
+                                                <div class="small mb-1"><strong>Mood:</strong> {{ note['mood_summary'] or 'Not recorded' }}</div>
+                                                <div class="small mb-1"><strong>Behavior Notes:</strong> {{ note['behavior_notes'] or 'Not recorded' }}</div>
+                                                <div class="small">
+                                                    <strong>Behavior Checklist:</strong>
+                                                    {% if note['behavior_checklist'] %}
+                                                        {% for tag in note['behavior_checklist'].split(',') %}
+                                                            {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
                                                         {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label smallest">Mood summary</label>
-                                                    <input type="text" name="mood_summary" class="form-control form-control-sm" value="{{ note['mood_summary'] or '' }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label smallest">Behavior notes</label>
-                                                    <input type="text" name="behavior_notes" class="form-control form-control-sm" value="{{ note['behavior_notes'] or '' }}">
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label smallest">Content</label>
-                                                    <textarea name="content" class="form-control form-control-sm" rows="3" required>{{ note['content'] or '' }}</textarea>
+                                                    {% else %}
+                                                        Not recorded
+                                                    {% endif %}
                                                 </div>
                                             </div>
-                                            <button type="submit" class="btn btn-sm btn-primary mt-2 rounded-pill px-3">Save changes</button>
-                                        </form>
+                                        </div>
+                                        <div class="small text-muted mb-2">Edited at: {{ note['updated_at'] or 'Not edited yet' }}</div>
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ note['id'] }}">{{ t('Edit') }}</button>
+                                        <div class="collapse mt-3" id="editNote{{ note['id'] }}">
+                                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="p-3 border rounded-3 bg-light">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="row g-2">
+                                                    <div class="col-md-2">
+                                                        <label class="form-label smallest">Meeting #</label>
+                                                        <input type="number" name="session_number" class="form-control form-control-sm" value="{{ note['session_number'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label smallest">Date</label>
+                                                        <input type="date" name="note_date" class="form-control form-control-sm" value="{{ note['note_date'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label smallest">Appearance overview</label>
+                                                        <input type="text" name="patient_appearance" class="form-control form-control-sm" value="{{ note['patient_appearance'] or '' }}">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label smallest">Behavior checklist</label>
+                                                        <div class="row g-2">
+                                                            {% set note_checks = (note['behavior_checklist'] or '').split(',') %}
+                                                            {% for item in behavior_options %}
+                                                            <div class="col-md-3 col-6">
+                                                                <div class="form-check">
+                                                                    <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_edit_{{ note['id'] }}_{{ loop.index }}" {% if item in note_checks %}checked{% endif %}>
+                                                                    <label class="form-check-label small" for="behavior_edit_{{ note['id'] }}_{{ loop.index }}">{{ item }}</label>
+                                                                </div>
+                                                            </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label smallest">Mood summary</label>
+                                                        <input type="text" name="mood_summary" class="form-control form-control-sm" value="{{ note['mood_summary'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label smallest">Behavior notes</label>
+                                                        <input type="text" name="behavior_notes" class="form-control form-control-sm" value="{{ note['behavior_notes'] or '' }}">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label smallest">Content</label>
+                                                        <textarea name="content" class="form-control form-control-sm" rows="3" required>{{ note['content'] or '' }}</textarea>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-sm btn-primary mt-2 rounded-pill px-3">Save changes</button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </div>
                             {% else %}

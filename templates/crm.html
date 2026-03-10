@@ -1,0 +1,123 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row g-3 align-items-center mb-4">
+    <div class="col-lg-8">
+        <h2 class="mb-2 text-primary">
+            <i class="bi bi-grid-1x2-fill me-2"></i>Clinic CRM
+        </h2>
+        <p class="text-muted mb-0 small">Management center for patients, treatment logs, and clinic resources.</p>
+    </div>
+    <div class="col-lg-4 text-lg-end">
+        <a href="{{ url_for('static', filename='treatment_log_template.json') }}" download class="btn btn-outline-primary btn-sm rounded-pill px-3 me-2">
+            <i class="bi bi-download me-1"></i> Treatment Log Template
+        </a>
+        <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill px-3">
+            <i class="bi bi-person-plus-fill me-1"></i> {{ t('Add Patient') }}
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all') }}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="small text-muted text-uppercase">All Patients</div>
+                    <div class="fs-4 fw-bold text-primary">{{ counts['all'] }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3 col-6">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing') }}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="small text-muted text-uppercase">Ongoing</div>
+                    <div class="fs-4 fw-bold text-success">{{ counts['ongoing'] }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3 col-6">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate') }}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="small text-muted text-uppercase">Candidates & Waiting</div>
+                    <div class="fs-4 fw-bold text-warning">{{ counts['candidate_waiting'] }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-3 col-6">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived') }}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="small text-muted text-uppercase">Archived</div>
+                    <div class="fs-4 fw-bold text-secondary">{{ counts['archived'] }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold text-primary">
+            <i class="bi bi-people-fill me-2"></i>
+            {% if status == 'all' %}
+                {{ t('All Patients') }}
+            {% elif status in ['candidate', 'waiting for scheduling', 'waiting'] %}
+                {{ t('Candidates & Waiting') }}
+            {% else %}
+                {{ t(status|capitalize) }} {{ t('Patients') }}
+            {% endif %}
+        </h5>
+        <div>
+            <a href="{{ url_for('manage_resources') }}" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Manage Resources') }}</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for patient in patients %}
+                <div class="col">
+                    <div class="card h-100 border-0 shadow-sm patient-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
+                                    <i class="bi bi-person-fill fs-4"></i>
+                                </div>
+                                <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] and patient['has_recurring'] %}bg-info text-white{% else %}bg-secondary{% endif %}">
+                                    {% if patient['status'] in ['candidate', 'waiting for scheduling', 'waiting'] %}
+                                        {% if patient['status'] == 'candidate' %}
+                                            {{ t('Candidate') }}
+                                        {% elif patient['has_recurring'] %}
+                                            {{ t('Waiting') }} - {{ t('Scheduled') }}
+                                        {% else %}
+                                            {{ t('Waiting') }}
+                                        {% endif %}
+                                    {% else %}
+                                        {{ t(patient['status']|capitalize) }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <h5 class="card-title fw-bold mb-1">{{ patient['name'] }}</h5>
+                            <p class="text-muted small mb-3">{{ t('ID:') }} #{{ patient['id'] }}</p>
+                            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
+                                {{ t('View Profile') }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="col-12 w-100 text-center py-5">
+                    <div class="bg-white p-5 rounded-4 shadow-sm">
+                        <i class="bi bi-person-exclamation fs-1 text-muted mb-3 d-block"></i>
+                        <h5 class="text-muted">No patients found in this category.</h5>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
