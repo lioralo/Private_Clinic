@@ -35,9 +35,6 @@
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='all') }}">Clinic CRM</a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('crm_dashboard', status='ongoing') }}">{{ t('Ongoing') }}</a>
                         </li>
                         <li class="nav-item">
@@ -54,6 +51,17 @@
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('manage_resources') }}">
                                 <i class="bi bi-journal-bookmark me-1"></i> {{ t('Resources') }}
+                            </a>
+                        </li>
+                        <li class="nav-item ms-lg-2">
+                            <a class="btn btn-warning btn-sm mt-1 fw-bold" href="{{ url_for('weekly_calendar') }}">
+                                <i class="bi bi-calendar3 me-1"></i> Calendar
+                            </a>
+                        </li>
+                    {% elif current_user.is_authenticated and current_user.role == 'patient' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('weekly_calendar') }}">
+                                <i class="bi bi-calendar3 me-1"></i> Calendar
                             </a>
                         </li>
                     {% endif %}

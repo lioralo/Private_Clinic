@@ -89,6 +89,11 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     blocked_date DATE NOT NULL,
     blocked_time TIME NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
+    title TEXT,
+    is_private BOOLEAN DEFAULT 0,
+    block_type TEXT DEFAULT 'blocked',
+    created_by INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

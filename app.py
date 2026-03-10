@@ -363,6 +363,26 @@ def init_db():
             )''')
         except sqlite3.OperationalError:
             pass
+        try:
+            db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
+        except sqlite3.OperationalError:
+            pass
 
         try:
             db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
@@ -707,6 +727,423 @@ def patient_detail(patient_id):
 def redirect_to_patient_tab(patient_id, default_tab='info'):
     tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
     return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
+def parse_date_safe(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def parse_time_safe(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%H:%M').time()
+    except ValueError:
+        return None
+
+
+def custom_weekday(date_obj):
+    # 0=Sunday, 6=Saturday
+    return (date_obj.weekday() + 1) % 7
+
+
+def combine_dt(date_obj, time_str):
+    parsed_time = parse_time_safe((time_str or '').strip()[:5])
+    if not parsed_time:
+        parsed_time = datetime.strptime('00:00', '%H:%M').time()
+    return datetime.combine(date_obj, parsed_time)
+
+
+def daterange(start_date, end_date):
+    current = start_date
+    while current <= end_date:
+        yield current
+        current += timedelta(days=1)
+
+
+def parse_recurrence_days(appt):
+    raw = (appt['recurrence_days'] or '').strip()
+    if raw:
+        days = []
+        for part in raw.split(','):
+            part = part.strip()
+            if part.isdigit():
+                val = int(part)
+                if 0 <= val <= 6:
+                    days.append(val)
+        if days:
+            return sorted(set(days))
+
+    base_date = parse_date_safe(appt['appointment_date'])
+    if not base_date:
+        return [0]
+    return [custom_weekday(base_date)]
+
+
+def recurring_occurrences_for_week(appt, week_start, week_end):
+    base_date = parse_date_safe(appt['appointment_date'])
+    if not base_date:
+        return []
+
+    interval = int(appt['recurrence_interval'] or 1)
+    if interval <= 0:
+        interval = 1
+
+    recurrence_end = parse_date_safe(appt['recurrence_end_date'])
+    recurrence_count = int(appt['recurrence_count'] or 0)
+    days = parse_recurrence_days(appt)
+
+    anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
+    result = []
+    produced = 0
+    week_index = 0
+
+    while True:
+        block_week_start = anchor_week_start + timedelta(weeks=week_index * interval)
+        if block_week_start > week_end:
+            break
+
+        for day_code in days:
+            occ_date = block_week_start + timedelta(days=day_code)
+            if occ_date < base_date:
+                continue
+            if recurrence_end and occ_date > recurrence_end:
+                continue
+
+            produced += 1
+            if recurrence_count and produced > recurrence_count:
+                return result
+
+            if week_start <= occ_date <= week_end:
+                result.append(occ_date)
+
+        week_index += 1
+
+    return sorted(result)
+
+
+def overlaps(start_a, end_a, start_b, end_b):
+    return start_a < end_b and start_b < end_a
+
+
+def build_week_calendar_snapshot(db, week_start, user):
+    week_end = week_start + timedelta(days=6)
+    today = datetime.now().date()
+
+    patients = {
+        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
+    }
+
+    appointment_rows = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.status AS patient_status
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
+           OR (a.is_recurring = 1 AND a.appointment_date <= ?)
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat(), week_end.isoformat())).fetchall()
+
+    blocks = db.execute('''
+        SELECT * FROM blocked_slots
+        WHERE blocked_date BETWEEN ? AND ?
+        ORDER BY blocked_date ASC, blocked_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
+    events = []
+    occupied = []
+    weekend_specials = {'friday': [], 'saturday': []}
+    follow_up_alerts = []
+
+    # One-time past intake/diagnostic indicator for candidates/waiting.
+    follow_up_rows = db.execute('''
+        SELECT p.id AS patient_id, p.name, p.status, MAX(a.appointment_date) AS last_date
+        FROM patients p
+        JOIN appointments a ON a.patient_id = p.id
+        WHERE p.status IN ('candidate', 'waiting for scheduling', 'waiting')
+          AND a.is_recurring = 0
+          AND a.appointment_date < ?
+        GROUP BY p.id, p.name, p.status
+    ''', (today.isoformat(),)).fetchall()
+
+    for row in follow_up_rows:
+        has_future = db.execute('''
+            SELECT 1 FROM appointments
+            WHERE patient_id = ? AND appointment_date >= ?
+            LIMIT 1
+        ''', (row['patient_id'], today.isoformat())).fetchone()
+        if not has_future:
+            follow_up_alerts.append({
+                'patient_id': row['patient_id'],
+                'patient_name': row['name'],
+                'status': row['status'],
+                'last_meeting_date': row['last_date'],
+                'message': 'Past one-time meeting with no next booking. Review for follow-up or archive.'
+            })
+
+    for appt in appointment_rows:
+        is_recurring = int(appt['is_recurring'] or 0) == 1
+        occ_dates = recurring_occurrences_for_week(appt, week_start, week_end) if is_recurring else [parse_date_safe(appt['appointment_date'])]
+        occ_dates = [d for d in occ_dates if d is not None]
+
+        for occ_date in occ_dates:
+            start_dt = combine_dt(occ_date, appt['appointment_time'])
+            duration = int(appt['duration_minutes'] or 60)
+            end_dt = start_dt + timedelta(minutes=duration)
+
+            title = appt['patient_name']
+            if user.role == 'patient' and appt['patient_id'] != user.patient_id:
+                title = 'Unavailable'
+
+            is_own = (user.role == 'patient' and appt['patient_id'] == user.patient_id)
+            can_delete = user.role == 'admin' or is_own
+
+            event_color = '#2563eb' if appt['patient_status'] == 'ongoing' else '#f59e0b'
+            if appt['patient_status'] == 'archived':
+                event_color = '#6b7280'
+
+            events.append({
+                'id': f"appointment-{appt['id']}-{occ_date.isoformat()}",
+                'appointment_id': appt['id'],
+                'patient_id': appt['patient_id'],
+                'title': title,
+                'start': start_dt.isoformat(),
+                'end': end_dt.isoformat(),
+                'editable': False,
+                'color': event_color,
+                'meta': {
+                    'type': 'appointment',
+                    'is_recurring': is_recurring,
+                    'meeting_type': appt['meeting_type'],
+                    'can_delete': can_delete
+                }
+            })
+            occupied.append((start_dt, end_dt))
+
+    for block in blocks:
+        block_date = parse_date_safe(block['blocked_date'])
+        if not block_date:
+            continue
+        start_dt = combine_dt(block_date, block['blocked_time'])
+        duration = int(block['duration_minutes'] or 60)
+        end_dt = start_dt + timedelta(minutes=duration)
+        is_private = int(block['is_private'] or 0) == 1
+        block_type = (block['block_type'] or 'blocked').strip().lower()
+        raw_title = block['title'] or ('Blocked Slot' if block_type == 'blocked' else 'Special Occasion')
+        visible_title = raw_title if (user.role == 'admin' or not is_private) else 'Unavailable'
+
+        events.append({
+            'id': f"block-{block['id']}",
+            'block_id': block['id'],
+            'title': visible_title,
+            'start': start_dt.isoformat(),
+            'end': end_dt.isoformat(),
+            'editable': False,
+            'color': '#dc2626' if block_type == 'blocked' else '#7c3aed',
+            'meta': {
+                'type': 'block',
+                'block_type': block_type,
+                'is_private': is_private,
+                'can_delete': user.role == 'admin'
+            }
+        })
+
+        occupied.append((start_dt, end_dt))
+
+        day_code = custom_weekday(block_date)
+        if day_code == 5:
+            weekend_specials['friday'].append({
+                'id': block['id'],
+                'title': visible_title,
+                'time': block['blocked_time'],
+                'duration': duration,
+                'type': block_type
+            })
+        if day_code == 6:
+            weekend_specials['saturday'].append({
+                'id': block['id'],
+                'title': visible_title,
+                'time': block['blocked_time'],
+                'duration': duration,
+                'type': block_type
+            })
+
+    # Available slots for patient self-booking or admin quick scheduling (workdays Sun-Thu, 08:00-20:00).
+    available_slots = []
+    for day in daterange(week_start, week_end):
+        day_code = custom_weekday(day)
+        if day_code in (5, 6):
+            continue
+
+        for hour in range(8, 20):
+            start_dt = datetime.combine(day, datetime.strptime(f'{hour:02d}:00', '%H:%M').time())
+            end_dt = start_dt + timedelta(minutes=60)
+
+            if any(overlaps(start_dt, end_dt, occ_start, occ_end) for occ_start, occ_end in occupied):
+                continue
+
+            available_slots.append({
+                'date': day.isoformat(),
+                'time': start_dt.strftime('%H:%M'),
+                'duration_minutes': 60
+            })
+
+    return {
+        'week_start': week_start.isoformat(),
+        'week_end': week_end.isoformat(),
+        'events': events,
+        'weekend_specials': weekend_specials,
+        'available_slots': available_slots,
+        'follow_up_alerts': follow_up_alerts
+    }
+
+
+@app.route('/calendar')
+@login_required
+def weekly_calendar():
+    db = get_db()
+    patient_options = []
+    can_self_schedule = False
+    if current_user.role == 'admin':
+        patient_options = db.execute(
+            'SELECT id, name, status FROM patients ORDER BY name ASC'
+        ).fetchall()
+    else:
+        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+        can_self_schedule = bool(patient and int(patient['can_self_schedule'] or 0) == 1)
+    return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule)
+
+
+@app.route('/api/calendar/snapshot')
+@login_required
+def api_calendar_snapshot():
+    start_raw = request.args.get('week_start', '').strip()
+    anchor = parse_date_safe(start_raw) or datetime.now().date()
+    week_start = anchor - timedelta(days=custom_weekday(anchor))
+    db = get_db()
+    payload = build_week_calendar_snapshot(db, week_start, current_user)
+    return jsonify(payload)
+
+
+@app.route('/api/calendar/block', methods=['POST'])
+@login_required
+def api_calendar_block():
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    blocked_date = request.form.get('blocked_date', '').strip()
+    blocked_time = request.form.get('blocked_time', '').strip()
+    duration = request.form.get('duration_minutes', '60').strip()
+    title = request.form.get('title', '').strip()
+    block_type = request.form.get('block_type', 'blocked').strip().lower()
+    is_private = 1 if request.form.get('is_private') else 0
+
+    if not parse_date_safe(blocked_date) or not parse_time_safe(blocked_time):
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    try:
+        duration_value = int(duration)
+        if duration_value <= 0:
+            duration_value = 60
+    except ValueError:
+        duration_value = 60
+
+    if block_type not in ('blocked', 'special'):
+        block_type = 'blocked'
+
+    db = get_db()
+    db.execute('''
+        INSERT INTO blocked_slots
+        (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (blocked_date, blocked_time, duration_value, title or None, is_private, block_type, current_user.id))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/block/<int:block_id>/delete', methods=['POST'])
+@login_required
+def api_calendar_block_delete(block_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    db.execute('DELETE FROM blocked_slots WHERE id = ?', (block_id,))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/book', methods=['POST'])
+@login_required
+def api_calendar_book():
+    db = get_db()
+
+    booking_date = request.form.get('date', '').strip()
+    booking_time = request.form.get('time', '').strip()
+    duration_raw = request.form.get('duration_minutes', '60').strip()
+    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
+    meeting_link = request.form.get('meeting_link', '').strip()
+
+    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    try:
+        duration = int(duration_raw)
+        if duration <= 0:
+            duration = 60
+    except ValueError:
+        duration = 60
+
+    if current_user.role == 'admin':
+        patient_id_raw = request.form.get('patient_id', '').strip()
+        if not patient_id_raw.isdigit():
+            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
+        patient_id = int(patient_id_raw)
+    else:
+        patient_id = current_user.patient_id
+        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if not patient or int(patient['can_self_schedule'] or 0) != 1:
+            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+
+    anchor = parse_date_safe(booking_date)
+    week_start = anchor - timedelta(days=custom_weekday(anchor))
+    snapshot = build_week_calendar_snapshot(db, week_start, current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id))
+    is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
+    if not is_available:
+        return jsonify({'status': 'error', 'message': 'Selected slot is not available.'}), 409
+
+    db.execute('''
+        INSERT INTO appointments
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, status, is_recurring)
+        VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0)
+    ''', (patient_id, booking_date, booking_time, duration, meeting_type, meeting_link or None))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/appointment/<int:appointment_id>/delete', methods=['POST'])
+@login_required
+def api_calendar_appointment_delete(appointment_id):
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
+
+    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    if current_user.role == 'patient':
+        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+        if not patient or int(patient['can_self_schedule'] or 0) != 1:
+            return jsonify({'status': 'error', 'message': 'Self-management is disabled.'}), 403
+
+    db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+    db.commit()
+    return jsonify({'status': 'success'})
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required

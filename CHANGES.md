@@ -2,6 +2,80 @@
 
 ---
 
+## Session 7 — March 10, 2026 (Workweek Snapshot Calendar + Self-Booking)
+
+### Overview
+Implemented a new weekly scheduling system focused on operational snapshot planning (not meeting journaling), with workweek visibility, weekend special handling, blocked intervals, private admin-only labels, and controlled patient self-booking.
+
+### Features Implemented
+
+#### 1. Treatment-log template now specifies checklist options
+- Updated `static/treatment_log_template.json` to include `behavior_checklist_allowed_values` in the template entries.
+- This gives explicit allowed values when editing/importing previous sessions.
+
+#### 2. Removed extra Clinic CRM text button in ribbon
+- Removed the additional `Clinic CRM` nav text link.
+- Main brand/title remains the single entry point to CRM.
+
+#### 3. New weekly calendar system
+- Added route: `/calendar` and new template: `templates/calendar.html`.
+- Added API: `/api/calendar/snapshot` returning a week snapshot payload.
+- Main calendar view configuration:
+  - Sunday-Thursday only
+  - 08:00-20:00
+  - Weekly time-grid snapshot
+
+#### 4. Weekend special occasions side columns
+- Calendar page now renders dedicated Friday and Saturday side panels.
+- Weekend items are sourced from schedule overrides and support time + duration.
+
+#### 5. Recurring vs one-time behavior
+- Recurring appointments are expanded into weekly occurrences using recurrence rules.
+- One-time intake/diagnostic meetings remain one-time and do not replicate.
+- Added follow-up indicators for candidate/waiting patients with past one-time meetings and no future booking.
+
+#### 6. Blocked intervals and private admin-only labels
+- Extended `blocked_slots` model with:
+  - `duration_minutes`
+  - `title`
+  - `is_private`
+  - `block_type` (`blocked` or `special`)
+  - `created_by`
+- Patients see private entries as `Unavailable` while admins see full titles (e.g., supervision/seminar/group).
+
+#### 7. Self-booking and deletion for users (controlled by admin)
+- Added API `POST /api/calendar/book`:
+  - Admin can book for any selected patient.
+  - Patient can self-book only when `can_self_schedule = 1`.
+- Added API `POST /api/calendar/appointment/<id>/delete`:
+  - Admin can delete any appointment.
+  - Patient can delete own appointments when self-management is enabled.
+
+#### 8. Admin override management
+- Added API `POST /api/calendar/block` for adding blocked/special intervals.
+- Added API `POST /api/calendar/block/<id>/delete` for removing overrides.
+
+### Additional UX wiring
+- Added calendar nav access for both admin and patient in `templates/layout.html`.
+- Added quick links from `templates/crm.html` and `templates/patient_home.html`.
+
+### Files Updated
+- `app.py`
+- `schema.sql`
+- `templates/calendar.html` (new)
+- `templates/layout.html`
+- `templates/crm.html`
+- `templates/patient_home.html`
+- `static/treatment_log_template.json`
+- `test_app.py`
+- `CHANGES.md`
+
+### Verification
+- `python -m py_compile app.py` passed.
+- `python test_app.py` passed (`14` tests).
+
+---
+
 ## Session 6 — March 10, 2026 (CRM Navigation + Meeting History UX + Multi-Patient Messaging)
 
 ### Overview

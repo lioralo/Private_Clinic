@@ -3,6 +3,7 @@ import unittest
 import tempfile
 import sqlite3
 import json
+from datetime import datetime, timedelta
 from flask import g
 from app import app, init_db, get_db
 
@@ -248,6 +249,58 @@ class ClinicTestCase(unittest.TestCase):
             assert rows[0]['note_date'] == '2026-02-10'
             assert rows[1]['session_number'] == '2'
             assert rows[1]['note_date'] == '2026-02-17'
+
+    def test_calendar_snapshot_api_admin(self):
+        self.login('admin', 'admin')
+        rv = self.client.get('/api/calendar/snapshot')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert 'events' in payload
+        assert 'available_slots' in payload
+        assert 'weekend_specials' in payload
+
+    def test_patient_self_booking_and_cancel(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Self Booking Patient',
+            status='waiting'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='selfbook',
+            password='password123'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('UPDATE patients SET can_self_schedule = 1 WHERE id = 1')
+            db.commit()
+
+        self.logout()
+        self.login('selfbook', 'password123')
+
+        day = datetime.now().date() + timedelta(days=1)
+        while ((day.weekday() + 1) % 7) in (5, 6):
+            day += timedelta(days=1)
+        booking_date = day.isoformat()
+
+        rv = self.client.post('/api/calendar/book', data=dict(
+            date=booking_date,
+            time='10:00',
+            duration_minutes='60',
+            meeting_type='in-person'
+        ))
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            appt = db.execute('SELECT id FROM appointments WHERE patient_id = 1 ORDER BY id DESC LIMIT 1').fetchone()
+            assert appt is not None
+            appt_id = appt['id']
+
+        rv = self.client.post(f'/api/calendar/appointment/{appt_id}/delete')
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
 
 if __name__ == '__main__':
     unittest.main()

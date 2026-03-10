@@ -12,6 +12,9 @@
         <a href="{{ url_for('static', filename='treatment_log_template.json') }}" download class="btn btn-outline-primary btn-sm rounded-pill px-3 me-2">
             <i class="bi bi-download me-1"></i> Treatment Log Template
         </a>
+        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-warning btn-sm rounded-pill px-3 me-2">
+            <i class="bi bi-calendar3 me-1"></i> Weekly Calendar
+        </a>
         <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill px-3">
             <i class="bi bi-person-plus-fill me-1"></i> {{ t('Add Patient') }}
         </a>

@@ -1,0 +1,401 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-calendar3 me-2"></i>Weekly Snapshot Calendar</h2>
+        <p class="text-muted small mb-0">Workweek view (Sunday-Thursday, 08:00-20:00) with booking and scheduling controls.</p>
+    </div>
+    {% if current_user.role == 'admin' %}
+    <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to CRM</a>
+    {% endif %}
+</div>
+
+<input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+<div id="calendarContext" data-is-admin="{{ 1 if current_user.role == 'admin' else 0 }}" data-can-self-schedule="{{ 1 if can_self_schedule else 0 }}"></div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-9">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body">
+                <div id="weeklyCalendar"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Friday Specials</h6>
+            </div>
+            <div class="card-body" id="fridaySpecials">
+                <div class="small text-muted">No weekend items.</div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Saturday Specials</h6>
+            </div>
+            <div class="card-body" id="saturdaySpecials">
+                <div class="small text-muted">No weekend items.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Follow-Up Indicators</h6>
+            </div>
+            <div class="card-body" id="followUpAlerts">
+                <div class="small text-muted">No pending follow-up indicators.</div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-primary">Available Slots This Week</h6>
+                <span class="badge bg-light text-dark" id="availableCount">0</span>
+            </div>
+            <div class="card-body" style="max-height: 360px; overflow-y: auto;" id="availableSlots"></div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        {% if current_user.role == 'admin' %}
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Add Block or Special Occasion</h6>
+            </div>
+            <div class="card-body">
+                <form id="addBlockForm">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small">Date</label>
+                            <input type="date" name="blocked_date" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Time</label>
+                            <input type="time" name="blocked_time" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Duration (minutes)</label>
+                            <input type="number" name="duration_minutes" class="form-control form-control-sm" value="60" min="15" step="15">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Type</label>
+                            <select name="block_type" class="form-select form-select-sm">
+                                <option value="blocked">Blocked interval</option>
+                                <option value="special">Special occasion</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Admin title</label>
+                            <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" value="1" id="is_private" name="is_private">
+                                <label class="form-check-label small" for="is_private">
+                                    Hide title from patients (shown as Unavailable)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Override</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Self-Booking</h6>
+            </div>
+            <div class="card-body">
+                {% if can_self_schedule %}
+                <p class="small text-muted mb-0">You can book into available slots and cancel your own sessions from the calendar.</p>
+                {% else %}
+                <p class="small text-muted mb-0">Self-booking is currently disabled by your therapist.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Booking Panel</h6>
+            </div>
+            <div class="card-body">
+                <form id="bookSlotForm">
+                    <input type="hidden" id="bookingDate" name="date">
+                    <input type="hidden" id="bookingTime" name="time">
+                    <input type="hidden" name="duration_minutes" value="60">
+                    {% if current_user.role == 'admin' %}
+                    <div class="mb-2">
+                        <label class="form-label small">Patient</label>
+                        <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
+                            <option value="">Select patient...</option>
+                            {% for p in patient_options %}
+                            <option value="{{ p['id'] }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="mb-2">
+                        <label class="form-label small">Selected Slot</label>
+                        <div class="small text-muted" id="selectedSlotText">No slot selected</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Meeting Type</label>
+                        <select name="meeting_type" class="form-select form-select-sm">
+                            <option value="in-person">In-person</option>
+                            <option value="online">Online</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Meeting Link (optional)</label>
+                        <input type="url" name="meeting_link" class="form-control form-control-sm">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">Book Selected Slot</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const contextNode = document.getElementById('calendarContext');
+    const isAdmin = contextNode && contextNode.dataset.isAdmin === '1';
+    const canSelfSchedule = contextNode && contextNode.dataset.canSelfSchedule === '1';
+    const csrfToken = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : null;
+    const selectedSlotText = document.getElementById('selectedSlotText');
+    const bookingDate = document.getElementById('bookingDate');
+    const bookingTime = document.getElementById('bookingTime');
+    const availableSlotsContainer = document.getElementById('availableSlots');
+    const availableCount = document.getElementById('availableCount');
+    const followUpAlerts = document.getElementById('followUpAlerts');
+    const fridaySpecials = document.getElementById('fridaySpecials');
+    const saturdaySpecials = document.getElementById('saturdaySpecials');
+
+    const calendarEl = document.getElementById('weeklyCalendar');
+    let currentWeekStart = null;
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        height: 760,
+        firstDay: 0,
+        hiddenDays: [5, 6],
+        slotMinTime: '08:00:00',
+        slotMaxTime: '20:00:00',
+        allDaySlot: false,
+        nowIndicator: true,
+        selectable: true,
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: ''
+        },
+        datesSet: function(info) {
+            const start = new Date(info.start);
+            const yyyy = start.getFullYear();
+            const mm = String(start.getMonth() + 1).padStart(2, '0');
+            const dd = String(start.getDate()).padStart(2, '0');
+            currentWeekStart = `${yyyy}-${mm}-${dd}`;
+            loadSnapshot();
+        },
+        select: function(info) {
+            const start = info.start;
+            const date = start.toISOString().slice(0, 10);
+            const time = start.toTimeString().slice(0, 5);
+            setSelectedSlot(date, time);
+            calendar.unselect();
+        },
+        eventClick: function(info) {
+            const props = info.event.extendedProps || {};
+            const meta = props.meta || {};
+            if (!meta.can_delete) {
+                return;
+            }
+
+            if (meta.type === 'appointment') {
+                if (!confirm('Delete this appointment?')) {
+                    return;
+                }
+                fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        loadSnapshot();
+                    } else {
+                        alert(data.message || 'Could not delete appointment.');
+                    }
+                });
+            }
+
+            if (meta.type === 'block' && isAdmin) {
+                if (!confirm('Delete this block/special item?')) {
+                    return;
+                }
+                fetch(`/api/calendar/block/${props.block_id}/delete`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        loadSnapshot();
+                    } else {
+                        alert(data.message || 'Could not delete override.');
+                    }
+                });
+            }
+        }
+    });
+
+    calendar.render();
+
+    function setSelectedSlot(date, time) {
+        bookingDate.value = date;
+        bookingTime.value = time;
+        selectedSlotText.textContent = `${date} ${time}`;
+    }
+
+    function renderWeekendList(container, list) {
+        if (!list || list.length === 0) {
+            container.innerHTML = '<div class="small text-muted">No weekend items.</div>';
+            return;
+        }
+        container.innerHTML = list.map(item => {
+            const badge = item.type === 'blocked' ? 'bg-danger' : 'bg-primary';
+            return `<div class="border rounded-3 p-2 mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="badge ${badge} small">${item.type}</span>
+                    <span class="small text-muted">${item.time}</span>
+                </div>
+                <div class="small fw-semibold">${item.title}</div>
+                <div class="small text-muted">${item.duration} min</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderFollowUps(list) {
+        if (!list || list.length === 0) {
+            followUpAlerts.innerHTML = '<div class="small text-muted">No pending follow-up indicators.</div>';
+            return;
+        }
+        followUpAlerts.innerHTML = list.map(item => {
+            return `<div class="alert alert-warning py-2 mb-2 small">
+                <strong>${item.patient_name}</strong> (${item.status})<br>
+                Last one-time meeting: ${item.last_meeting_date}<br>
+                ${item.message}
+            </div>`;
+        }).join('');
+    }
+
+    function renderAvailableSlots(slots) {
+        availableCount.textContent = slots.length;
+
+        if (!slots.length) {
+            availableSlotsContainer.innerHTML = '<div class="small text-muted">No open slots this week.</div>';
+            return;
+        }
+
+        availableSlotsContainer.innerHTML = slots.map(slot => {
+            return `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
+                <div>
+                    <div class="small fw-semibold">${slot.date}</div>
+                    <div class="small text-muted">${slot.time}</div>
+                </div>
+                <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}">Select</button>
+            </div>`;
+        }).join('');
+
+        document.querySelectorAll('.pick-slot').forEach(btn => {
+            btn.addEventListener('click', function() {
+                setSelectedSlot(this.dataset.date, this.dataset.time);
+            });
+        });
+    }
+
+    function loadSnapshot() {
+        if (!currentWeekStart) return;
+        fetch(`/api/calendar/snapshot?week_start=${encodeURIComponent(currentWeekStart)}`)
+            .then(r => r.json())
+            .then(data => {
+                calendar.removeAllEvents();
+                (data.events || []).forEach(evt => calendar.addEvent(evt));
+                renderWeekendList(fridaySpecials, data.weekend_specials ? data.weekend_specials.friday : []);
+                renderWeekendList(saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
+                renderFollowUps(data.follow_up_alerts || []);
+                renderAvailableSlots(data.available_slots || []);
+            });
+    }
+
+    const addBlockForm = document.getElementById('addBlockForm');
+    if (addBlockForm) {
+        addBlockForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(addBlockForm);
+            fetch('/api/calendar/block', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: new URLSearchParams(formData)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    addBlockForm.reset();
+                    loadSnapshot();
+                } else {
+                    alert(data.message || 'Could not save override.');
+                }
+            });
+        });
+    }
+
+    const bookSlotForm = document.getElementById('bookSlotForm');
+    bookSlotForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        if (!bookingDate.value || !bookingTime.value) {
+            alert('Please select an available slot first.');
+            return;
+        }
+
+        if (!isAdmin && !canSelfSchedule) {
+            alert('Self-booking is disabled for your account.');
+            return;
+        }
+
+        const formData = new FormData(bookSlotForm);
+        fetch('/api/calendar/book', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: new URLSearchParams(formData)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Booking saved.');
+                loadSnapshot();
+            } else {
+                alert(data.message || 'Booking failed.');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

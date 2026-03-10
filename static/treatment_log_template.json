@@ -4,6 +4,16 @@
     "date": "YYYY-MM-DD",
     "content": "Session summary and key interventions.",
     "patient_appearance": "General appearance observations.",
+    "behavior_checklist_allowed_values": [
+      "Calm",
+      "Anxious",
+      "Restless",
+      "Withdrawn",
+      "Cooperative",
+      "Engaged",
+      "Low Energy",
+      "Irritable"
+    ],
     "behavior_checklist": [
       "Calm",
       "Anxious"
@@ -16,6 +26,16 @@
     "date": "YYYY-MM-DD",
     "content": "Follow-up session notes.",
     "patient_appearance": "Updated appearance observations.",
+    "behavior_checklist_allowed_values": [
+      "Calm",
+      "Anxious",
+      "Restless",
+      "Withdrawn",
+      "Cooperative",
+      "Engaged",
+      "Low Energy",
+      "Irritable"
+    ],
     "behavior_checklist": [
       "Engaged",
       "Cooperative"
