@@ -14,6 +14,28 @@
 <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
 <div id="calendarContext" data-is-admin="{{ 1 if current_user.role == 'admin' else 0 }}" data-can-self-schedule="{{ 1 if can_self_schedule else 0 }}"></div>
 
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <span class="small fw-semibold text-muted">Legend:</span>
+            <span class="badge rounded-pill" style="background:#2563eb;">Ongoing</span>
+            <span class="badge rounded-pill" style="background:#f59e0b;">Candidate/Waiting</span>
+            <span class="badge rounded-pill" style="background:#6b7280;">Archived</span>
+            <span class="badge rounded-pill" style="background:#dc2626;">Blocked</span>
+            <span class="badge rounded-pill" style="background:#7c3aed;">Special Occasion</span>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2" id="calendarFilters">
+            <span class="small fw-semibold text-muted me-1">Filters:</span>
+            <button type="button" class="btn btn-sm rounded-pill btn-primary filter-chip" data-filter="all">All</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="ongoing">Ongoing</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="candidate">Candidate/Waiting</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="archived">Archived</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="blocked">Blocked</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="special">Special</button>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4">
     <div class="col-lg-9">
         <div class="card border-0 shadow-sm rounded-4">
@@ -132,7 +154,7 @@
                 <form id="bookSlotForm">
                     <input type="hidden" id="bookingDate" name="date">
                     <input type="hidden" id="bookingTime" name="time">
-                    <input type="hidden" name="duration_minutes" value="60">
+                    <input type="hidden" id="bookingDuration" name="duration_minutes" value="60">
                     {% if current_user.role == 'admin' %}
                     <div class="mb-2">
                         <label class="form-label small">Patient</label>
@@ -147,6 +169,16 @@
                     <div class="mb-2">
                         <label class="form-label small">Selected Slot</label>
                         <div class="small text-muted" id="selectedSlotText">No slot selected</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Duration (minutes)</label>
+                        <select class="form-select form-select-sm" id="durationSelect">
+                            <option value="30">30</option>
+                            <option value="45">45</option>
+                            <option value="60" selected>60</option>
+                            <option value="90">90</option>
+                            <option value="120">120</option>
+                        </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">Meeting Type</label>
@@ -177,6 +209,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedSlotText = document.getElementById('selectedSlotText');
     const bookingDate = document.getElementById('bookingDate');
     const bookingTime = document.getElementById('bookingTime');
+    const bookingDuration = document.getElementById('bookingDuration');
+    const durationSelect = document.getElementById('durationSelect');
+    const filterButtons = document.querySelectorAll('.filter-chip');
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
     const followUpAlerts = document.getElementById('followUpAlerts');
@@ -185,6 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calendarEl = document.getElementById('weeklyCalendar');
     let currentWeekStart = null;
+    let activeFilter = 'all';
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
@@ -196,6 +232,8 @@ document.addEventListener('DOMContentLoaded', function() {
         allDaySlot: false,
         nowIndicator: true,
         selectable: true,
+        slotDuration: '00:30:00',
+        selectMirror: true,
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
@@ -211,9 +249,11 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         select: function(info) {
             const start = info.start;
+            const end = info.end;
             const date = start.toISOString().slice(0, 10);
             const time = start.toTimeString().slice(0, 5);
-            setSelectedSlot(date, time);
+            const durationMinutes = Math.max(30, Math.round((end - start) / 60000));
+            setSelectedSlot(date, time, durationMinutes);
             calendar.unselect();
         },
         eventClick: function(info) {
@@ -263,11 +303,73 @@ document.addEventListener('DOMContentLoaded', function() {
 
     calendar.render();
 
-    function setSelectedSlot(date, time) {
+    function setSelectedSlot(date, time, durationMinutes) {
         bookingDate.value = date;
         bookingTime.value = time;
-        selectedSlotText.textContent = `${date} ${time}`;
+        if (durationMinutes) {
+            bookingDuration.value = String(durationMinutes);
+            if (durationSelect) {
+                const option = Array.from(durationSelect.options).find(opt => opt.value === String(durationMinutes));
+                if (option) {
+                    durationSelect.value = String(durationMinutes);
+                }
+            }
+        }
+        selectedSlotText.textContent = `${date} ${time} (${bookingDuration.value} min)`;
     }
+
+    if (durationSelect) {
+        durationSelect.addEventListener('change', function() {
+            bookingDuration.value = durationSelect.value;
+            if (bookingDate.value && bookingTime.value) {
+                selectedSlotText.textContent = `${bookingDate.value} ${bookingTime.value} (${bookingDuration.value} min)`;
+            }
+        });
+    }
+
+    function eventMatchesFilter(event) {
+        if (activeFilter === 'all') {
+            return true;
+        }
+
+        const meta = event.extendedProps && event.extendedProps.meta ? event.extendedProps.meta : {};
+
+        if (activeFilter === 'blocked') {
+            return meta.type === 'block' && meta.block_type === 'blocked';
+        }
+        if (activeFilter === 'special') {
+            return meta.type === 'block' && meta.block_type === 'special';
+        }
+        if (activeFilter === 'ongoing') {
+            return meta.type === 'appointment' && meta.patient_status === 'ongoing';
+        }
+        if (activeFilter === 'candidate') {
+            return meta.type === 'appointment' && (meta.patient_status === 'candidate' || meta.patient_status === 'waiting' || meta.patient_status === 'waiting for scheduling');
+        }
+        if (activeFilter === 'archived') {
+            return meta.type === 'appointment' && meta.patient_status === 'archived';
+        }
+        return true;
+    }
+
+    function applyCalendarFilter() {
+        calendar.getEvents().forEach(event => {
+            event.setProp('display', eventMatchesFilter(event) ? 'auto' : 'none');
+        });
+    }
+
+    filterButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            activeFilter = btn.dataset.filter;
+            filterButtons.forEach(b => {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-outline-primary');
+            });
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-primary');
+            applyCalendarFilter();
+        });
+    });
 
     function renderWeekendList(container, list) {
         if (!list || list.length === 0) {
@@ -313,15 +415,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
                 <div>
                     <div class="small fw-semibold">${slot.date}</div>
-                    <div class="small text-muted">${slot.time}</div>
+                    <div class="small text-muted">${slot.time} · ${slot.duration_minutes} min</div>
                 </div>
-                <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}">Select</button>
+                <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Select</button>
             </div>`;
         }).join('');
 
         document.querySelectorAll('.pick-slot').forEach(btn => {
             btn.addEventListener('click', function() {
-                setSelectedSlot(this.dataset.date, this.dataset.time);
+                setSelectedSlot(this.dataset.date, this.dataset.time, parseInt(this.dataset.duration || '60', 10));
             });
         });
     }
@@ -333,6 +435,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 calendar.removeAllEvents();
                 (data.events || []).forEach(evt => calendar.addEvent(evt));
+                applyCalendarFilter();
                 renderWeekendList(fridaySpecials, data.weekend_specials ? data.weekend_specials.friday : []);
                 renderWeekendList(saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
                 renderFollowUps(data.follow_up_alerts || []);

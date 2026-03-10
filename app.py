@@ -741,10 +741,14 @@ def parse_date_safe(value):
 def parse_time_safe(value):
     if not value:
         return None
-    try:
-        return datetime.strptime(value, '%H:%M').time()
-    except ValueError:
-        return None
+    raw = value.strip()
+    formats = ['%H:%M', '%H:%M:%S']
+    for fmt in formats:
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except ValueError:
+            continue
+    return None
 
 
 def custom_weekday(date_obj):
@@ -917,6 +921,7 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'color': event_color,
                 'meta': {
                     'type': 'appointment',
+                    'patient_status': appt['patient_status'],
                     'is_recurring': is_recurring,
                     'meeting_type': appt['meeting_type'],
                     'can_delete': can_delete
@@ -979,8 +984,10 @@ def build_week_calendar_snapshot(db, week_start, user):
         if day_code in (5, 6):
             continue
 
-        for hour in range(8, 20):
-            start_dt = datetime.combine(day, datetime.strptime(f'{hour:02d}:00', '%H:%M').time())
+        for half_hour_index in range(24):
+            slot_hour = 8 + (half_hour_index // 2)
+            slot_minute = 30 if (half_hour_index % 2) else 0
+            start_dt = datetime.combine(day, datetime.strptime(f'{slot_hour:02d}:{slot_minute:02d}', '%H:%M').time())
             end_dt = start_dt + timedelta(minutes=60)
 
             if any(overlaps(start_dt, end_dt, occ_start, occ_end) for occ_start, occ_end in occupied):
@@ -1120,7 +1127,7 @@ def api_calendar_book():
         INSERT INTO appointments
         (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, status, is_recurring)
         VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0)
-    ''', (patient_id, booking_date, booking_time, duration, meeting_type, meeting_link or None))
+    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None))
     db.commit()
     return jsonify({'status': 'success'})
 

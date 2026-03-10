@@ -2,6 +2,35 @@
 
 ---
 
+## Session 8 — March 10, 2026 (Calendar UX Polish)
+
+### Overview
+Added a usability polish pass on top of the weekly snapshot calendar to improve planning speed and clarity.
+
+### UX Enhancements
+- Added visual legend for event meaning (ongoing, candidate/waiting, archived, blocked, special).
+- Added interactive filter chips to toggle visible event groups in the calendar view.
+- Added drag-to-book support:
+  - selecting a time range now sets date, time, and duration in booking panel.
+  - duration selector added to booking panel.
+- Added half-hour slot granularity for availability generation (08:00-20:00, Sun-Thu).
+
+### Backend Adjustments
+- Calendar event metadata now includes `patient_status` for precise frontend filtering.
+- Time parsing now accepts `HH:MM` and `HH:MM:SS`.
+- Booking normalizes appointment time values before insert.
+
+### Files Updated
+- `templates/calendar.html`
+- `app.py`
+- `CHANGES.md`
+
+### Verification
+- `python -m py_compile app.py` passed.
+- `python test_app.py` passed (`14` tests).
+
+---
+
 ## Session 7 — March 10, 2026 (Workweek Snapshot Calendar + Self-Booking)
 
 ### Overview
