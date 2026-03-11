@@ -105,7 +105,12 @@
                                 </span>
                             </div>
                             <h5 class="card-title fw-bold mb-1">{{ patient['name'] }}</h5>
-                            <p class="text-muted small mb-3">{{ t('ID:') }} #{{ patient['id'] }}</p>
+                            <p class="text-muted small mb-3">
+                                {{ t('ID:') }} #{{ patient['id'] }}
+                                {% if patient['patient_type'] == 'residency' %}
+                                <span class="badge ms-1" style="background:#7c3aed;font-size:0.7em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
+                                {% endif %}
+                            </p>
                             <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
                                 {{ t('View Profile') }}
                             </a>

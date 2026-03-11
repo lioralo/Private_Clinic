@@ -52,6 +52,26 @@
                             </div>
                         </div>
 
+                        <div class="col-md-12">
+                            <label class="form-label text-uppercase smallest fw-bold">Patient Type</label>
+                            <div class="d-flex gap-3 mt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="patient_type" id="typePrivate" value="private"
+                                        {% if not patient['patient_type'] or patient['patient_type'] == 'private' %}checked{% endif %}>
+                                    <label class="form-check-label" for="typePrivate">
+                                        <i class="bi bi-person me-1"></i>Private
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="patient_type" id="typeResidency" value="residency"
+                                        {% if patient['patient_type'] == 'residency' %}checked{% endif %}>
+                                    <label class="form-check-label" for="typeResidency">
+                                        <i class="bi bi-mortarboard me-1"></i>Residency
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="col-12 mt-4">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
                                 <i class="bi bi-save me-2"></i> Save Patient Record

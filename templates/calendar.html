@@ -41,8 +41,11 @@
             <span class="badge rounded-pill" style="background:#2563eb;">Ongoing</span>
             <span class="badge rounded-pill" style="background:#f59e0b;">Candidate/Waiting</span>
             <span class="badge rounded-pill" style="background:#6b7280;">Archived</span>
+            {% if current_user.role == 'admin' %}
             <span class="badge rounded-pill" style="background:#dc2626;">Blocked</span>
             <span class="badge rounded-pill" style="background:#7c3aed;">Special Occasion</span>
+            {% endif %}
+            <span class="badge rounded-pill bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>Zoom</span>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2" id="calendarFilters">
             <span class="small fw-semibold text-muted me-1">Filters:</span>
@@ -141,7 +144,7 @@
             <form id="bookSlotForm">
                 <input type="hidden" id="bookingDate" name="date">
                 <input type="hidden" id="bookingTime" name="time">
-                <input type="hidden" id="bookingDuration" name="duration_minutes" value="60">
+                <input type="hidden" id="bookingEndTime" name="end_time">
                 {% if current_user.role == 'admin' %}
                 <div class="mb-2">
                     <label class="form-label small">Patient</label>
@@ -158,26 +161,32 @@
                     <div class="small text-muted" id="selectedSlotText">No slot selected</div>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label small">Duration (minutes)</label>
-                    <select class="form-select form-select-sm" id="durationSelect">
-                        <option value="30">30</option>
-                        <option value="45">45</option>
-                        <option value="60" selected>60</option>
-                        <option value="90">90</option>
-                        <option value="120">120</option>
-                    </select>
+                    <label class="form-label small">End Time</label>
+                    <input type="time" class="form-control form-control-sm" id="bookingEndTimeInput" step="900">
                 </div>
                 <div class="mb-2">
                     <label class="form-label small">Meeting Type</label>
-                    <select name="meeting_type" class="form-select form-select-sm">
+                    <select name="meeting_type" id="meetingTypeSelect" class="form-select form-select-sm">
                         <option value="in-person">In-person</option>
                         <option value="online">Online</option>
+                        <option value="zoom">Zoom</option>
+                        <option value="google-meet">Google Meet</option>
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">Meeting Link (optional)</label>
-                    <input type="url" name="meeting_link" class="form-control form-control-sm">
+                    <div class="input-group input-group-sm">
+                        <input type="url" name="meeting_link" id="meetingLinkInput" class="form-control form-control-sm" placeholder="https://...">
+                        <button type="button" class="btn btn-outline-success btn-sm" id="openGoogleMeetBtn" title="Open Google Meet to create a new meeting">
+                            <i class="bi bi-camera-video me-1"></i>Meet
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="openZoomBtn" title="Open Zoom to start a meeting">
+                            <i class="bi bi-camera-video-fill me-1"></i>Zoom
+                        </button>
+                    </div>
+                    <div class="form-text">Click Meet or Zoom to open in a new tab, copy the link, then paste above.</div>
                 </div>
+                <input type="hidden" name="meeting_platform" id="meetingPlatformHidden">
                 <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">Book Selected Slot</button>
             </form>
         </div>
@@ -193,19 +202,19 @@
         <div class="card-body">
             <form id="addBlockForm">
                 <div class="row g-2">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="form-label small">Date</label>
                         <input type="date" name="blocked_date" class="form-control form-control-sm" required>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label small">Time</label>
-                        <input type="time" name="blocked_time" class="form-control form-control-sm" required>
+                    <div class="col-md-4">
+                        <label class="form-label small">Start Time</label>
+                        <input type="time" name="blocked_time" class="form-control form-control-sm" required step="900">
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label small">Duration (minutes)</label>
-                        <input type="number" name="duration_minutes" class="form-control form-control-sm" value="60" min="15" step="15">
+                    <div class="col-md-4">
+                        <label class="form-label small">End Time</label>
+                        <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-12">
                         <label class="form-label small">Type</label>
                         <select name="block_type" class="form-select form-select-sm">
                             <option value="blocked">Blocked interval</option>
@@ -262,8 +271,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedSlotText = document.getElementById('selectedSlotText');
     const bookingDate = document.getElementById('bookingDate');
     const bookingTime = document.getElementById('bookingTime');
-    const bookingDuration = document.getElementById('bookingDuration');
-    const durationSelect = document.getElementById('durationSelect');
+    const bookingEndTime = document.getElementById('bookingEndTime');
+    const bookingEndTimeInput = document.getElementById('bookingEndTimeInput');
+    const meetingTypeSelect = document.getElementById('meetingTypeSelect');
+    const meetingLinkInput = document.getElementById('meetingLinkInput');
+    const meetingPlatformHidden = document.getElementById('meetingPlatformHidden');
     const filterButtons = document.querySelectorAll('.filter-chip');
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
@@ -363,6 +375,21 @@ document.addEventListener('DOMContentLoaded', function() {
         allDaySlot: false,
         nowIndicator: true,
         selectable: true,
+        eventContent: function(arg) {
+            const props = arg.event.extendedProps || {};
+            const meta = props.meta || {};
+            const platform = meta.meeting_platform || '';
+            const mtype = meta.meeting_type || '';
+            let icon = '';
+            if (platform === 'zoom' || mtype === 'zoom') {
+                icon = '<i class="bi bi-camera-video-fill me-1" title="Zoom meeting"></i>';
+            } else if (platform === 'google-meet' || mtype === 'google-meet') {
+                icon = '<i class="bi bi-camera-video me-1" title="Google Meet"></i>';
+            }
+            const timeText = arg.timeText ? `<div class="fc-event-time">${arg.timeText}</div>` : '';
+            const titleText = `<div class="fc-event-title">${icon}${arg.event.title || ''}</div>`;
+            return { html: `<div class="fc-event-main-frame">${timeText}${titleText}</div>` };
+        },
         selectMinDistance: 0,
         selectLongPressDelay: 0,
         selectOverlap: false,
@@ -470,26 +497,63 @@ document.addEventListener('DOMContentLoaded', function() {
 
     calendar.render();
 
+    // Fix: when switching back to the schedule tab, FullCalendar needs a size refresh
+    // because the tab pane was hidden (display:none) during initial render.
+    const scheduleTabEl = document.getElementById('schedule-tab');
+    if (scheduleTabEl) {
+        scheduleTabEl.addEventListener('shown.bs.tab', function () {
+            calendar.updateSize();
+        });
+    }
+
     function setSelectedSlot(date, time, durationMinutes) {
         bookingDate.value = date;
         bookingTime.value = time;
-        if (durationMinutes) {
-            bookingDuration.value = String(durationMinutes);
-            if (durationSelect) {
-                const option = Array.from(durationSelect.options).find(opt => opt.value === String(durationMinutes));
-                if (option) {
-                    durationSelect.value = String(durationMinutes);
-                }
-            }
+        // Compute end time from start + duration
+        const [h, m] = time.split(':').map(Number);
+        const endTotalMins = h * 60 + m + (durationMinutes || 60);
+        const endH = Math.floor(endTotalMins / 60) % 24;
+        const endM = endTotalMins % 60;
+        const endTimeStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+        bookingEndTime.value = endTimeStr;
+        if (bookingEndTimeInput) {
+            bookingEndTimeInput.value = endTimeStr;
         }
-        selectedSlotText.textContent = `${date} ${time} (${bookingDuration.value} min)`;
+        selectedSlotText.textContent = `${date} ${time} → ${endTimeStr}`;
     }
 
-    if (durationSelect) {
-        durationSelect.addEventListener('change', function() {
-            bookingDuration.value = durationSelect.value;
-            if (bookingDate.value && bookingTime.value) {
-                selectedSlotText.textContent = `${bookingDate.value} ${bookingTime.value} (${bookingDuration.value} min)`;
+    // Sync end time input back to hidden field
+    if (bookingEndTimeInput) {
+        bookingEndTimeInput.addEventListener('change', function() {
+            bookingEndTime.value = bookingEndTimeInput.value;
+            if (bookingDate.value && bookingTime.value && bookingEndTimeInput.value) {
+                selectedSlotText.textContent = `${bookingDate.value} ${bookingTime.value} → ${bookingEndTimeInput.value}`;
+            }
+        });
+    }
+
+    // Google Meet / Zoom helper buttons
+    const openGoogleMeetBtn = document.getElementById('openGoogleMeetBtn');
+    const openZoomBtn = document.getElementById('openZoomBtn');
+    if (openGoogleMeetBtn) {
+        openGoogleMeetBtn.addEventListener('click', function() {
+            window.open('https://meet.google.com/new', '_blank', 'noopener,noreferrer');
+            if (meetingTypeSelect) meetingTypeSelect.value = 'google-meet';
+            if (meetingPlatformHidden) meetingPlatformHidden.value = 'google-meet';
+        });
+    }
+    if (openZoomBtn) {
+        openZoomBtn.addEventListener('click', function() {
+            window.open('https://zoom.us/start/videomeeting', '_blank', 'noopener,noreferrer');
+            if (meetingTypeSelect) meetingTypeSelect.value = 'zoom';
+            if (meetingPlatformHidden) meetingPlatformHidden.value = 'zoom';
+        });
+    }
+    // Auto-set platform hidden field when meeting type changes
+    if (meetingTypeSelect) {
+        meetingTypeSelect.addEventListener('change', function() {
+            if (meetingPlatformHidden) {
+                meetingPlatformHidden.value = (this.value === 'zoom' || this.value === 'google-meet') ? this.value : '';
             }
         });
     }
@@ -668,6 +732,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!bookingDate.value || !bookingTime.value) {
             showActionModal({ title: 'Slot Required', message: 'Please select an available slot first.' });
+            return;
+        }
+
+        // Sync end time from display input to hidden field before submit
+        if (bookingEndTimeInput && bookingEndTimeInput.value) {
+            bookingEndTime.value = bookingEndTimeInput.value;
+        }
+        if (!bookingEndTime.value) {
+            showActionModal({ title: 'End Time Required', message: 'Please set an end time for the booking.' });
             return;
         }
 

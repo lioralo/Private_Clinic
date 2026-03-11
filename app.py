@@ -383,6 +383,14 @@ def init_db():
             db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
         except sqlite3.OperationalError:
             pass
+        try:
+            db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
+        except sqlite3.OperationalError:
+            pass
 
         try:
             db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
@@ -621,13 +629,16 @@ def add_patient():
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        patient_type = request.form.get('patient_type', 'private')
+        if patient_type not in ('private', 'residency'):
+            patient_type = 'private'
 
         if not name:
             flash('Name is required!')
         else:
             db = get_db()
-            db.execute('INSERT INTO patients (name, status, email, phone) VALUES (?, ?, ?, ?)',
-                       (name, status, email, phone))
+            db.execute('INSERT INTO patients (name, status, email, phone, patient_type) VALUES (?, ?, ?, ?, ?)',
+                       (name, status, email, phone, patient_type))
             db.commit()
             return redirect(url_for('patients', status=status))
 
@@ -918,6 +929,7 @@ def build_week_calendar_snapshot(db, week_start, user):
             if appt['patient_status'] == 'archived':
                 event_color = '#6b7280'
 
+            platform = (appt['meeting_platform'] or '') if 'meeting_platform' in appt.keys() else ''
             events.append({
                 'id': f"appointment-{appt['id']}-{occ_date.isoformat()}",
                 'appointment_id': appt['id'],
@@ -932,6 +944,7 @@ def build_week_calendar_snapshot(db, week_start, user):
                     'patient_status': appt['patient_status'],
                     'is_recurring': is_recurring,
                     'meeting_type': appt['meeting_type'],
+                    'meeting_platform': platform,
                     'can_delete': can_delete
                 }
             })
@@ -949,6 +962,13 @@ def build_week_calendar_snapshot(db, week_start, user):
         raw_title = block['title'] or ('Blocked Slot' if block_type == 'blocked' else 'Special Occasion')
         visible_title = raw_title if (user.role == 'admin' or not is_private) else 'Unavailable'
 
+        # Always mark blocked/special slots as occupied so they don't appear in available_slots.
+        occupied.append((start_dt, end_dt))
+
+        # Blocked durations are only shown to admin; patients should not see them at all.
+        if user.role != 'admin':
+            continue
+
         events.append({
             'id': f"block-{block['id']}",
             'block_id': block['id'],
@@ -964,8 +984,6 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'can_delete': user.role == 'admin'
             }
         })
-
-        occupied.append((start_dt, end_dt))
 
         day_code = custom_weekday(block_date)
         if day_code == 5:
@@ -1030,7 +1048,8 @@ def weekly_calendar():
     else:
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
         can_self_schedule = bool(patient and int(patient['can_self_schedule'] or 0) == 1)
-    return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule)
+    return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
+                           is_admin=(current_user.role == 'admin'))
 
 
 @app.route('/api/calendar/snapshot')
@@ -1052,7 +1071,7 @@ def api_calendar_block():
 
     blocked_date = request.form.get('blocked_date', '').strip()
     blocked_time = request.form.get('blocked_time', '').strip()
-    duration = request.form.get('duration_minutes', '60').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
     title = request.form.get('title', '').strip()
     block_type = request.form.get('block_type', 'blocked').strip().lower()
     is_private = 1 if request.form.get('is_private') else 0
@@ -1060,12 +1079,16 @@ def api_calendar_block():
     if not parse_date_safe(blocked_date) or not parse_time_safe(blocked_time):
         return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
 
-    try:
-        duration_value = int(duration)
-        if duration_value <= 0:
-            duration_value = 60
-    except ValueError:
-        duration_value = 60
+    # Compute duration from start + end time.
+    duration_value = 60
+    parsed_start = parse_time_safe(blocked_time)
+    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
+    if parsed_start and parsed_end:
+        start_minutes = parsed_start.hour * 60 + parsed_start.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration_value = computed
 
     if block_type not in ('blocked', 'special'):
         block_type = 'blocked'
@@ -1099,19 +1122,24 @@ def api_calendar_book():
 
     booking_date = request.form.get('date', '').strip()
     booking_time = request.form.get('time', '').strip()
-    duration_raw = request.form.get('duration_minutes', '60').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
     meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
     meeting_link = request.form.get('meeting_link', '').strip()
+    meeting_platform = request.form.get('meeting_platform', '').strip()
 
     if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
         return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
 
-    try:
-        duration = int(duration_raw)
-        if duration <= 0:
-            duration = 60
-    except ValueError:
-        duration = 60
+    # Compute duration from start + end time.
+    duration = 60
+    parsed_start = parse_time_safe(booking_time)
+    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
+    if parsed_start and parsed_end:
+        start_minutes = parsed_start.hour * 60 + parsed_start.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration = computed
 
     if current_user.role == 'admin':
         patient_id_raw = request.form.get('patient_id', '').strip()
@@ -1133,9 +1161,9 @@ def api_calendar_book():
 
     db.execute('''
         INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, status, is_recurring)
-        VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0)
-    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None))
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, status, is_recurring)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 0)
+    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None, meeting_platform or None))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -2179,12 +2207,15 @@ def edit_patient(patient_id):
         email = request.form.get('email')
         phone = request.form.get('phone')
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
+        patient_type = request.form.get('patient_type', 'private')
+        if patient_type not in ('private', 'residency'):
+            patient_type = 'private'
 
         if not name:
             flash('Name is required!')
         else:
-            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ? WHERE id = ?',
-                       (name, status, email, phone, can_self_schedule, patient_id))
+            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ?, patient_type = ? WHERE id = ?',
+                       (name, status, email, phone, can_self_schedule, patient_type, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))

@@ -2,6 +2,59 @@
 
 ---
 
+## Session 10 — March 11, 2026 (Booking UX, Calendar Fixes, Patient Type, Meeting Links)
+
+### Overview
+Wide-scope improvement pass covering 6 requested features + bug fixes across the calendar, patient management, and booking flows.
+
+### 1. Calendar Layout Fix on Tab Switch
+- **Problem:** The FullCalendar grid rendered incorrectly (collapsed columns, overlapping text) when switching away from the Schedule tab and returning.
+- **Fix:** Added `shown.bs.tab` listener on `#schedule-tab` that calls `calendar.updateSize()` to force FullCalendar to recalculate its dimensions after the tab becomes visible again.
+
+### 2. Start/End Time Instead of Duration
+- **Booking Panel (`#booking-pane`):** Replaced the "Duration (minutes)" dropdown with an "End Time" time input. Duration is now computed automatically as `end_time - start_time` in both the UI and backend.
+- **Add Block / Special (`#blocks-pane`):** Replaced the "Duration (minutes)" number input with a "Start Time" + "End Time" pair (15-minute stepping).
+- **Backend (`api_calendar_book`, `api_calendar_block`):** Both endpoints now accept `end_time` instead of `duration_minutes`. Duration is computed server-side from `start - end` with a 60-minute safe default.
+- **`setSelectedSlot()` updated** to display `date HH:MM → HH:MM` instead of `(N min)`.
+
+### 3. Patient Calendar: Blocked Slots Hidden from Patients
+- **Problem:** Blocked slots (and special occasions) were visible to patients as "Unavailable" entries in the calendar.
+- **Fix (`build_week_calendar_snapshot`):** Blocked/special entries are still added to the `occupied` set (so available slots remain accurate), but the calendar `events` list only includes them when the viewer is an admin. Patients never see blocked time entries.
+- **Legend updated:** Blocked/Special badges in the Schedule tab legend are now wrapped in `{% if current_user.role == 'admin' %}`.
+
+### 4. Patient Type Field (Private / Residency)
+- **DB migration:** `ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'`
+- **Add Patient form (`add_patient.html`):** Added radio buttons for "Private" vs "Residency" below the phone field.
+- **Edit Patient form (`edit_patient.html`):** Same radio buttons, pre-selects current value.
+- **Patient Detail (`patient_detail.html`):** Shows a colour-coded badge (purple for Residency, muted for Private) next to the status badge.
+- **CRM Dashboard (`crm.html`):** Residency patients show a small "Residency" badge next to their ID.
+- **`add_patient` / `edit_patient` routes in `app.py`:** Accept and persist `patient_type` with validation against `('private', 'residency')`.
+
+### 5. Google Meet / Zoom Meeting Link Integration
+- **New meeting type options:** Added `zoom` and `google-meet` to the Meeting Type dropdown in the Booking Panel (previously only `in-person` and `online`).
+- **Helper buttons:** Two buttons added next to the Meeting Link URL field:
+  - **Meet** button: opens `https://meet.google.com/new` in a new tab with `noopener,noreferrer` (no API key required — admin copies the generated link manually).
+  - **Zoom** button: opens `https://zoom.us/start/videomeeting` in a new tab.
+  - Clicking either button also auto-selects the corresponding meeting type in the dropdown.
+- **`meeting_platform` column:** Added to the `appointments` table to store the platform independently of `meeting_type`. Both are sent from the frontend and persisted.
+
+### 6. Zoom / Google Meet Icon in Calendar Events
+- **`eventContent` callback** added to the FullCalendar configuration.
+- Meetings with `meeting_platform = 'zoom'` or `meeting_type = 'zoom'` show a filled camera icon (`bi-camera-video-fill`).
+- Meetings with `meeting_platform = 'google-meet'` or `meeting_type = 'google-meet'` show an outline camera icon (`bi-camera-video`).
+- Legend updated with a "Zoom" camera-video badge for player reference.
+
+### Bug Fixes
+- `api_calendar_block` was accepting a free-form `duration_minutes` integer input that could be negative or zero — replaced by computed end−start with a 60-minute fallback.
+- Calendar `booking_date` local variable was also used for form parsing, causing potential shadowing with `appointment_date` in the INSERT — renamed/traced to confirm no conflict.
+- `appt.keys()` check for `meeting_platform` column ensures graceful fallback on legacy DB rows that predate the migration.
+
+### Tests
+- All 14 `test_app.py` tests pass.
+- All 3 `test_security.py` tests pass.
+
+---
+
 ## Session 9 - March 11, 2026 (Stability, Debugging, and Verification)
 
 ### Overview

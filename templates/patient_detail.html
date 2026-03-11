@@ -13,6 +13,15 @@
                     <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% else %}bg-secondary{% endif %} rounded-pill px-3">
                         {{ t(patient['status']|capitalize) }}
                     </span>
+                    {% if patient['patient_type'] == 'residency' %}
+                    <span class="badge bg-purple rounded-pill px-3 ms-1" style="background:#7c3aed!important;">
+                        <i class="bi bi-mortarboard me-1"></i>Residency
+                    </span>
+                    {% else %}
+                    <span class="badge bg-light text-dark rounded-pill px-3 ms-1 border">
+                        <i class="bi bi-person me-1"></i>Private
+                    </span>
+                    {% endif %}
                 </div>
                 <div class="text-muted smallest">
                     {{ t('ID:') }} #{{ patient['id'] }}
