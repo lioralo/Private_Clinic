@@ -860,6 +860,7 @@ def build_week_calendar_snapshot(db, week_start, user):
 
     events = []
     occupied = []
+    emitted_appointment_keys = set()
     weekend_specials = {'friday': [], 'saturday': []}
     follow_up_alerts = []
 
@@ -905,6 +906,13 @@ def build_week_calendar_snapshot(db, week_start, user):
 
             is_own = (user.role == 'patient' and appt['patient_id'] == user.patient_id)
             can_delete = user.role == 'admin' or is_own
+
+            # Prevent duplicate renders when legacy data has multiple recurring rows
+            # that resolve to the same patient+time occurrence in the same week.
+            appointment_key = (appt['patient_id'], start_dt.isoformat(), end_dt.isoformat())
+            if appointment_key in emitted_appointment_keys:
+                continue
+            emitted_appointment_keys.add(appointment_key)
 
             event_color = '#2563eb' if appt['patient_status'] == 'ongoing' else '#f59e0b'
             if appt['patient_status'] == 'archived':

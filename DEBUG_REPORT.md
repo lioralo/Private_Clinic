@@ -120,3 +120,45 @@ Results: 15/15 tests passed ✓
 1. ✓ Always validate numeric inputs from forms in both backend and template
 2. ✓ Handle null/empty values gracefully in templates
 3. ✓ Consider adding database constraints to enforce numeric types
+
+---
+
+## Debugging Report - Security Test Failures (March 11, 2026)
+
+## Issue Summary
+Security test execution failed in two stages:
+1. Missing dependency: `pyotp` (`ModuleNotFoundError`)
+2. Outdated test schema assumptions: tests attempted to insert into a non-existent `users.secret_token` column.
+
+## Root Cause Analysis
+
+### 1. Missing dependency declaration
+- `test_security.py` imported `pyotp`, but `requirements.txt` did not include it.
+
+### 2. Test/app mismatch
+- Current authentication flow in the app does not implement OTP/2FA.
+- Current `users` schema has no `secret_token` column.
+- Existing tests were written for an older 2FA design and no longer matched runtime behavior.
+
+## Fixes Applied
+
+### 1. Dependency update
+- Installed `pyotp` in environment to unblock immediate execution.
+- Added `pyotp` to `requirements.txt` for reproducible setup.
+
+### 2. Security test rewrite to current behavior
+- Replaced outdated 2FA tests with tests that validate current login security:
+    - successful admin login redirects to `/patients`
+    - invalid password shows `Invalid username or password`
+    - inactive account shows `Account is disabled. Contact administrator.`
+- Updated test DB seed inserts to use existing `users` columns.
+
+## Validation Results
+- `python3 test_security.py` -> PASS (3 tests)
+- `WTF_CSRF_ENABLED=False python3 test_app.py` -> PASS (14 tests)
+- `python3 test_db.py` -> PASS (schema output verified)
+
+## Files Modified
+- `test_security.py`
+- `requirements.txt`
+- `.gitignore`

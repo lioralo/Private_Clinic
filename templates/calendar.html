@@ -4,7 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-calendar3 me-2"></i>Weekly Snapshot Calendar</h2>
-        <p class="text-muted small mb-0">Workweek view (Sunday-Thursday, 08:00-20:00) with booking and scheduling controls.</p>
+        <p class="text-muted small mb-0">Current workweek only (Sunday-Thursday, 08:00-20:00). The board auto-rolls to the next week.</p>
     </div>
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to CRM</a>
@@ -13,6 +13,26 @@
 
 <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
 <div id="calendarContext" data-is-admin="{{ 1 if current_user.role == 'admin' else 0 }}" data-can-self-schedule="{{ 1 if can_self_schedule else 0 }}"></div>
+
+<ul class="nav nav-tabs mb-3" id="calendarTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="schedule-tab" data-bs-toggle="tab" data-bs-target="#schedule-pane" type="button" role="tab" aria-controls="schedule-pane" aria-selected="true">Schedule</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="booking-tab" data-bs-toggle="tab" data-bs-target="#booking-pane" type="button" role="tab" aria-controls="booking-pane" aria-selected="false">Booking Panel</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="slots-tab" data-bs-toggle="tab" data-bs-target="#slots-pane" type="button" role="tab" aria-controls="slots-pane" aria-selected="false">Available Slots</button>
+    </li>
+    {% if current_user.role == 'admin' %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="blocks-tab" data-bs-toggle="tab" data-bs-target="#blocks-pane" type="button" role="tab" aria-controls="blocks-pane" aria-selected="false">Add Block / Special</button>
+    </li>
+    {% endif %}
+</ul>
+
+<div class="tab-content" id="calendarTabContent">
+<div class="tab-pane fade show active" id="schedule-pane" role="tabpanel" aria-labelledby="schedule-tab" tabindex="0">
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body py-3">
@@ -36,15 +56,37 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <span class="small text-muted">Showing:</span>
+            <span class="fw-semibold" id="calendarWeekLabel">Current week</span>
+        </div>
+        <div>
+            <span class="small text-muted">Ongoing this week:</span>
+            <span class="fw-semibold" id="ongoingThisWeek">None</span>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0">
+        <h6 class="fw-bold mb-0 text-primary">Follow-Up Indicators</h6>
+    </div>
+    <div class="card-body" id="followUpAlerts">
+        <div class="small text-muted">No pending follow-up indicators.</div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4">
-    <div class="col-lg-9">
+    <div class="col-lg-8">
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-body">
                 <div id="weeklyCalendar"></div>
             </div>
         </div>
     </div>
-    <div class="col-lg-3">
+    <div class="col-lg-4">
         <div class="card border-0 shadow-sm rounded-4 mb-3">
             <div class="card-header bg-white border-0">
                 <h6 class="fw-bold mb-0 text-primary">Friday Specials</h6>
@@ -63,136 +105,147 @@
         </div>
     </div>
 </div>
+</div>
 
-<div class="row g-4">
-    <div class="col-lg-6">
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Follow-Up Indicators</h6>
-            </div>
-            <div class="card-body" id="followUpAlerts">
-                <div class="small text-muted">No pending follow-up indicators.</div>
-            </div>
+<div class="tab-pane fade" id="slots-pane" role="tabpanel" aria-labelledby="slots-tab" tabindex="0">
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary">Available Slots This Week</h6>
+            <span class="badge bg-light text-dark" id="availableCount">0</span>
         </div>
+        <div class="card-body" id="availableSlots"></div>
+    </div>
+</div>
 
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                <h6 class="fw-bold mb-0 text-primary">Available Slots This Week</h6>
-                <span class="badge bg-light text-dark" id="availableCount">0</span>
-            </div>
-            <div class="card-body" style="max-height: 360px; overflow-y: auto;" id="availableSlots"></div>
+<div class="tab-pane fade" id="booking-pane" role="tabpanel" aria-labelledby="booking-tab" tabindex="0">
+    {% if current_user.role != 'admin' %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-primary">Self-Booking</h6>
+        </div>
+        <div class="card-body">
+            {% if can_self_schedule %}
+            <p class="small text-muted mb-0">You can book into available slots and cancel your own sessions from the calendar.</p>
+            {% else %}
+            <p class="small text-muted mb-0">Self-booking is currently disabled by your therapist.</p>
+            {% endif %}
         </div>
     </div>
+    {% endif %}
 
-    <div class="col-lg-6">
-        {% if current_user.role == 'admin' %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Add Block or Special Occasion</h6>
-            </div>
-            <div class="card-body">
-                <form id="addBlockForm">
-                    <div class="row g-2">
-                        <div class="col-md-6">
-                            <label class="form-label small">Date</label>
-                            <input type="date" name="blocked_date" class="form-control form-control-sm" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Time</label>
-                            <input type="time" name="blocked_time" class="form-control form-control-sm" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Duration (minutes)</label>
-                            <input type="number" name="duration_minutes" class="form-control form-control-sm" value="60" min="15" step="15">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small">Type</label>
-                            <select name="block_type" class="form-select form-select-sm">
-                                <option value="blocked">Blocked interval</option>
-                                <option value="special">Special occasion</option>
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small">Admin title</label>
-                            <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
-                        </div>
-                        <div class="col-12">
-                            <div class="form-check mt-1">
-                                <input class="form-check-input" type="checkbox" value="1" id="is_private" name="is_private">
-                                <label class="form-check-label small" for="is_private">
-                                    Hide title from patients (shown as Unavailable)
-                                </label>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Override</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-primary">Booking Panel</h6>
         </div>
-        {% else %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Self-Booking</h6>
-            </div>
-            <div class="card-body">
-                {% if can_self_schedule %}
-                <p class="small text-muted mb-0">You can book into available slots and cancel your own sessions from the calendar.</p>
-                {% else %}
-                <p class="small text-muted mb-0">Self-booking is currently disabled by your therapist.</p>
+        <div class="card-body">
+            <form id="bookSlotForm">
+                <input type="hidden" id="bookingDate" name="date">
+                <input type="hidden" id="bookingTime" name="time">
+                <input type="hidden" id="bookingDuration" name="duration_minutes" value="60">
+                {% if current_user.role == 'admin' %}
+                <div class="mb-2">
+                    <label class="form-label small">Patient</label>
+                    <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
+                        <option value="">Select patient...</option>
+                        {% for p in patient_options %}
+                        <option value="{{ p['id'] }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 {% endif %}
-            </div>
+                <div class="mb-2">
+                    <label class="form-label small">Selected Slot</label>
+                    <div class="small text-muted" id="selectedSlotText">No slot selected</div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Duration (minutes)</label>
+                    <select class="form-select form-select-sm" id="durationSelect">
+                        <option value="30">30</option>
+                        <option value="45">45</option>
+                        <option value="60" selected>60</option>
+                        <option value="90">90</option>
+                        <option value="120">120</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">Meeting Type</label>
+                    <select name="meeting_type" class="form-select form-select-sm">
+                        <option value="in-person">In-person</option>
+                        <option value="online">Online</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Meeting Link (optional)</label>
+                    <input type="url" name="meeting_link" class="form-control form-control-sm">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">Book Selected Slot</button>
+            </form>
         </div>
-        {% endif %}
+    </div>
+</div>
 
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Booking Panel</h6>
-            </div>
-            <div class="card-body">
-                <form id="bookSlotForm">
-                    <input type="hidden" id="bookingDate" name="date">
-                    <input type="hidden" id="bookingTime" name="time">
-                    <input type="hidden" id="bookingDuration" name="duration_minutes" value="60">
-                    {% if current_user.role == 'admin' %}
-                    <div class="mb-2">
-                        <label class="form-label small">Patient</label>
-                        <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
-                            <option value="">Select patient...</option>
-                            {% for p in patient_options %}
-                            <option value="{{ p['id'] }}">{{ p['name'] }} ({{ p['status'] }})</option>
-                            {% endfor %}
-                        </select>
+{% if current_user.role == 'admin' %}
+<div class="tab-pane fade" id="blocks-pane" role="tabpanel" aria-labelledby="blocks-tab" tabindex="0">
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-primary">Add Block or Special Occasion</h6>
+        </div>
+        <div class="card-body">
+            <form id="addBlockForm">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label small">Date</label>
+                        <input type="date" name="blocked_date" class="form-control form-control-sm" required>
                     </div>
-                    {% endif %}
-                    <div class="mb-2">
-                        <label class="form-label small">Selected Slot</label>
-                        <div class="small text-muted" id="selectedSlotText">No slot selected</div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Time</label>
+                        <input type="time" name="blocked_time" class="form-control form-control-sm" required>
                     </div>
-                    <div class="mb-2">
+                    <div class="col-md-6">
                         <label class="form-label small">Duration (minutes)</label>
-                        <select class="form-select form-select-sm" id="durationSelect">
-                            <option value="30">30</option>
-                            <option value="45">45</option>
-                            <option value="60" selected>60</option>
-                            <option value="90">90</option>
-                            <option value="120">120</option>
+                        <input type="number" name="duration_minutes" class="form-control form-control-sm" value="60" min="15" step="15">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Type</label>
+                        <select name="block_type" class="form-select form-select-sm">
+                            <option value="blocked">Blocked interval</option>
+                            <option value="special">Special occasion</option>
                         </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label small">Meeting Type</label>
-                        <select name="meeting_type" class="form-select form-select-sm">
-                            <option value="in-person">In-person</option>
-                            <option value="online">Online</option>
-                        </select>
+                    <div class="col-12">
+                        <label class="form-label small">Admin title</label>
+                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label small">Meeting Link (optional)</label>
-                        <input type="url" name="meeting_link" class="form-control form-control-sm">
+                    <div class="col-12">
+                        <div class="form-check mt-1">
+                            <input class="form-check-input" type="checkbox" value="1" id="is_private" name="is_private">
+                            <label class="form-check-label small" for="is_private">
+                                Hide title from patients (shown as Unavailable)
+                            </label>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">Book Selected Slot</button>
-                </form>
+                    <div class="col-12">
+                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Override</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+</div>
+
+<div class="modal fade" id="calendarActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="calendarActionModalTitle">Calendar Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="calendarActionModalBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="calendarModalCancelBtn" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="calendarModalConfirmBtn">OK</button>
             </div>
         </div>
     </div>
@@ -215,12 +268,88 @@ document.addEventListener('DOMContentLoaded', function() {
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
     const followUpAlerts = document.getElementById('followUpAlerts');
+    const ongoingThisWeek = document.getElementById('ongoingThisWeek');
+    const calendarWeekLabel = document.getElementById('calendarWeekLabel');
     const fridaySpecials = document.getElementById('fridaySpecials');
     const saturdaySpecials = document.getElementById('saturdaySpecials');
+    const bookingTabTrigger = document.getElementById('booking-tab');
+
+    const modalRoot = document.getElementById('calendarActionModal');
+    const modalTitle = document.getElementById('calendarActionModalTitle');
+    const modalBody = document.getElementById('calendarActionModalBody');
+    const modalConfirmBtn = document.getElementById('calendarModalConfirmBtn');
+    const modalCancelBtn = document.getElementById('calendarModalCancelBtn');
+    const actionModal = modalRoot ? new bootstrap.Modal(modalRoot) : null;
 
     const calendarEl = document.getElementById('weeklyCalendar');
     let currentWeekStart = null;
     let activeFilter = 'all';
+    let nowWeekAnchor = getWeekStartString(new Date());
+
+    function pad2(v) {
+        return String(v).padStart(2, '0');
+    }
+
+    function getWeekStartString(dateObj) {
+        const d = new Date(dateObj);
+        const day = d.getDay();
+        d.setDate(d.getDate() - day);
+        d.setHours(0, 0, 0, 0);
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+
+    function parseIsoDate(iso) {
+        const [y, m, d] = String(iso).split('-').map(Number);
+        return new Date(y, (m || 1) - 1, d || 1);
+    }
+
+    function formatWeekLabel(isoStart) {
+        const start = parseIsoDate(isoStart);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 4);
+        const fmt = new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+        return `${fmt.format(start)} - ${fmt.format(end)}`;
+    }
+
+    function showActionModal(config) {
+        if (!actionModal) {
+            return Promise.resolve(true);
+        }
+
+        return new Promise((resolve) => {
+            modalTitle.textContent = config.title || 'Notice';
+            modalBody.textContent = config.message || '';
+            modalConfirmBtn.textContent = config.confirmText || 'OK';
+            modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
+
+            if (config.showCancel) {
+                modalCancelBtn.classList.remove('d-none');
+                modalCancelBtn.textContent = config.cancelText || 'Cancel';
+            } else {
+                modalCancelBtn.classList.add('d-none');
+            }
+
+            let resolved = false;
+            const confirmHandler = () => {
+                if (resolved) return;
+                resolved = true;
+                actionModal.hide();
+                resolve(true);
+            };
+            const hiddenHandler = () => {
+                modalConfirmBtn.removeEventListener('click', confirmHandler);
+                modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
+                if (!resolved) {
+                    resolved = true;
+                    resolve(false);
+                }
+            };
+
+            modalConfirmBtn.addEventListener('click', confirmHandler);
+            modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
+            actionModal.show();
+        });
+    }
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
@@ -229,15 +358,26 @@ document.addEventListener('DOMContentLoaded', function() {
         hiddenDays: [5, 6],
         slotMinTime: '08:00:00',
         slotMaxTime: '20:00:00',
+        slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
         allDaySlot: false,
         nowIndicator: true,
         selectable: true,
+        selectMinDistance: 0,
+        selectLongPressDelay: 0,
+        selectOverlap: false,
         slotDuration: '00:30:00',
         selectMirror: true,
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: ''
+        dayHeaderFormat: { weekday: 'short', month: '2-digit', day: '2-digit' },
+        headerToolbar: false,
+        visibleRange: function() {
+            const start = parseIsoDate(nowWeekAnchor);
+            const endExclusive = new Date(start);
+            endExclusive.setDate(endExclusive.getDate() + 5);
+            return {
+                start,
+                end: endExclusive
+            };
         },
         datesSet: function(info) {
             const start = new Date(info.start);
@@ -245,6 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const mm = String(start.getMonth() + 1).padStart(2, '0');
             const dd = String(start.getDate()).padStart(2, '0');
             currentWeekStart = `${yyyy}-${mm}-${dd}`;
+            calendarWeekLabel.textContent = formatWeekLabel(currentWeekStart);
             loadSnapshot();
         },
         select: function(info) {
@@ -254,7 +395,17 @@ document.addEventListener('DOMContentLoaded', function() {
             const time = start.toTimeString().slice(0, 5);
             const durationMinutes = Math.max(30, Math.round((end - start) / 60000));
             setSelectedSlot(date, time, durationMinutes);
+            if (bookingTabTrigger) {
+                bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+            }
             calendar.unselect();
+        },
+        dateClick: function(info) {
+            const clicked = info.date;
+            setSelectedSlot(clicked.toISOString().slice(0, 10), clicked.toTimeString().slice(0, 5), parseInt(bookingDuration.value || '60', 10));
+            if (bookingTabTrigger) {
+                bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+            }
         },
         eventClick: function(info) {
             const props = info.event.extendedProps || {};
@@ -264,38 +415,54 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (meta.type === 'appointment') {
-                if (!confirm('Delete this appointment?')) {
-                    return;
-                }
-                fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken
+                showActionModal({
+                    title: 'Delete Appointment',
+                    message: 'Delete this appointment?',
+                    confirmText: 'Delete',
+                    confirmClass: 'btn-danger',
+                    showCancel: true
+                }).then((confirmed) => {
+                    if (!confirmed) {
+                        return;
                     }
-                }).then(r => r.json()).then(data => {
-                    if (data.status === 'success') {
-                        loadSnapshot();
-                    } else {
-                        alert(data.message || 'Could not delete appointment.');
-                    }
+                    fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            loadSnapshot();
+                        } else {
+                            showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete appointment.' });
+                        }
+                    });
                 });
             }
 
             if (meta.type === 'block' && isAdmin) {
-                if (!confirm('Delete this block/special item?')) {
-                    return;
-                }
-                fetch(`/api/calendar/block/${props.block_id}/delete`, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken
+                showActionModal({
+                    title: 'Delete Block',
+                    message: 'Delete this block/special item?',
+                    confirmText: 'Delete',
+                    confirmClass: 'btn-danger',
+                    showCancel: true
+                }).then((confirmed) => {
+                    if (!confirmed) {
+                        return;
                     }
-                }).then(r => r.json()).then(data => {
-                    if (data.status === 'success') {
-                        loadSnapshot();
-                    } else {
-                        alert(data.message || 'Could not delete override.');
-                    }
+                    fetch(`/api/calendar/block/${props.block_id}/delete`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            loadSnapshot();
+                        } else {
+                            showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete override.' });
+                        }
+                    });
                 });
             }
         }
@@ -403,6 +570,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }).join('');
     }
 
+    function renderOngoingList(events) {
+        const names = (events || [])
+            .filter(evt => evt.meta && evt.meta.type === 'appointment' && evt.meta.patient_status === 'ongoing')
+            .map(evt => evt.title)
+            .filter(name => name && name !== 'Unavailable');
+        const uniqueNames = Array.from(new Set(names));
+        ongoingThisWeek.textContent = uniqueNames.length ? uniqueNames.join(', ') : 'None';
+    }
+
     function renderAvailableSlots(slots) {
         availableCount.textContent = slots.length;
 
@@ -411,19 +587,37 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        availableSlotsContainer.innerHTML = slots.map(slot => {
-            return `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
-                <div>
-                    <div class="small fw-semibold">${slot.date}</div>
+        const grouped = slots.reduce((acc, slot) => {
+            if (!acc[slot.date]) {
+                acc[slot.date] = [];
+            }
+            acc[slot.date].push(slot);
+            return acc;
+        }, {});
+
+        const sortedDays = Object.keys(grouped).sort();
+
+        availableSlotsContainer.innerHTML = sortedDays.map((day) => {
+            const daySlots = grouped[day];
+            const entries = daySlots.map(slot => (
+                `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
                     <div class="small text-muted">${slot.time} · ${slot.duration_minutes} min</div>
-                </div>
-                <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Select</button>
-            </div>`;
+                    <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Use Slot</button>
+                </div>`
+            )).join('');
+
+            return `<details class="border rounded-3 p-2 mb-2 slot-day-details">
+                <summary class="fw-semibold">${day} (${daySlots.length} slots)</summary>
+                <div class="mt-2">${entries}</div>
+            </details>`;
         }).join('');
 
         document.querySelectorAll('.pick-slot').forEach(btn => {
             btn.addEventListener('click', function() {
                 setSelectedSlot(this.dataset.date, this.dataset.time, parseInt(this.dataset.duration || '60', 10));
+                if (bookingTabTrigger) {
+                    bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+                }
             });
         });
     }
@@ -440,6 +634,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderWeekendList(saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
                 renderFollowUps(data.follow_up_alerts || []);
                 renderAvailableSlots(data.available_slots || []);
+                renderOngoingList(data.events || []);
             });
     }
 
@@ -461,7 +656,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     addBlockForm.reset();
                     loadSnapshot();
                 } else {
-                    alert(data.message || 'Could not save override.');
+                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not save override.' });
                 }
             });
         });
@@ -472,12 +667,12 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
 
         if (!bookingDate.value || !bookingTime.value) {
-            alert('Please select an available slot first.');
+            showActionModal({ title: 'Slot Required', message: 'Please select an available slot first.' });
             return;
         }
 
         if (!isAdmin && !canSelfSchedule) {
-            alert('Self-booking is disabled for your account.');
+            showActionModal({ title: 'Booking Disabled', message: 'Self-booking is disabled for your account.' });
             return;
         }
 
@@ -492,13 +687,24 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(r => r.json())
         .then(data => {
             if (data.status === 'success') {
-                alert('Booking saved.');
+                showActionModal({ title: 'Booking Saved', message: 'The booking was saved successfully.' });
                 loadSnapshot();
             } else {
-                alert(data.message || 'Booking failed.');
+                showActionModal({ title: 'Booking Failed', message: data.message || 'Booking failed.' });
             }
         });
     });
+
+    setInterval(function() {
+        const nextAnchor = getWeekStartString(new Date());
+        if (nextAnchor !== nowWeekAnchor) {
+            nowWeekAnchor = nextAnchor;
+            currentWeekStart = nextAnchor;
+            calendar.refetchEvents();
+            calendar.gotoDate(parseIsoDate(nextAnchor));
+            loadSnapshot();
+        }
+    }, 60000);
 });
 </script>
 {% endblock %}

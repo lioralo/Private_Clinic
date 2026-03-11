@@ -1,8 +1,6 @@
 import unittest
 import tempfile
 import os
-import sqlite3
-import pyotp
 from app import app, get_db
 
 class SecurityTestCase(unittest.TestCase):
@@ -22,49 +20,41 @@ class SecurityTestCase(unittest.TestCase):
             db.commit()
 
             from werkzeug.security import generate_password_hash
-            hashed_pw = generate_password_hash('admin')
-            # Create admin without secret token first to test setup flow if needed,
-            # or with it to test 2FA enforcement.
-            self.admin_secret = pyotp.random_base32()
-            db.execute("INSERT INTO users (username, password_hash, role, secret_token) VALUES (?, ?, ?, ?)",
-                       ('admin', hashed_pw, 'admin', self.admin_secret))
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)",
+                ('admin', generate_password_hash('admin'), 'admin', 1)
+            )
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)",
+                ('disabled_admin', generate_password_hash('admin'), 'admin', 0)
+            )
             db.commit()
 
     def tearDown(self):
         os.close(self.db_fd)
         os.unlink(self.db_path)
 
-    def test_admin_2fa_required(self):
-        # Login without OTP
+    def test_admin_login_success_redirects(self):
         rv = self.client.post('/login', data=dict(
             username='admin',
             password='admin'
-        ), follow_redirects=True)
-        # Should ask for OTP
-        assert b'2FA Code' in rv.data
-        assert b'Required for admin access' in rv.data
+        ), follow_redirects=False)
+        self.assertEqual(rv.status_code, 302)
+        self.assertIn('/patients', rv.headers.get('Location', ''))
 
-    def test_admin_2fa_success(self):
-        # Login with OTP
-        totp = pyotp.TOTP(self.admin_secret)
-        otp = totp.now()
+    def test_login_invalid_credentials(self):
         rv = self.client.post('/login', data=dict(
             username='admin',
-            password='admin',
-            otp=otp
+            password='wrong-password'
         ), follow_redirects=True)
-        # Should be logged in (redirected to patients list)
-        assert b'Ongoing' in rv.data
+        self.assertIn(b'Invalid username or password', rv.data)
 
-    def test_admin_2fa_invalid(self):
-        # Login with invalid OTP
+    def test_disabled_account_cannot_login(self):
         rv = self.client.post('/login', data=dict(
-            username='admin',
-            password='admin',
-            otp='000000'
+            username='disabled_admin',
+            password='admin'
         ), follow_redirects=True)
-        # Should fail
-        assert b'Invalid 2FA Code' in rv.data
+        self.assertIn(b'Account is disabled. Contact administrator.', rv.data)
 
 if __name__ == '__main__':
     unittest.main()

@@ -153,6 +153,35 @@ footer {
     padding: 2px 4px;
 }
 
+#weeklyCalendar .fc-col-header-cell-cushion,
+#weeklyCalendar .fc-timegrid-axis-cushion,
+#weeklyCalendar .fc-timegrid-slot-label-cushion {
+    color: #334155;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-weight: 700;
+}
+
+#weeklyCalendar .fc-timegrid-slot-label-cushion {
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+}
+
+#weeklyCalendar .fc-event-title,
+#weeklyCalendar .fc-event-time {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+}
+
+.slot-day-details summary {
+    cursor: pointer;
+    color: #0f172a;
+}
+
+.slot-day-details[open] {
+    background: #f8fafc;
+}
+
 /* Softer event colors */
 .fc-event[style*="background-color: red"] {
     background-color: #ef4444 !important; /* softer red */

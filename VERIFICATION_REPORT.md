@@ -258,6 +258,30 @@ python3 run.py --verbose
    - [ ] Connect to Zoom/Google Meet API for automatic meeting URLs
    - [ ] Set up cron job for reminder scheduling
 
+---
+
+## Verification Addendum - March 11, 2026
+
+### Scope
+Follow-up verification for current branch updates focused on calendar stability, test reliability, and dependency consistency.
+
+### Actions Performed
+- Executed complete local test set:
+   - `WTF_CSRF_ENABLED=False python3 test_app.py`
+   - `python3 test_security.py`
+   - `python3 test_db.py`
+- Debugged and fixed failing security tests caused by outdated assumptions (`secret_token` and OTP flow).
+- Added missing dependency declaration for `pyotp`.
+- Added `.venv/` ignore rule to avoid committing local environment artifacts.
+
+### Results
+- ✅ `test_app.py` passed (14/14)
+- ✅ `test_security.py` passed (3/3)
+- ✅ `test_db.py` completed successfully
+
+### Notes
+- The current app login flow validates username/password and account active-state; OTP/2FA is not currently implemented in runtime authentication.
+
 3. **Deployment**:
    - [ ] Run: `python3 run.py` to start application
    - [ ] Access: http://127.0.0.1:5000

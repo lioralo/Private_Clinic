@@ -2,6 +2,25 @@
 
 ---
 
+## Session 9 - March 11, 2026 (Stability, Debugging, and Verification)
+
+### Overview
+Completed a full debug and verification pass on current calendar and test updates, then aligned security tests and dependency declarations with the current app behavior.
+
+### Fixes Applied
+- Added deduping guard for weekly calendar event emission to avoid duplicate recurring render collisions.
+- Improved weekly calendar UI workflow (tabs, modal confirmations, grouped available slots, ongoing list, current-week auto-roll behavior).
+- Added `.venv/` to `.gitignore` to avoid accidental environment commits.
+- Added missing dependency `pyotp` to `requirements.txt`.
+- Rewrote `test_security.py` from outdated OTP/`secret_token` assumptions to current login security behavior.
+
+### Verification
+- `WTF_CSRF_ENABLED=False python3 test_app.py` passed (`14` tests).
+- `python3 test_security.py` passed (`3` tests).
+- `python3 test_db.py` completed successfully (schema verification output).
+
+---
+
 ## Session 8 — March 10, 2026 (Calendar UX Polish)
 
 ### Overview

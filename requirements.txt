@@ -3,5 +3,6 @@ Flask-WTF
 Flask-Login
 werkzeug
 email_validator
+pyotp
 python-docx
 psutil
