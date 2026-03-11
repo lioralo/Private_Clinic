@@ -2,6 +2,54 @@
 
 ---
 
+## Session 11 — March 11, 2026 (Special Booking Flow, CRM Views, Hebrew Coverage)
+
+### Overview
+Implemented the latest UX and workflow updates across calendar and CRM, including moving Special scheduling into Booking Panel, adding card/list presentation mode in CRM, and extending Hebrew translation coverage for updated UI labels.
+
+### 1. Special Moved from Block Panel to Booking Panel
+- Added `Booking Type` in Booking Panel with:
+  - `Appointment` (default)
+  - `Special` (purple-highlighted selection)
+- When `Special` is selected:
+  - `Special Pattern` field appears (`One-time` / `Weekly Recurring`)
+  - `Repeat Until` field appears for weekly recurring mode
+  - `Special Title` field appears
+- Kept block creation tab for **blocked intervals only**.
+
+### 2. Special Availability Behavior
+- `api_calendar_book` now supports `booking_type=special`.
+- Special slots are saved to `blocked_slots` with `block_type='special'`.
+- Recurring special slots are expanded weekly until the selected end date.
+- Overlap checks prevent inserting special blocks over existing appointments/blocks.
+- Patients still do **not** see blocked/special events, and those slots are excluded from available slots.
+
+### 3. Calendar Bug Fixes and UI Polish
+- Fixed stale `bookingDuration` reference in `dateClick` callback (now defaults to 60-minute selection when clicking a slot cell).
+- Added admin-only display for blocked/special filter chips.
+- Added broader `t(...)` wrappers in calendar headers, labels, legends, and button text for Hebrew mode consistency.
+
+### 4. CRM Main Page Updates
+- Removed top action buttons for:
+  - Weekly Calendar
+  - Add Patient
+- Added view mode toggle in CRM patient section:
+  - `Cards`
+  - `List`
+- Implemented responsive list-mode styling so mobile layout remains intact.
+- Added translation wrappers for CRM title/summary and view-mode controls.
+
+### 5. Hebrew Translation Coverage
+- Extended `HEBREW_TRANSLATIONS` with new strings used by:
+  - Calendar new controls (`Booking Type`, `Special Pattern`, `Repeat Until`, etc.)
+  - CRM list/card mode labels and headers
+
+### Verification
+- `python3 test_app.py` passed (`14` tests)
+- `python3 test_security.py` passed (`3` tests)
+
+---
+
 ## Session 10 — March 11, 2026 (Booking UX, Calendar Fixes, Patient Type, Meeting Links)
 
 ### Overview

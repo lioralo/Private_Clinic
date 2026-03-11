@@ -189,7 +189,63 @@ HEBREW_TRANSLATIONS = {
     "Save": "שמור",
     "Enter username": "הכנס שם משתמש",
     "Sign In": "התחבר",
-    "Register": "הירשם"
+    "Register": "הירשם",
+    "Weekly Snapshot Calendar": "תמונת מצב שבועית",
+    "Current workweek only (Sunday-Thursday, 08:00-20:00). The board auto-rolls to the next week.": "שבוע העבודה הנוכחי בלבד (א'-ה', 08:00-20:00). הלוח מתעדכן אוטומטית לשבוע הבא.",
+    "Back to CRM": "חזרה ל-CRM",
+    "Schedule": "יומן",
+    "Booking Panel": "פאנל קביעות",
+    "Available Slots": "זמינות",
+    "Add Block": "הוסף חסימה",
+    "Legend:": "מקרא:",
+    "Candidate/Waiting": "מועמד/ממתין",
+    "Blocked": "חסום",
+    "Special Occasion": "אירוע מיוחד",
+    "Filters:": "סינון:",
+    "All": "הכל",
+    "Special": "מיוחד",
+    "Showing:": "מוצג:",
+    "Current week": "השבוע הנוכחי",
+    "Ongoing this week:": "בטיפול השבוע:",
+    "None": "אין",
+    "Follow-Up Indicators": "התראות מעקב",
+    "No pending follow-up indicators.": "אין התראות מעקב כרגע.",
+    "Friday Specials": "אירועים מיוחדים - שישי",
+    "Saturday Specials": "אירועים מיוחדים - שבת",
+    "No weekend items.": "אין פריטים לסופ״ש.",
+    "Available Slots This Week": "זמינות לשבוע זה",
+    "Self-Booking": "קביעה עצמית",
+    "You can book into available slots and cancel your own sessions from the calendar.": "אפשר לקבוע לזמנים פנויים ולבטל פגישות שלך מהיומן.",
+    "Self-booking is currently disabled by your therapist.": "קביעה עצמית כרגע כבויה על ידי המטפל.",
+    "Patient": "מטופל",
+    "Select patient...": "בחר מטופל...",
+    "Selected Slot": "משבצת נבחרת",
+    "No slot selected": "לא נבחרה משבצת",
+    "End Time": "שעת סיום",
+    "Booking Type": "סוג קביעה",
+    "Appointment": "פגישה",
+    "Special Pattern": "תבנית אירוע מיוחד",
+    "One-time": "חד פעמי",
+    "Weekly Recurring": "חוזר שבועית",
+    "Repeat Until": "חזרה עד",
+    "Special Title": "כותרת אירוע מיוחד",
+    "Seminar / Conference / Vacation": "סמינר / כנס / חופשה",
+    "Meeting Link (optional)": "קישור פגישה (אופציונלי)",
+    "Click Meet or Zoom to open in a new tab, copy the link, then paste above.": "לחץ Meet או Zoom לפתיחה בלשונית חדשה, העתק את הקישור והדבק כאן.",
+    "Book Selected Slot": "קבע משבצת נבחרת",
+    "Start Time": "שעת התחלה",
+    "Type": "סוג",
+    "Admin title": "כותרת למנהל",
+    "Hide title from patients (shown as Unavailable)": "הסתר כותרת ממטופלים (יוצג כלא זמין)",
+    "Save Override": "שמור דריסה",
+    "Calendar Action": "פעולת יומן",
+    "OK": "אישור",
+    "Clinic CRM": "מערכת CRM קלינית",
+    "Management center for patients, treatment logs, and clinic resources.": "מרכז ניהול למטופלים, יומני טיפול ומשאבי קליניקה.",
+    "Treatment Log Template": "תבנית יומן טיפולים",
+    "View mode": "מצב תצוגה",
+    "Cards": "כרטיסים",
+    "List": "רשימה"
 }
 
 @app.context_processor
@@ -1073,7 +1129,7 @@ def api_calendar_block():
     blocked_time = request.form.get('blocked_time', '').strip()
     end_time_raw = request.form.get('end_time', '').strip()
     title = request.form.get('title', '').strip()
-    block_type = request.form.get('block_type', 'blocked').strip().lower()
+    block_type = 'blocked'
     is_private = 1 if request.form.get('is_private') else 0
 
     if not parse_date_safe(blocked_date) or not parse_time_safe(blocked_time):
@@ -1089,9 +1145,6 @@ def api_calendar_block():
         computed = end_minutes - start_minutes
         if computed > 0:
             duration_value = computed
-
-    if block_type not in ('blocked', 'special'):
-        block_type = 'blocked'
 
     db = get_db()
     db.execute('''
@@ -1126,6 +1179,10 @@ def api_calendar_book():
     meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
     meeting_link = request.form.get('meeting_link', '').strip()
     meeting_platform = request.form.get('meeting_platform', '').strip()
+    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
+    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
+    special_repeat_until = request.form.get('special_repeat_until', '').strip()
+    special_title = request.form.get('special_title', '').strip()
 
     if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
         return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
@@ -1143,16 +1200,81 @@ def api_calendar_book():
 
     if current_user.role == 'admin':
         patient_id_raw = request.form.get('patient_id', '').strip()
-        if not patient_id_raw.isdigit():
+        if booking_type != 'special' and not patient_id_raw.isdigit():
             return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
-        patient_id = int(patient_id_raw)
+        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
     else:
+        if booking_type == 'special':
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
         patient_id = current_user.patient_id
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
         if not patient or int(patient['can_self_schedule'] or 0) != 1:
             return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
 
+    def slot_is_available(date_iso, start_time_str, slot_duration):
+        date_obj = parse_date_safe(date_iso)
+        if not date_obj:
+            return False
+        slot_start = combine_dt(date_obj, start_time_str)
+        slot_end = slot_start + timedelta(minutes=slot_duration)
+
+        date_rows = db.execute('''
+            SELECT appointment_time, duration_minutes FROM appointments WHERE appointment_date = ?
+        ''', (date_iso,)).fetchall()
+        for row in date_rows:
+            row_start = combine_dt(date_obj, row['appointment_time'])
+            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+            if overlaps(slot_start, slot_end, row_start, row_end):
+                return False
+
+        block_rows = db.execute('''
+            SELECT blocked_time, duration_minutes FROM blocked_slots WHERE blocked_date = ?
+        ''', (date_iso,)).fetchall()
+        for row in block_rows:
+            row_start = combine_dt(date_obj, row['blocked_time'])
+            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+            if overlaps(slot_start, slot_end, row_start, row_end):
+                return False
+
+        return True
+
     anchor = parse_date_safe(booking_date)
+    if not anchor:
+        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
+
+    if booking_type == 'special':
+        if current_user.role != 'admin':
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+        if special_pattern not in ('one-time', 'weekly'):
+            special_pattern = 'one-time'
+
+        dates_to_block = [anchor]
+        if special_pattern == 'weekly':
+            repeat_until = parse_date_safe(special_repeat_until)
+            if not repeat_until or repeat_until < anchor:
+                return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
+            dates_to_block = []
+            current = anchor
+            while current <= repeat_until:
+                dates_to_block.append(current)
+                current += timedelta(days=7)
+
+        for d in dates_to_block:
+            date_iso = d.isoformat()
+            if not slot_is_available(date_iso, booking_time, duration):
+                return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
+
+        for d in dates_to_block:
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, ?, ?, ?, 1, 'special', ?)
+            ''', (d.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
+                  special_title or 'Special Occasion', current_user.id))
+        db.commit()
+        return jsonify({'status': 'success'})
+
     week_start = anchor - timedelta(days=custom_weekday(anchor))
     snapshot = build_week_calendar_snapshot(db, week_start, current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id))
     is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])

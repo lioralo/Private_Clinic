@@ -4,19 +4,13 @@
 <div class="row g-3 align-items-center mb-4">
     <div class="col-lg-8">
         <h2 class="mb-2 text-primary">
-            <i class="bi bi-grid-1x2-fill me-2"></i>Clinic CRM
+            <i class="bi bi-grid-1x2-fill me-2"></i>{{ t('Clinic CRM') }}
         </h2>
-        <p class="text-muted mb-0 small">Management center for patients, treatment logs, and clinic resources.</p>
+        <p class="text-muted mb-0 small">{{ t('Management center for patients, treatment logs, and clinic resources.') }}</p>
     </div>
     <div class="col-lg-4 text-lg-end">
         <a href="{{ url_for('static', filename='treatment_log_template.json') }}" download class="btn btn-outline-primary btn-sm rounded-pill px-3 me-2">
-            <i class="bi bi-download me-1"></i> Treatment Log Template
-        </a>
-        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-warning btn-sm rounded-pill px-3 me-2">
-            <i class="bi bi-calendar3 me-1"></i> Weekly Calendar
-        </a>
-        <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill px-3">
-            <i class="bi bi-person-plus-fill me-1"></i> {{ t('Add Patient') }}
+            <i class="bi bi-download me-1"></i> {{ t('Treatment Log Template') }}
         </a>
     </div>
 </div>
@@ -26,7 +20,7 @@
         <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all') }}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="small text-muted text-uppercase">All Patients</div>
+                    <div class="small text-muted text-uppercase">{{ t('All Patients') }}</div>
                     <div class="fs-4 fw-bold text-primary">{{ counts['all'] }}</div>
                 </div>
             </div>
@@ -36,7 +30,7 @@
         <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing') }}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="small text-muted text-uppercase">Ongoing</div>
+                    <div class="small text-muted text-uppercase">{{ t('Ongoing') }}</div>
                     <div class="fs-4 fw-bold text-success">{{ counts['ongoing'] }}</div>
                 </div>
             </div>
@@ -46,7 +40,7 @@
         <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate') }}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="small text-muted text-uppercase">Candidates & Waiting</div>
+                    <div class="small text-muted text-uppercase">{{ t('Candidates & Waiting') }}</div>
                     <div class="fs-4 fw-bold text-warning">{{ counts['candidate_waiting'] }}</div>
                 </div>
             </div>
@@ -56,7 +50,7 @@
         <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived') }}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="small text-muted text-uppercase">Archived</div>
+                    <div class="small text-muted text-uppercase">{{ t('Archived') }}</div>
                     <div class="fs-4 fw-bold text-secondary">{{ counts['archived'] }}</div>
                 </div>
             </div>
@@ -76,14 +70,18 @@
                 {{ t(status|capitalize) }} {{ t('Patients') }}
             {% endif %}
         </h5>
-        <div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm" role="group" aria-label="{{ t('View mode') }}">
+                <button type="button" class="btn btn-outline-secondary active" id="viewCardsBtn">{{ t('Cards') }}</button>
+                <button type="button" class="btn btn-outline-secondary" id="viewListBtn">{{ t('List') }}</button>
+            </div>
             <a href="{{ url_for('manage_resources') }}" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Manage Resources') }}</a>
         </div>
     </div>
     <div class="card-body">
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="patientsContainer">
             {% for patient in patients %}
-                <div class="col">
+                <div class="col patient-col">
                     <div class="card h-100 border-0 shadow-sm patient-card">
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-start mb-3">
@@ -111,7 +109,7 @@
                                 <span class="badge ms-1" style="background:#7c3aed;font-size:0.7em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
                                 {% endif %}
                             </p>
-                            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
+                            <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold list-view-btn">
                                 {{ t('View Profile') }}
                             </a>
                         </div>
@@ -128,4 +126,59 @@
         </div>
     </div>
 </div>
+
+<style>
+.crm-list-mode .patient-col {
+    width: 100%;
+    flex: 0 0 100%;
+    max-width: 100%;
+}
+
+.crm-list-mode .patient-card .card-body {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.crm-list-mode .patient-card .card-title,
+.crm-list-mode .patient-card .text-muted {
+    margin-bottom: 0.25rem !important;
+}
+
+.crm-list-mode .patient-card .list-view-btn {
+    width: auto !important;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .crm-list-mode .patient-card .card-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .crm-list-mode .patient-card .list-view-btn {
+        margin-left: 0;
+        width: 100% !important;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const container = document.getElementById('patientsContainer');
+    const cardsBtn = document.getElementById('viewCardsBtn');
+    const listBtn = document.getElementById('viewListBtn');
+    if (!container || !cardsBtn || !listBtn) return;
+
+    function setMode(mode) {
+        const listMode = mode === 'list';
+        container.classList.toggle('crm-list-mode', listMode);
+        cardsBtn.classList.toggle('active', !listMode);
+        listBtn.classList.toggle('active', listMode);
+    }
+
+    cardsBtn.addEventListener('click', function () { setMode('cards'); });
+    listBtn.addEventListener('click', function () { setMode('list'); });
+});
+</script>
 {% endblock %}
