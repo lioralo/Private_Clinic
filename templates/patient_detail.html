@@ -123,6 +123,257 @@
                                 </form>
                             </div>
                         </div>
+
+                        {% if patient['patient_type'] == 'initial-intake' %}
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                <h5 class="fw-bold mb-0 text-primary">
+                                    <i class="bi bi-clipboard2-pulse me-2"></i>{{ 'טופס אינטייק להערכה' if lang == 'he' else 'Intake Evaluation Form' }}
+                                </h5>
+                                <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                                    <i class="bi bi-file-earmark-word me-1"></i>{{ 'ייצוא DOCX' if lang == 'he' else 'Export DOCX' }}
+                                </a>
+                            </div>
+                            <div class="card-body p-4">
+                                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
+                                    <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
+                                    <input type="hidden" name="active_tab" value="info">
+
+                                    <ul class="nav nav-pills intake-nav mb-3" role="tablist">
+                                        <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="pill" data-bs-target="#intake-pre">{{ 'מקדים' if lang == 'he' else 'Prelim' }}</button></li>
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-background">{{ 'רקע' if lang == 'he' else 'Background' }}</button></li>
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-admin">{{ 'אדמיניסטרטיבי' if lang == 'he' else 'Administrative' }}</button></li>
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-medical">{{ 'רפואי' if lang == 'he' else 'Medical' }}</button></li>
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-mental">{{ 'סטטוס מנטלי' if lang == 'he' else 'Mental Status' }}</button></li>
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-plan">{{ 'החלטות טיפול' if lang == 'he' else 'Treatment Plan' }}</button></li>
+                                    </ul>
+
+                                    <div class="tab-content border rounded-3 p-3 bg-light">
+                                        <div class="tab-pane fade show active" id="intake-pre">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'מקום הפגישה' if lang == 'he' else 'Meeting Location' }}</label>
+                                                    <select class="form-select" name="intake_meeting_location">
+                                                        <option value="" {% if not intake_form_data.get('meeting_location') %}selected{% endif %}>{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                        <option value="מרפאה" {% if intake_form_data.get('meeting_location') == 'מרפאה' %}selected{% endif %}>{{ 'מרפאה' if lang == 'he' else 'Clinic' }}</option>
+                                                        <option value="טלפונית" {% if intake_form_data.get('meeting_location') == 'טלפונית' %}selected{% endif %}>{{ 'טלפונית' if lang == 'he' else 'Phone' }}</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label fw-bold small">{{ 'זמן הפגישה' if lang == 'he' else 'Meeting Time' }}</label>
+                                                    <input class="form-control" type="time" name="intake_meeting_time" value="{{ intake_form_data.get('meeting_time', '') }}">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label fw-bold small">{{ 'משך' if lang == 'he' else 'Duration' }}</label>
+                                                    <input class="form-control" name="intake_meeting_duration" value="{{ intake_form_data.get('meeting_duration', '') }}" placeholder="{{ 'למשל 50 דקות' if lang == 'he' else 'e.g. 50 min' }}">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'מי מעביר' if lang == 'he' else 'Conducted By' }}</label>
+                                                    <input class="form-control" name="intake_meeting_conductor" value="{{ intake_form_data.get('meeting_conductor', '') }}">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="intake-background">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'תלונה עיקרית' if lang == 'he' else 'Main Complaint' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_main_complaint">{{ intake_form_data.get('main_complaint', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'היסטוריה של הבעיה ומחלה נוכחית' if lang == 'he' else 'Problem History / Current Illness' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_problem_history">{{ intake_form_data.get('problem_history', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'אנמנזה מוקדמת (התפתחותית/משפחתית/חברתית/חינוכית/תעסוקתית/רומנטית)' if lang == 'he' else 'Early Anamnesis (developmental/family/social/educational/occupational/romantic)' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_early_anamnesis">{{ intake_form_data.get('early_anamnesis', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'כיצד הופנה המטופל' if lang == 'he' else 'Referral Source' }}</label>
+                                                    <input class="form-control" name="intake_referral_source" value="{{ intake_form_data.get('referral_source', '') }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'תאריך ההפניה' if lang == 'he' else 'Referral Date' }}</label>
+                                                    <input class="form-control" type="date" name="intake_referral_date" value="{{ intake_form_data.get('referral_date', '') }}">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="intake-admin">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'מצב משפחתי' if lang == 'he' else 'Family Status' }}</label>
+                                                    <input class="form-control" name="intake_family_status" value="{{ intake_form_data.get('family_status', '') }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'אפוטרופסות' if lang == 'he' else 'Guardian Status' }}</label>
+                                                    <select class="form-select" name="intake_guardian_status">
+                                                        {% set guardian_value = intake_form_data.get('guardian_status', '') %}
+                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                        {% for opt in ['לא', 'קטין', 'לגופו', 'לרכושו', 'כללי', 'לא ידוע'] %}
+                                                        <option value="{{ opt }}" {% if guardian_value == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'לא':'No','קטין':'Minor','לגופו':'Personal','לרכושו':'Property','כללי':'General','לא ידוע':'Unknown'}[opt] }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'אם יש אפוטרופסות, על ידי מי' if lang == 'he' else 'Guardian Details' }}</label>
+                                                    <input class="form-control" name="intake_guardian_by_whom" value="{{ intake_form_data.get('guardian_by_whom', '') }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'עם מי גר' if lang == 'he' else 'Living Arrangement' }}</label>
+                                                    {% set living_value = intake_form_data.get('living_with', '') %}
+                                                    <select class="form-select" name="intake_living_with">
+                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                        {% for opt in ['הורים','רק אם','רק אב','בני משפחה אחרים','אומנה','מוסד','לבד','אחר'] %}
+                                                        <option value="{{ opt }}" {% if living_value == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'הורים':'Parents','רק אם':'Mother only','רק אב':'Father only','בני משפחה אחרים':'Other family','אומנה':'Foster care','מוסד':'Institution','לבד':'Alone','אחר':'Other'}[opt] }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'אם אחר, פרט' if lang == 'he' else 'If Other, Specify' }}</label>
+                                                    <input class="form-control" name="intake_living_with_other" value="{{ intake_form_data.get('living_with_other', '') }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'סטטוס נכות' if lang == 'he' else 'Disability Status' }}</label>
+                                                    {% set disability_value = intake_form_data.get('disability_status', '') %}
+                                                    <select class="form-select" id="intakeDisabilityStatus" name="intake_disability_status">
+                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                        <option value="כן" {% if disability_value == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
+                                                        <option value="לא" {% if disability_value == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
+                                                        <option value="לא ידוע" {% if disability_value == 'לא ידוע' %}selected{% endif %}>{{ 'לא ידוע' if lang == 'he' else 'Unknown' }}</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'אחוזי נכות' if lang == 'he' else 'Disability Percent' }}</label>
+                                                    <input class="form-control" id="intakeDisabilityPercent" name="intake_disability_percent" value="{{ intake_form_data.get('disability_percent', '') }}" placeholder="%">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'רמת סיכון לפגיעה עצמית' if lang == 'he' else 'Self-harm Risk Level' }}</label>
+                                                    <input class="form-control" name="intake_self_harm_level" value="{{ intake_form_data.get('self_harm_level', '') }}" placeholder="{{ 'לפי הסיווג שבטופס' if lang == 'he' else 'According to intake scale' }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'מתי לאחרונה' if lang == 'he' else 'Most Recent Event' }}</label>
+                                                    <input class="form-control" name="intake_self_harm_recent" value="{{ intake_form_data.get('self_harm_recent', '') }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'כמה מקרים בעבר' if lang == 'he' else 'Past Incidents Count' }}</label>
+                                                    <input class="form-control" name="intake_self_harm_count" value="{{ intake_form_data.get('self_harm_count', '') }}">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'טיפולים כפויים בעבר' if lang == 'he' else 'Forced Treatment History' }}</label>
+                                                    <input class="form-control" name="intake_forced_treatment" value="{{ intake_form_data.get('forced_treatment', '') }}" placeholder="{{ 'באשפוז/במרפאה' if lang == 'he' else 'Inpatient / outpatient' }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'שימוש בסמים' if lang == 'he' else 'Substance Use' }}</label>
+                                                    <textarea class="form-control" rows="2" name="intake_substance_use">{{ intake_form_data.get('substance_use', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'קנאביס רפואי' if lang == 'he' else 'Medical Cannabis' }}</label>
+                                                    <textarea class="form-control" rows="2" name="intake_medical_cannabis">{{ intake_form_data.get('medical_cannabis', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'שימוש באלכוהול' if lang == 'he' else 'Alcohol Use' }}</label>
+                                                    <textarea class="form-control" rows="2" name="intake_alcohol_use">{{ intake_form_data.get('alcohol_use', '') }}</textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="intake-medical">
+                                            <div class="row g-3">
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'מחלות רקע' if lang == 'he' else 'Medical Background Conditions' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_medical_conditions">{{ intake_form_data.get('medical_conditions', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'מחלות נפשיות, אבחון, טיפול ואשפוז' if lang == 'he' else 'Psychiatric Conditions, Diagnosis, Treatment, Hospitalization' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_psychiatric_conditions">{{ intake_form_data.get('psychiatric_conditions', '') }}</textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="intake-mental">
+                                            <div class="row g-3">
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'הופעה - תואמת' if lang == 'he' else 'Appearance - Congruent' }}</label><input class="form-control" name="intake_appearance_fit" value="{{ intake_form_data.get('appearance_fit', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הופעה - הערה' if lang == 'he' else 'Appearance Note' }}</label><input class="form-control" name="intake_appearance_fit_note" value="{{ intake_form_data.get('appearance_fit_note', '') }}"></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מסודרת' if lang == 'he' else 'Ordered' }}</label><input class="form-control" name="intake_appearance_ordered" value="{{ intake_form_data.get('appearance_ordered', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מסודרות/מוזנחת' if lang == 'he' else 'Ordering Note' }}</label><input class="form-control" name="intake_appearance_ordered_note" value="{{ intake_form_data.get('appearance_ordered_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'שיתוף פעולה' if lang == 'he' else 'Cooperation' }}</label><input class="form-control" name="intake_cooperation" value="{{ intake_form_data.get('cooperation', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות על שיתוף פעולה' if lang == 'he' else 'Cooperation Note' }}</label><input class="form-control" name="intake_cooperation_note" value="{{ intake_form_data.get('cooperation_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'קשר עין' if lang == 'he' else 'Eye Contact' }}</label><input class="form-control" name="intake_eye_contact" value="{{ intake_form_data.get('eye_contact', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות קשר עין' if lang == 'he' else 'Eye Contact Note' }}</label><input class="form-control" name="intake_eye_contact_note" value="{{ intake_form_data.get('eye_contact_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'התנהגות' if lang == 'he' else 'Behavior' }}</label><input class="form-control" name="intake_behavior_normal" value="{{ intake_form_data.get('behavior_normal', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות התנהגות' if lang == 'he' else 'Behavior Note' }}</label><input class="form-control" name="intake_behavior_note" value="{{ intake_form_data.get('behavior_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'דיבור' if lang == 'he' else 'Speech' }}</label><input class="form-control" name="intake_speech_style" value="{{ intake_form_data.get('speech_style', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות דיבור' if lang == 'he' else 'Speech Note' }}</label><input class="form-control" name="intake_speech_note" value="{{ intake_form_data.get('speech_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מצב רוח' if lang == 'he' else 'Mood' }}</label><input class="form-control" name="intake_mood" value="{{ intake_form_data.get('mood', '') }}"></div>
+                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מצב רוח' if lang == 'he' else 'Mood Note' }}</label><input class="form-control" name="intake_mood_note" value="{{ intake_form_data.get('mood_note', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט תואם' if lang == 'he' else 'Affect Congruent' }}</label><input class="form-control" name="intake_affect_match" value="{{ intake_form_data.get('affect_match', '') }}"></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט - מצב' if lang == 'he' else 'Affect State' }}</label><input class="form-control" name="intake_affect_state" value="{{ intake_form_data.get('affect_state', '') }}"></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'הערות אפקט' if lang == 'he' else 'Affect Note' }}</label><input class="form-control" name="intake_affect_note" value="{{ intake_form_data.get('affect_note', '') }}"></div>
+
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'חשיבה תקינה' if lang == 'he' else 'Thinking Normal' }}</label><input class="form-control" name="intake_thinking_normal" value="{{ intake_form_data.get('thinking_normal', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'קצב חשיבה' if lang == 'he' else 'Thinking Rate' }}</label><input class="form-control" name="intake_thinking_rate" value="{{ intake_form_data.get('thinking_rate', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'רצף חשיבה' if lang == 'he' else 'Thinking Sequence' }}</label><input class="form-control" name="intake_thinking_sequence" value="{{ intake_form_data.get('thinking_sequence', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תוכן חשיבה' if lang == 'he' else 'Thinking Content' }}</label><input class="form-control" name="intake_thinking_content" value="{{ intake_form_data.get('thinking_content', '') }}"></div>
+
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תפיסה תקינה' if lang == 'he' else 'Perception Normal' }}</label><input class="form-control" name="intake_perception_normal" value="{{ intake_form_data.get('perception_normal', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תפיסה לא תקינה' if lang == 'he' else 'Perception Abnormal' }}</label><input class="form-control" name="intake_perception_abnormal" value="{{ intake_form_data.get('perception_abnormal', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'בוחן מציאות' if lang == 'he' else 'Reality Testing' }}</label><input class="form-control" name="intake_reality_testing" value="{{ intake_form_data.get('reality_testing', '') }}"></div>
+                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'בוחן שיפוט' if lang == 'he' else 'Judgment' }}</label><input class="form-control" name="intake_judgment" value="{{ intake_form_data.get('judgment', '') }}"></div>
+
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'תובנה עצמית' if lang == 'he' else 'Self Insight' }}</label><input class="form-control" name="intake_self_insight" value="{{ intake_form_data.get('self_insight', '') }}"></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'התמצאות' if lang == 'he' else 'Orientation' }}</label><input class="form-control" name="intake_orientation" value="{{ intake_form_data.get('orientation', '') }}"></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'זיכרון' if lang == 'he' else 'Memory' }}</label><input class="form-control" name="intake_memory" value="{{ intake_form_data.get('memory', '') }}"></div>
+                                            </div>
+                                        </div>
+
+                                        <div class="tab-pane fade" id="intake-plan">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'הפניה' if lang == 'he' else 'Referral Target' }}</label>
+                                                    <input class="form-control" name="intake_referral_target" value="{{ intake_form_data.get('referral_target', '') }}" placeholder="{{ 'פסיכיאטר / פסיכולוג / עו״ס / מיון...' if lang == 'he' else 'Psychiatrist / psychologist / social worker / ER...' }}">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'הסכמת המטופל' if lang == 'he' else 'Patient Consent' }}</label>
+                                                    <input class="form-control" name="intake_patient_consent" value="{{ intake_form_data.get('patient_consent', '') }}">
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'פירוט מטרות ההפניה' if lang == 'he' else 'Referral Details and Goals' }}</label>
+                                                    <textarea class="form-control" rows="3" name="intake_referral_details">{{ intake_form_data.get('referral_details', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'גישה טיפולית' if lang == 'he' else 'Treatment Approach' }}</label>
+                                                    <input class="form-control" name="intake_treatment_approach" value="{{ intake_form_data.get('treatment_approach', '') }}" placeholder="Dynamic / CBT / Group ...">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'תדירות מפגשים' if lang == 'he' else 'Meeting Frequency' }}</label>
+                                                    <input class="form-control" name="intake_treatment_frequency" value="{{ intake_form_data.get('treatment_frequency', '') }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label fw-bold small">{{ 'זמן משוער לטיפול' if lang == 'he' else 'Estimated Duration' }}</label>
+                                                    <input class="form-control" name="intake_treatment_estimated_duration" value="{{ intake_form_data.get('treatment_estimated_duration', '') }}" placeholder="{{ 'חודש/3 חודשים/חצי שנה/שנה+' if lang == 'he' else '1m / 3m / 6m / 1y+' }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 d-flex justify-content-end">
+                                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                                            <i class="bi bi-save me-1"></i>{{ 'שמירת אינטייק' if lang == 'he' else 'Save Intake Form' }}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <div class="col-lg-5">
@@ -658,6 +909,20 @@ document.addEventListener('DOMContentLoaded', function() {
             syncActiveTabInputs();
         });
     });
+
+    const disabilityStatus = document.getElementById('intakeDisabilityStatus');
+    const disabilityPercent = document.getElementById('intakeDisabilityPercent');
+    if (disabilityStatus && disabilityPercent) {
+        const syncDisabilityPercent = () => {
+            const enabled = disabilityStatus.value === 'כן';
+            disabilityPercent.disabled = !enabled;
+            if (!enabled && disabilityPercent.value.trim() === '') {
+                disabilityPercent.placeholder = '';
+            }
+        };
+        disabilityStatus.addEventListener('change', syncDisabilityPercent);
+        syncDisabilityPercent();
+    }
 });
 </script>
 {% endblock %}

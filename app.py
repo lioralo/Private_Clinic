@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import socket
+import json
 from collections import Counter
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
@@ -733,6 +734,154 @@ def extract_recent_focus(notes):
     return ''
 
 
+def parse_intake_questionnaire(raw_value):
+    if not raw_value:
+        return {}
+    try:
+        parsed = json.loads(raw_value)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return {}
+
+
+def intake_form_fields():
+    return [
+        'meeting_location', 'meeting_time', 'meeting_duration', 'meeting_conductor',
+        'main_complaint', 'problem_history', 'early_anamnesis', 'referral_source', 'referral_date',
+        'family_status', 'guardian_status', 'guardian_by_whom', 'living_with', 'living_with_other',
+        'disability_status', 'disability_percent', 'self_harm_level', 'self_harm_recent', 'self_harm_count',
+        'forced_treatment', 'substance_use', 'medical_cannabis', 'alcohol_use',
+        'medical_conditions', 'psychiatric_conditions',
+        'appearance_fit', 'appearance_fit_note', 'appearance_ordered', 'appearance_ordered_note',
+        'cooperation', 'cooperation_note', 'eye_contact', 'eye_contact_note',
+        'behavior_normal', 'behavior_note', 'speech_style', 'speech_note',
+        'mood', 'mood_note', 'affect_match', 'affect_state', 'affect_note',
+        'thinking_normal', 'thinking_rate', 'thinking_sequence', 'thinking_content',
+        'perception_normal', 'perception_abnormal', 'reality_testing', 'judgment', 'self_insight',
+        'orientation', 'memory',
+        'referral_target', 'referral_details', 'patient_consent',
+        'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration'
+    ]
+
+
+def intake_data_from_request(form):
+    if not any(key.startswith('intake_') for key in form.keys()):
+        return None
+    data = {}
+    for key in intake_form_fields():
+        raw = form.get(f'intake_{key}', '')
+        data[key] = (raw or '').strip()
+    return data
+
+
+def serialize_intake_assessment(data):
+    main_complaint = data.get('main_complaint', '')
+    problem_history = data.get('problem_history', '')
+    early_anamnesis = data.get('early_anamnesis', '')
+    parts = []
+    if main_complaint:
+        parts.append(f"Main complaint:\n{main_complaint}")
+    if problem_history:
+        parts.append(f"Problem history / current illness:\n{problem_history}")
+    if early_anamnesis:
+        parts.append(f"Early anamnesis:\n{early_anamnesis}")
+    return '\n\n'.join(parts).strip()
+
+
+def add_intake_section_heading(doc, title):
+    heading = doc.add_paragraph()
+    heading.add_run(title).bold = True
+
+
+def add_intake_line(doc, label, value):
+    cleaned = (value or '').strip()
+    if not cleaned:
+        return
+    paragraph = doc.add_paragraph()
+    paragraph.add_run(f'{label}: ').bold = True
+    paragraph.add_run(cleaned)
+
+
+def build_intake_docx(patient_name, data):
+    doc = Document()
+    doc.add_heading(f'Intake Evaluation - {patient_name}', level=1)
+
+    add_intake_section_heading(doc, 'Preliminary Details')
+    add_intake_line(doc, 'Meeting location', data.get('meeting_location'))
+    add_intake_line(doc, 'Meeting time', data.get('meeting_time'))
+    add_intake_line(doc, 'Duration', data.get('meeting_duration'))
+    add_intake_line(doc, 'Conducted by', data.get('meeting_conductor'))
+
+    add_intake_section_heading(doc, 'Background / Referral Reason')
+    add_intake_line(doc, 'Main complaint', data.get('main_complaint'))
+    add_intake_line(doc, 'Problem history / current illness', data.get('problem_history'))
+    add_intake_line(doc, 'Early anamnesis', data.get('early_anamnesis'))
+    add_intake_line(doc, 'Referral source', data.get('referral_source'))
+    add_intake_line(doc, 'Referral date', data.get('referral_date'))
+
+    add_intake_section_heading(doc, 'Administrative Anamnesis')
+    add_intake_line(doc, 'Family status', data.get('family_status'))
+    add_intake_line(doc, 'Guardian status', data.get('guardian_status'))
+    add_intake_line(doc, 'Guardian details', data.get('guardian_by_whom'))
+    add_intake_line(doc, 'Living arrangement', data.get('living_with'))
+    add_intake_line(doc, 'Living arrangement (other)', data.get('living_with_other'))
+    add_intake_line(doc, 'Disability status', data.get('disability_status'))
+    add_intake_line(doc, 'Disability percent', data.get('disability_percent'))
+    add_intake_line(doc, 'Self-harm level', data.get('self_harm_level'))
+    add_intake_line(doc, 'Self-harm recent timing', data.get('self_harm_recent'))
+    add_intake_line(doc, 'Self-harm number of cases', data.get('self_harm_count'))
+    add_intake_line(doc, 'Forced treatment history', data.get('forced_treatment'))
+    add_intake_line(doc, 'Substance use', data.get('substance_use'))
+    add_intake_line(doc, 'Medical cannabis', data.get('medical_cannabis'))
+    add_intake_line(doc, 'Alcohol use', data.get('alcohol_use'))
+
+    add_intake_section_heading(doc, 'Medical Anamnesis')
+    add_intake_line(doc, 'Medical background conditions', data.get('medical_conditions'))
+    add_intake_line(doc, 'Psychiatric conditions and history', data.get('psychiatric_conditions'))
+
+    add_intake_section_heading(doc, 'Mental Status')
+    add_intake_line(doc, 'Appearance - fit', data.get('appearance_fit'))
+    add_intake_line(doc, 'Appearance - fit note', data.get('appearance_fit_note'))
+    add_intake_line(doc, 'Appearance - ordered', data.get('appearance_ordered'))
+    add_intake_line(doc, 'Appearance - ordered note', data.get('appearance_ordered_note'))
+    add_intake_line(doc, 'Cooperation', data.get('cooperation'))
+    add_intake_line(doc, 'Cooperation note', data.get('cooperation_note'))
+    add_intake_line(doc, 'Eye contact', data.get('eye_contact'))
+    add_intake_line(doc, 'Eye contact note', data.get('eye_contact_note'))
+    add_intake_line(doc, 'Behavior', data.get('behavior_normal'))
+    add_intake_line(doc, 'Behavior note', data.get('behavior_note'))
+    add_intake_line(doc, 'Speech', data.get('speech_style'))
+    add_intake_line(doc, 'Speech note', data.get('speech_note'))
+    add_intake_line(doc, 'Mood', data.get('mood'))
+    add_intake_line(doc, 'Mood note', data.get('mood_note'))
+    add_intake_line(doc, 'Affect congruence', data.get('affect_match'))
+    add_intake_line(doc, 'Affect state', data.get('affect_state'))
+    add_intake_line(doc, 'Affect note', data.get('affect_note'))
+    add_intake_line(doc, 'Thinking normal', data.get('thinking_normal'))
+    add_intake_line(doc, 'Thinking rate', data.get('thinking_rate'))
+    add_intake_line(doc, 'Thinking sequence', data.get('thinking_sequence'))
+    add_intake_line(doc, 'Thinking content', data.get('thinking_content'))
+    add_intake_line(doc, 'Perception normal', data.get('perception_normal'))
+    add_intake_line(doc, 'Perception abnormal type', data.get('perception_abnormal'))
+    add_intake_line(doc, 'Reality testing', data.get('reality_testing'))
+    add_intake_line(doc, 'Judgment', data.get('judgment'))
+    add_intake_line(doc, 'Self insight', data.get('self_insight'))
+    add_intake_line(doc, 'Orientation', data.get('orientation'))
+    add_intake_line(doc, 'Memory', data.get('memory'))
+
+    add_intake_section_heading(doc, 'Treatment Decisions')
+    add_intake_line(doc, 'Referral target', data.get('referral_target'))
+    add_intake_line(doc, 'Referral details', data.get('referral_details'))
+    add_intake_line(doc, 'Patient consent', data.get('patient_consent'))
+    add_intake_line(doc, 'Treatment approach', data.get('treatment_approach'))
+    add_intake_line(doc, 'Meeting frequency', data.get('treatment_frequency'))
+    add_intake_line(doc, 'Estimated treatment duration', data.get('treatment_estimated_duration'))
+
+    return doc
+
+
 def build_patient_background_from_notes(db, patient_id, patient_name=None):
     if patient_name is None:
         patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
@@ -1085,6 +1234,7 @@ def patient_detail(patient_id):
 
     active_tab = request.args.get('tab', 'info')
     latest_note = notes[0] if notes else None
+    intake_form_data = parse_intake_questionnaire(patient['intake_questionnaire'])
     next_session_row = db.execute('''
         SELECT COALESCE(MAX(CAST(COALESCE(session_number, '0') AS INTEGER)), 0) AS max_session
         FROM notes
@@ -1093,7 +1243,7 @@ def patient_detail(patient_id):
     suggested_session_number = int(next_session_row['max_session'] or 0) + 1
     suggested_note_date = datetime.now().date().isoformat()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data)
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):
@@ -2743,15 +2893,57 @@ def update_patient_info(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    background = request.form.get('background', '')
-    treatment_info = request.form.get('treatment_info', '')
+    background = request.form.get('background')
+    treatment_info = request.form.get('treatment_info')
+    intake_data = intake_data_from_request(request.form)
+    serialized_intake = json.dumps(intake_data, ensure_ascii=False, indent=2) if intake_data is not None else None
+    serialized_assessment = serialize_intake_assessment(intake_data) if intake_data is not None else None
 
     db = get_db()
-    db.execute('UPDATE patients SET background = ?, treatment_info = ? WHERE id = ?',
-               (background, treatment_info, patient_id))
+    if background is None or treatment_info is None:
+        existing = db.execute('SELECT background, treatment_info FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if existing is not None:
+            if background is None:
+                background = existing['background'] or ''
+            if treatment_info is None:
+                treatment_info = existing['treatment_info'] or ''
+    background = background or ''
+    treatment_info = treatment_info or ''
+
+    if intake_data is None:
+        db.execute('UPDATE patients SET background = ?, treatment_info = ? WHERE id = ?',
+                   (background, treatment_info, patient_id))
+    else:
+        db.execute('''
+            UPDATE patients
+            SET background = ?, treatment_info = ?, intake_assessment = ?, intake_questionnaire = ?
+            WHERE id = ?
+        ''', (background, treatment_info, serialized_assessment or None, serialized_intake or None, patient_id))
     db.commit()
     flash('Patient information updated.')
     return redirect_to_patient_tab(patient_id, 'info')
+
+
+@app.route('/patient/<int:patient_id>/intake_docx', methods=('GET',))
+@login_required
+def export_patient_intake_docx(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    patient = db.execute('SELECT id, name, intake_questionnaire FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient is None:
+        return "Patient not found", 404
+
+    intake_data = parse_intake_questionnaire(patient['intake_questionnaire'])
+    if not intake_data:
+        flash('No intake form data found for export.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    document = build_intake_docx(patient['name'], intake_data)
+    temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'intake_{patient_id}.docx')
+    document.save(temp_path)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], f'intake_{patient_id}.docx', as_attachment=True)
 
 
 @app.route('/patient/<int:patient_id>/generate_background', methods=('POST',))
