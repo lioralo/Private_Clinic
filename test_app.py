@@ -34,6 +34,39 @@ class ClinicTestCase(unittest.TestCase):
     def logout(self):
         return self.client.get('/logout', follow_redirects=True)
 
+    def next_allowed_booking_slot(self, preferred_times=None):
+        allowed_by_day = {
+            0: ['14:00'],
+            1: ['09:00', '12:30'],
+            4: ['10:00', '19:00'],
+        }
+        day = datetime.now().date() + timedelta(days=1)
+        for _ in range(21):
+            day_code = (day.weekday() + 1) % 7
+            times = allowed_by_day.get(day_code, [])
+            if times:
+                if preferred_times:
+                    for preferred in preferred_times:
+                        if preferred in times:
+                            return day.isoformat(), preferred
+                return day.isoformat(), times[0]
+            day += timedelta(days=1)
+        raise AssertionError('Could not find allowed booking slot in the next 3 weeks')
+
+    def next_allowed_day_with_two_slots(self):
+        allowed_by_day = {
+            1: ['09:00', '12:30'],
+            4: ['10:00', '11:00'],
+        }
+        day = datetime.now().date() + timedelta(days=1)
+        for _ in range(21):
+            day_code = (day.weekday() + 1) % 7
+            times = allowed_by_day.get(day_code, [])
+            if len(times) >= 2:
+                return day.isoformat(), times[0], times[1]
+            day += timedelta(days=1)
+        raise AssertionError('Could not find allowed day with two booking slots in the next 3 weeks')
+
     def test_login_logout(self):
         rv = self.login('admin', 'admin')
         assert b'Log out' in rv.data or b'Logout' in rv.data
@@ -289,14 +322,11 @@ class ClinicTestCase(unittest.TestCase):
         self.logout()
         self.login('selfbook', 'password123')
 
-        day = datetime.now().date() + timedelta(days=1)
-        while ((day.weekday() + 1) % 7) in (5, 6):
-            day += timedelta(days=1)
-        booking_date = day.isoformat()
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
 
         rv = self.client.post('/api/calendar/book', data=dict(
             date=booking_date,
-            time='10:00',
+            time=booking_time,
             duration_minutes='60',
             meeting_type='in-person'
         ))
@@ -323,16 +353,17 @@ class ClinicTestCase(unittest.TestCase):
             intake_questionnaire='Initial questionnaire text'
         ), follow_redirects=True)
 
-        day = datetime.now().date() + timedelta(days=1)
-        while ((day.weekday() + 1) % 7) in (5, 6):
-            day += timedelta(days=1)
-        booking_date = day.isoformat()
+        booking_date, first_time, second_time = self.next_allowed_day_with_two_slots()
+
+        def add_hour(time_text):
+            dt = datetime.strptime(time_text, '%H:%M') + timedelta(hours=1)
+            return dt.strftime('%H:%M')
 
         rv1 = self.client.post('/api/calendar/book', data=dict(
             patient_id='1',
             date=booking_date,
-            time='09:00',
-            end_time='10:00',
+            time=first_time,
+            end_time=add_hour(first_time),
             meeting_type='in-person'
         ))
         assert rv1.status_code == 200
@@ -341,8 +372,8 @@ class ClinicTestCase(unittest.TestCase):
         rv2 = self.client.post('/api/calendar/book', data=dict(
             patient_id='1',
             date=booking_date,
-            time='11:00',
-            end_time='12:00',
+            time=second_time,
+            end_time=add_hour(second_time),
             meeting_type='in-person'
         ))
         assert rv2.status_code == 200
@@ -357,7 +388,7 @@ class ClinicTestCase(unittest.TestCase):
                 ORDER BY id ASC
             ''').fetchall()
             assert len(rows) == 1
-            assert rows[0]['appointment_time'] == '11:00'
+            assert rows[0]['appointment_time'] == second_time
             assert int(rows[0]['is_recurring'] or 0) == 0
 
 if __name__ == '__main__':

@@ -2,6 +2,49 @@
 
 ---
 
+## Session 13 — March 12, 2026 (Refinement Pass: Status Colors, Collapsed Filters, Admin Name, Strict Calendar Windows)
+
+### Overview
+Applied a focused refinement pass to align UI behavior with requested semantics, tighten scheduling availability windows, and fix admin identity rendering.
+
+### 1. Status-Driven Card Semantics (Main + CRM)
+- Removed visible status badges (`Ongoing`, `Candidate`, etc.) from card headers.
+- Switched card backgrounds to **status-based color coding**:
+  - ongoing = green
+  - candidate/intake = yellow
+  - waiting = blue
+  - archived/other = gray
+- `initial-intake` now behaves like a **status-level candidate visual state** (instead of a separate type badge in card header).
+
+### 2. Type Badge Placement Simplification
+- Kept only a compact type badge at the end of the ID row.
+- Residency remains explicitly tagged as `Residency`.
+- All non-residency patients are shown as `Private` for display consistency.
+
+### 3. CRM Filter UX Compact Mode
+- Moved CRM search/type/sort controls into a **collapsed panel**.
+- Added a funnel icon toggle button to open/close filters.
+- Removed `initial-intake` from type filter options to keep intake behavior status-centric.
+
+### 4. Admin Display Name in Navbar
+- Updated authenticated user model loading so `display_name` is available on `current_user`.
+- Navbar now renders `display_name` with username fallback.
+- Profile updates are now immediately reflected in the top-right identity button.
+
+### 5. Calendar Availability Restricted to Explicit Windows
+- Replaced broad workday slot generation with explicit allowed windows:
+  - Sunday: 14:00–15:00
+  - Monday: 09:00–10:00, 12:30–13:30
+  - Thursday: 10:00–15:00, 19:00–20:00
+  - Tuesday/Wednesday: no availability
+- Availability slots continue to honor overlap checks against existing appointments and blocks.
+
+### 6. Test Alignment and Verification
+- Updated booking-related tests to select valid allowed slots dynamically under the new window rules.
+- `python test_app.py` passed (`16` tests).
+
+---
+
 ## Session 12 — March 12, 2026 (Intake Workflow, CRM Filters, Messaging, Admin Profile, Backup Security)
 
 ### Overview

@@ -76,7 +76,7 @@
                             <a class="btn btn-outline-light btn-sm rounded-pill" href="{{ url_for('admin_profile') }}">
                                 <i class="bi bi-person-circle me-1"></i>
                                 <i class="bi bi-crown-fill text-warning me-1"></i>
-                                {{ current_user.username }}
+                                {{ current_user.display_name or current_user.username }}
                             </a>
                             {% else %}
                             <span class="nav-link text-white-50 small">

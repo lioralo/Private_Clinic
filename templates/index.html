@@ -30,32 +30,13 @@
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
     {% for patient in patients %}
         <div class="col">
-            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'residency' %}patient-type-residency{% elif patient['patient_type'] == 'initial-intake' %}patient-type-intake{% else %}patient-type-private{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' else 'info') }}">
+            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' else 'info') }}">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
-                        <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-                        <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] and patient['has_recurring'] %}bg-info text-white{% else %}bg-secondary{% endif %}">
-
-                            {% if patient['status'] in ['candidate', 'waiting for scheduling', 'waiting'] %}
-                                {% if patient['status'] == 'candidate' %}
-                                    {{ t('Candidate') }}
-                                {% elif patient['has_recurring'] %}
-                                    {{ t('Waiting') }} - {{ t('Scheduled') }}
-                                {% else %}
-                                    {{ t('Waiting') }}
-                                {% endif %}
-                            {% else %}
-                                {{ t(patient['status']|capitalize) }}
-                            {% endif %}
-
-                        </span>
-                        {% if patient['patient_type'] == 'initial-intake' %}
-                            <span class="badge bg-warning text-dark" style="font-size:0.7em;"><i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake</span>
-                        {% endif %}
-                        </div>
+                        <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end"></div>
                     </div>
                     <h5 class="card-title fw-bold mb-1">
                         {{ patient['name'] }}
@@ -63,7 +44,16 @@
                             <i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="{{ t('Missing Recurring Appointment') }}"></i>
                         {% endif %}
                     </h5>
-                    <p class="text-muted small mb-3">{{ t('ID:') }} #{{ patient['id'] }}</p>
+                    <p class="text-muted small mb-3 d-flex justify-content-between align-items-center w-100">
+                        <span>{{ t('ID:') }} #{{ patient['id'] }}</span>
+                        <span>
+                        {% if patient['patient_type'] == 'residency' %}
+                            <span class="badge" style="background:#5b21b6;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
+                        {% else %}
+                            <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>Private</span>
+                        {% endif %}
+                        </span>
+                    </p>
                     
                     <div class="mb-4">
                         {% if patient['email'] %}
@@ -78,11 +68,6 @@
                         {% endif %}
                     </div>
                     
-                    {% if patient['patient_type'] == 'residency' %}
-                        <span class="badge" style="background:#5b21b6;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
-                    {% elif patient['patient_type'] == 'private' or not patient['patient_type'] %}
-                        <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>Private</span>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -110,21 +95,26 @@
     cursor: pointer;
 }
 
-.patient-card.patient-type-private {
-    background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
+.patient-card.patient-status-ongoing {
+    background: linear-gradient(135deg, #dcfce7 0%, #86efac 100%);
 }
 
-.patient-card.patient-type-residency {
-    background: linear-gradient(135deg, #e9d5ff 0%, #c4b5fd 100%);
+.patient-card.patient-status-candidate {
+    background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
 }
 
-.patient-card.patient-type-intake {
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+.patient-card.patient-status-waiting {
+    background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
 }
 
-.patient-card.patient-type-private .text-muted,
-.patient-card.patient-type-residency .text-muted,
-.patient-card.patient-type-intake .text-muted {
+.patient-card.patient-status-archived {
+    background: linear-gradient(135deg, #e5e7eb 0%, #cbd5e1 100%);
+}
+
+.patient-card.patient-status-ongoing .text-muted,
+.patient-card.patient-status-candidate .text-muted,
+.patient-card.patient-status-waiting .text-muted,
+.patient-card.patient-status-archived .text-muted {
     color: #334155 !important;
 }
 </style>

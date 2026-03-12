@@ -9,3 +9,4 @@ venv/
 *.db
 static/uploads/
 *.log
+secure_backups/

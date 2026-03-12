@@ -297,18 +297,19 @@ def routine_backup_guard():
         pass
 
 class User(UserMixin):
-    def __init__(self, id, username, role, patient_id=None):
+    def __init__(self, id, username, role, patient_id=None, display_name=None):
         self.id = id
         self.username = username
         self.role = role
         self.patient_id = patient_id
+        self.display_name = display_name or username
 
 @login_manager.user_loader
 def load_user(user_id):
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     if user:
-        return User(user['id'], user['username'], user['role'], user['patient_id'])
+        return User(user['id'], user['username'], user['role'], user['patient_id'], user['display_name'])
     return None
 
 def get_db():
@@ -1412,6 +1413,26 @@ def daterange(start_date, end_date):
         current += timedelta(days=1)
 
 
+def calendar_allowed_windows(day_code):
+    # 0=Sunday ... 6=Saturday
+    # Requested clinic availability:
+    # Sunday: 14:00-15:00
+    # Monday: 09:00-10:00, 12:30-13:30
+    # Tuesday: fully blocked
+    # Wednesday: fully blocked
+    # Thursday: 10:00-15:00, 19:00-20:00
+    # Friday/Saturday: no regular slots
+    if day_code == 0:
+        return [('14:00', '15:00')]
+    if day_code == 1:
+        return [('09:00', '10:00'), ('12:30', '13:30')]
+    if day_code in (2, 3):
+        return []
+    if day_code == 4:
+        return [('10:00', '15:00'), ('19:00', '20:00')]
+    return []
+
+
 def parse_recurrence_days(appt):
     raw = (appt['recurrence_days'] or '').strip()
     if raw:
@@ -1639,27 +1660,28 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'type': block_type
             })
 
-    # Available slots for patient self-booking or admin quick scheduling (workdays Sun-Thu, 08:00-20:00).
+    # Available slots are restricted to explicit allowed windows.
     available_slots = []
     for day in daterange(week_start, week_end):
         day_code = custom_weekday(day)
-        if day_code in (5, 6):
+        day_windows = calendar_allowed_windows(day_code)
+        if not day_windows:
             continue
 
-        for half_hour_index in range(24):
-            slot_hour = 8 + (half_hour_index // 2)
-            slot_minute = 30 if (half_hour_index % 2) else 0
-            start_dt = datetime.combine(day, datetime.strptime(f'{slot_hour:02d}:{slot_minute:02d}', '%H:%M').time())
-            end_dt = start_dt + timedelta(minutes=60)
+        for start_text, end_text in day_windows:
+            window_start = datetime.combine(day, datetime.strptime(start_text, '%H:%M').time())
+            window_end = datetime.combine(day, datetime.strptime(end_text, '%H:%M').time())
 
-            if any(overlaps(start_dt, end_dt, occ_start, occ_end) for occ_start, occ_end in occupied):
-                continue
-
-            available_slots.append({
-                'date': day.isoformat(),
-                'time': start_dt.strftime('%H:%M'),
-                'duration_minutes': 60
-            })
+            slot_start = window_start
+            while slot_start + timedelta(minutes=60) <= window_end:
+                slot_end = slot_start + timedelta(minutes=60)
+                if not any(overlaps(slot_start, slot_end, occ_start, occ_end) for occ_start, occ_end in occupied):
+                    available_slots.append({
+                        'date': day.isoformat(),
+                        'time': slot_start.strftime('%H:%M'),
+                        'duration_minutes': 60
+                    })
+                slot_start += timedelta(minutes=30)
 
     return {
         'week_start': week_start.isoformat(),
@@ -1866,7 +1888,11 @@ def api_calendar_book():
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
     week_start = anchor - timedelta(days=custom_weekday(anchor))
-    snapshot = build_week_calendar_snapshot(db, week_start, current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id))
+    snapshot = build_week_calendar_snapshot(
+        db,
+        week_start,
+        current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id, current_user.display_name)
+    )
     is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
     if not is_available:
         return jsonify({'status': 'error', 'message': 'Selected slot is not available.'}), 409
