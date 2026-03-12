@@ -3,6 +3,7 @@ import sqlite3
 import socket
 import json
 from collections import Counter
+from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -19,6 +20,8 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 csrf = CSRFProtect(app)
 DATABASE = 'clinic.db'
+BACKUP_DIR = 'secure_backups'
+BACKUP_INTERVAL_HOURS = 12
 
 @app.template_filter('rjust')
 def rjust_filter(s, width, fillchar=' '):
@@ -280,6 +283,19 @@ def set_lang(lang):
         session['lang'] = lang
     return redirect(request.referrer or url_for('index'))
 
+
+@app.before_request
+def routine_backup_guard():
+    if request.path.startswith('/static/'):
+        return
+    if app.config.get('TESTING'):
+        return
+    try:
+        perform_routine_encrypted_backup(app.config.get('DATABASE', DATABASE))
+    except Exception:
+        # Keep requests alive even if backup fails.
+        pass
+
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None):
         self.id = id
@@ -308,6 +324,64 @@ def close_connection(exception):
     db = getattr(g, '_database', None)
     if db is not None:
         db.close()
+
+
+def _get_or_create_backup_key():
+    key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
+    if key:
+        return key.encode('utf-8')
+
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+    key_path = backup_root / '.backup.key'
+    if key_path.exists():
+        return key_path.read_bytes().strip()
+
+    from cryptography.fernet import Fernet
+    generated = Fernet.generate_key()
+    key_path.write_bytes(generated)
+    return generated
+
+
+def perform_encrypted_backup(db_path):
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    raw_backup_path = backup_root / f'clinic_{timestamp}.db'
+    encrypted_path = backup_root / f'clinic_{timestamp}.db.enc'
+
+    src = sqlite3.connect(db_path)
+    dst = sqlite3.connect(raw_backup_path)
+    with dst:
+        src.backup(dst)
+    src.close()
+    dst.close()
+
+    from cryptography.fernet import Fernet
+    cipher = Fernet(_get_or_create_backup_key())
+    encrypted_path.write_bytes(cipher.encrypt(raw_backup_path.read_bytes()))
+    raw_backup_path.unlink(missing_ok=True)
+    return str(encrypted_path)
+
+
+def perform_routine_encrypted_backup(db_path):
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+    marker = backup_root / '.last_backup_at'
+
+    now = datetime.now()
+    if marker.exists():
+        try:
+            last_run = datetime.fromisoformat(marker.read_text().strip())
+            if now - last_run < timedelta(hours=BACKUP_INTERVAL_HOURS):
+                return None
+        except ValueError:
+            pass
+
+    encrypted_path = perform_encrypted_backup(db_path)
+    marker.write_text(now.isoformat())
+    return encrypted_path
 
 def init_db():
 
@@ -490,6 +564,22 @@ def init_db():
             db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
         except sqlite3.OperationalError:
             pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN email TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
+        except sqlite3.OperationalError:
+            pass
 
         try:
             db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
@@ -536,7 +626,17 @@ def init_db():
             db.commit()
             print("Admin user created (username: admin, password: admin).")
 
+        if admin and not admin['display_name']:
+            db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
+            db.commit()
+
         print(f"Initialized the database at {database}.")
+
+        if not app.config.get('TESTING'):
+            try:
+                perform_routine_encrypted_backup(database)
+            except Exception as backup_error:
+                print(f"Routine backup skipped: {backup_error}")
 
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -939,35 +1039,50 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     return ' '.join(part.strip() for part in parts if part).strip()
 
 
-def fetch_patients_by_status(db, status):
-    if status == 'all':
-        return db.execute('''
-            SELECT p.*,
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p
-            WHERE COALESCE(p.is_deleted, 0) = 0
-            ORDER BY
-                CASE
-                    WHEN p.status = 'ongoing' THEN 0
-                    WHEN p.status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1
-                    WHEN p.status = 'archived' THEN 2
-                    ELSE 3
-                END ASC,
-                p.created_at DESC
-        ''').fetchall()
-    if status in ['candidate', 'waiting for scheduling', 'waiting']:
-        return db.execute('''
-            SELECT p.*,
-            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p
-            WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
-              AND COALESCE(p.is_deleted, 0) = 0
-        ''').fetchall()
-    return db.execute('''
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority'):
+    base_query = '''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-        FROM patients p WHERE status = ? AND COALESCE(p.is_deleted, 0) = 0
-    ''', (status,)).fetchall()
+        FROM patients p
+        WHERE COALESCE(p.is_deleted, 0) = 0
+    '''
+
+    params = []
+
+    if status in ['candidate', 'waiting for scheduling', 'waiting']:
+        base_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
+    elif status != 'all':
+        base_query += ' AND p.status = ?'
+        params.append(status)
+
+    if patient_type in ('private', 'residency', 'initial-intake'):
+        base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
+        params.append(patient_type)
+
+    if search_query:
+        base_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, \"\")) LIKE ? OR LOWER(COALESCE(p.phone, \"\")) LIKE ?)'
+        like_value = f"%{search_query.lower()}%"
+        params.extend([like_value, like_value, like_value])
+
+    order_map = {
+        'name_asc': 'p.name ASC',
+        'name_desc': 'p.name DESC',
+        'newest': 'p.created_at DESC',
+        'oldest': 'p.created_at ASC',
+        'status_priority': '''
+            CASE
+                WHEN p.status = 'ongoing' THEN 0
+                WHEN p.status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1
+                WHEN p.status = 'archived' THEN 2
+                ELSE 3
+            END ASC,
+            p.created_at DESC
+        '''
+    }
+    order_clause = order_map.get(sort_by, order_map['status_priority'])
+
+    final_query = f"{base_query} ORDER BY {order_clause}"
+    return db.execute(final_query, tuple(params)).fetchall()
 
 
 @app.route('/crm')
@@ -978,14 +1093,19 @@ def crm_dashboard():
 
     db = get_db()
     status = request.args.get('status', 'all')
-    patients = fetch_patients_by_status(db, status)
+    patient_type = request.args.get('patient_type', 'all')
+    search_query = request.args.get('q', '').strip()
+    sort_by = request.args.get('sort', 'status_priority')
+
+    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by)
     counts = {
         'all': db.execute('SELECT COUNT(*) AS c FROM patients WHERE COALESCE(is_deleted, 0) = 0').fetchone()['c'],
         'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing' AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
         'candidate_waiting': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status IN ('candidate', 'waiting for scheduling', 'waiting') AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
         'archived': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'archived' AND COALESCE(is_deleted, 0) = 0").fetchone()['c']
     }
-    return render_template('crm.html', patients=patients, status=status, counts=counts)
+    return render_template('crm.html', patients=patients, status=status, counts=counts,
+                           patient_type=patient_type, search_query=search_query, sort_by=sort_by)
 
 @app.route('/patient/home')
 @login_required
@@ -2707,6 +2827,51 @@ def contact_admin():
         flash('Message sent to your therapist.')
 
     return redirect(url_for('patient_home'))
+
+
+@app.route('/admin/profile', methods=['GET', 'POST'])
+@login_required
+def admin_profile():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if admin is None:
+        return "Admin not found", 404
+
+    if request.method == 'POST':
+        display_name = (request.form.get('display_name') or '').strip() or admin['username']
+        email = (request.form.get('email') or '').strip() or None
+        phone = (request.form.get('phone') or '').strip() or None
+        id_number = (request.form.get('id_number') or '').strip() or None
+        birth_date = request.form.get('birth_date') or None
+
+        db.execute('''
+            UPDATE users
+            SET display_name = ?, email = ?, phone = ?, id_number = ?, birth_date = ?
+            WHERE id = ?
+        ''', (display_name, email, phone, id_number, birth_date, current_user.id))
+        db.commit()
+        flash('Admin profile updated.')
+        return redirect(url_for('admin_profile'))
+
+    return render_template('admin_profile.html', admin=admin)
+
+
+@app.route('/admin/backup_now', methods=['POST'])
+@login_required
+def backup_now():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    database = app.config.get('DATABASE', DATABASE)
+    try:
+        backup_path = perform_encrypted_backup(database)
+        flash(f'Encrypted backup created: {backup_path}')
+    except Exception as exc:
+        flash(f'Backup failed: {exc}')
+    return redirect(url_for('admin_profile'))
 
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
 @login_required

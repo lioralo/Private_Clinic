@@ -52,8 +52,13 @@ CREATE TABLE IF NOT EXISTS receipts (
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
+    display_name TEXT,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('admin', 'patient')),
+    email TEXT,
+    phone TEXT,
+    id_number TEXT,
+    birth_date DATE,
     patient_id INTEGER,
     is_active BOOLEAN DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

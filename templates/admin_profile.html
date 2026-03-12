@@ -1,0 +1,52 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-person-gear me-2"></i>Admin Profile</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Display Name</label>
+                            <input class="form-control" name="display_name" value="{{ admin['display_name'] or admin['username'] }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Username</label>
+                            <input class="form-control" value="{{ admin['username'] }}" disabled>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Email</label>
+                            <input type="email" class="form-control" name="email" value="{{ admin['email'] or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Phone</label>
+                            <input class="form-control" name="phone" value="{{ admin['phone'] or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">ID Number</label>
+                            <input class="form-control" name="id_number" value="{{ admin['id_number'] or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Date of Birth</label>
+                            <input type="date" class="form-control" name="birth_date" value="{{ admin['birth_date'] or '' }}">
+                        </div>
+                        <div class="col-12 pt-2">
+                            <button class="btn btn-primary rounded-pill px-4" type="submit">
+                                <i class="bi bi-save me-1"></i>Save Profile
+                            </button>
+                            <button class="btn btn-outline-secondary rounded-pill px-4 ms-2" type="submit" formaction="{{ url_for('backup_now') }}" formmethod="post">
+                                <i class="bi bi-shield-lock me-1"></i>Create Encrypted Backup
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

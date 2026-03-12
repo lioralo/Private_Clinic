@@ -2,6 +2,61 @@
 
 ---
 
+## Session 12 — March 12, 2026 (Intake Workflow, CRM Filters, Messaging, Admin Profile, Backup Security)
+
+### Overview
+Implemented a broad UX and workflow update across intake handling, CRM filtering/sorting, chat usability, top navigation cleanup, admin identity management, and encrypted backup reliability.
+
+### 1. Intake Workflow Integration
+- Added a dedicated **Intake Evaluation** main tab in patient profile for `initial-intake` patients.
+- Intake form is now presented as its own top-level tab alongside Summary, Treatment Log, Billing, and Messages.
+- For intake patients, default tab now opens Intake directly.
+- Quick Actions replaced Treatment Log shortcut with an Intake Form shortcut for intake patients.
+
+### 2. CRM and Main Card Experience
+- Added CRM controls for:
+  - free-text search (`name/email/phone`)
+  - patient type filter (`private`, `residency`, `initial-intake`)
+  - sorting (status priority, name A-Z/Z-A, newest/oldest)
+- Updated patient cards to use full background coloring by patient type.
+- Added clear patient-type tags (Private/Residency and Intake badge).
+- Removed redundant View Profile buttons from card grids and kept full-card click navigation.
+- Intake cards now navigate directly to the intake tab.
+
+### 3. Top Navigation Cleanup
+- Removed redundant top blue-bar links for Ongoing / Candidates & Waiting / Archived.
+- Kept primary action buttons (Add Patient, Resources, Calendar).
+
+### 4. Admin Identity and Profile Management
+- Added admin profile page (`/admin/profile`) with editable fields:
+  - display name
+  - email
+  - phone
+  - id number
+  - date of birth
+- Navbar admin identity is now a button with a **crown icon** linking to profile settings.
+- Added user schema support and migration coverage for new profile fields.
+
+### 5. Messaging Improvements (Admin)
+- Enhanced message drawer to support contacting patients even with no prior thread.
+- Added recipient search and filtering in the chat drawer by:
+  - patient name/user text
+  - patient type
+  - patient status
+- Backend API now returns patient type metadata and supports query filtering.
+
+### 6. Encrypted Backup and Data Safety
+- Added encrypted backup support with `cryptography` (Fernet):
+  - encrypted `.db.enc` backup artifacts
+  - periodic routine backup guard
+  - manual backup trigger endpoint (`/admin/backup_now`)
+- Added `cryptography` to `requirements.txt`.
+
+### Verification
+- `python test_app.py` passed (`16` tests).
+
+---
+
 ## Session 11 — March 11, 2026 (Special Booking Flow, CRM Views, Hebrew Coverage)
 
 ### Overview

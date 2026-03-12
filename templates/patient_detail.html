@@ -39,6 +39,11 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
             </li>
+            {% if patient['patient_type'] == 'initial-intake' %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="intake-tab" data-bs-toggle="tab" data-bs-target="#intake" type="button" role="tab" aria-controls="intake" aria-selected="false"><i class="bi bi-clipboard2-pulse me-2"></i>{{ 'Intake Evaluation' if lang == 'en' else 'הערכת אינטייק' }}</button>
+            </li>
+            {% endif %}
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes" type="button" role="tab" aria-controls="notes" aria-selected="false"><i class="bi bi-journal-text me-2"></i>{{ t('Treatment Log') }}</button>
             </li>
@@ -55,7 +60,7 @@
             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
                 <div class="row">
                     <div class="col-lg-7">
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                        <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeFormBlock">
                             <div class="card-body p-4 bg-light bg-opacity-10">
                                 <div class="row g-4">
                                     <div class="col-md-6">
@@ -650,6 +655,12 @@
                 </div>
             </div>
 
+            {% if patient['patient_type'] == 'initial-intake' %}
+            <div class="tab-pane fade" id="intake" role="tabpanel" aria-labelledby="intake-tab">
+                <div id="intakeFormHost"></div>
+            </div>
+            {% endif %}
+
             <!-- TREATMENT LOG TAB -->
             <div class="tab-pane fade" id="notes" role="tabpanel" aria-labelledby="notes-tab">
                 <div class="card mb-4 border-0 shadow-sm rounded-4">
@@ -941,9 +952,11 @@
                 <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
                     <i class="bi bi-download me-1"></i>{{ t('Export History') }}
                 </a>
-                <button class="btn btn-sm btn-outline-info rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#notes">
-                    <i class="bi bi-journal-text me-1"></i>{{ t('Treatment Log') }}
+                {% if patient['patient_type'] == 'initial-intake' %}
+                <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#intake">
+                    <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
                 </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -1072,7 +1085,16 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tabs = document.querySelectorAll('#patientTabs button[data-bs-toggle="tab"]');
-    const initialTab = '{{ active_tab or "info" }}';
+    const intakeFormBlock = document.getElementById('intakeFormBlock');
+    const intakeFormHost = document.getElementById('intakeFormHost');
+    if (intakeFormBlock && intakeFormHost) {
+        intakeFormHost.appendChild(intakeFormBlock);
+    }
+
+    let initialTab = '{{ active_tab or "info" }}';
+    if (initialTab === 'info' && '{{ patient["patient_type"] }}' === 'initial-intake') {
+        initialTab = 'intake';
+    }
     const requestedTabButton = document.querySelector(`#${initialTab}-tab`);
     if (requestedTabButton) {
         bootstrap.Tab.getOrCreateInstance(requestedTabButton).show();

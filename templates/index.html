@@ -30,7 +30,7 @@
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
     {% for patient in patients %}
         <div class="col">
-            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable" data-href="{{ url_for('patient_detail', patient_id=patient['id']) }}">
+            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'residency' %}patient-type-residency{% elif patient['patient_type'] == 'initial-intake' %}patient-type-intake{% else %}patient-type-private{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' else 'info') }}">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
@@ -78,9 +78,11 @@
                         {% endif %}
                     </div>
                     
-                    <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold">
-                        {{ t('View Profile') }}
-                    </a>
+                    {% if patient['patient_type'] == 'residency' %}
+                        <span class="badge" style="background:#5b21b6;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
+                    {% elif patient['patient_type'] == 'private' or not patient['patient_type'] %}
+                        <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>Private</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -106,6 +108,24 @@
 
 .patient-card-clickable {
     cursor: pointer;
+}
+
+.patient-card.patient-type-private {
+    background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
+}
+
+.patient-card.patient-type-residency {
+    background: linear-gradient(135deg, #e9d5ff 0%, #c4b5fd 100%);
+}
+
+.patient-card.patient-type-intake {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+}
+
+.patient-card.patient-type-private .text-muted,
+.patient-card.patient-type-residency .text-muted,
+.patient-card.patient-type-intake .text-muted {
+    color: #334155 !important;
 }
 </style>
 <!-- Notification Toast Container -->

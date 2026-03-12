@@ -34,15 +34,6 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='ongoing') }}">{{ t('Ongoing') }}</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='candidate') }}">{{ t('Candidates & Waiting') }}</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('crm_dashboard', status='archived') }}">{{ t('Archived') }}</a>
-                        </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
                                 <i class="bi bi-person-plus-fill me-1"></i> {{ t('Add Patient') }}
@@ -81,9 +72,17 @@
                             </a>
                         </li>
                         <li class="nav-item me-3">
+                            {% if current_user.role == 'admin' %}
+                            <a class="btn btn-outline-light btn-sm rounded-pill" href="{{ url_for('admin_profile') }}">
+                                <i class="bi bi-person-circle me-1"></i>
+                                <i class="bi bi-crown-fill text-warning me-1"></i>
+                                {{ current_user.username }}
+                            </a>
+                            {% else %}
                             <span class="nav-link text-white-50 small">
                                 <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
                             </span>
+                            {% endif %}
                         </li>
                         <li class="nav-item">
                             <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{{ url_for('logout') }}">
@@ -131,6 +130,28 @@
       <div class="offcanvas-body d-flex flex-column">
         {% if current_user.role == 'admin' %}
         <div class="mb-3 border rounded-3 p-2 bg-light">
+            <label for="conversationSearch" class="form-label small text-muted mb-1">Search Patient</label>
+            <input id="conversationSearch" class="form-control form-control-sm mb-2" placeholder="Type patient name...">
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <select id="conversationTypeFilter" class="form-select form-select-sm">
+                        <option value="all">All Types</option>
+                        <option value="private">Private</option>
+                        <option value="residency">Residency</option>
+                        <option value="initial-intake">Initial Intake</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <select id="conversationStatusFilter" class="form-select form-select-sm">
+                        <option value="all">All Statuses</option>
+                        <option value="ongoing">Ongoing</option>
+                        <option value="candidate">Candidate</option>
+                        <option value="waiting">Waiting</option>
+                        <option value="waiting for scheduling">Waiting for Scheduling</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+            </div>
             <label for="conversationSelect" class="form-label small text-muted mb-1">Patient Conversation</label>
             <select id="conversationSelect" class="form-select form-select-sm"></select>
         </div>
@@ -158,8 +179,12 @@
         const offcanvas = document.getElementById('messagesOffcanvas');
         const isAdmin = {{ 'true' if current_user.role == 'admin' else 'false' }};
         const conversationSelect = document.getElementById('conversationSelect');
+        const conversationSearch = document.getElementById('conversationSearch');
+        const conversationTypeFilter = document.getElementById('conversationTypeFilter');
+        const conversationStatusFilter = document.getElementById('conversationStatusFilter');
         const recipientInput = document.getElementById('messageRecipientId');
         let selectedConversation = null;
+        let allConversations = [];
 
         if (offcanvas) {
             offcanvas.addEventListener('show.bs.offcanvas', function () {
@@ -175,6 +200,18 @@
                     loadMessages();
                 });
             }
+
+            [conversationSearch, conversationTypeFilter, conversationStatusFilter].forEach((node) => {
+                if (!node) return;
+                node.addEventListener('input', function () {
+                    selectedConversation = null;
+                    loadMessages();
+                });
+                node.addEventListener('change', function () {
+                    selectedConversation = null;
+                    loadMessages();
+                });
+            });
 
             document.getElementById('sendMessageForm').addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -205,9 +242,20 @@
         }
 
         function loadMessages() {
-            const query = (isAdmin && selectedConversation)
-                ? ('?conversation_with=' + encodeURIComponent(selectedConversation))
-                : '';
+            let query = '';
+            if (isAdmin) {
+                const searchValue = conversationSearch ? conversationSearch.value.trim() : '';
+                const typeValue = conversationTypeFilter ? conversationTypeFilter.value : 'all';
+                const statusValue = conversationStatusFilter ? conversationStatusFilter.value : 'all';
+                const params = new URLSearchParams();
+                if (selectedConversation) params.set('conversation_with', selectedConversation);
+                if (searchValue) params.set('q', searchValue);
+                if (typeValue && typeValue !== 'all') params.set('patient_type', typeValue);
+                if (statusValue && statusValue !== 'all') params.set('status', statusValue);
+                query = params.toString() ? ('?' + params.toString()) : '';
+            } else if (selectedConversation) {
+                query = '?conversation_with=' + encodeURIComponent(selectedConversation);
+            }
 
             fetch('{{ url_for("api_get_messages") }}' + query)
                 .then(response => response.json())
@@ -219,20 +267,25 @@
 
                     if (isAdmin) {
                         const conversations = payload.conversations || [];
+                        allConversations = conversations;
 
                         if (conversationSelect) {
                             conversationSelect.innerHTML = '';
 
-                            if (conversations.length === 0) {
+                            if (allConversations.length === 0) {
                                 conversationSelect.innerHTML = '<option value="">No patient conversations</option>';
                             } else {
-                                conversations.forEach((conv) => {
+                                allConversations.forEach((conv) => {
                                     const option = document.createElement('option');
                                     option.value = String(conv.user_id);
                                     option.textContent = conv.patient_name + (conv.unread_count ? ` (${conv.unread_count} unread)` : '');
                                     conversationSelect.appendChild(option);
                                 });
                             }
+                        }
+
+                        if (selectedConversation && !allConversations.some(c => String(c.user_id) === String(selectedConversation))) {
+                            selectedConversation = allConversations.length ? String(allConversations[0].user_id) : null;
                         }
 
                         const activeConversation = payload.active_conversation ? String(payload.active_conversation) : null;
