@@ -2,6 +2,58 @@
 
 ---
 
+## Session 16
+
+**Date:** March 12, 2026
+
+**Objective:** Enhance UI/UX with three focused improvements: vacant slot visibility in calendar, dedicated intake form tab space, and quick booking action.
+
+**Changes Made:**
+
+1. **Vacant Slots Now Visible in Calendar**
+   - Modified `build_week_calendar_snapshot()` in app.py to render available slots as distinct calendar events
+   - Vacant slots appear with green color (#10b981) labeled as "Vacant (duration)min"
+   - Admin-only feature to maintain clean UI for patient calendars
+   - Added "Vacant Slot" badge to calendar legend for clarity
+
+2. **Intake Form Dedicated Tab**
+   - The Intake Evaluation Form already had proper dedicated tab support via JavaScript DOM movement
+   - Form is rendered in its own tab (#intake) with full card styling and spacing
+   - Export DOCX button remains accessible within the tab
+   - Sub-tabs within form (Prelim, Background, Administrative, Medical, Mental Status, Treatment Plan) remain functional
+
+3. **Quick Action: Book Appointment**
+   - Added new quick action button to patient detail page Quick Actions panel
+   - Button navigates directly to /weekly_calendar for easy appointment booking
+   - Styled with info color (#0d6efd) to distinguish from intake form action
+   - Appears for all patient types after Edit and Export History buttons
+
+**Technical Details:**
+
+- **app.py (lines 1804-1816)**: Added vacant slot event rendering for admins using #10b981 color
+- **calendar.html**: Added "Vacant Slot" badge to legend for event type visibility
+- **patient_detail.html**: Appended Book Appointment link after intake tab control
+
+**Test Results:**
+- Application Tests: ✓ 16/16 passed
+- Security Tests: ✓ 3/3 passed
+- Syntax Validation: ✓ Passed
+
+**Dependencies:**
+- No new dependencies introduced
+- Uses existing calendar event infrastructure
+- Leverages existing route structure (weekly_calendar)
+
+**User Impact:**
+- Admins can now see all bookable slots at a glance in calendar view
+- Patients have immediate access to book appointments from patient profile
+- More screen real estate for intake form completion on dedicated tab
+
+**Next Steps (Future):**
+- Real-time vacancy counter on quick action button
+- Batch slot availability import from external scheduling systems
+- Intake form progress indicator (e.g., "4/6 sections completed")
+
 ## Session 15 — March 12, 2026 (Phase 1: Group Meetings History and Management)
 
 ### Overview
