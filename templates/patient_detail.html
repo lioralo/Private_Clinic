@@ -98,6 +98,12 @@
                                         {{ t('Edit') }}
                                     </button>
                                     <div class="collapse mt-3" id="backgroundEditor">
+                                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                                            <button type="submit" formaction="{{ url_for('generate_patient_background', patient_id=patient['id']) }}" formmethod="post" class="btn btn-sm btn-outline-secondary px-3 fw-bold rounded-pill">
+                                                {{ t('Generate AI Background') }}
+                                            </button>
+                                            <span class="small text-muted">{{ t('AI-generated summary based on meeting logs.') }}</span>
+                                        </div>
                                         <textarea name="background" class="form-control mb-2" rows="8" placeholder="{{ t('Enter clinical history...') }}">{{ patient['background'] or '' }}</textarea>
                                         <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold rounded-pill">{{ t('Update Background') }}</button>
                                     </div>

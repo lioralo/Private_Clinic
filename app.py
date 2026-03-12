@@ -171,6 +171,9 @@ HEBREW_TRANSLATIONS = {
     "No resources found.": "לא נמצאו משאבים.",
     "Edit Patient": "ערוך מטופל",
     "Update patient information": "עדכן פרטי מטופל",
+    "Generate AI Background": "צור רקע אוטומטי",
+    "AI-generated summary based on meeting logs.": "סיכום אוטומטי המבוסס על יומני הפגישות.",
+    "AI background generated.": "נוצר רקע אוטומטי.",
     "Full Name": "שם מלא",
     "Status": "סטטוס",
     "Email Address": "כתובת דוא״ל",
@@ -535,6 +538,60 @@ def index():
         elif current_user.role == 'patient':
             return redirect(url_for('patient_home'))
     return redirect(url_for('login'))
+
+
+def extract_background_sentence(text):
+    if not text:
+        return ''
+
+    clean_text = ' '.join(str(text).replace('\n', ' ').split())
+    if not clean_text:
+        return ''
+
+    parts = re.split(r'[.!?]|\u05c3', clean_text)
+    for part in parts:
+        part = part.strip()
+        if len(part) >= 12:
+            return part
+    return clean_text[:180].strip()
+
+
+def build_patient_background_from_notes(db, patient_id, patient_name=None):
+    if patient_name is None:
+        patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
+
+    notes = db.execute('''
+        SELECT note_date, content, mood_summary, created_at
+        FROM notes
+        WHERE patient_id = ?
+        ORDER BY COALESCE(note_date, date(created_at)) ASC, created_at ASC
+    ''', (patient_id,)).fetchall()
+
+    if not notes:
+        return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
+
+    first_note = notes[0]
+    last_note = notes[-1]
+    first_desc = extract_background_sentence(first_note['content']) or 'לא תועד תיאור ראשוני מפורט.'
+    latest_focus = extract_background_sentence(last_note['mood_summary'] or last_note['content']) or 'לא תועד מוקד ברור במפגש האחרון.'
+
+    first_date = first_note['note_date']
+    last_date = last_note['note_date']
+
+    if first_date and last_date:
+        timeframe = f"התיעוד נע בין {first_date} ל-{last_date}."
+    elif last_date:
+        timeframe = f"המפגש האחרון המתועד הוא בתאריך {last_date}."
+    else:
+        timeframe = ''
+
+    return (
+        f"{patient_name} נמצא/ת במעקב טיפולי מתועד הכולל {len(notes)} מפגשים. "
+        f"בשלב הראשוני עלה: {first_desc}. "
+        f"בשלב האחרון בולט: {latest_focus}. "
+        f"{timeframe}"
+    ).strip()
 
 
 def fetch_patients_by_status(db, status):
@@ -2496,6 +2553,24 @@ def update_patient_info(patient_id):
                (background, treatment_info, patient_id))
     db.commit()
     flash('Patient information updated.')
+    return redirect_to_patient_tab(patient_id, 'info')
+
+
+@app.route('/patient/<int:patient_id>/generate_background', methods=('POST',))
+@login_required
+def generate_patient_background(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient is None:
+        return "Patient not found", 404
+
+    background = build_patient_background_from_notes(db, patient_id, patient['name'])
+    db.execute('UPDATE patients SET background = ? WHERE id = ?', (background, patient_id))
+    db.commit()
+    flash('AI background generated.')
     return redirect_to_patient_tab(patient_id, 'info')
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
