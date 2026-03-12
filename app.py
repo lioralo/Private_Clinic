@@ -2,6 +2,7 @@ import os
 import sqlite3
 import socket
 import json
+import shutil
 from collections import Counter
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
@@ -409,6 +410,73 @@ def perform_routine_encrypted_backup(db_path):
     encrypted_path = perform_encrypted_backup(db_path)
     marker.write_text(now.isoformat())
     return encrypted_path
+
+
+def list_encrypted_backups():
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+    backups = sorted(backup_root.glob('clinic_*.db.enc'), reverse=True)
+    return [path.name for path in backups]
+
+
+def perform_encrypted_restore(db_path, backup_filename=None):
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+
+    backups = sorted(backup_root.glob('clinic_*.db.enc'))
+    if not backups:
+        raise FileNotFoundError('No encrypted backups found.')
+
+    if backup_filename:
+        safe_name = Path(backup_filename).name
+        target = backup_root / safe_name
+        if target not in backups or not target.exists():
+            raise FileNotFoundError('Selected backup file was not found.')
+    else:
+        target = backups[-1]
+
+    from cryptography.fernet import Fernet
+    cipher = Fernet(_get_or_create_backup_key())
+    decrypted = cipher.decrypt(target.read_bytes())
+    if not decrypted.startswith(b'SQLite format 3'):
+        raise RuntimeError('Backup decrypt succeeded but SQLite header is invalid.')
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    temp_restore = backup_root / f'.restore_tmp_{timestamp}.db'
+    safety_copy = backup_root / f'clinic_pre_restore_{timestamp}.db'
+
+    temp_restore.write_bytes(decrypted)
+
+    temp_conn = sqlite3.connect(str(temp_restore))
+    try:
+        integrity = temp_conn.execute('PRAGMA integrity_check').fetchone()[0]
+        if integrity != 'ok':
+            raise RuntimeError(f'Restored backup integrity check failed: {integrity}')
+    finally:
+        temp_conn.close()
+
+    live_db = Path(db_path)
+    if live_db.exists():
+        shutil.copy2(live_db, safety_copy)
+
+    # Ensure no request-scoped DB handle stays open while replacing file.
+    existing = getattr(g, '_database', None)
+    if existing is not None:
+        existing.close()
+        g._database = None
+
+    shutil.copy2(temp_restore, live_db)
+    temp_restore.unlink(missing_ok=True)
+
+    verify_conn = sqlite3.connect(str(live_db))
+    try:
+        verify_integrity = verify_conn.execute('PRAGMA integrity_check').fetchone()[0]
+        if verify_integrity != 'ok':
+            raise RuntimeError(f'Post-restore database integrity check failed: {verify_integrity}')
+    finally:
+        verify_conn.close()
+
+    return str(target), str(safety_copy)
 
 def init_db():
 
@@ -3473,7 +3541,8 @@ def admin_profile():
         flash('Admin profile updated.')
         return redirect(url_for('admin_profile'))
 
-    return render_template('admin_profile.html', admin=admin)
+    backup_files = list_encrypted_backups()
+    return render_template('admin_profile.html', admin=admin, backup_files=backup_files)
 
 
 @app.route('/admin/backup_now', methods=['POST'])
@@ -3488,6 +3557,23 @@ def backup_now():
         flash(f'Encrypted backup created: {backup_path}')
     except Exception as exc:
         flash(f'Backup failed: {exc}')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/restore_backup', methods=['POST'])
+@login_required
+def restore_backup_now():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    selected_backup = (request.form.get('backup_file') or '').strip() or None
+    database = app.config.get('DATABASE', DATABASE)
+
+    try:
+        restored_from, safety_copy = perform_encrypted_restore(database, selected_backup)
+        flash(f'Restore completed from: {restored_from}. Safety copy created: {safety_copy}')
+    except Exception as exc:
+        flash(f'Restore failed: {exc}')
     return redirect(url_for('admin_profile'))
 
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
