@@ -2,6 +2,43 @@
 
 ---
 
+## Session 14 — March 12, 2026 (Vacancy-Gated Booking, Sticky CRM Filters, Messaging Ribbon, Intake Tab Controls)
+
+### Overview
+Implemented the requested behavior fixes for booking permissions, CRM filter persistence, admin chat ribbon visibility, and intake tab access controls.
+
+### 1. Booking Restricted to Admin-Enabled Vacancies
+- Calendar booking availability is now sourced from explicit admin vacancy records (`slots_override` with `status='available'`).
+- Added admin endpoint: `/api/calendar/vacancy` to enable a date/time window as bookable.
+- Added UI in calendar block management tab: **Enable Vacant Slot** (date, start time, end time).
+- Booking now succeeds only when the selected slot exists in enabled vacancies and remains non-overlapping with appointments/blocks.
+
+### 2. CRM Filters Persist Across Page Returns
+- CRM filter state (`status`, `patient_type`, `q`, `sort`) is now persisted in session.
+- Returning to `/crm` without query parameters restores the last active filter set.
+- Status summary cards now preserve active search/type/sort filters when switching status buckets.
+
+### 3. Messages Ribbon Includes Patients Without Message History
+- Admin conversation list now uses patients as the base dataset and includes rows even with no prior messages.
+- Added support for listing patients that do not yet have a portal login (displayed but non-selectable for sending).
+- API filtering by search/type/status now applies server-side for conversation list retrieval.
+
+### 4. Intake Form Placement and Enablement
+- Intake tab visibility now supports either:
+  - `patient_type='initial-intake'`, or
+  - explicit `has_intake_tab=1`.
+- Added migration/schema support for `has_intake_tab`.
+- Added quick action for non-intake patients: **Enable Intake Tab**.
+- Intake form state now posts with `active_tab='intake'` to remain on the intake tab after save.
+
+### 5. Test Updates and Verification
+- Updated booking tests to create explicit vacancies before booking actions.
+- Verification:
+  - `python test_app.py` passed (`16` tests)
+  - `python test_security.py` passed (`3` tests)
+
+---
+
 ## Session 13 — March 12, 2026 (Refinement Pass: Status Colors, Collapsed Filters, Admin Name, Strict Calendar Windows)
 
 ### Overview

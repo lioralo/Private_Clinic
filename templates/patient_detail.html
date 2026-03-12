@@ -39,7 +39,7 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
             </li>
-            {% if patient['patient_type'] == 'initial-intake' %}
+            {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="intake-tab" data-bs-toggle="tab" data-bs-target="#intake" type="button" role="tab" aria-controls="intake" aria-selected="false"><i class="bi bi-clipboard2-pulse me-2"></i>{{ 'Intake Evaluation' if lang == 'en' else 'הערכת אינטייק' }}</button>
             </li>
@@ -129,7 +129,7 @@
                             </div>
                         </div>
 
-                        {% if patient['patient_type'] == 'initial-intake' %}
+                        {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
                         <div class="card border-0 shadow-sm rounded-4 mb-4">
                             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center gap-2 flex-wrap">
                                 <h5 class="fw-bold mb-0 text-primary">
@@ -144,7 +144,7 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
                                     <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
-                                    <input type="hidden" name="active_tab" value="info">
+                                    <input type="hidden" name="active_tab" value="intake">
 
                                     <ul class="nav nav-pills intake-nav mb-3" role="tablist">
                                         <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="pill" data-bs-target="#intake-pre">{{ 'מקדים' if lang == 'he' else 'Prelim' }}</button></li>
@@ -655,7 +655,7 @@
                 </div>
             </div>
 
-            {% if patient['patient_type'] == 'initial-intake' %}
+            {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
             <div class="tab-pane fade" id="intake" role="tabpanel" aria-labelledby="intake-tab">
                 <div id="intakeFormHost"></div>
             </div>
@@ -952,10 +952,17 @@
                 <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
                     <i class="bi bi-download me-1"></i>{{ t('Export History') }}
                 </a>
-                {% if patient['patient_type'] == 'initial-intake' %}
+                {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
                 <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#intake">
                     <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
                 </button>
+                {% else %}
+                <form method="post" action="{{ url_for('enable_intake_tab', patient_id=patient['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-warning rounded-pill w-100">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Enable Intake Tab' if lang == 'en' else 'הפעלת לשונית אינטייק' }}
+                    </button>
+                </form>
                 {% endif %}
             </div>
         </div>
@@ -1092,7 +1099,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     let initialTab = '{{ active_tab or "info" }}';
-    if (initialTab === 'info' && '{{ patient["patient_type"] }}' === 'initial-intake') {
+    if (initialTab === 'info' && ('{{ patient["patient_type"] }}' === 'initial-intake' || '{{ 1 if patient["has_intake_tab"] else 0 }}' === '1')) {
         initialTab = 'intake';
     }
     const requestedTabButton = document.querySelector(`#${initialTab}-tab`);

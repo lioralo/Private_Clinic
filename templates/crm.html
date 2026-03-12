@@ -17,7 +17,7 @@
 
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-6">
-        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all') }}">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', patient_type=patient_type, q=search_query, sort=sort_by) }}">
             <div class="card border-0 shadow-sm h-100 crm-summary-card">
                 <div class="card-body">
                     <div class="small text-muted text-uppercase">{{ t('All Patients') }}</div>
@@ -27,7 +27,7 @@
         </a>
     </div>
     <div class="col-md-3 col-6">
-        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing') }}">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', patient_type=patient_type, q=search_query, sort=sort_by) }}">
             <div class="card border-0 shadow-sm h-100 crm-summary-card">
                 <div class="card-body">
                     <div class="small text-muted text-uppercase">{{ t('Ongoing') }}</div>
@@ -37,7 +37,7 @@
         </a>
     </div>
     <div class="col-md-3 col-6">
-        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate') }}">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', patient_type=patient_type, q=search_query, sort=sort_by) }}">
             <div class="card border-0 shadow-sm h-100 crm-summary-card">
                 <div class="card-body">
                     <div class="small text-muted text-uppercase">{{ t('Candidates & Waiting') }}</div>
@@ -47,7 +47,7 @@
         </a>
     </div>
     <div class="col-md-3 col-6">
-        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived') }}">
+        <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', patient_type=patient_type, q=search_query, sort=sort_by) }}">
             <div class="card border-0 shadow-sm h-100 crm-summary-card">
                 <div class="card-body">
                     <div class="small text-muted text-uppercase">{{ t('Archived') }}</div>
@@ -104,7 +104,7 @@
         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2 crm-list-mode" id="patientsContainer">
             {% for patient in patients %}
                 <div class="col patient-col">
-                    <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' else 'info') }}">
+                    <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] else 'info') }}">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">

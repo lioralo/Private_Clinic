@@ -67,6 +67,15 @@ class ClinicTestCase(unittest.TestCase):
             day += timedelta(days=1)
         raise AssertionError('Could not find allowed day with two booking slots in the next 3 weeks')
 
+    def add_vacancy(self, date_iso, time_text, duration_minutes=60):
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
+                VALUES (?, ?, 'available', ?)
+            ''', (date_iso, time_text, duration_minutes))
+            db.commit()
+
     def test_login_logout(self):
         rv = self.login('admin', 'admin')
         assert b'Log out' in rv.data or b'Logout' in rv.data
@@ -323,6 +332,7 @@ class ClinicTestCase(unittest.TestCase):
         self.login('selfbook', 'password123')
 
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
+        self.add_vacancy(booking_date, booking_time, 60)
 
         rv = self.client.post('/api/calendar/book', data=dict(
             date=booking_date,
@@ -354,6 +364,8 @@ class ClinicTestCase(unittest.TestCase):
         ), follow_redirects=True)
 
         booking_date, first_time, second_time = self.next_allowed_day_with_two_slots()
+        self.add_vacancy(booking_date, first_time, 60)
+        self.add_vacancy(booking_date, second_time, 60)
 
         def add_hour(time_text):
             dt = datetime.strptime(time_text, '%H:%M') + timedelta(hours=1)

@@ -30,7 +30,7 @@
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
     {% for patient in patients %}
         <div class="col">
-            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' else 'info') }}">
+            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] else 'info') }}">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">

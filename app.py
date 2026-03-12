@@ -550,6 +550,10 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
         except sqlite3.OperationalError:
             pass
@@ -1093,10 +1097,25 @@ def crm_dashboard():
         return redirect(url_for('patient_home'))
 
     db = get_db()
-    status = request.args.get('status', 'all')
-    patient_type = request.args.get('patient_type', 'all')
-    search_query = request.args.get('q', '').strip()
-    sort_by = request.args.get('sort', 'status_priority')
+    saved_filters = session.get('crm_filters', {})
+    status = request.args.get('status', saved_filters.get('status', 'all')).strip()
+    patient_type = request.args.get('patient_type', saved_filters.get('patient_type', 'all')).strip()
+    search_query = request.args.get('q', saved_filters.get('q', '')).strip()
+    sort_by = request.args.get('sort', saved_filters.get('sort', 'status_priority')).strip()
+
+    if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
+        status = 'all'
+    if patient_type not in {'all', 'private', 'residency', 'initial-intake'}:
+        patient_type = 'all'
+    if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest'}:
+        sort_by = 'status_priority'
+
+    session['crm_filters'] = {
+        'status': status,
+        'patient_type': patient_type,
+        'q': search_query,
+        'sort': sort_by
+    }
 
     patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by)
     counts = {
@@ -1252,6 +1271,7 @@ def add_patient():
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake'):
             patient_type = 'private'
+        has_intake_tab = 1 if patient_type == 'initial-intake' else 0
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
         intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
 
@@ -1260,9 +1280,10 @@ def add_patient():
         else:
             db = get_db()
             db.execute('''INSERT INTO patients
-                                  (name, status, email, phone, birth_date, id_number, patient_type, intake_assessment, intake_questionnaire)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                              (name, status, email, phone, birth_date, id_number, patient_type, intake_assessment or None, intake_questionnaire or None))
+                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, intake_assessment, intake_questionnaire)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
+                               intake_assessment or None, intake_questionnaire or None))
             db.commit()
             return redirect(url_for('patients', status=status))
 
@@ -1354,6 +1375,9 @@ def patient_detail(patient_id):
         }
 
     active_tab = request.args.get('tab', 'info')
+    intake_enabled = patient['patient_type'] == 'initial-intake' or int(patient['has_intake_tab'] or 0) == 1
+    if active_tab == 'intake' and not intake_enabled:
+        active_tab = 'info'
     latest_note = notes[0] if notes else None
     intake_form_data = parse_intake_questionnaire(patient['intake_questionnaire'])
     next_session_row = db.execute('''
@@ -1660,28 +1684,41 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'type': block_type
             })
 
-    # Available slots are restricted to explicit allowed windows.
+    # Available slots are restricted to admin-enabled vacancy overrides.
+    vacancy_rows = db.execute('''
+        SELECT slot_date, slot_time, duration_minutes
+        FROM slots_override
+        WHERE status = 'available' AND slot_date BETWEEN ? AND ?
+        ORDER BY slot_date ASC, slot_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
     available_slots = []
-    for day in daterange(week_start, week_end):
-        day_code = custom_weekday(day)
-        day_windows = calendar_allowed_windows(day_code)
-        if not day_windows:
+    seen_slots = set()
+    for row in vacancy_rows:
+        day = parse_date_safe(row['slot_date'])
+        if not day:
             continue
+        slot_time = (row['slot_time'] or '').strip()
+        parsed = parse_time_safe(slot_time)
+        if not parsed:
+            continue
+        duration = int(row['duration_minutes'] or 60)
+        if duration <= 0:
+            duration = 60
 
-        for start_text, end_text in day_windows:
-            window_start = datetime.combine(day, datetime.strptime(start_text, '%H:%M').time())
-            window_end = datetime.combine(day, datetime.strptime(end_text, '%H:%M').time())
+        slot_start = datetime.combine(day, parsed)
+        slot_end = slot_start + timedelta(minutes=duration)
+        slot_key = (day.isoformat(), slot_start.strftime('%H:%M'), duration)
+        if slot_key in seen_slots:
+            continue
+        seen_slots.add(slot_key)
 
-            slot_start = window_start
-            while slot_start + timedelta(minutes=60) <= window_end:
-                slot_end = slot_start + timedelta(minutes=60)
-                if not any(overlaps(slot_start, slot_end, occ_start, occ_end) for occ_start, occ_end in occupied):
-                    available_slots.append({
-                        'date': day.isoformat(),
-                        'time': slot_start.strftime('%H:%M'),
-                        'duration_minutes': 60
-                    })
-                slot_start += timedelta(minutes=30)
+        if not any(overlaps(slot_start, slot_end, occ_start, occ_end) for occ_start, occ_end in occupied):
+            available_slots.append({
+                'date': day.isoformat(),
+                'time': slot_start.strftime('%H:%M'),
+                'duration_minutes': duration
+            })
 
     return {
         'week_start': week_start.isoformat(),
@@ -1766,6 +1803,62 @@ def api_calendar_block_delete(block_id):
 
     db = get_db()
     db.execute('DELETE FROM blocked_slots WHERE id = ?', (block_id,))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/vacancy', methods=['POST'])
+@login_required
+def api_calendar_vacancy():
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    slot_date = request.form.get('slot_date', '').strip()
+    slot_time = request.form.get('slot_time', '').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
+
+    date_obj = parse_date_safe(slot_date)
+    start_time = parse_time_safe(slot_time)
+    end_time = parse_time_safe(end_time_raw)
+    if not date_obj or not start_time or not end_time:
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    start_minutes = start_time.hour * 60 + start_time.minute
+    end_minutes = end_time.hour * 60 + end_time.minute
+    duration = end_minutes - start_minutes
+    if duration <= 0:
+        return jsonify({'status': 'error', 'message': 'End time must be after start time.'}), 400
+
+    slot_start = datetime.combine(date_obj, start_time)
+    slot_end = slot_start + timedelta(minutes=duration)
+
+    db = get_db()
+    appointment_rows = db.execute('''
+        SELECT appointment_time, duration_minutes FROM appointments WHERE appointment_date = ?
+    ''', (slot_date,)).fetchall()
+    for row in appointment_rows:
+        row_start = combine_dt(date_obj, row['appointment_time'])
+        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+        if overlaps(slot_start, slot_end, row_start, row_end):
+            return jsonify({'status': 'error', 'message': 'Vacancy overlaps an existing appointment.'}), 409
+
+    block_rows = db.execute('''
+        SELECT blocked_time, duration_minutes FROM blocked_slots WHERE blocked_date = ?
+    ''', (slot_date,)).fetchall()
+    for row in block_rows:
+        row_start = combine_dt(date_obj, row['blocked_time'])
+        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+        if overlaps(slot_start, slot_end, row_start, row_end):
+            return jsonify({'status': 'error', 'message': 'Vacancy overlaps a blocked slot.'}), 409
+
+    db.execute('''
+        DELETE FROM slots_override
+        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+    ''', (slot_date, start_time.strftime('%H:%M')))
+    db.execute('''
+        INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
+        VALUES (?, ?, 'available', ?)
+    ''', (slot_date, start_time.strftime('%H:%M'), duration))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -2704,34 +2797,69 @@ def download_file(name):
 def api_get_messages():
     db = get_db()
     if current_user.role == 'admin':
+        search_query = request.args.get('q', '').strip().lower()
+        patient_type = request.args.get('patient_type', 'all').strip().lower()
+        status_filter = request.args.get('status', 'all').strip().lower()
+
+        filters = ["COALESCE(p.is_deleted, 0) = 0"]
+        params = [current_user.id, current_user.id, current_user.id]
+
+        if search_query:
+            filters.append('(LOWER(p.name) LIKE ? OR LOWER(COALESCE(u.username, "")) LIKE ? OR LOWER(COALESCE(u.display_name, "")) LIKE ?)')
+            like_query = f"%{search_query}%"
+            params.extend([like_query, like_query, like_query])
+
+        if patient_type in ('private', 'residency', 'initial-intake'):
+            filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
+            params.append(patient_type)
+
+        if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
+            if status_filter == 'waiting':
+                filters.append("p.status IN ('waiting', 'waiting for scheduling')")
+            else:
+                filters.append('LOWER(p.status) = ?')
+                params.append(status_filter)
+
+        where_clause = ' AND '.join(filters)
         conversations = db.execute('''
             SELECT
+                p.id AS patient_id,
                 u.id AS user_id,
-                u.username,
-                u.display_name,
+                COALESCE(u.username, '') AS username,
+                COALESCE(u.display_name, '') AS display_name,
                 p.name AS patient_name,
                 p.status AS patient_status,
+                COALESCE(p.patient_type, 'private') AS patient_type,
                 MAX(m.timestamp) AS last_message_at,
                 SUM(CASE
                     WHEN m.recipient_id = ? AND m.is_read = 0 AND m.sender_id = u.id THEN 1
                     ELSE 0
-                END) AS unread_count
-            FROM users u
-            JOIN patients p ON p.id = u.patient_id
+                END) AS unread_count,
+                CASE WHEN u.id IS NULL THEN 0 ELSE 1 END AS can_message
+            FROM patients p
+            LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND u.is_active = 1
             LEFT JOIN messages m ON (
-                (m.sender_id = u.id AND m.recipient_id = ?) OR
-                (m.sender_id = ? AND m.recipient_id = u.id)
+                u.id IS NOT NULL AND (
+                    (m.sender_id = u.id AND m.recipient_id = ?) OR
+                    (m.sender_id = ? AND m.recipient_id = u.id)
+                )
             )
-            WHERE u.role = 'patient' AND u.is_active = 1 AND COALESCE(p.is_deleted, 0) = 0
-            GROUP BY u.id, u.username, u.display_name, p.name, p.status
+            WHERE ''' + where_clause + '''
+            GROUP BY p.id, u.id, u.username, u.display_name, p.name, p.status, p.patient_type
             ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
                      COALESCE(MAX(m.timestamp), '') DESC,
                      p.name ASC
-        ''', (current_user.id, current_user.id, current_user.id)).fetchall()
+        ''', tuple(params)).fetchall()
 
         requested_user = request.args.get('conversation_with', type=int)
-        if requested_user is None and conversations:
-            requested_user = conversations[0]['user_id']
+        if requested_user is None:
+            for conv in conversations:
+                if conv['user_id'] is not None:
+                    requested_user = conv['user_id']
+                    break
+
+        if requested_user is not None and not any(c['user_id'] == requested_user for c in conversations if c['user_id'] is not None):
+            requested_user = None
 
         if requested_user is not None:
             db.execute(
@@ -3129,7 +3257,7 @@ def export_patient_intake_docx(patient_id):
     intake_data = parse_intake_questionnaire(patient['intake_questionnaire'])
     if not intake_data:
         flash('No intake form data found for export.')
-        return redirect_to_patient_tab(patient_id, 'info')
+        return redirect_to_patient_tab(patient_id, 'intake')
 
     document = build_intake_docx(patient['name'], intake_data)
     temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'intake_{patient_id}.docx')
@@ -3176,6 +3304,9 @@ def edit_patient(patient_id):
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake'):
             patient_type = 'private'
+        has_intake_tab = int(patient['has_intake_tab'] or 0)
+        if patient_type == 'initial-intake':
+            has_intake_tab = 1
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
         intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
 
@@ -3184,10 +3315,10 @@ def edit_patient(patient_id):
         else:
             db.execute('''UPDATE patients
                           SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
-                              patient_type = ?, intake_assessment = ?, intake_questionnaire = ?
+                              patient_type = ?, has_intake_tab = ?, intake_assessment = ?, intake_questionnaire = ?
                           WHERE id = ?''',
                        (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
-                        intake_assessment or None, intake_questionnaire or None, patient_id))
+                        has_intake_tab, intake_assessment or None, intake_questionnaire or None, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -3232,6 +3363,19 @@ def manage_access(patient_id):
             flash('Username already taken.')
 
     return redirect_to_patient_tab(patient_id, 'info')
+
+
+@app.route('/patient/<int:patient_id>/enable_intake_tab', methods=('POST',))
+@login_required
+def enable_intake_tab(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('UPDATE patients SET has_intake_tab = 1 WHERE id = ?', (patient_id,))
+    db.commit()
+    flash('Intake tab enabled for this patient.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
 
 @app.route('/patient/<int:patient_id>/toggle_access', methods=('POST',))
 @login_required

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS patients (
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
     can_self_schedule BOOLEAN DEFAULT 0,
     patient_type TEXT DEFAULT 'private',
+    has_intake_tab BOOLEAN DEFAULT 0,
     intake_assessment TEXT,
     intake_questionnaire TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

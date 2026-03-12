@@ -219,6 +219,9 @@
                 const csrfToken = document.getElementById('csrf_token').value;
 
                 if (content.trim() !== '') {
+                    if (isAdmin && !selectedConversation) {
+                        return;
+                    }
                     const formBody = 'content=' + encodeURIComponent(content)
                         + (isAdmin && selectedConversation ? '&recipient_id=' + encodeURIComponent(selectedConversation) : '');
 
@@ -277,20 +280,28 @@
                             } else {
                                 allConversations.forEach((conv) => {
                                     const option = document.createElement('option');
-                                    option.value = String(conv.user_id);
-                                    option.textContent = conv.patient_name + (conv.unread_count ? ` (${conv.unread_count} unread)` : '');
+                                    option.value = conv.user_id ? String(conv.user_id) : '';
+                                    option.disabled = !conv.can_message;
+                                    const unread = conv.unread_count ? ` (${conv.unread_count} unread)` : '';
+                                    const locked = conv.can_message ? '' : ' (No patient login)';
+                                    option.textContent = conv.patient_name + unread + locked;
                                     conversationSelect.appendChild(option);
                                 });
                             }
                         }
 
-                        if (selectedConversation && !allConversations.some(c => String(c.user_id) === String(selectedConversation))) {
-                            selectedConversation = allConversations.length ? String(allConversations[0].user_id) : null;
+                        if (selectedConversation && !allConversations.some(c => c.user_id && String(c.user_id) === String(selectedConversation))) {
+                            selectedConversation = null;
                         }
 
                         const activeConversation = payload.active_conversation ? String(payload.active_conversation) : null;
                         if (!selectedConversation && activeConversation) {
                             selectedConversation = activeConversation;
+                        }
+
+                        if (!selectedConversation) {
+                            const firstAvailable = allConversations.find(c => c.can_message && c.user_id);
+                            selectedConversation = firstAvailable ? String(firstAvailable.user_id) : null;
                         }
 
                         if (conversationSelect && selectedConversation) {

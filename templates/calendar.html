@@ -4,7 +4,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-calendar3 me-2"></i>{{ t('Weekly Snapshot Calendar') }}</h2>
-        <p class="text-muted small mb-0">{{ t('Current workweek only (Sunday-Thursday, 08:00-20:00). The board auto-rolls to the next week.') }}</p>
+        <p class="text-muted small mb-0">{{ t('Current workweek board. Patients can only book admin-enabled vacant slots.') }}</p>
     </div>
     {% if current_user.role == 'admin' %}
     <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">{{ t('Back to CRM') }}</a>
@@ -268,6 +268,33 @@
                     </div>
                     <div class="col-12">
                         <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">{{ t('Save Override') }}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mt-3">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-success">{{ t('Enable Vacant Slot') }}</h6>
+        </div>
+        <div class="card-body">
+            <form id="addVacancyForm">
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label small">{{ t('Date') }}</label>
+                        <input type="date" name="slot_date" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">{{ t('Start Time') }}</label>
+                        <input type="time" name="slot_time" class="form-control form-control-sm" required step="900">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">{{ t('End Time') }}</label>
+                        <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-success btn-sm rounded-pill px-3" type="submit">{{ t('Enable Slot') }}</button>
                     </div>
                 </div>
             </form>
@@ -915,6 +942,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadSnapshot();
                 } else {
                     showActionModal({ title: 'Save Failed', message: data.message || 'Could not save override.' });
+                }
+            });
+        });
+    }
+
+    const addVacancyForm = document.getElementById('addVacancyForm');
+    if (addVacancyForm) {
+        addVacancyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(addVacancyForm);
+            fetch('/api/calendar/vacancy', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: new URLSearchParams(formData)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    addVacancyForm.reset();
+                    loadSnapshot();
+                } else {
+                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not enable slot.' });
                 }
             });
         });
