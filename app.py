@@ -619,6 +619,50 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                group_type TEXT DEFAULT 'support',
+                description TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS group_members (
+                group_id INTEGER NOT NULL,
+                patient_id INTEGER NOT NULL,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                left_at TIMESTAMP,
+                role TEXT DEFAULT 'member',
+                PRIMARY KEY (group_id, patient_id),
+                FOREIGN KEY (group_id) REFERENCES groups (id),
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS group_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                session_date DATE NOT NULL,
+                session_time TIME NOT NULL,
+                duration_minutes INTEGER DEFAULT 60,
+                title TEXT,
+                facilitator TEXT,
+                meeting_type TEXT DEFAULT 'in-person',
+                meeting_link TEXT,
+                status TEXT DEFAULT 'scheduled',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_id) REFERENCES groups (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
         db.commit()
 
         # Check if admin exists
@@ -1545,6 +1589,16 @@ def build_week_calendar_snapshot(db, week_start, user):
         ORDER BY blocked_date ASC, blocked_time ASC
     ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
 
+    group_sessions = db.execute('''
+        SELECT gs.*, g.name AS group_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE gs.session_date BETWEEN ? AND ?
+          AND COALESCE(g.is_active, 1) = 1
+          AND COALESCE(gs.status, 'scheduled') = 'scheduled'
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
     events = []
     occupied = []
     emitted_appointment_keys = set()
@@ -1630,6 +1684,34 @@ def build_week_calendar_snapshot(db, week_start, user):
                 }
             })
             occupied.append((start_dt, end_dt))
+
+    for group_session in group_sessions:
+        session_date = parse_date_safe(group_session['session_date'])
+        if not session_date:
+            continue
+
+        session_start = combine_dt(session_date, group_session['session_time'])
+        session_duration = int(group_session['duration_minutes'] or 60)
+        session_end = session_start + timedelta(minutes=session_duration)
+
+        events.append({
+            'id': f"group-session-{group_session['id']}",
+            'group_session_id': group_session['id'],
+            'group_id': group_session['group_id'],
+            'title': f"Group: {group_session['group_name']}",
+            'start': session_start.isoformat(),
+            'end': session_end.isoformat(),
+            'editable': False,
+            'color': '#8b5cf6',
+            'meta': {
+                'type': 'group_session',
+                'group_name': group_session['group_name'],
+                'meeting_type': group_session['meeting_type'],
+                'meeting_link': group_session['meeting_link'],
+                'can_delete': user.role == 'admin'
+            }
+        })
+        occupied.append((session_start, session_end))
 
     for block in blocks:
         block_date = parse_date_safe(block['blocked_date'])
@@ -1745,6 +1827,139 @@ def weekly_calendar():
         can_self_schedule = bool(patient and int(patient['can_self_schedule'] or 0) == 1)
     return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
                            is_admin=(current_user.role == 'admin'))
+
+
+@app.route('/groups', methods=['GET', 'POST'])
+@login_required
+def groups_dashboard():
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        group_type = (request.form.get('group_type') or 'support').strip()
+        description = (request.form.get('description') or '').strip()
+        if not name:
+            flash('Group name is required.')
+        else:
+            db.execute('INSERT INTO groups (name, group_type, description) VALUES (?, ?, ?)',
+                       (name, group_type or 'support', description or None))
+            db.commit()
+            flash('Group created.')
+        return redirect(url_for('groups_dashboard'))
+
+    groups = db.execute('''
+        SELECT g.*, COUNT(gm.patient_id) AS member_count
+        FROM groups g
+        LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.left_at IS NULL
+        GROUP BY g.id
+        ORDER BY g.created_at DESC, g.name ASC
+    ''').fetchall()
+
+    group_members = db.execute('''
+        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name
+        FROM group_members gm
+        JOIN patients p ON p.id = gm.patient_id
+        WHERE gm.left_at IS NULL AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+    ''').fetchall()
+
+    group_sessions = db.execute('''
+        SELECT gs.*, g.name AS group_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE COALESCE(gs.status, 'scheduled') = 'scheduled'
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''').fetchall()
+
+    patients = db.execute('''
+        SELECT id, name
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY name ASC
+    ''').fetchall()
+
+    return render_template('groups.html', groups=groups, group_members=group_members,
+                           group_sessions=group_sessions, patients=patients)
+
+
+@app.route('/groups/<int:group_id>/members', methods=['POST'])
+@login_required
+def add_group_member(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    patient_id_raw = (request.form.get('patient_id') or '').strip()
+    if not patient_id_raw.isdigit():
+        flash('Valid patient is required.')
+        return redirect(url_for('groups_dashboard'))
+
+    db = get_db()
+    db.execute('''
+        INSERT OR REPLACE INTO group_members (group_id, patient_id, joined_at, left_at, role)
+        VALUES (?, ?, CURRENT_TIMESTAMP, NULL, 'member')
+    ''', (group_id, int(patient_id_raw)))
+    db.commit()
+    flash('Patient added to group.')
+    return redirect(url_for('groups_dashboard'))
+
+
+@app.route('/groups/<int:group_id>/members/<int:patient_id>/remove', methods=['POST'])
+@login_required
+def remove_group_member(group_id, patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('''
+        UPDATE group_members
+        SET left_at = CURRENT_TIMESTAMP
+        WHERE group_id = ? AND patient_id = ?
+    ''', (group_id, patient_id))
+    db.commit()
+    flash('Patient removed from group.')
+    return redirect(url_for('groups_dashboard'))
+
+
+@app.route('/groups/<int:group_id>/sessions', methods=['POST'])
+@login_required
+def add_group_session(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    session_date = (request.form.get('session_date') or '').strip()
+    session_time = (request.form.get('session_time') or '').strip()
+    end_time_raw = (request.form.get('end_time') or '').strip()
+    title = (request.form.get('title') or '').strip()
+    facilitator = (request.form.get('facilitator') or '').strip()
+    meeting_type = (request.form.get('meeting_type') or 'in-person').strip()
+    meeting_link = (request.form.get('meeting_link') or '').strip()
+
+    parsed_date = parse_date_safe(session_date)
+    parsed_time = parse_time_safe(session_time)
+    parsed_end = parse_time_safe(end_time_raw)
+    if not parsed_date or not parsed_time:
+        flash('Valid session date and start time are required.')
+        return redirect(url_for('groups_dashboard'))
+
+    duration = 60
+    if parsed_end:
+        start_minutes = parsed_time.hour * 60 + parsed_time.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        if end_minutes > start_minutes:
+            duration = end_minutes - start_minutes
+
+    db = get_db()
+    db.execute('''
+        INSERT INTO group_sessions
+            (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, meeting_link, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+    ''', (group_id, session_date, parsed_time.strftime('%H:%M'), duration,
+          title or None, facilitator or None, meeting_type or 'in-person', meeting_link or None))
+    db.commit()
+    flash('Group session added.')
+    return redirect(url_for('groups_dashboard'))
 
 
 @app.route('/api/calendar/snapshot')
@@ -2981,6 +3196,19 @@ def contact_admin():
         flash('Message sent to your therapist.')
 
     return redirect(url_for('patient_home'))
+
+
+@app.route('/groups/sessions/<int:session_id>/delete', methods=['POST'])
+@login_required
+def delete_group_session(session_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
+    db.commit()
+    flash('Group session deleted.')
+    return redirect(url_for('groups_dashboard'))
 
 
 @app.route('/admin/profile', methods=['GET', 'POST'])

@@ -166,3 +166,38 @@ CREATE TABLE IF NOT EXISTS goals (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
+
+CREATE TABLE IF NOT EXISTS groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    group_type TEXT DEFAULT 'support',
+    description TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL,
+    patient_id INTEGER NOT NULL,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    left_at TIMESTAMP,
+    role TEXT DEFAULT 'member',
+    PRIMARY KEY (group_id, patient_id),
+    FOREIGN KEY (group_id) REFERENCES groups (id),
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
+CREATE TABLE IF NOT EXISTS group_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    session_date DATE NOT NULL,
+    session_time TIME NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
+    title TEXT,
+    facilitator TEXT,
+    meeting_type TEXT DEFAULT 'in-person',
+    meeting_link TEXT,
+    status TEXT DEFAULT 'scheduled',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES groups (id)
+);

@@ -45,6 +45,7 @@
                 {% if current_user.role == 'admin' %}
                 <span class="badge rounded-pill" style="background:#dc2626;">{{ t('Blocked') }}</span>
                 <span class="badge rounded-pill" style="background:#7c3aed;">{{ t('Special Occasion') }}</span>
+                <span class="badge rounded-pill" style="background:#8b5cf6;">Group Session</span>
                 {% endif %}
                 <span class="badge rounded-pill bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>Zoom</span>
             </div>
@@ -774,6 +775,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (activeFilter === 'special') {
             return meta.type === 'block' && meta.block_type === 'special';
+        }
+        if (activeFilter === 'all' && meta.type === 'group_session') {
+            return true;
         }
         if (activeFilter === 'ongoing') {
             return meta.type === 'appointment' && meta.patient_status === 'ongoing';

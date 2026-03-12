@@ -2,6 +2,47 @@
 
 ---
 
+## Session 15 — March 12, 2026 (Phase 1: Group Meetings History and Management)
+
+### Overview
+Started implementation of group meeting management by introducing dedicated group data models, admin workflows, and calendar integration.
+
+### 1. New Group Data Model
+- Added DB support for:
+  - `groups` (name, type, description, active flag)
+  - `group_members` (group-to-patient assignment with join/leave tracking)
+  - `group_sessions` (scheduled sessions with date/time/duration/link)
+- Added migration-safe creation in `init_db` and schema coverage in `schema.sql`.
+
+### 2. Admin Group Management Routes
+- Added admin routes:
+  - `GET/POST /groups` to view and create groups
+  - `POST /groups/<group_id>/members` to add a patient to a group
+  - `POST /groups/<group_id>/members/<patient_id>/remove` to remove a member
+  - `POST /groups/<group_id>/sessions` to schedule a group session
+  - `POST /groups/sessions/<session_id>/delete` to delete a session
+
+### 3. Groups Admin UI
+- Added new template: `templates/groups.html`.
+- Includes:
+  - Group creation form
+  - Per-group member management
+  - Per-group session scheduling
+  - Upcoming session list with deletion
+- Added a `Groups` admin nav action in `layout.html`.
+
+### 4. Calendar Integration
+- Group sessions now appear in weekly calendar snapshot events with a dedicated color.
+- Group sessions are also considered occupied time, preventing slot collisions.
+- Updated calendar legend to include Group Session indicator.
+
+### Verification
+- `python -m py_compile app.py test_app.py` passed.
+- `python test_app.py` passed (`16` tests).
+- `python test_security.py` passed (`3` tests).
+
+---
+
 ## Session 14 — March 12, 2026 (Vacancy-Gated Booking, Sticky CRM Filters, Messaging Ribbon, Intake Tab Controls)
 
 ### Overview
