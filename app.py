@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import socket
+from collections import Counter
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -540,20 +541,186 @@ def index():
     return redirect(url_for('login'))
 
 
-def extract_background_sentence(text):
+HEBREW_NUMBER_WORDS = {
+    'אחד': '1',
+    'אחת': '1',
+    'שני': '2',
+    'שניים': '2',
+    'שתיים': '2',
+    'שתי': '2',
+    'שלושה': '3',
+    'שלוש': '3',
+    'ארבעה': '4',
+    'ארבע': '4',
+    'חמישה': '5',
+    'חמש': '5'
+}
+
+
+BACKGROUND_REASON_TOPICS = {
+    'אבל ואובדן': ['נפטר', 'פטירה', 'שבעה', 'אבל', 'אלמן', 'אלמנה'],
+    'חרדה ומתח': ['חרד', 'חרדה', 'פחד', 'חשש', 'דאג', 'לחץ'],
+    'קשיים במשפחה וביחסים קרובים': ['ילדים', 'ילד', 'בת', 'בן', 'בעל', 'אמא', 'אבא', 'משפחה', 'זוג'],
+    'קשיי תפקוד בעבודה או בלימודים': ['עבודה', 'מנהל', 'בוס', 'מפעל', 'מכללה', 'לומד', 'לומדת', 'צבא'],
+    'בושה, חריגות ודימוי עצמי': ['בושה', 'חריג', 'לא בסדר', 'אשם', 'לא נחמדה', 'רעה'],
+    'מחשבות אובססיביות או ירידה נפשית': ['אובסס', 'דיכא', 'בדידות', 'אין לו כח', 'אין לה כח', 'שעמום']
+}
+
+
+BACKGROUND_THEME_TOPICS = {
+    'יחסי קרבה, תלות ועצמאות': ['עצמאי', 'עצמאית', 'תלוי', 'תלות', 'להיעזר', 'להיתמך', 'לעזור', 'מרחק', 'קרובה'],
+    'ביקורת עצמית ותחושת חריגות': ['בושה', 'חריג', 'לא בסדר', 'אשם', 'רעה', 'לא נחמדה'],
+    'חרדה, דריכות וציפייה לפגיעה': ['חרד', 'פחד', 'חשש', 'לא בטוח', 'סכנה', 'מאיים', 'דריכות'],
+    'אבל, בדידות וחוויית אובדן': ['נפטר', 'פטירה', 'בדידות', 'שכול', 'שבעה', 'אובדן'],
+    'גבולות, עימותים וקונפליקטים': ['גבול', 'ריב', 'כעס', 'תוקפ', 'אסרטיב', 'מריבה', 'ויכוח'],
+    'עומס תפקודי בעבודה, לימודים או שירות': ['עבודה', 'מכללה', 'לימוד', 'צבא', 'משמרת', 'תפקיד', 'מפעל']
+}
+
+
+def normalize_summary_text(text):
     if not text:
         return ''
+    return ' '.join(str(text).replace('\n', ' ').split())
 
-    clean_text = ' '.join(str(text).replace('\n', ' ').split())
+
+def split_summary_segments(text):
+    clean_text = normalize_summary_text(text)
     if not clean_text:
+        return []
+
+    segments = []
+    for segment in re.split(r'[.!?\n\u05c3]+', clean_text):
+        segment = segment.strip(' ,;:-')
+        if len(segment) >= 18:
+            segments.append(segment)
+    return segments
+
+
+def extract_background_sentence(text):
+    segments = split_summary_segments(text)
+    if segments:
+        return segments[0][:180].strip()
+    return normalize_summary_text(text)[:180].strip()
+
+
+def trim_summary_segment(segment, limit=140):
+    segment = normalize_summary_text(segment)
+    if len(segment) <= limit:
+        return segment.rstrip(' ,;:')
+
+    trimmed = segment[:limit].rsplit(' ', 1)[0].rstrip(' ,;:')
+    return f'{trimmed}...'
+
+
+def find_best_summary_segment(texts, patient_name, keywords, prefer_earlier=True):
+    best_segment = ''
+    best_score = -1
+    normalized_name = normalize_summary_text(patient_name)
+
+    for index, text in enumerate(texts):
+        for segment in split_summary_segments(text):
+            score = 0
+            for keyword in keywords:
+                if keyword in segment:
+                    score += 2
+            if normalized_name and normalized_name in segment:
+                score += 2
+            if prefer_earlier:
+                score += max(0, 4 - index)
+            if score > best_score:
+                best_score = score
+                best_segment = segment
+
+    return trim_summary_segment(best_segment) if best_score > 0 else ''
+
+
+def pick_top_summary_topics(texts, topics, limit):
+    counts = Counter()
+    for text in texts:
+        clean_text = normalize_summary_text(text)
+        for label, keywords in topics.items():
+            hits = sum(clean_text.count(keyword) for keyword in keywords)
+            if hits:
+                counts[label] += hits
+
+    return [label for label, _ in counts.most_common(limit)]
+
+
+def extract_age_fact(texts, patient_name):
+    if not patient_name:
         return ''
 
-    parts = re.split(r'[.!?]|\u05c3', clean_text)
-    for part in parts:
-        part = part.strip()
-        if len(part) >= 12:
-            return part
-    return clean_text[:180].strip()
+    escaped_name = re.escape(patient_name)
+    patterns = [
+        rf'{escaped_name}[^.!?\n]{{0,40}}?\b(בן|בת)\s+(\d{{1,2}})\b',
+        rf'\b(בן|בת)\s+(\d{{1,2}})\b[^.!?\n]{{0,40}}?{escaped_name}'
+    ]
+
+    for text in texts[:4]:
+        clean_text = normalize_summary_text(text)
+        for pattern in patterns:
+            match = re.search(pattern, clean_text)
+            if match:
+                return f"גיל מתועד: {match.group(1)} {match.group(2)}"
+
+    return 'גיל מדויק לא תועד במפורש'
+
+
+def extract_occupation_fact(texts, patient_name):
+    segment = find_best_summary_segment(
+        texts,
+        patient_name,
+        ['עובד', 'עובדת', 'עבודה', 'לומד', 'לומדת', 'מכללה', 'מפעל', 'תפקיד', 'מנהל', 'מנהלת', 'צבא'],
+        prefer_earlier=True
+    )
+    if not segment:
+        return ''
+    return f'בהיבט התפקודי/תעסוקתי עלה כי {segment}'
+
+
+def extract_children_count(corpus):
+    match = re.search(r'(?:יש\s+ל[וה]\s+|אם\s+ל|אב\s+ל)(\d+|אחד|אחת|שני|שניים|שתיים|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש)\s+ילדים', corpus)
+    if not match:
+        return ''
+
+    raw_count = match.group(1)
+    return HEBREW_NUMBER_WORDS.get(raw_count, raw_count)
+
+
+def extract_family_fact(texts):
+    corpus = ' '.join(normalize_summary_text(text) for text in texts if text)
+    facts = []
+
+    if any(keyword in corpus for keyword in ['בעלה שנפטר', 'פטירת האב', 'פטירה של בעל', 'בן זוגה שנפטר', 'בעלה נפטר']):
+        facts.append('מתמודד/ת עם אובדן בן או בת הזוג')
+
+    children_count = extract_children_count(corpus)
+    if children_count:
+        facts.append(f'הורה ל-{children_count} ילדים')
+    elif 'ילדים' in corpus or 'ילדיה' in corpus:
+        facts.append('יחסיו/ה עם הילדים הם מוקד משמעותי')
+
+    if any(keyword in corpus for keyword in ['אמא', 'אביה', 'אביו', 'אחים', 'אחיו', 'אחיה', 'משפחת המקור']):
+        facts.append('עולה עיסוק משמעותי גם במשפחת המקור')
+
+    return '; '.join(facts[:3])
+
+
+def extract_recent_focus(notes):
+    recent_texts = []
+    for note in notes[-3:]:
+        if note['mood_summary']:
+            recent_texts.append(note['mood_summary'])
+        if note['content']:
+            recent_texts.append(note['content'])
+
+    recent_topics = pick_top_summary_topics(recent_texts, BACKGROUND_THEME_TOPICS, 2)
+    if recent_topics:
+        return ', '.join(recent_topics)
+
+    if notes:
+        return extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
+    return ''
 
 
 def build_patient_background_from_notes(db, patient_id, patient_name=None):
@@ -571,27 +738,46 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     if not notes:
         return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
 
-    first_note = notes[0]
-    last_note = notes[-1]
-    first_desc = extract_background_sentence(first_note['content']) or 'לא תועד תיאור ראשוני מפורט.'
-    latest_focus = extract_background_sentence(last_note['mood_summary'] or last_note['content']) or 'לא תועד מוקד ברור במפגש האחרון.'
+    note_texts = []
+    for note in notes:
+        note_texts.append(note['content'])
+        if note['mood_summary']:
+            note_texts.append(note['mood_summary'])
 
-    first_date = first_note['note_date']
-    last_date = last_note['note_date']
+    first_date = notes[0]['note_date']
+    last_date = notes[-1]['note_date']
 
     if first_date and last_date:
-        timeframe = f"התיעוד נע בין {first_date} ל-{last_date}."
+        timeframe = f" בין {first_date} ל-{last_date}"
     elif last_date:
-        timeframe = f"המפגש האחרון המתועד הוא בתאריך {last_date}."
+        timeframe = f" עד המפגש האחרון המתועד ב-{last_date}"
     else:
         timeframe = ''
 
-    return (
-        f"{patient_name} נמצא/ת במעקב טיפולי מתועד הכולל {len(notes)} מפגשים. "
-        f"בשלב הראשוני עלה: {first_desc}. "
-        f"בשלב האחרון בולט: {latest_focus}. "
-        f"{timeframe}"
-    ).strip()
+    age_fact = extract_age_fact(note_texts, patient_name)
+    occupation_fact = extract_occupation_fact(note_texts, patient_name)
+    family_fact = extract_family_fact(note_texts)
+    reason_topics = pick_top_summary_topics(note_texts[:6], BACKGROUND_REASON_TOPICS, 3)
+    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 3)
+    recent_focus = extract_recent_focus(notes)
+
+    parts = [f"{patient_name} נמצא/ת במעקב טיפולי מתועד הכולל {len(notes)} מפגשים{timeframe}."]
+
+    identity_parts = [age_fact]
+    if occupation_fact:
+        identity_parts.append(occupation_fact)
+    if family_fact:
+        identity_parts.append(family_fact)
+    parts.append(f"פרטים מרכזיים שעלו בתיעוד: {'; '.join(identity_parts)}.")
+
+    if reason_topics:
+        parts.append(f"מוקדי הפנייה והקושי הבולטים הם {', '.join(reason_topics)}.")
+    if theme_topics:
+        parts.append(f"לאורך הטיפול חוזרים נושאים של {', '.join(theme_topics)}.")
+    if recent_focus:
+        parts.append(f"במפגשים האחרונים בולט במיוחד {recent_focus}.")
+
+    return ' '.join(part.strip() for part in parts if part).strip()
 
 
 def fetch_patients_by_status(db, status):
