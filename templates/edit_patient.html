@@ -80,6 +80,13 @@
                                     </label>
                                 </div>
                                 <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="patient_type" id="typeGroup" value="group"
+                                        {% if patient['patient_type'] == 'group' %}checked{% endif %}>
+                                    <label class="form-check-label" for="typeGroup">
+                                        <i class="bi bi-people-fill me-1"></i>Group
+                                    </label>
+                                </div>
+                                <div class="form-check">
                                     <input class="form-check-input" type="radio" name="patient_type" id="typeInitialIntake" value="initial-intake"
                                         {% if patient['patient_type'] == 'initial-intake' %}checked{% endif %}>
                                     <label class="form-check-label" for="typeInitialIntake">

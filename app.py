@@ -345,6 +345,19 @@ def _get_or_create_backup_key():
 
 
 def perform_encrypted_backup(db_path):
+    db_source = Path(db_path)
+    if not db_source.exists():
+        raise FileNotFoundError(f"Database not found: {db_path}")
+
+    # Guard against backing up a corrupted database.
+    src_check = sqlite3.connect(db_path)
+    try:
+        integrity = src_check.execute('PRAGMA integrity_check').fetchone()[0]
+        if integrity != 'ok':
+            raise RuntimeError(f"Backup aborted, source DB integrity check failed: {integrity}")
+    finally:
+        src_check.close()
+
     backup_root = Path(BACKUP_DIR)
     backup_root.mkdir(parents=True, exist_ok=True)
 
@@ -361,7 +374,20 @@ def perform_encrypted_backup(db_path):
 
     from cryptography.fernet import Fernet
     cipher = Fernet(_get_or_create_backup_key())
-    encrypted_path.write_bytes(cipher.encrypt(raw_backup_path.read_bytes()))
+    raw_bytes = raw_backup_path.read_bytes()
+    encrypted_bytes = cipher.encrypt(raw_bytes)
+    encrypted_path.write_bytes(encrypted_bytes)
+
+    # Quick sanity check so we do not keep unreadable backups.
+    try:
+        probe = cipher.decrypt(encrypted_bytes)
+        if not probe.startswith(b'SQLite format 3'):
+            raise RuntimeError('Encrypted backup verification failed: invalid SQLite header')
+    except Exception as exc:
+        encrypted_path.unlink(missing_ok=True)
+        raw_backup_path.unlink(missing_ok=True)
+        raise RuntimeError(f'Encrypted backup verification failed: {exc}')
+
     raw_backup_path.unlink(missing_ok=True)
     return str(encrypted_path)
 
@@ -1036,6 +1062,12 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
         patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
         patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
 
+    patient_row = db.execute('''
+        SELECT intake_assessment, intake_questionnaire
+        FROM patients
+        WHERE id = ?
+    ''', (patient_id,)).fetchone()
+
     notes = db.execute('''
         SELECT note_date, content, mood_summary, created_at
         FROM notes
@@ -1044,6 +1076,20 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     ''', (patient_id,)).fetchall()
 
     if not notes:
+        intake_questionnaire = parse_intake_questionnaire(patient_row['intake_questionnaire'] if patient_row else None)
+        main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
+        problem_history = (intake_questionnaire.get('problem_history') or '').strip()
+        intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
+
+        main_problem = main_complaint or problem_history
+        if not main_problem and intake_assessment.strip():
+            main_problem = intake_assessment.strip().splitlines()[0]
+
+        if main_problem:
+            return (
+                f"{patient_name}: מידע עיקרי מבוסס אינטייק ראשוני (טרם תועדו מפגשים שוטפים). "
+                f"הבעיה המרכזית כיום: {main_problem}."
+            )
         return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
 
     note_texts = []
@@ -1065,9 +1111,37 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     age_fact = extract_age_fact(note_texts, patient_name)
     occupation_fact = extract_occupation_fact(note_texts, patient_name)
     family_fact = extract_family_fact(note_texts)
-    reason_topics = pick_top_summary_topics(note_texts[:6], BACKGROUND_REASON_TOPICS, 3)
-    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 3)
+    reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
+    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
     recent_focus = extract_recent_focus(notes)
+
+    intake_questionnaire = parse_intake_questionnaire(patient_row['intake_questionnaire'] if patient_row else None)
+    main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
+    problem_history = (intake_questionnaire.get('problem_history') or '').strip()
+
+    intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
+    intake_problem_line = ''
+    if intake_assessment:
+        for line in intake_assessment.splitlines():
+            cleaned = line.strip()
+            if cleaned and not cleaned.lower().startswith('main complaint:'):
+                intake_problem_line = cleaned
+                break
+
+    if main_complaint:
+        main_problem = main_complaint
+    elif problem_history:
+        main_problem = problem_history
+    elif intake_problem_line:
+        main_problem = intake_problem_line
+    elif reason_topics:
+        main_problem = f"קושי מרכזי סביב {', '.join(reason_topics)}"
+    elif theme_topics:
+        main_problem = f"מוקד קושי חוזר סביב {', '.join(theme_topics)}"
+    elif recent_focus:
+        main_problem = recent_focus
+    else:
+        main_problem = extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
 
     parts = [f"{patient_name} נמצא/ת במעקב טיפולי מתועד הכולל {len(notes)} מפגשים{timeframe}."]
 
@@ -1079,19 +1153,70 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     parts.append(f"פרטים מרכזיים שעלו בתיעוד: {'; '.join(identity_parts)}.")
 
     if reason_topics:
-        parts.append(f"מוקדי הפנייה והקושי הבולטים הם {', '.join(reason_topics)}.")
+        parts.append(f"מוקדי קושי בולטים: {', '.join(reason_topics)}.")
     if theme_topics:
-        parts.append(f"לאורך הטיפול חוזרים נושאים של {', '.join(theme_topics)}.")
+        parts.append(f"נושאים חוזרים בטיפול: {', '.join(theme_topics)}.")
     if recent_focus:
-        parts.append(f"במפגשים האחרונים בולט במיוחד {recent_focus}.")
+        parts.append(f"מיקוד עדכני: {recent_focus}.")
+
+    parts.append(f"הבעיה המרכזית כיום: {main_problem}.")
 
     return ' '.join(part.strip() for part in parts if part).strip()
+
+
+def _normalize_session_number(value):
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return str(int(raw))
+    except (TypeError, ValueError):
+        return raw
+
+
+def _has_meaningful_note_information(content_text, mood_summary, behavior_notes, appearance_text, checklist_text):
+    placeholders = {
+        '',
+        'n/a',
+        'na',
+        'none',
+        'unknown',
+        'yyyy-mm-dd',
+        'brief mood summary.',
+        'short behavior notes.',
+        'general appearance observations.',
+    }
+
+    values = [content_text, mood_summary, behavior_notes, appearance_text, checklist_text]
+    for value in values:
+        cleaned = (value or '').strip().lower()
+        if cleaned and cleaned not in placeholders:
+            return True
+    return False
 
 
 def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority'):
     base_query = '''
         SELECT p.*,
-        (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
+        (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring,
+        (
+            SELECT GROUP_CONCAT(g.name, ', ')
+            FROM group_members gm
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.patient_id = p.id
+              AND gm.left_at IS NULL
+              AND COALESCE(g.is_active, 1) = 1
+        ) AS group_names,
+        (
+            SELECT GROUP_CONCAT(COALESCE(gm.role, 'member'), ', ')
+            FROM group_members gm
+            JOIN groups g ON g.id = gm.group_id
+            WHERE gm.patient_id = p.id
+              AND gm.left_at IS NULL
+              AND COALESCE(g.is_active, 1) = 1
+        ) AS group_roles
         FROM patients p
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
@@ -1104,7 +1229,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
         base_query += ' AND p.status = ?'
         params.append(status)
 
-    if patient_type in ('private', 'residency', 'initial-intake'):
+    if patient_type in ('private', 'residency', 'initial-intake', 'group'):
         base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
         params.append(patient_type)
 
@@ -1149,7 +1274,7 @@ def crm_dashboard():
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
-    if patient_type not in {'all', 'private', 'residency', 'initial-intake'}:
+    if patient_type not in {'all', 'private', 'residency', 'initial-intake', 'group'}:
         patient_type = 'all'
     if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest'}:
         sort_by = 'status_priority'
@@ -1313,7 +1438,7 @@ def add_patient():
         birth_date = request.form.get('birth_date') or None
         id_number = (request.form.get('id_number') or '').strip() or None
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency', 'initial-intake'):
+        if patient_type not in ('private', 'residency', 'initial-intake', 'group'):
             patient_type = 'private'
         has_intake_tab = 1 if patient_type == 'initial-intake' else 0
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
@@ -1566,6 +1691,50 @@ def overlaps(start_a, end_a, start_b, end_b):
     return start_a < end_b and start_b < end_a
 
 
+def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None, exclude_group_session_id=None):
+    day_iso = day_obj.isoformat()
+
+    appointment_rows = db.execute('''
+        SELECT id, appointment_time, duration_minutes
+        FROM appointments
+        WHERE appointment_date = ?
+    ''', (day_iso,)).fetchall()
+    for row in appointment_rows:
+        if exclude_appointment_id and int(row['id']) == int(exclude_appointment_id):
+            continue
+        row_start = combine_dt(day_obj, row['appointment_time'])
+        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+        if overlaps(start_dt, end_dt, row_start, row_end):
+            return 'Time overlaps an existing appointment.'
+
+    block_rows = db.execute('''
+        SELECT blocked_time, duration_minutes
+        FROM blocked_slots
+        WHERE blocked_date = ?
+    ''', (day_iso,)).fetchall()
+    for row in block_rows:
+        row_start = combine_dt(day_obj, row['blocked_time'])
+        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+        if overlaps(start_dt, end_dt, row_start, row_end):
+            return 'Time overlaps a blocked slot.'
+
+    group_rows = db.execute('''
+        SELECT id, session_time, duration_minutes
+        FROM group_sessions
+        WHERE session_date = ?
+          AND COALESCE(status, 'scheduled') = 'scheduled'
+    ''', (day_iso,)).fetchall()
+    for row in group_rows:
+        if exclude_group_session_id and int(row['id']) == int(exclude_group_session_id):
+            continue
+        row_start = combine_dt(day_obj, row['session_time'])
+        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
+        if overlaps(start_dt, end_dt, row_start, row_end):
+            return 'Time overlaps an existing group session.'
+
+    return None
+
+
 def build_week_calendar_snapshot(db, week_start, user):
     week_end = week_start + timedelta(days=6)
     today = datetime.now().date()
@@ -1673,6 +1842,7 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'color': event_color,
                 'meta': {
                     'type': 'appointment',
+                    'appointment_id': appt['id'],
                     'patient_status': appt['patient_status'],
                     'is_recurring': is_recurring,
                     'meeting_type': appt['meeting_type'],
@@ -1705,10 +1875,17 @@ def build_week_calendar_snapshot(db, week_start, user):
             'color': '#8b5cf6',
             'meta': {
                 'type': 'group_session',
+                'group_session_id': group_session['id'],
+                'session_date': group_session['session_date'],
+                'session_time': group_session['session_time'],
+                'duration_minutes': session_duration,
+                'title': group_session['title'] or '',
+                'facilitator': group_session['facilitator'] or '',
                 'group_name': group_session['group_name'],
                 'meeting_type': group_session['meeting_type'],
                 'meeting_link': group_session['meeting_link'],
-                'can_delete': user.role == 'admin'
+                'can_delete': user.role == 'admin',
+                'can_edit': user.role == 'admin'
             }
         })
         occupied.append((session_start, session_end))
@@ -1812,18 +1989,6 @@ def build_week_calendar_snapshot(db, week_start, user):
                     'color': '#10b981',
                     'meta': {'type': 'vacancy', 'can_delete': False}
                 })
-
-
-        if user.role == 'admin':
-            events.append({
-                'id': f"vacancy-{day.isoformat()}-{slot_start.strftime('%H:%M')}",
-                'title': f"Vacant ({duration}min)",
-                'start': slot_start.isoformat(),
-                'end': slot_end.isoformat(),
-                'editable': False,
-                'color': '#10b981',
-                'meta': {'type': 'vacancy', 'can_delete': False}
-            })
 
     return {
         'week_start': week_start.isoformat(),
@@ -1973,7 +2138,15 @@ def add_group_session(group_id):
         if end_minutes > start_minutes:
             duration = end_minutes - start_minutes
 
+    session_start = datetime.combine(parsed_date, parsed_time)
+    session_end = session_start + timedelta(minutes=duration)
+
     db = get_db()
+    conflict_message = has_time_conflict(db, parsed_date, session_start, session_end)
+    if conflict_message:
+        flash(conflict_message)
+        return redirect(url_for('groups_dashboard'))
+
     db.execute('''
         INSERT INTO group_sessions
             (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, meeting_link, status)
@@ -2071,23 +2244,9 @@ def api_calendar_vacancy():
     slot_end = slot_start + timedelta(minutes=duration)
 
     db = get_db()
-    appointment_rows = db.execute('''
-        SELECT appointment_time, duration_minutes FROM appointments WHERE appointment_date = ?
-    ''', (slot_date,)).fetchall()
-    for row in appointment_rows:
-        row_start = combine_dt(date_obj, row['appointment_time'])
-        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-        if overlaps(slot_start, slot_end, row_start, row_end):
-            return jsonify({'status': 'error', 'message': 'Vacancy overlaps an existing appointment.'}), 409
-
-    block_rows = db.execute('''
-        SELECT blocked_time, duration_minutes FROM blocked_slots WHERE blocked_date = ?
-    ''', (slot_date,)).fetchall()
-    for row in block_rows:
-        row_start = combine_dt(date_obj, row['blocked_time'])
-        row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-        if overlaps(slot_start, slot_end, row_start, row_end):
-            return jsonify({'status': 'error', 'message': 'Vacancy overlaps a blocked slot.'}), 409
+    conflict_message = has_time_conflict(db, date_obj, slot_start, slot_end)
+    if conflict_message:
+        return jsonify({'status': 'error', 'message': f'Vacancy conflict: {conflict_message}'}), 409
 
     db.execute('''
         DELETE FROM slots_override
@@ -2879,15 +3038,30 @@ def import_patient_history(patient_id):
 
                 # Handle flat list of treatment logs (meeting number, date, content)
                 for item in sorted(data, key=_sort_key):
-                    meeting_number = item.get('meeting_number')
-                    date_str = item.get('date') or item.get('note_date')
-                    content_text = item.get('content')
-                    appearance_text = item.get('patient_appearance')
+                    meeting_number = _normalize_session_number(item.get('meeting_number') or item.get('session_number'))
+                    date_str = (item.get('date') or item.get('note_date') or '').strip() or None
+                    content_text = (item.get('content') or '').strip()
+                    appearance_text = (item.get('patient_appearance') or '').strip()
                     checklist_text = item.get('behavior_checklist')
                     if isinstance(checklist_text, list):
                         checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
-                    mood_summary = item.get('mood_summary')
-                    behavior_notes = item.get('behavior_notes')
+                    checklist_text = (checklist_text or '').strip()
+                    mood_summary = (item.get('mood_summary') or '').strip()
+                    behavior_notes = (item.get('behavior_notes') or '').strip()
+
+                    if not meeting_number and not _has_meaningful_note_information(
+                        content_text,
+                        mood_summary,
+                        behavior_notes,
+                        appearance_text,
+                        checklist_text,
+                    ):
+                        continue
+
+                    if not content_text:
+                        content_text = mood_summary or behavior_notes or appearance_text
+                    if not content_text:
+                        continue
 
                     appt_id = None
                     if date_str:
@@ -2949,9 +3123,31 @@ def import_patient_history(patient_id):
                 )
                 for note in sorted_notes:
                     new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+                    session_number = _normalize_session_number(note.get('session_number') or note.get('meeting_number'))
+                    note_date = (note.get('note_date') or note.get('date') or '').strip() or None
+                    content_text = (note.get('content') or '').strip()
+                    appearance_text = (note.get('patient_appearance') or '').strip()
                     checklist_text = note.get('behavior_checklist')
                     if isinstance(checklist_text, list):
                         checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
+                    checklist_text = (checklist_text or '').strip()
+                    mood_summary = (note.get('mood_summary') or '').strip()
+                    behavior_notes = (note.get('behavior_notes') or '').strip()
+
+                    if not session_number and not _has_meaningful_note_information(
+                        content_text,
+                        mood_summary,
+                        behavior_notes,
+                        appearance_text,
+                        checklist_text,
+                    ):
+                        continue
+
+                    if not content_text:
+                        content_text = mood_summary or behavior_notes or appearance_text
+                    if not content_text:
+                        continue
+
                     db.execute('''INSERT INTO notes
                         (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
                          behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
@@ -2959,13 +3155,13 @@ def import_patient_history(patient_id):
                         (
                             patient_id,
                             new_appt_id,
-                            note.get('session_number') or note.get('meeting_number'),
-                            note.get('note_date') or note.get('date'),
-                            note.get('content'),
-                            note.get('patient_appearance'),
+                            session_number,
+                            note_date,
+                            content_text,
+                            appearance_text,
                             checklist_text,
-                            note.get('mood_summary'),
-                            note.get('behavior_notes'),
+                            mood_summary,
+                            behavior_notes,
                             note.get('needs_review'),
                             note.get('created_at')
                         ))
@@ -3047,7 +3243,7 @@ def api_get_messages():
             like_query = f"%{search_query}%"
             params.extend([like_query, like_query, like_query])
 
-        if patient_type in ('private', 'residency', 'initial-intake'):
+        if patient_type in ('private', 'residency', 'initial-intake', 'group'):
             filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
             params.append(patient_type)
 
@@ -3232,6 +3428,22 @@ def delete_group_session(session_id):
     db.commit()
     flash('Group session deleted.')
     return redirect(url_for('groups_dashboard'))
+
+
+@app.route('/api/groups/sessions/<int:session_id>/delete', methods=['POST'])
+@login_required
+def api_delete_group_session(session_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    existing = db.execute('SELECT id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    if not existing:
+        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
+
+    db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
+    db.commit()
+    return jsonify({'status': 'success'})
 
 
 @app.route('/admin/profile', methods=['GET', 'POST'])
@@ -3446,6 +3658,13 @@ def api_calendar_appointment_update(appointment_id):
         if computed > 0:
             duration = computed
 
+    day_obj = parse_date_safe(booking_date)
+    start_dt = combine_dt(day_obj, parse_time_safe(booking_time).strftime('%H:%M'))
+    end_dt = start_dt + timedelta(minutes=duration)
+    conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=appointment_id)
+    if conflict_message:
+        return jsonify({'status': 'error', 'message': conflict_message}), 409
+
     db.execute('''
         UPDATE appointments
         SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
@@ -3454,6 +3673,55 @@ def api_calendar_appointment_update(appointment_id):
         WHERE id = ?
     ''', (booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration,
           meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None, save_to_google, appointment_id))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/groups/sessions/<int:session_id>/update', methods=['POST'])
+@login_required
+def api_update_group_session(session_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    existing = db.execute('SELECT * FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    if not existing:
+        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
+
+    session_date = (request.form.get('session_date') or '').strip()
+    session_time = (request.form.get('session_time') or '').strip()
+    end_time_raw = (request.form.get('end_time') or '').strip()
+    title = (request.form.get('title') or '').strip()
+    facilitator = (request.form.get('facilitator') or '').strip()
+    meeting_type = (request.form.get('meeting_type') or 'in-person').strip() or 'in-person'
+    meeting_link = (request.form.get('meeting_link') or '').strip()
+
+    parsed_date = parse_date_safe(session_date)
+    parsed_time = parse_time_safe(session_time)
+    parsed_end = parse_time_safe(end_time_raw)
+    if not parsed_date or not parsed_time:
+        return jsonify({'status': 'error', 'message': 'Valid date and start time are required.'}), 400
+
+    duration = int(existing['duration_minutes'] or 60)
+    if parsed_end:
+        start_minutes = parsed_time.hour * 60 + parsed_time.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        if end_minutes > start_minutes:
+            duration = end_minutes - start_minutes
+
+    start_dt = datetime.combine(parsed_date, parsed_time)
+    end_dt = start_dt + timedelta(minutes=duration)
+    conflict_message = has_time_conflict(db, parsed_date, start_dt, end_dt, exclude_group_session_id=session_id)
+    if conflict_message:
+        return jsonify({'status': 'error', 'message': conflict_message}), 409
+
+    db.execute('''
+        UPDATE group_sessions
+        SET session_date = ?, session_time = ?, duration_minutes = ?,
+            title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
+        WHERE id = ?
+    ''', (session_date, parsed_time.strftime('%H:%M'), duration,
+          title or None, facilitator or None, meeting_type, meeting_link or None, session_id))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -3553,7 +3821,7 @@ def edit_patient(patient_id):
         id_number = (request.form.get('id_number') or '').strip() or None
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency', 'initial-intake'):
+        if patient_type not in ('private', 'residency', 'initial-intake', 'group'):
             patient_type = 'private'
         has_intake_tab = int(patient['has_intake_tab'] or 0)
         if patient_type == 'initial-intake':

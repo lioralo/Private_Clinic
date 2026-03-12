@@ -1,6 +1,9 @@
 {% extends 'layout.html' %}
 
 {% block content %}
+{# Hidden CSRF token used by inline JS fetch calls #}
+<input type="hidden" id="groups_csrf_token" value="{{ csrf_token() }}">
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-people-fill me-2"></i>Group Meetings</h2>
@@ -49,16 +52,19 @@
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
                     {% for session in group_sessions %}
-                    <div class="list-group-item">
+                    <div class="list-group-item" id="sidebar-session-{{ session['id'] }}">
                         <div class="fw-semibold">{{ session['group_name'] }}</div>
                         <div class="small text-muted">{{ session['session_date'] }} {{ session['session_time'] }} · {{ session['duration_minutes'] }} min</div>
-                        {% if session['title'] %}
-                        <div class="small text-muted">{{ session['title'] }}</div>
-                        {% endif %}
-                        <form method="post" action="{{ url_for('delete_group_session', session_id=session['id']) }}" class="mt-2">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">Delete Session</button>
-                        </form>
+                        {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
+                        <div class="mt-2 d-flex gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill"
+                                onclick="openEditModal({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}')">
+                                <i class="bi bi-pencil me-1"></i>Edit
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
+                                <i class="bi bi-trash me-1"></i>Delete
+                            </button>
+                        </div>
                     </div>
                     {% else %}
                     <div class="list-group-item text-muted small">No sessions yet.</div>
@@ -149,6 +155,86 @@
                         </form>
                     </div>
                 </div>
+
+                {# ---- Existing sessions for this group ---- #}
+                {% set gsessions = group_sessions | selectattr('group_id', 'equalto', group['id']) | list %}
+                {% if gsessions %}
+                <hr class="my-3">
+                <h6 class="small text-uppercase text-muted mb-2">Scheduled Sessions</h6>
+                <div class="list-group list-group-flush">
+                    {% for session in gsessions %}
+                    <div class="list-group-item px-0" id="group-session-row-{{ session['id'] }}">
+                        {# ---- View row ---- #}
+                        <div class="d-flex justify-content-between align-items-start" id="session-view-{{ session['id'] }}">
+                            <div>
+                                <div class="fw-semibold small">{{ session['session_date'] }} &bull; {{ session['session_time'] }}
+                                    {% set end_h = ((session['session_time'][:2]|int)*60 + (session['session_time'][3:5]|int) + session['duration_minutes']) // 60 %}
+                                    {% set end_m = ((session['session_time'][:2]|int)*60 + (session['session_time'][3:5]|int) + session['duration_minutes']) % 60 %}
+                                    – {{ '%02d'|format(end_h % 24) }}:{{ '%02d'|format(end_m) }}
+                                </div>
+                                {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
+                                <div class="d-flex gap-2 mt-1 flex-wrap">
+                                    <span class="badge bg-secondary-subtle text-secondary border small">{{ session['meeting_type'] or 'in-person' }}</span>
+                                    {% if session['facilitator'] %}<span class="badge bg-light text-dark border small"><i class="bi bi-person me-1"></i>{{ session['facilitator'] }}</span>{% endif %}
+                                    {% if session['meeting_link'] %}<a href="{{ session['meeting_link'] }}" target="_blank" rel="noopener noreferrer" class="badge bg-primary-subtle text-primary border small text-decoration-none"><i class="bi bi-box-arrow-up-right me-1"></i>Link</a>{% endif %}
+                                </div>
+                            </div>
+                            <div class="d-flex gap-1 ms-2 flex-shrink-0">
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill"
+                                    onclick="toggleEditRow({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {# ---- Inline edit form (hidden by default) ---- #}
+                        <div class="mt-2 d-none border rounded-3 p-3 bg-light" id="session-edit-{{ session['id'] }}">
+                            <div class="row g-2">
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label small mb-1">Date</label>
+                                    <input type="date" class="form-control form-control-sm" id="edit-date-{{ session['id'] }}">
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <label class="form-label small mb-1">Start</label>
+                                    <input type="time" class="form-control form-control-sm" id="edit-start-{{ session['id'] }}">
+                                </div>
+                                <div class="col-6 col-sm-4">
+                                    <label class="form-label small mb-1">End</label>
+                                    <input type="time" class="form-control form-control-sm" id="edit-end-{{ session['id'] }}">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small mb-1">Title</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-title-{{ session['id'] }}" placeholder="Optional">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small mb-1">Facilitator</label>
+                                    <input type="text" class="form-control form-control-sm" id="edit-facilitator-{{ session['id'] }}">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small mb-1">Meeting Type</label>
+                                    <select class="form-select form-select-sm" id="edit-type-{{ session['id'] }}">
+                                        <option value="in-person">In-person</option>
+                                        <option value="online">Online</option>
+                                        <option value="zoom">Zoom</option>
+                                        <option value="google-meet">Google Meet</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small mb-1">Meeting Link</label>
+                                    <input type="url" class="form-control form-control-sm" id="edit-link-{{ session['id'] }}" placeholder="https://...">
+                                </div>
+                                <div class="col-12 d-flex gap-2 justify-content-end">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="cancelEditRow({{ session['id'] }})">Cancel</button>
+                                    <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="saveSession({{ session['id'] }})">Save Changes</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
         </div>
         {% else %}
@@ -160,4 +246,185 @@
         {% endfor %}
     </div>
 </div>
+
+{# ---- Edit Session Modal (used from sidebar) ---- #}
+<div class="modal fade" id="editSessionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Edit Group Session</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalSessionId">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small">Date</label>
+                        <input type="date" class="form-control form-control-sm" id="modalDate">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Start Time</label>
+                        <input type="time" class="form-control form-control-sm" id="modalStart">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">End Time</label>
+                        <input type="time" class="form-control form-control-sm" id="modalEnd">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Title</label>
+                        <input type="text" class="form-control form-control-sm" id="modalTitle" placeholder="Optional">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Facilitator</label>
+                        <input type="text" class="form-control form-control-sm" id="modalFacilitator">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Meeting Type</label>
+                        <select class="form-select form-select-sm" id="modalMeetingType">
+                            <option value="in-person">In-person</option>
+                            <option value="online">Online</option>
+                            <option value="zoom">Zoom</option>
+                            <option value="google-meet">Google Meet</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Meeting Link</label>
+                        <input type="url" class="form-control form-control-sm" id="modalMeetingLink" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill me-auto" id="modalDeleteBtn">Delete Session</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm rounded-pill" id="modalSaveBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const csrfToken = document.getElementById('groups_csrf_token').value;
+const editModal = document.getElementById('editSessionModal') ? new bootstrap.Modal(document.getElementById('editSessionModal')) : null;
+
+function minutesToTime(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+function timeToMinutes(hhmm) {
+    if (!hhmm) return 0;
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+}
+
+/* ---- Inline row editing (right-column sessions list) ---- */
+function toggleEditRow(id, date, start, durationMin, title, facilitator, type, link) {
+    document.getElementById('edit-date-' + id).value = date;
+    document.getElementById('edit-start-' + id).value = start;
+    document.getElementById('edit-end-' + id).value = minutesToTime(timeToMinutes(start) + durationMin);
+    document.getElementById('edit-title-' + id).value = title;
+    document.getElementById('edit-facilitator-' + id).value = facilitator;
+    document.getElementById('edit-type-' + id).value = type;
+    document.getElementById('edit-link-' + id).value = link;
+    document.getElementById('session-view-' + id).classList.add('d-none');
+    document.getElementById('session-edit-' + id).classList.remove('d-none');
+}
+
+function cancelEditRow(id) {
+    document.getElementById('session-view-' + id).classList.remove('d-none');
+    document.getElementById('session-edit-' + id).classList.add('d-none');
+}
+
+function saveSession(id) {
+    const body = new URLSearchParams({
+        session_date: document.getElementById('edit-date-' + id).value,
+        session_time: document.getElementById('edit-start-' + id).value,
+        end_time: document.getElementById('edit-end-' + id).value,
+        title: document.getElementById('edit-title-' + id).value || '',
+        facilitator: document.getElementById('edit-facilitator-' + id).value || '',
+        meeting_type: document.getElementById('edit-type-' + id).value || 'in-person',
+        meeting_link: document.getElementById('edit-link-' + id).value || ''
+    });
+    fetch('/api/groups/sessions/' + id + '/update', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message || 'Could not save changes.');
+        }
+    }).catch(() => alert('Could not save changes.'));
+}
+
+function deleteSession(id) {
+    if (!confirm('Delete this group session?')) return;
+    fetch('/api/groups/sessions/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken }
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message || 'Could not delete session.');
+        }
+    }).catch(() => alert('Could not delete session.'));
+}
+
+/* ---- Modal editing (left sidebar sessions) ---- */
+function openEditModal(id, date, start, durationMin, title, facilitator, type, link) {
+    document.getElementById('modalSessionId').value = id;
+    document.getElementById('modalDate').value = date;
+    document.getElementById('modalStart').value = start;
+    document.getElementById('modalEnd').value = minutesToTime(timeToMinutes(start) + durationMin);
+    document.getElementById('modalTitle').value = title;
+    document.getElementById('modalFacilitator').value = facilitator;
+    document.getElementById('modalMeetingType').value = type;
+    document.getElementById('modalMeetingLink').value = link;
+    if (editModal) editModal.show();
+}
+
+document.getElementById('modalSaveBtn').addEventListener('click', function() {
+    const id = document.getElementById('modalSessionId').value;
+    const body = new URLSearchParams({
+        session_date: document.getElementById('modalDate').value,
+        session_time: document.getElementById('modalStart').value,
+        end_time: document.getElementById('modalEnd').value,
+        title: document.getElementById('modalTitle').value || '',
+        facilitator: document.getElementById('modalFacilitator').value || '',
+        meeting_type: document.getElementById('modalMeetingType').value || 'in-person',
+        meeting_link: document.getElementById('modalMeetingLink').value || ''
+    });
+    fetch('/api/groups/sessions/' + id + '/update', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            if (editModal) editModal.hide();
+            location.reload();
+        } else {
+            alert(data.message || 'Could not save changes.');
+        }
+    }).catch(() => alert('Could not save changes.'));
+});
+
+document.getElementById('modalDeleteBtn').addEventListener('click', function() {
+    const id = document.getElementById('modalSessionId').value;
+    if (!confirm('Delete this group session?')) return;
+    fetch('/api/groups/sessions/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken }
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            if (editModal) editModal.hide();
+            location.reload();
+        } else {
+            alert(data.message || 'Could not delete session.');
+        }
+    }).catch(() => alert('Could not delete session.'));
+});
+</script>
 {% endblock %}

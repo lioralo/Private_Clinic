@@ -82,6 +82,7 @@
                         <option value="all" {% if patient_type == 'all' %}selected{% endif %}>All Types</option>
                         <option value="private" {% if patient_type == 'private' %}selected{% endif %}>Private</option>
                         <option value="residency" {% if patient_type == 'residency' %}selected{% endif %}>Residency</option>
+                        <option value="group" {% if patient_type == 'group' %}selected{% endif %}>Group</option>
                     </select>
                     <select class="form-select form-select-sm" name="sort">
                         <option value="status_priority" {% if sort_by == 'status_priority' %}selected{% endif %}>Status Priority</option>
@@ -118,11 +119,19 @@
                                 <span>
                                 {% if patient['patient_type'] == 'residency' %}
                                 <span class="badge ms-1" style="background:#5b21b6;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
+                                {% elif patient['patient_type'] == 'group' %}
+                                <span class="badge ms-1" style="background:#7c3aed;font-size:0.72em;"><i class="bi bi-people-fill me-1"></i>Group</span>
                                 {% else %}
                                 <span class="badge ms-1" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>Private</span>
                                 {% endif %}
                                 </span>
                             </p>
+                            {% if patient['group_names'] %}
+                            <p class="text-muted small mb-0">
+                                <i class="bi bi-diagram-3 me-1"></i>{{ patient['group_names'] }}
+                                {% if patient['group_roles'] %} · Roles: {{ patient['group_roles'] }}{% endif %}
+                            </p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

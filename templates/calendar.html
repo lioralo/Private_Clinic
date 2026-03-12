@@ -515,11 +515,19 @@ document.addEventListener('DOMContentLoaded', function() {
         eventClick: function(info) {
             const props = info.event.extendedProps || {};
             const meta = props.meta || {};
-            if (!meta.can_delete) {
-                return;
-            }
 
             if (meta.type === 'appointment') {
+                if (!meta.can_delete) {
+                    showActionModal({ title: 'Not Allowed', message: 'You cannot edit this meeting.' });
+                    return;
+                }
+
+                const appointmentId = props.appointment_id || meta.appointment_id;
+                if (!appointmentId) {
+                    showActionModal({ title: 'Edit Failed', message: 'Missing appointment id.' });
+                    return;
+                }
+
                 const startDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : '';
                 const startTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
                 const endTime = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
@@ -554,14 +562,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
                 if (deleteBtn) {
                     deleteBtn.onclick = function() {
-                        fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
+                        fetch(`/api/calendar/appointment/${appointmentId}/delete`, {
                             method: 'POST',
                             headers: { 'X-CSRFToken': csrfToken }
                         }).then(r => r.json()).then(data => {
                             if (data.status === 'success') {
                                 actionModal.hide();
                                 loadSnapshot();
+                            } else {
+                                showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete meeting.' });
                             }
+                        }).catch(() => {
+                            showActionModal({ title: 'Delete Failed', message: 'Could not delete meeting.' });
                         });
                     };
                 }
@@ -584,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         save_to_google: shouldSaveToGoogle ? '1' : '0',
                         meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
                     });
-                    fetch(`/api/calendar/appointment/${props.appointment_id}/update`, {
+                    fetch(`/api/calendar/appointment/${appointmentId}/update`, {
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': csrfToken,
@@ -598,9 +610,103 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                             actionModal.hide();
                             loadSnapshot();
+                        } else {
+                            showActionModal({ title: 'Save Failed', message: data.message || 'Could not save meeting changes.' });
                         }
+                    }).catch(() => {
+                        showActionModal({ title: 'Save Failed', message: 'Could not save meeting changes.' });
                     });
                 };
+
+                return;
+            }
+
+            if (meta.type === 'group_session' && isAdmin) {
+                const groupSessionId = props.group_session_id || meta.group_session_id;
+                if (!groupSessionId) {
+                    showActionModal({ title: 'Edit Failed', message: 'Missing group session id.' });
+                    return;
+                }
+
+                const sessionDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : (meta.session_date || '');
+                const sessionStart = info.event.start ? info.event.start.toTimeString().slice(0, 5) : (meta.session_time || '');
+                const sessionEnd = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
+                modalTitle.textContent = 'Edit Group Session';
+                modalBody.innerHTML = `
+                    <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${sessionDate}"></div>
+                    <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${sessionStart}"></div>
+                    <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${sessionEnd}"></div>
+                    <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${meta.title || ''}"></div>
+                    <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${meta.facilitator || ''}"></div>
+                    <div class="mb-2"><label class="form-label small">Meeting Type</label>
+                        <select class="form-select form-select-sm" id="editGroupMeetingType">
+                            <option value="in-person">In-person</option>
+                            <option value="online">Online</option>
+                            <option value="zoom">Zoom</option>
+                            <option value="google-meet">Google Meet</option>
+                        </select>
+                    </div>
+                    <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${meta.meeting_link || ''}"></div>
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
+                `;
+                const groupTypeSelect = document.getElementById('editGroupMeetingType');
+                if (groupTypeSelect) {
+                    groupTypeSelect.value = meta.meeting_type || 'in-person';
+                }
+                modalConfirmBtn.textContent = 'Save';
+                modalConfirmBtn.className = 'btn btn-primary';
+                modalCancelBtn.classList.remove('d-none');
+                actionModal.show();
+
+                const deleteGroupBtn = document.getElementById('deleteGroupSessionInsideEdit');
+                if (deleteGroupBtn) {
+                    deleteGroupBtn.onclick = function() {
+                        fetch(`/api/groups/sessions/${groupSessionId}/delete`, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrfToken }
+                        }).then(r => r.json()).then(data => {
+                            if (data.status === 'success') {
+                                actionModal.hide();
+                                loadSnapshot();
+                            } else {
+                                showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete group session.' });
+                            }
+                        }).catch(() => {
+                            showActionModal({ title: 'Delete Failed', message: 'Could not delete group session.' });
+                        });
+                    };
+                }
+
+                modalConfirmBtn.onclick = function() {
+                    const body = new URLSearchParams({
+                        session_date: document.getElementById('editGroupDate').value,
+                        session_time: document.getElementById('editGroupStart').value,
+                        end_time: document.getElementById('editGroupEnd').value,
+                        title: document.getElementById('editGroupTitle').value || '',
+                        facilitator: document.getElementById('editGroupFacilitator').value || '',
+                        meeting_type: document.getElementById('editGroupMeetingType').value || 'in-person',
+                        meeting_link: document.getElementById('editGroupMeetingLink').value || ''
+                    });
+                    fetch(`/api/groups/sessions/${groupSessionId}/update`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: body.toString()
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            actionModal.hide();
+                            loadSnapshot();
+                        } else {
+                            showActionModal({ title: 'Save Failed', message: data.message || 'Could not save group session.' });
+                        }
+                    }).catch(() => {
+                        showActionModal({ title: 'Save Failed', message: 'Could not save group session.' });
+                    });
+                };
+
+                return;
             }
 
             if (meta.type === 'block' && isAdmin) {
