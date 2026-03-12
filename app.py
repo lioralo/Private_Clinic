@@ -444,7 +444,35 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
         except sqlite3.OperationalError:
             pass
 
@@ -514,18 +542,22 @@ def fetch_patients_by_status(db, status):
         return db.execute('''
             SELECT p.*,
             (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p ORDER BY p.created_at DESC
+            FROM patients p
+            WHERE COALESCE(p.is_deleted, 0) = 0
+            ORDER BY p.created_at DESC
         ''').fetchall()
     if status in ['candidate', 'waiting for scheduling', 'waiting']:
         return db.execute('''
             SELECT p.*,
             (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-            FROM patients p WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
+            FROM patients p
+            WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')
+              AND COALESCE(p.is_deleted, 0) = 0
         ''').fetchall()
     return db.execute('''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
-        FROM patients p WHERE status = ?
+        FROM patients p WHERE status = ? AND COALESCE(p.is_deleted, 0) = 0
     ''', (status,)).fetchall()
 
 
@@ -539,10 +571,10 @@ def crm_dashboard():
     status = request.args.get('status', 'all')
     patients = fetch_patients_by_status(db, status)
     counts = {
-        'all': db.execute('SELECT COUNT(*) AS c FROM patients').fetchone()['c'],
-        'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing'").fetchone()['c'],
-        'candidate_waiting': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status IN ('candidate', 'waiting for scheduling', 'waiting')").fetchone()['c'],
-        'archived': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'archived'").fetchone()['c']
+        'all': db.execute('SELECT COUNT(*) AS c FROM patients WHERE COALESCE(is_deleted, 0) = 0').fetchone()['c'],
+        'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing' AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
+        'candidate_waiting': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status IN ('candidate', 'waiting for scheduling', 'waiting') AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
+        'archived': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'archived' AND COALESCE(is_deleted, 0) = 0").fetchone()['c']
     }
     return render_template('crm.html', patients=patients, status=status, counts=counts)
 
@@ -686,15 +718,19 @@ def add_patient():
         email = request.form.get('email')
         phone = request.form.get('phone')
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency'):
+        if patient_type not in ('private', 'residency', 'initial-intake'):
             patient_type = 'private'
+        intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
+        intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
 
         if not name:
             flash('Name is required!')
         else:
             db = get_db()
-            db.execute('INSERT INTO patients (name, status, email, phone, patient_type) VALUES (?, ?, ?, ?, ?)',
-                       (name, status, email, phone, patient_type))
+            db.execute('''INSERT INTO patients
+                          (name, status, email, phone, patient_type, intake_assessment, intake_questionnaire)
+                          VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                       (name, status, email, phone, patient_type, intake_assessment or None, intake_questionnaire or None))
             db.commit()
             return redirect(url_for('patients', status=status))
 
@@ -729,7 +765,7 @@ def patient_detail(patient_id):
          return redirect(url_for('patient_home'))
 
     db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if patient is None:
         return "Patient not found", 404
 
@@ -787,8 +823,15 @@ def patient_detail(patient_id):
 
     active_tab = request.args.get('tab', 'info')
     latest_note = notes[0] if notes else None
+    next_session_row = db.execute('''
+        SELECT COALESCE(MAX(CAST(COALESCE(session_number, '0') AS INTEGER)), 0) AS max_session
+        FROM notes
+        WHERE patient_id = ?
+    ''', (patient_id,)).fetchone()
+    suggested_session_number = int(next_session_row['max_session'] or 0) + 1
+    suggested_note_date = datetime.now().date().isoformat()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date)
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):
@@ -911,7 +954,7 @@ def build_week_calendar_snapshot(db, week_start, user):
     }
 
     appointment_rows = db.execute('''
-        SELECT a.*, p.name AS patient_name, p.status AS patient_status
+        SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
         WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
@@ -986,6 +1029,8 @@ def build_week_calendar_snapshot(db, week_start, user):
                 event_color = '#6b7280'
 
             platform = (appt['meeting_platform'] or '') if 'meeting_platform' in appt.keys() else ''
+            meeting_title = (appt['meeting_title'] or '') if 'meeting_title' in appt.keys() else ''
+            save_to_google = int(appt['save_to_google'] or 0) if 'save_to_google' in appt.keys() else 0
             events.append({
                 'id': f"appointment-{appt['id']}-{occ_date.isoformat()}",
                 'appointment_id': appt['id'],
@@ -1000,7 +1045,10 @@ def build_week_calendar_snapshot(db, week_start, user):
                     'patient_status': appt['patient_status'],
                     'is_recurring': is_recurring,
                     'meeting_type': appt['meeting_type'],
+                    'meeting_link': appt['meeting_link'],
                     'meeting_platform': platform,
+                    'meeting_title': meeting_title,
+                    'save_to_google': save_to_google,
                     'can_delete': can_delete
                 }
             })
@@ -1099,7 +1147,7 @@ def weekly_calendar():
     can_self_schedule = False
     if current_user.role == 'admin':
         patient_options = db.execute(
-            'SELECT id, name, status FROM patients ORDER BY name ASC'
+            'SELECT id, name, status, patient_type FROM patients ORDER BY name ASC'
         ).fetchall()
     else:
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
@@ -1179,6 +1227,8 @@ def api_calendar_book():
     meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
     meeting_link = request.form.get('meeting_link', '').strip()
     meeting_platform = request.form.get('meeting_platform', '').strip()
+    meeting_title = request.form.get('meeting_title', '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
     booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
     special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
     special_repeat_until = request.form.get('special_repeat_until', '').strip()
@@ -1210,6 +1260,11 @@ def api_calendar_book():
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
         if not patient or int(patient['can_self_schedule'] or 0) != 1:
             return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+
+    patient_type = None
+    if booking_type != 'special' and patient_id:
+        patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
 
     def slot_is_available(date_iso, start_time_str, slot_duration):
         date_obj = parse_date_safe(date_iso)
@@ -1275,6 +1330,9 @@ def api_calendar_book():
         db.commit()
         return jsonify({'status': 'success'})
 
+    if patient_type == 'initial-intake':
+        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
+
     week_start = anchor - timedelta(days=custom_weekday(anchor))
     snapshot = build_week_calendar_snapshot(db, week_start, current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id))
     is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
@@ -1283,9 +1341,9 @@ def api_calendar_book():
 
     db.execute('''
         INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, status, is_recurring)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', 0)
-    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None, meeting_platform or None))
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 0)
+    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None, save_to_google))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -2075,7 +2133,9 @@ def api_get_messages():
             SELECT
                 u.id AS user_id,
                 u.username,
+                u.display_name,
                 p.name AS patient_name,
+                p.status AS patient_status,
                 MAX(m.timestamp) AS last_message_at,
                 SUM(CASE
                     WHEN m.recipient_id = ? AND m.is_read = 0 AND m.sender_id = u.id THEN 1
@@ -2087,9 +2147,11 @@ def api_get_messages():
                 (m.sender_id = u.id AND m.recipient_id = ?) OR
                 (m.sender_id = ? AND m.recipient_id = u.id)
             )
-            WHERE u.role = 'patient' AND u.is_active = 1
-            GROUP BY u.id, u.username, p.name
-            ORDER BY COALESCE(MAX(m.timestamp), '') DESC, p.name ASC
+            WHERE u.role = 'patient' AND u.is_active = 1 AND COALESCE(p.is_deleted, 0) = 0
+            GROUP BY u.id, u.username, u.display_name, p.name, p.status
+            ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
+                     COALESCE(MAX(m.timestamp), '') DESC,
+                     p.name ASC
         ''', (current_user.id, current_user.id, current_user.id)).fetchall()
 
         requested_user = request.args.get('conversation_with', type=int)
@@ -2144,6 +2206,22 @@ def api_send_message():
         recipient_id = admin['id'] if admin else None
     else:
         recipient_id_raw = request.form.get('recipient_id')
+        if recipient_id_raw == 'all':
+            recipients = db.execute('''
+                SELECT u.id
+                FROM users u
+                JOIN patients p ON p.id = u.patient_id
+                WHERE u.role = 'patient'
+                  AND u.is_active = 1
+                  AND COALESCE(p.is_deleted, 0) = 0
+                ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
+                         p.name ASC
+            ''').fetchall()
+            for recipient in recipients:
+                db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                           (current_user.id, recipient['id'], content))
+            db.commit()
+            return jsonify({'status': 'success'})
         try:
             recipient_id = int(recipient_id_raw)
         except (TypeError, ValueError):
@@ -2296,6 +2374,90 @@ def convert_patient(patient_id):
 
     return redirect_to_patient_tab(patient_id, 'info')
 
+@app.route('/patient/<int:patient_id>/delete', methods=('POST',))
+@login_required
+def delete_patient(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return "Patient not found", 404
+
+    db.execute('''
+        UPDATE patients
+        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, status = 'archived'
+        WHERE id = ?
+    ''', (patient_id,))
+    db.execute('UPDATE users SET is_active = 0 WHERE patient_id = ?', (patient_id,))
+    db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+               (patient_id, 'delete', f"Patient {patient['name']} marked as deleted."))
+    db.commit()
+    flash('Patient moved to deleted records.')
+    return redirect(url_for('crm_dashboard', status='all'))
+
+@app.route('/admin/profile/name', methods=('POST',))
+@login_required
+def update_admin_profile_name():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    new_name = request.form.get('display_name', '').strip()
+    if not new_name:
+        flash('Admin name is required.')
+        return redirect(request.referrer or url_for('crm_dashboard'))
+
+    db = get_db()
+    db.execute('UPDATE users SET display_name = ? WHERE id = ?', (new_name, current_user.id))
+    db.commit()
+    flash('Admin display name updated.')
+    return redirect(request.referrer or url_for('crm_dashboard'))
+
+@app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
+@login_required
+def api_calendar_appointment_update(appointment_id):
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
+
+    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    booking_date = request.form.get('date', '').strip()
+    booking_time = request.form.get('time', '').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
+    meeting_type = request.form.get('meeting_type', (appt['meeting_type'] or 'in-person')).strip() or 'in-person'
+    meeting_link = request.form.get('meeting_link', '').strip()
+    meeting_platform = request.form.get('meeting_platform', '').strip()
+    meeting_title = request.form.get('meeting_title', '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
+
+    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    duration = int(appt['duration_minutes'] or 60)
+    parsed_start = parse_time_safe(booking_time)
+    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
+    if parsed_start and parsed_end:
+        start_minutes = parsed_start.hour * 60 + parsed_start.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration = computed
+
+    db.execute('''
+        UPDATE appointments
+        SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
+            meeting_type = ?, meeting_link = ?, meeting_platform = ?,
+            meeting_title = ?, save_to_google = ?
+        WHERE id = ?
+    ''', (booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration,
+          meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None, save_to_google, appointment_id))
+    db.commit()
+    return jsonify({'status': 'success'})
+
 @app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
 @login_required
 def update_patient_info(patient_id):
@@ -2330,14 +2492,20 @@ def edit_patient(patient_id):
         phone = request.form.get('phone')
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency'):
+        if patient_type not in ('private', 'residency', 'initial-intake'):
             patient_type = 'private'
+        intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
+        intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
 
         if not name:
             flash('Name is required!')
         else:
-            db.execute('UPDATE patients SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ?, patient_type = ? WHERE id = ?',
-                       (name, status, email, phone, can_self_schedule, patient_type, patient_id))
+            db.execute('''UPDATE patients
+                          SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ?,
+                              patient_type = ?, intake_assessment = ?, intake_questionnaire = ?
+                          WHERE id = ?''',
+                       (name, status, email, phone, can_self_schedule, patient_type,
+                        intake_assessment or None, intake_questionnaire or None, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -2419,6 +2587,8 @@ def add_appointment(patient_id):
     
     meeting_type = request.form.get('meeting_type', 'in-person')
     meeting_link = request.form.get('meeting_link', '')
+    meeting_title = request.form.get('meeting_title', '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
     is_recurring = int(request.form.get('is_recurring', 0))
     duration = int(request.form.get('duration', 60))
 
@@ -2442,6 +2612,11 @@ def add_appointment(patient_id):
         return redirect(url_for('patient_detail', patient_id=patient_id))
 
     db = get_db()
+    patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
+    if patient_type == 'initial-intake':
+        is_recurring = 0
+        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
     # Handle recurring appointment fields
     recurrence_interval = None
@@ -2479,17 +2654,19 @@ def add_appointment(patient_id):
         if is_recurring:
             db.execute('''INSERT INTO appointments 
                           (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
-                           is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                           recurrence_end_date, recurrence_count) 
-                          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)''',
+                                    is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                                    recurrence_end_date, recurrence_count, meeting_title, save_to_google) 
+                                  VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)''',
                        (patient_id, date, time, cost, duration, recurrence_interval, 
-                        recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count))
+                                recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
+                                meeting_title or None, save_to_google))
         else:
             db.execute('''INSERT INTO appointments 
                           (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
-                           meeting_type, meeting_link) 
-                          VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                       (patient_id, date, time, cost, duration, meeting_type, meeting_link))
+                                    meeting_type, meeting_link, meeting_title, save_to_google) 
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              (patient_id, date, time, cost, duration, meeting_type, meeting_link,
+                                meeting_title or None, save_to_google))
 
         # Log the appointment
         patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()

@@ -197,6 +197,17 @@ class ClinicTestCase(unittest.TestCase):
             assert note['note_date'] == '2025-01-02'
             assert note['updated_at'] is not None
 
+    def test_treatment_log_defaults_prefilled(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Prefill Patient', status='ongoing'), follow_redirects=True)
+        self.client.post('/patient/1/add_note', data=dict(content='First', session_number='1', note_date='2026-03-01'), follow_redirects=True)
+        self.client.post('/patient/1/add_note', data=dict(content='Second', session_number='2', note_date='2026-03-08'), follow_redirects=True)
+
+        rv = self.client.get('/patient/1?tab=notes', follow_redirects=True)
+        today_iso = datetime.now().date().isoformat().encode('utf-8')
+        assert b'name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="3"' in rv.data
+        assert today_iso in rv.data
+
     def test_behavior_questionnaire_fields_persist(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(name='Behavior Patient', status='ongoing'), follow_redirects=True)
@@ -301,6 +312,53 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.client.post(f'/api/calendar/appointment/{appt_id}/delete')
         assert rv.status_code == 200
         assert rv.get_json().get('status') == 'success'
+
+    def test_initial_intake_keeps_single_scheduled_meeting(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Intake Patient',
+            status='candidate',
+            patient_type='initial-intake',
+            intake_assessment='Initial assessment text',
+            intake_questionnaire='Initial questionnaire text'
+        ), follow_redirects=True)
+
+        day = datetime.now().date() + timedelta(days=1)
+        while ((day.weekday() + 1) % 7) in (5, 6):
+            day += timedelta(days=1)
+        booking_date = day.isoformat()
+
+        rv1 = self.client.post('/api/calendar/book', data=dict(
+            patient_id='1',
+            date=booking_date,
+            time='09:00',
+            end_time='10:00',
+            meeting_type='in-person'
+        ))
+        assert rv1.status_code == 200
+        assert rv1.get_json().get('status') == 'success'
+
+        rv2 = self.client.post('/api/calendar/book', data=dict(
+            patient_id='1',
+            date=booking_date,
+            time='11:00',
+            end_time='12:00',
+            meeting_type='in-person'
+        ))
+        assert rv2.status_code == 200
+        assert rv2.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT appointment_time, is_recurring
+                FROM appointments
+                WHERE patient_id = 1 AND status = 'scheduled'
+                ORDER BY id ASC
+            ''').fetchall()
+            assert len(rows) == 1
+            assert rows[0]['appointment_time'] == '11:00'
+            assert int(rows[0]['is_recurring'] or 0) == 0
 
 if __name__ == '__main__':
     unittest.main()

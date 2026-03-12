@@ -36,18 +36,21 @@
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body py-3">
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-            <span class="small fw-semibold text-muted">{{ t('Legend:') }}</span>
-            <span class="badge rounded-pill" style="background:#2563eb;">{{ t('Ongoing') }}</span>
-            <span class="badge rounded-pill" style="background:#f59e0b;">{{ t('Candidate/Waiting') }}</span>
-            <span class="badge rounded-pill" style="background:#6b7280;">{{ t('Archived') }}</span>
-            {% if current_user.role == 'admin' %}
-            <span class="badge rounded-pill" style="background:#dc2626;">{{ t('Blocked') }}</span>
-            <span class="badge rounded-pill" style="background:#7c3aed;">{{ t('Special Occasion') }}</span>
-            {% endif %}
-            <span class="badge rounded-pill bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>Zoom</span>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3 position-relative" id="legendArea">
+            <span class="small fw-semibold text-muted" id="legendHoverTitle" style="cursor:pointer;">{{ t('Legend:') }}</span>
+            <div id="legendHoverContent" class="d-none position-absolute bg-white border rounded-3 shadow-sm p-2" style="top: 22px; z-index: 10;">
+                <span class="badge rounded-pill" style="background:#2563eb;">{{ t('Ongoing') }}</span>
+                <span class="badge rounded-pill" style="background:#f59e0b;">{{ t('Candidate/Waiting') }}</span>
+                <span class="badge rounded-pill" style="background:#6b7280;">{{ t('Archived') }}</span>
+                {% if current_user.role == 'admin' %}
+                <span class="badge rounded-pill" style="background:#dc2626;">{{ t('Blocked') }}</span>
+                <span class="badge rounded-pill" style="background:#7c3aed;">{{ t('Special Occasion') }}</span>
+                {% endif %}
+                <span class="badge rounded-pill bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>Zoom</span>
+            </div>
         </div>
-        <div class="d-flex flex-wrap align-items-center gap-2" id="calendarFilters">
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill mb-2" id="toggleFiltersBtn">{{ t('Show Filters') }}</button>
+        <div class="d-flex flex-wrap align-items-center gap-2 d-none" id="calendarFilters">
             <span class="small fw-semibold text-muted me-1">{{ t('Filters:') }}</span>
             <button type="button" class="btn btn-sm rounded-pill btn-primary filter-chip" data-filter="all">{{ t('All') }}</button>
             <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="ongoing">{{ t('Ongoing') }}</button>
@@ -153,7 +156,7 @@
                     <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
                         <option value="">{{ t('Select patient...') }}</option>
                         {% for p in patient_options %}
-                        <option value="{{ p['id'] }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                        <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ p['patient_type'] or 'private' }}">{{ p['name'] }} ({{ p['status'] }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -198,6 +201,16 @@
                         <option value="zoom">Zoom</option>
                         <option value="google-meet">Google Meet</option>
                     </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">{{ t('Meeting Title (optional)') }}</label>
+                    <input type="text" name="meeting_title" id="meetingTitleInput" class="form-control form-control-sm" placeholder="### private meeting">
+                </div>
+                <div class="mb-3 form-check">
+                    <input class="form-check-input" type="checkbox" value="1" id="saveToGoogleInput" name="save_to_google">
+                    <label class="form-check-label small" for="saveToGoogleInput">
+                        {{ t('Save to Google Calendar') }}
+                    </label>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">{{ t('Meeting Link (optional)') }}</label>
@@ -292,8 +305,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const bookingDate = document.getElementById('bookingDate');
     const bookingTime = document.getElementById('bookingTime');
     const bookingEndTime = document.getElementById('bookingEndTime');
+    const bookingPatient = document.getElementById('bookingPatient');
     const bookingEndTimeInput = document.getElementById('bookingEndTimeInput');
     const meetingTypeSelect = document.getElementById('meetingTypeSelect');
+    const meetingTitleInput = document.getElementById('meetingTitleInput');
     const bookingTypeSelect = document.getElementById('bookingTypeSelect');
     const specialMetaWrap = document.getElementById('specialMetaWrap');
     const specialPatternSelect = document.getElementById('specialPatternSelect');
@@ -302,6 +317,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const specialTitleWrap = document.getElementById('specialTitleWrap');
     const specialTitleInput = document.getElementById('specialTitleInput');
     const bookSlotSubmitBtn = document.getElementById('bookSlotSubmitBtn');
+    const toggleFiltersBtn = document.getElementById('toggleFiltersBtn');
+    const legendHoverTitle = document.getElementById('legendHoverTitle');
+    const legendHoverContent = document.getElementById('legendHoverContent');
+    const legendArea = document.getElementById('legendArea');
     const meetingLinkInput = document.getElementById('meetingLinkInput');
     const meetingPlatformHidden = document.getElementById('meetingPlatformHidden');
     const filterButtons = document.querySelectorAll('.filter-chip');
@@ -393,7 +412,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
-        height: 760,
+        height: 'auto',
+        expandRows: true,
+        contentHeight: 'auto',
         firstDay: 0,
         hiddenDays: [5, 6],
         slotMinTime: '08:00:00',
@@ -470,29 +491,87 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (meta.type === 'appointment') {
-                showActionModal({
-                    title: 'Delete Appointment',
-                    message: 'Delete this appointment?',
-                    confirmText: 'Delete',
-                    confirmClass: 'btn-danger',
-                    showCancel: true
-                }).then((confirmed) => {
-                    if (!confirmed) {
-                        return;
-                    }
-                    fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
+                const startDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : '';
+                const startTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
+                const endTime = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
+                const defaultTitle = meta.meeting_title || (meta.patient_status === 'ongoing' ? '### private meeting' : '');
+                modalTitle.textContent = 'Edit Meeting';
+                modalBody.innerHTML = `
+                    <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${startDate}"></div>
+                    <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${startTime}"></div>
+                    <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${endTime}"></div>
+                    <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${defaultTitle}"></div>
+                    <div class="mb-2 form-check"><input class="form-check-input" type="checkbox" id="editSaveToGoogle" ${meta.save_to_google ? 'checked' : ''}><label class="form-check-label small" for="editSaveToGoogle">Save to Google Calendar</label></div>
+                    <div class="mb-2"><label class="form-label small">Meeting Type</label>
+                        <select class="form-select form-select-sm" id="editMeetingType">
+                            <option value="in-person">In-person</option>
+                            <option value="online">Online</option>
+                            <option value="zoom">Zoom</option>
+                            <option value="google-meet">Google Meet</option>
+                        </select>
+                    </div>
+                    <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${meta.meeting_link || ''}"></div>
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">Delete Meeting</button>
+                `;
+                const typeSelect = document.getElementById('editMeetingType');
+                if (typeSelect) {
+                    typeSelect.value = meta.meeting_type || 'in-person';
+                }
+                modalConfirmBtn.textContent = 'Save';
+                modalConfirmBtn.className = 'btn btn-primary';
+                modalCancelBtn.classList.remove('d-none');
+                actionModal.show();
+
+                const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() {
+                        fetch(`/api/calendar/appointment/${props.appointment_id}/delete`, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrfToken }
+                        }).then(r => r.json()).then(data => {
+                            if (data.status === 'success') {
+                                actionModal.hide();
+                                loadSnapshot();
+                            }
+                        });
+                    };
+                }
+
+                modalConfirmBtn.onclick = function() {
+                    const selectedDate = document.getElementById('editMeetingDate').value;
+                    const selectedTime = document.getElementById('editMeetingTime').value;
+                    const selectedEndTime = document.getElementById('editMeetingEndTime').value;
+                    const selectedTitle = document.getElementById('editMeetingTitle').value || '';
+                    const selectedLink = document.getElementById('editMeetingLink').value || '';
+                    const selectedType = document.getElementById('editMeetingType').value;
+                    const shouldSaveToGoogle = document.getElementById('editSaveToGoogle').checked;
+                    const body = new URLSearchParams({
+                        date: selectedDate,
+                        time: selectedTime,
+                        end_time: selectedEndTime,
+                        meeting_type: selectedType,
+                        meeting_link: selectedLink,
+                        meeting_title: selectedTitle,
+                        save_to_google: shouldSaveToGoogle ? '1' : '0',
+                        meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
+                    });
+                    fetch(`/api/calendar/appointment/${props.appointment_id}/update`, {
                         method: 'POST',
                         headers: {
-                            'X-CSRFToken': csrfToken
-                        }
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: body.toString()
                     }).then(r => r.json()).then(data => {
                         if (data.status === 'success') {
+                            if (shouldSaveToGoogle) {
+                                openGoogleCalendarEvent(selectedDate, selectedTime, selectedEndTime, selectedTitle, selectedLink);
+                            }
+                            actionModal.hide();
                             loadSnapshot();
-                        } else {
-                            showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete appointment.' });
                         }
                     });
-                });
+                };
             }
 
             if (meta.type === 'block' && isAdmin) {
@@ -550,6 +629,23 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedSlotText.textContent = `${date} ${time} → ${endTimeStr}`;
     }
 
+    function toGoogleDateTime(dateValue, timeValue) {
+        const cleanDate = String(dateValue || '').replace(/-/g, '');
+        const cleanTime = String(timeValue || '').replace(':', '');
+        return `${cleanDate}T${cleanTime}00`;
+    }
+
+    function openGoogleCalendarEvent(dateValue, startTimeValue, endTimeValue, titleValue, meetingLinkValue) {
+        if (!dateValue || !startTimeValue || !endTimeValue) {
+            return;
+        }
+        const text = encodeURIComponent((titleValue || '').trim() || '### private meeting');
+        const details = encodeURIComponent((meetingLinkValue || '').trim() || 'Therapy meeting');
+        const dates = `${toGoogleDateTime(dateValue, startTimeValue)}/${toGoogleDateTime(dateValue, endTimeValue)}`;
+        const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&details=${details}&dates=${dates}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+
     // Sync end time input back to hidden field
     if (bookingEndTimeInput) {
         bookingEndTimeInput.addEventListener('change', function() {
@@ -582,6 +678,16 @@ document.addEventListener('DOMContentLoaded', function() {
         meetingTypeSelect.addEventListener('change', function() {
             if (meetingPlatformHidden) {
                 meetingPlatformHidden.value = (this.value === 'zoom' || this.value === 'google-meet') ? this.value : '';
+            }
+        });
+    }
+
+    if (bookingPatient && meetingTitleInput) {
+        bookingPatient.addEventListener('change', function() {
+            const selected = bookingPatient.options[bookingPatient.selectedIndex];
+            const status = selected ? (selected.dataset.patientStatus || '') : '';
+            if (!meetingTitleInput.value && status === 'ongoing') {
+                meetingTitleInput.value = '### private meeting';
             }
         });
     }
@@ -672,6 +778,23 @@ document.addEventListener('DOMContentLoaded', function() {
             applyCalendarFilter();
         });
     });
+
+    if (toggleFiltersBtn) {
+        toggleFiltersBtn.addEventListener('click', function() {
+            const hidden = availableSlotsContainer && document.getElementById('calendarFilters').classList.contains('d-none');
+            document.getElementById('calendarFilters').classList.toggle('d-none');
+            toggleFiltersBtn.textContent = hidden ? "{{ t('Hide Filters') }}" : "{{ t('Show Filters') }}";
+        });
+    }
+
+    if (legendHoverTitle && legendHoverContent && legendArea) {
+        legendArea.addEventListener('mouseenter', function() {
+            legendHoverContent.classList.remove('d-none');
+        });
+        legendArea.addEventListener('mouseleave', function() {
+            legendHoverContent.classList.add('d-none');
+        });
+    }
 
     function renderWeekendList(container, list) {
         if (!list || list.length === 0) {
@@ -828,6 +951,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const formData = new FormData(bookSlotForm);
+        const shouldSaveToGoogle = formData.get('save_to_google') === '1';
+        const formDate = formData.get('date') || bookingDate.value;
+        const formStartTime = formData.get('time') || bookingTime.value;
+        const formEndTime = formData.get('end_time') || bookingEndTime.value;
+        const formTitle = formData.get('meeting_title') || '';
+        const formLink = formData.get('meeting_link') || '';
         fetch('/api/calendar/book', {
             method: 'POST',
             headers: {
@@ -838,6 +967,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(r => r.json())
         .then(data => {
             if (data.status === 'success') {
+                if (shouldSaveToGoogle) {
+                    openGoogleCalendarEvent(formDate, formStartTime, formEndTime, formTitle, formLink);
+                }
                 showActionModal({ title: 'Booking Saved', message: 'The booking was saved successfully.' });
                 loadSnapshot();
             } else {

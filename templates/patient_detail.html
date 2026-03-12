@@ -17,6 +17,10 @@
                     <span class="badge bg-purple rounded-pill px-3 ms-1" style="background:#7c3aed!important;">
                         <i class="bi bi-mortarboard me-1"></i>Residency
                     </span>
+                    {% elif patient['patient_type'] == 'initial-intake' %}
+                    <span class="badge bg-warning text-dark rounded-pill px-3 ms-1 border border-warning-subtle">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
+                    </span>
                     {% else %}
                     <span class="badge bg-light text-dark rounded-pill px-3 ms-1 border">
                         <i class="bi bi-person me-1"></i>Private
@@ -236,11 +240,11 @@
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-2">
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Meeting #') }}</label>
-                                        <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm">
+                                        <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_session_number }}">
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Date') }}</label>
-                                        <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm">
+                                        <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_note_date }}">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content') }}</label>

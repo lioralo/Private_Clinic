@@ -5,6 +5,9 @@ CREATE TABLE IF NOT EXISTS patients (
     phone TEXT,
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
     can_self_schedule BOOLEAN DEFAULT 0,
+    patient_type TEXT DEFAULT 'private',
+    intake_assessment TEXT,
+    intake_questionnaire TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -70,6 +73,9 @@ CREATE TABLE IF NOT EXISTS appointments (
     recurrence_count INTEGER,
     meeting_type TEXT DEFAULT 'in-person',
     meeting_link TEXT,
+    meeting_platform TEXT,
+    meeting_title TEXT,
+    save_to_google BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );

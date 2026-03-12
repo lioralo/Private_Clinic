@@ -62,7 +62,20 @@
                                         <i class="bi bi-mortarboard me-1"></i>Residency
                                     </label>
                                 </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="patient_type" id="typeInitialIntake" value="initial-intake">
+                                    <label class="form-check-label" for="typeInitialIntake">
+                                        <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
+                                    </label>
+                                </div>
                             </div>
+                        </div>
+
+                        <div class="col-md-12 d-none" id="intakeFieldsWrap">
+                            <label for="intake_assessment" class="form-label text-uppercase smallest fw-bold">Initial Intake Assessment</label>
+                            <textarea class="form-control mb-3" name="intake_assessment" id="intake_assessment" rows="3" placeholder="Brief intake assessment"></textarea>
+                            <label for="intake_questionnaire" class="form-label text-uppercase smallest fw-bold">Initial Intake Questionnaire</label>
+                            <textarea class="form-control" name="intake_questionnaire" id="intake_questionnaire" rows="3" placeholder="Intake questionnaire summary"></textarea>
                         </div>
 
                         <div class="col-12 mt-5">
@@ -79,4 +92,24 @@
         </p>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const typeInputs = document.querySelectorAll('input[name="patient_type"]');
+    const intakeWrap = document.getElementById('intakeFieldsWrap');
+    const intakeAssessment = document.getElementById('intake_assessment');
+    const intakeQuestionnaire = document.getElementById('intake_questionnaire');
+
+    function syncIntakeFields() {
+        const selected = document.querySelector('input[name="patient_type"]:checked');
+        const isIntake = selected && selected.value === 'initial-intake';
+        intakeWrap.classList.toggle('d-none', !isIntake);
+        intakeAssessment.disabled = !isIntake;
+        intakeQuestionnaire.disabled = !isIntake;
+    }
+
+    typeInputs.forEach((input) => input.addEventListener('change', syncIntakeFields));
+    syncIntakeFields();
+});
+</script>
 {% endblock %}
