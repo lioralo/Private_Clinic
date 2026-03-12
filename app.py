@@ -544,7 +544,14 @@ def fetch_patients_by_status(db, status):
             (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring
             FROM patients p
             WHERE COALESCE(p.is_deleted, 0) = 0
-            ORDER BY p.created_at DESC
+            ORDER BY
+                CASE
+                    WHEN p.status = 'ongoing' THEN 0
+                    WHEN p.status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1
+                    WHEN p.status = 'archived' THEN 2
+                    ELSE 3
+                END ASC,
+                p.created_at DESC
         ''').fetchall()
     if status in ['candidate', 'waiting for scheduling', 'waiting']:
         return db.execute('''
@@ -1468,6 +1475,23 @@ def edit_note(note_id):
         db.commit()
         return redirect_to_patient_tab(note['patient_id'], 'notes')
     return "Note not found", 404
+
+
+@app.route('/note/<int:note_id>/delete', methods=('POST',))
+@login_required
+def delete_note(note_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    note = db.execute('SELECT id, patient_id FROM notes WHERE id = ?', (note_id,)).fetchone()
+    if note is None:
+        return "Note not found", 404
+
+    db.execute('DELETE FROM notes WHERE id = ?', (note_id,))
+    db.commit()
+    flash('Meeting log deleted.')
+    return redirect_to_patient_tab(note['patient_id'], 'notes')
 
 @app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
 @login_required
