@@ -964,6 +964,9 @@
                     </button>
                 </form>
                 {% endif %}
+                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-outline-info rounded-pill w-100" title="View and book available appointment slots">
+                    <i class="bi bi-calendar-check me-1"></i>{{ 'Book Appointment' if lang == 'en' else 'זמן פגישה' }}
+                </a>
             </div>
         </div>
     </div>

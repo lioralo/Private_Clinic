@@ -1801,6 +1801,29 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'time': slot_start.strftime('%H:%M'),
                 'duration_minutes': duration
             })
+            # Show vacant slots as calendar events for admins
+            if user.role == 'admin':
+                events.append({
+                    'id': f"vacancy-{day.isoformat()}-{slot_start.strftime('%H:%M')}",
+                    'title': f"Vacant ({duration}min)",
+                    'start': slot_start.isoformat(),
+                    'end': slot_end.isoformat(),
+                    'editable': False,
+                    'color': '#10b981',
+                    'meta': {'type': 'vacancy', 'can_delete': False}
+                })
+
+
+        if user.role == 'admin':
+            events.append({
+                'id': f"vacancy-{day.isoformat()}-{slot_start.strftime('%H:%M')}",
+                'title': f"Vacant ({duration}min)",
+                'start': slot_start.isoformat(),
+                'end': slot_end.isoformat(),
+                'editable': False,
+                'color': '#10b981',
+                'meta': {'type': 'vacancy', 'can_delete': False}
+            })
 
     return {
         'week_start': week_start.isoformat(),
