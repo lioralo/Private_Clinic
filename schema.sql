@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS patients (
     name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
+    birth_date DATE,
+    id_number TEXT,
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
     can_self_schedule BOOLEAN DEFAULT 0,
     patient_type TEXT DEFAULT 'private',

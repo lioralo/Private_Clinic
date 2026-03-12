@@ -179,6 +179,8 @@ HEBREW_TRANSLATIONS = {
     "Status": "סטטוס",
     "Email Address": "כתובת דוא״ל",
     "Phone Number": "מספר טלפון",
+    "Date of Birth": "תאריך לידה",
+    "ID Number": "תעודת זהות",
     "Save Changes": "שמור שינויים",
     "Add New Patient": "הוסף מטופל חדש",
     "Initial Status": "סטטוס התחלתי",
@@ -461,6 +463,14 @@ def init_db():
             pass
         try:
             db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
         except sqlite3.OperationalError:
             pass
         try:
@@ -967,6 +977,8 @@ def add_patient():
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        birth_date = request.form.get('birth_date') or None
+        id_number = (request.form.get('id_number') or '').strip() or None
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake'):
             patient_type = 'private'
@@ -978,9 +990,9 @@ def add_patient():
         else:
             db = get_db()
             db.execute('''INSERT INTO patients
-                          (name, status, email, phone, patient_type, intake_assessment, intake_questionnaire)
-                          VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                       (name, status, email, phone, patient_type, intake_assessment or None, intake_questionnaire or None))
+                                  (name, status, email, phone, birth_date, id_number, patient_type, intake_assessment, intake_questionnaire)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              (name, status, email, phone, birth_date, id_number, patient_type, intake_assessment or None, intake_questionnaire or None))
             db.commit()
             return redirect(url_for('patients', status=status))
 
@@ -2775,6 +2787,8 @@ def edit_patient(patient_id):
         status = request.form['status']
         email = request.form.get('email')
         phone = request.form.get('phone')
+        birth_date = request.form.get('birth_date') or None
+        id_number = (request.form.get('id_number') or '').strip() or None
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake'):
@@ -2786,10 +2800,10 @@ def edit_patient(patient_id):
             flash('Name is required!')
         else:
             db.execute('''UPDATE patients
-                          SET name = ?, status = ?, email = ?, phone = ?, can_self_schedule = ?,
+                          SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
                               patient_type = ?, intake_assessment = ?, intake_questionnaire = ?
                           WHERE id = ?''',
-                       (name, status, email, phone, can_self_schedule, patient_type,
+                       (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
                         intake_assessment or None, intake_questionnaire or None, patient_id))
             db.commit()
             flash('Patient updated successfully.')
