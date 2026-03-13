@@ -427,6 +427,69 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_interval'] is None
             assert row['recurrence_days'] is None
 
+    def test_admin_calendar_booking_without_vacancy_allowed(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Direct Calendar Booking',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        booking_date = (datetime.now().date() + timedelta(days=1)).isoformat()
+        rv = self.client.post('/api/calendar/book', data=dict(
+            patient_id='1',
+            date=booking_date,
+            time='11:00',
+            end_time='12:00',
+            meeting_type='in-person'
+        ))
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('''
+                SELECT is_recurring, recurrence_end_date
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert row is not None
+            assert int(row['is_recurring'] or 0) == 1
+            assert row['recurrence_end_date'] is not None
+
+    def test_patient_page_quick_book_without_vacancy(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Sidebar Quick Book',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        booking_date = (datetime.now().date() + timedelta(days=2)).isoformat()
+        rv = self.client.post('/patient/1/quick_book', data=dict(
+            date=booking_date,
+            time='13:00',
+            end_time='14:00',
+            meeting_type='in-person',
+            meeting_title='Quick booked'
+        ), follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('''
+                SELECT appointment_date, appointment_time, meeting_title, is_recurring
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert row is not None
+            assert row['appointment_date'] == booking_date
+            assert row['appointment_time'] == '13:00'
+            assert row['meeting_title'] == 'Quick booked'
+            assert int(row['is_recurring'] or 0) == 1
+
     def test_calendar_follow_up_alert_for_candidate_decision_needed(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
@@ -450,6 +513,44 @@ class ClinicTestCase(unittest.TestCase):
         assert any(a.get('patient_id') == 1 for a in alerts)
         alert = next(a for a in alerts if a.get('patient_id') == 1)
         assert 'Further decision is needed' in alert.get('message', '')
+
+    def test_ongoing_previous_week_auto_promoted_to_recurring(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Auto Recurring Ongoing',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            today = datetime.now().date()
+            current_week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+            prev_week_day = current_week_start - timedelta(days=2)
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring
+                ) VALUES (?, ?, ?, ?, 'scheduled', 0)
+            ''', (1, prev_week_day.isoformat(), '10:00', 60))
+            db.commit()
+
+        rv = self.client.get('/api/calendar/snapshot')
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('''
+                SELECT is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert row is not None
+            assert int(row['is_recurring'] or 0) == 1
+            assert int(row['recurrence_interval'] or 0) == 1
+            assert row['recurrence_days'] is not None
+            assert row['recurrence_end_date'] is not None
 
     def test_initial_intake_keeps_single_scheduled_meeting(self):
         self.login('admin', 'admin')

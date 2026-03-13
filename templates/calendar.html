@@ -153,6 +153,9 @@
                 <input type="hidden" id="bookingTime" name="time">
                 <input type="hidden" id="bookingEndTime" name="end_time">
                 {% if current_user.role == 'admin' %}
+                <p class="small text-muted mb-2">Click any free time in the calendar or pick a slot from the list. Vacancy setup is optional for admin booking.</p>
+                {% endif %}
+                {% if current_user.role == 'admin' %}
                 <div class="mb-2">
                     <label class="form-label small">{{ t('Patient') }}</label>
                     <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
@@ -1107,7 +1110,7 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
 
         if (!bookingDate.value || !bookingTime.value) {
-            showActionModal({ title: 'Slot Required', message: 'Please select an available slot first.' });
+            showActionModal({ title: 'Time Required', message: 'Please select a time on the calendar first.' });
             return;
         }
 

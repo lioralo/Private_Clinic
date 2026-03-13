@@ -1875,6 +1875,68 @@ def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None
     return None
 
 
+def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
+    """Promote last week's one-time meeting to weekly recurring for ongoing patients."""
+    today = reference_date or datetime.now().date()
+    current_week_start = today - timedelta(days=custom_weekday(today))
+    prev_week_start = current_week_start - timedelta(days=7)
+    prev_week_end = current_week_start - timedelta(days=1)
+
+    candidate_rows = db.execute('''
+        SELECT a.id AS appointment_id, a.patient_id, a.appointment_date, a.appointment_time
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE p.status = 'ongoing'
+          AND COALESCE(p.patient_type, 'private') != 'initial-intake'
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(a.is_recurring, 0) = 0
+          AND a.appointment_date BETWEEN ? AND ?
+        ORDER BY a.patient_id ASC, a.appointment_date DESC, a.id DESC
+    ''', (prev_week_start.isoformat(), prev_week_end.isoformat())).fetchall()
+
+    latest_by_patient = {}
+    for row in candidate_rows:
+        if row['patient_id'] not in latest_by_patient:
+            latest_by_patient[row['patient_id']] = row
+
+    if not latest_by_patient:
+        return 0
+
+    converted = 0
+    for patient_id, row in latest_by_patient.items():
+        has_recurring = db.execute('''
+            SELECT 1
+            FROM appointments
+            WHERE patient_id = ?
+              AND COALESCE(status, 'scheduled') = 'scheduled'
+              AND COALESCE(is_recurring, 0) = 1
+            LIMIT 1
+        ''', (patient_id,)).fetchone()
+        if has_recurring:
+            continue
+
+        base_date = parse_date_safe(row['appointment_date'])
+        if not base_date:
+            continue
+
+        recurrence_end = (base_date + timedelta(days=365)).isoformat()
+        recurrence_day = str(custom_weekday(base_date))
+        db.execute('''
+            UPDATE appointments
+            SET is_recurring = 1,
+                recurrence_interval = 1,
+                recurrence_days = ?,
+                recurrence_end_date = ?,
+                recurrence_count = NULL
+            WHERE id = ?
+        ''', (recurrence_day, recurrence_end, row['appointment_id']))
+        converted += 1
+
+    if converted:
+        db.commit()
+    return converted
+
+
 def build_week_calendar_snapshot(db, week_start, user):
     week_end = week_start + timedelta(days=6)
     today = datetime.now().date()
@@ -2148,6 +2210,8 @@ def build_week_calendar_snapshot(db, week_start, user):
 @login_required
 def weekly_calendar():
     db = get_db()
+    if current_user.role == 'admin':
+        ensure_ongoing_recurrence_from_previous_week(db)
     patient_options = []
     can_self_schedule = False
     if current_user.role == 'admin':
@@ -2309,6 +2373,8 @@ def api_calendar_snapshot():
     anchor = parse_date_safe(start_raw) or datetime.now().date()
     week_start = anchor - timedelta(days=custom_weekday(anchor))
     db = get_db()
+    if current_user.role == 'admin':
+        ensure_ongoing_recurrence_from_previous_week(db, anchor)
     payload = build_week_calendar_snapshot(db, week_start, current_user)
     return jsonify(payload)
 
@@ -2529,24 +2595,40 @@ def api_calendar_book():
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
 
-    week_start = anchor - timedelta(days=custom_weekday(anchor))
-    snapshot = build_week_calendar_snapshot(
-        db,
-        week_start,
-        current_user if current_user.role == 'admin' else User(current_user.id, current_user.username, current_user.role, patient_id, current_user.display_name)
-    )
-    is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
-    if not is_available:
-        return jsonify({'status': 'error', 'message': 'Selected slot is not available.'}), 409
+    parsed_booking_time = parse_time_safe(booking_time)
+    if not parsed_booking_time:
+        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
+
+    start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
+    end_dt = start_dt + timedelta(minutes=duration)
+    conflict_message = has_time_conflict(db, anchor, start_dt, end_dt)
+    if conflict_message:
+        return jsonify({'status': 'error', 'message': conflict_message}), 409
+
+    # Patients can only self-book into explicit vacancy slots; admins can book any free time.
+    if current_user.role != 'admin':
+        week_start = anchor - timedelta(days=custom_weekday(anchor))
+        snapshot = build_week_calendar_snapshot(
+            db,
+            week_start,
+            User(current_user.id, current_user.username, current_user.role, patient_id, current_user.display_name)
+        )
+        is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
+        if not is_available:
+            return jsonify({'status': 'error', 'message': 'Selected slot is not available.'}), 409
+
+    recurrence_end_date = None
+    if is_recurring:
+        recurrence_end_date = (anchor + timedelta(days=365)).isoformat()
 
     db.execute('''
         INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_interval, recurrence_days)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)
     ''', (
         patient_id,
         booking_date,
-        parse_time_safe(booking_time).strftime('%H:%M'),
+        parsed_booking_time.strftime('%H:%M'),
         duration,
         meeting_type,
         meeting_link or None,
@@ -2555,10 +2637,98 @@ def api_calendar_book():
         save_to_google,
         is_recurring,
         recurrence_interval,
-        recurrence_days
+        recurrence_days,
+        recurrence_end_date
     ))
     db.commit()
     return jsonify({'status': 'success'})
+
+
+@app.route('/patient/<int:patient_id>/quick_book', methods=('POST',))
+@login_required
+def quick_book_patient_appointment(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    date_raw = (request.form.get('date') or '').strip()
+    time_raw = (request.form.get('time') or '').strip()
+    end_time_raw = (request.form.get('end_time') or '').strip()
+    meeting_type = (request.form.get('meeting_type') or 'in-person').strip() or 'in-person'
+    meeting_link = (request.form.get('meeting_link') or '').strip()
+    meeting_title = (request.form.get('meeting_title') or '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
+
+    booking_date = parse_date_safe(date_raw)
+    booking_time = parse_time_safe(time_raw)
+    booking_end = parse_time_safe(end_time_raw)
+    if not booking_date or not booking_time:
+        flash('Valid date and time are required.', 'error')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    duration = 60
+    if booking_end:
+        start_minutes = booking_time.hour * 60 + booking_time.minute
+        end_minutes = booking_end.hour * 60 + booking_end.minute
+        if end_minutes > start_minutes:
+            duration = end_minutes - start_minutes
+
+    db = get_db()
+    patient_row = db.execute('''
+        SELECT id, status, patient_type
+        FROM patients
+        WHERE id = ? AND COALESCE(is_deleted, 0) = 0
+    ''', (patient_id,)).fetchone()
+    if not patient_row:
+        flash('Patient not found.', 'error')
+        return redirect(url_for('crm_dashboard'))
+
+    start_dt = datetime.combine(booking_date, booking_time)
+    end_dt = start_dt + timedelta(minutes=duration)
+    conflict_message = has_time_conflict(db, booking_date, start_dt, end_dt)
+    if conflict_message:
+        flash(conflict_message, 'error')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    patient_type = (patient_row['patient_type'] or 'private').strip().lower()
+    patient_status = (patient_row['status'] or '').strip().lower()
+    if patient_type == 'initial-intake':
+        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
+
+    is_recurring = 1 if patient_status == 'ongoing' and patient_type != 'initial-intake' else 0
+    recurrence_interval = 1 if is_recurring else None
+    recurrence_days = str(custom_weekday(booking_date)) if is_recurring else None
+    recurrence_end_date = (booking_date + timedelta(days=365)).isoformat() if is_recurring else None
+    meeting_platform = meeting_type if meeting_type in ('zoom', 'google-meet') else None
+
+    db.execute('''
+        INSERT INTO appointments (
+            patient_id, appointment_date, appointment_time, duration_minutes,
+            meeting_type, meeting_link, meeting_platform, meeting_title,
+            save_to_google, status, is_recurring, recurrence_interval,
+            recurrence_days, recurrence_end_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)
+    ''', (
+        patient_id,
+        booking_date.isoformat(),
+        booking_time.strftime('%H:%M'),
+        duration,
+        meeting_type,
+        meeting_link or None,
+        meeting_platform,
+        meeting_title or None,
+        save_to_google,
+        is_recurring,
+        recurrence_interval,
+        recurrence_days,
+        recurrence_end_date
+    ))
+    db.commit()
+
+    if is_recurring:
+        flash('Recurring weekly appointment booked for one year.', 'success')
+    else:
+        flash('Appointment booked.', 'success')
+    return redirect_to_patient_tab(patient_id, 'info')
 
 
 @app.route('/api/calendar/appointment/<int:appointment_id>/delete', methods=['POST'])
