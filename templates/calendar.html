@@ -21,9 +21,6 @@
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="booking-tab" data-bs-toggle="tab" data-bs-target="#booking-pane" type="button" role="tab" aria-controls="booking-pane" aria-selected="false">{{ t('Booking Panel') }}</button>
     </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="slots-tab" data-bs-toggle="tab" data-bs-target="#slots-pane" type="button" role="tab" aria-controls="slots-pane" aria-selected="false">{{ t('Available Slots') }}</button>
-    </li>
     {% if current_user.role == 'admin' %}
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="blocks-tab" data-bs-toggle="tab" data-bs-target="#blocks-pane" type="button" role="tab" aria-controls="blocks-pane" aria-selected="false">{{ t('Add Block') }}</button>
@@ -117,16 +114,6 @@
 </div>
 </div>
 
-<div class="tab-pane fade" id="slots-pane" role="tabpanel" aria-labelledby="slots-tab" tabindex="0">
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Available Slots This Week') }}</h6>
-            <span class="badge bg-light text-dark" id="availableCount">0</span>
-        </div>
-        <div class="card-body" id="availableSlots"></div>
-    </div>
-</div>
-
 <div class="tab-pane fade" id="booking-pane" role="tabpanel" aria-labelledby="booking-tab" tabindex="0">
     {% if current_user.role != 'admin' %}
     <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -163,8 +150,16 @@
                         {% for p in patient_options %}
                         <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ p['patient_type'] or 'private' }}">{{ p['name'] }} ({{ p['status'] }})</option>
                         {% endfor %}
+                        <option value="other">── {{ t('Other (enter name below)') }} ──</option>
                     </select>
                     <div class="form-text" id="bookingStatusHint">Select a patient to see booking mode.</div>
+                    <div class="mb-2 d-none" id="otherNameWrap">
+                        <label class="form-label small mt-1">{{ t('Name / Description') }}</label>
+                        <input type="text" id="otherNameInput" class="form-control form-control-sm" placeholder="{{ t('External client / Guest name') }}">
+                    </div>
+                    <div class="mb-2 d-none alert alert-success py-2 px-3 small" id="vacantHintBooking">
+                        <i class="bi bi-unlock me-1"></i>{{ t('This time slot will be marked as available for patient self-booking.') }}
+                    </div>
                 </div>
                 {% endif %}
                 <div class="mb-2">
@@ -203,7 +198,7 @@
                     <label class="form-label small">{{ t('Meeting Type') }}</label>
                     <select name="meeting_type" id="meetingTypeSelect" class="form-select form-select-sm">
                         <option value="in-person">In-person</option>
-                        <option value="online">Online</option>
+                        <option value="vacant">{{ t('Vacant (open for patients)') }}</option>
                         <option value="zoom">Zoom</option>
                         <option value="google-meet">Google Meet</option>
                     </select>
@@ -211,12 +206,6 @@
                 <div class="mb-3">
                     <label class="form-label small">{{ t('Meeting Title (optional)') }}</label>
                     <input type="text" name="meeting_title" id="meetingTitleInput" class="form-control form-control-sm" placeholder="### private meeting">
-                </div>
-                <div class="mb-3 form-check">
-                    <input class="form-check-input" type="checkbox" value="1" id="saveToGoogleInput" name="save_to_google">
-                    <label class="form-check-label small" for="saveToGoogleInput">
-                        {{ t('Save to Google Calendar') }}
-                    </label>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">{{ t('Meeting Link (optional)') }}</label>
@@ -235,6 +224,13 @@
                 <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3" id="bookSlotSubmitBtn">{{ t('Book Selected Slot') }}</button>
             </form>
         </div>
+    </div>
+    <div class="card border-0 shadow-sm rounded-4 mt-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary">{{ t('Available Slots This Week') }}</h6>
+            <span class="badge bg-light text-dark" id="availableCount">0</span>
+        </div>
+        <div class="card-body" id="availableSlots"></div>
     </div>
 </div>
 
@@ -280,32 +276,6 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4 mt-3">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-success">{{ t('Enable Vacant Slot') }}</h6>
-        </div>
-        <div class="card-body">
-            <form id="addVacancyForm">
-                <div class="row g-2">
-                    <div class="col-md-4">
-                        <label class="form-label small">{{ t('Date') }}</label>
-                        <input type="date" name="slot_date" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">{{ t('Start Time') }}</label>
-                        <input type="time" name="slot_time" class="form-control form-control-sm" required step="900">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small">{{ t('End Time') }}</label>
-                        <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
-                    </div>
-                    <div class="col-12">
-                        <button class="btn btn-success btn-sm rounded-pill px-3" type="submit">{{ t('Enable Slot') }}</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 {% endif %}
 </div>
@@ -357,6 +327,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const legendArea = document.getElementById('legendArea');
     const meetingLinkInput = document.getElementById('meetingLinkInput');
     const meetingPlatformHidden = document.getElementById('meetingPlatformHidden');
+        const vacantHintBooking = document.getElementById('vacantHintBooking');
+        const otherNameWrap = document.getElementById('otherNameWrap');
+        const otherNameInput = document.getElementById('otherNameInput');
     const filterButtons = document.querySelectorAll('.filter-chip');
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
@@ -552,11 +525,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${startTime}"></div>
                     <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${endTime}"></div>
                     <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${defaultTitle}"></div>
-                    <div class="mb-2 form-check"><input class="form-check-input" type="checkbox" id="editSaveToGoogle" ${meta.save_to_google ? 'checked' : ''}><label class="form-check-label small" for="editSaveToGoogle">Save to Google Calendar</label></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>Add to Google Calendar</button>
                     <div class="mb-2"><label class="form-label small">Meeting Type</label>
                         <select class="form-select form-select-sm" id="editMeetingType">
                             <option value="in-person">In-person</option>
-                            <option value="online">Online</option>
                             <option value="zoom">Zoom</option>
                             <option value="google-meet">Google Meet</option>
                         </select>
@@ -576,6 +548,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
                 if (deleteBtn) {
                     deleteBtn.onclick = function() {
+                                        const editSaveGoogleBtn = document.getElementById('editSaveToGoogleBtn');
+                                        if (editSaveGoogleBtn) {
+                                            editSaveGoogleBtn.onclick = function() {
+                                                openGoogleCalendarEvent(
+                                                    document.getElementById('editMeetingDate').value,
+                                                    document.getElementById('editMeetingTime').value,
+                                                    document.getElementById('editMeetingEndTime').value,
+                                                    document.getElementById('editMeetingTitle').value,
+                                                    document.getElementById('editMeetingLink').value
+                                                );
+                                            };
+                                        }
+                                        const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
+                                        if (deleteBtn) {
+                                            deleteBtn.onclick = function() {
                         fetch(`/api/calendar/appointment/${appointmentId}/delete`, {
                             method: 'POST',
                             headers: { 'X-CSRFToken': csrfToken }
@@ -599,7 +586,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     const selectedTitle = document.getElementById('editMeetingTitle').value || '';
                     const selectedLink = document.getElementById('editMeetingLink').value || '';
                     const selectedType = document.getElementById('editMeetingType').value;
-                    const shouldSaveToGoogle = document.getElementById('editSaveToGoogle').checked;
                     const body = new URLSearchParams({
                         date: selectedDate,
                         time: selectedTime,
@@ -607,7 +593,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         meeting_type: selectedType,
                         meeting_link: selectedLink,
                         meeting_title: selectedTitle,
-                        save_to_google: shouldSaveToGoogle ? '1' : '0',
+                        save_to_google: '0',
                         meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
                     });
                     fetch(`/api/calendar/appointment/${appointmentId}/update`, {
@@ -619,9 +605,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         body: body.toString()
                     }).then(r => r.json()).then(data => {
                         if (data.status === 'success') {
-                            if (shouldSaveToGoogle) {
-                                openGoogleCalendarEvent(selectedDate, selectedTime, selectedEndTime, selectedTitle, selectedLink);
-                            }
                             actionModal.hide();
                             loadSnapshot();
                         } else {
@@ -655,7 +638,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="mb-2"><label class="form-label small">Meeting Type</label>
                         <select class="form-select form-select-sm" id="editGroupMeetingType">
                             <option value="in-person">In-person</option>
-                            <option value="online">Online</option>
                             <option value="zoom">Zoom</option>
                             <option value="google-meet">Google Meet</option>
                         </select>
@@ -822,9 +804,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (meetingPlatformHidden) meetingPlatformHidden.value = 'zoom';
         });
     }
-    // Auto-set platform hidden field when meeting type changes
+    // Auto-set platform hidden field; handle vacant slot mode
     if (meetingTypeSelect) {
         meetingTypeSelect.addEventListener('change', function() {
+            const isVacant = this.value === 'vacant';
+            if (bookingPatient) {
+                bookingPatient.disabled = isVacant;
+                if (isVacant) {
+                    bookingPatient.value = '';
+                    if (otherNameWrap) otherNameWrap.classList.add('d-none');
+                    if (bookingStatusHint) bookingStatusHint.textContent = 'Slot will be open for patient self-booking.';
+                } else if (!bookingPatient.value) {
+                    if (bookingStatusHint) bookingStatusHint.textContent = 'Select a patient to see booking mode.';
+                }
+            }
+            if (vacantHintBooking) {
+                vacantHintBooking.classList.toggle('d-none', !isVacant);
+            }
             if (meetingPlatformHidden) {
                 meetingPlatformHidden.value = (this.value === 'zoom' || this.value === 'google-meet') ? this.value : '';
             }
@@ -835,8 +831,23 @@ document.addEventListener('DOMContentLoaded', function() {
         bookingPatient.addEventListener('change', function() {
             const selected = bookingPatient.options[bookingPatient.selectedIndex];
             const status = selected ? (selected.dataset.patientStatus || '') : '';
+            const isOther = this.value === 'other';
+            if (otherNameWrap) {
+                otherNameWrap.classList.toggle('d-none', !isOther);
+            }
+            if (isOther && bookingTypeSelect) {
+                bookingTypeSelect.value = 'special';
+                refreshSpecialControls();
+                if (specialTitleWrap) specialTitleWrap.classList.add('d-none');
+            } else if (!isOther && bookingTypeSelect && bookingTypeSelect.value === 'special' && !isOther) {
+                // revert to appointment if user switches back from other
+                bookingTypeSelect.value = 'appointment';
+                refreshSpecialControls();
+            }
             if (bookingStatusHint) {
-                if (!status) {
+                if (isOther) {
+                    bookingStatusHint.textContent = 'Other: creates a special time block with the specified name.';
+                } else if (!status) {
                     bookingStatusHint.textContent = 'Select a patient to see booking mode.';
                 } else if (status === 'ongoing') {
                     bookingStatusHint.textContent = 'Ongoing patient: this booking will be created as a recurring weekly meeting.';
@@ -1081,29 +1092,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    const addVacancyForm = document.getElementById('addVacancyForm');
-    if (addVacancyForm) {
-        addVacancyForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(addVacancyForm);
-            fetch('/api/calendar/vacancy', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                body: new URLSearchParams(formData)
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    addVacancyForm.reset();
-                    loadSnapshot();
-                } else {
-                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not enable slot.' });
-                }
-            });
-        });
-    }
 
     const bookSlotForm = document.getElementById('bookSlotForm');
     bookSlotForm.addEventListener('submit', function(e) {
@@ -1123,6 +1111,23 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Vacant slot: submit to vacancy endpoint instead
+        if (meetingTypeSelect && meetingTypeSelect.value === 'vacant') {
+            fetch('/api/calendar/vacancy', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ slot_date: bookingDate.value, slot_time: bookingTime.value, end_time: bookingEndTime.value })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
+                    loadSnapshot();
+                } else {
+                    showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
+                }
+            });
+            return;
+        }
+
         if (bookingTypeSelect && bookingTypeSelect.value === 'special') {
             if (specialPatternSelect && specialPatternSelect.value === 'weekly' && (!specialRepeatUntilInput || !specialRepeatUntilInput.value)) {
                 showActionModal({ title: 'Repeat Until Required', message: 'Please select a repeat-until date for recurring special slots.' });
@@ -1136,25 +1141,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const formData = new FormData(bookSlotForm);
-        const shouldSaveToGoogle = formData.get('save_to_google') === '1';
-        const formDate = formData.get('date') || bookingDate.value;
-        const formStartTime = formData.get('time') || bookingTime.value;
-        const formEndTime = formData.get('end_time') || bookingEndTime.value;
-        const formTitle = formData.get('meeting_title') || '';
-        const formLink = formData.get('meeting_link') || '';
+        // "Other" patient: route as special event with custom name
+        if (bookingPatient && bookingPatient.value === 'other') {
+            const otherVal = otherNameInput ? otherNameInput.value.trim() : '';
+            if (!otherVal) {
+                showActionModal({ title: 'Name Required', message: 'Please enter a name for the other booking.' });
+                return;
+            }
+            formData.set('booking_type', 'special');
+            formData.set('special_title', otherVal);
+        }
+
         fetch('/api/calendar/book', {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken
-            },
+            headers: { 'X-CSRFToken': csrfToken },
             body: new URLSearchParams(formData)
-        })
-        .then(r => r.json())
-        .then(data => {
+        }).then(r => r.json()).then(data => {
             if (data.status === 'success') {
-                if (shouldSaveToGoogle) {
-                    openGoogleCalendarEvent(formDate, formStartTime, formEndTime, formTitle, formLink);
-                }
                 showActionModal({ title: 'Booking Saved', message: 'The booking was saved successfully.' });
                 loadSnapshot();
             } else {
