@@ -1,15 +1,24 @@
 :root {
-    --primary-color: #2563eb;
-    --primary-dark: #1d4ed8;
+    --primary-color: #0f766e;
+    --primary-dark: #115e59;
+    --primary-soft: #ccfbf1;
+    --accent-color: #f59e0b;
     --secondary-color: #64748b;
-    --background-color: #f8fafc;
-    --text-color: #1e293b;
-    --border-color: #e2e8f0;
+    --background-color: #f5f7f4;
+    --surface-color: rgba(255, 255, 255, 0.88);
+    --surface-strong: #ffffff;
+    --text-color: #1f2937;
+    --muted-color: #5b6472;
+    --border-color: #d8e1df;
+    --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: var(--background-color);
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+        radial-gradient(circle at top left, rgba(20, 184, 166, 0.10), transparent 28%),
+        radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 24%),
+        linear-gradient(180deg, #f9fbf9 0%, #f3f5f2 100%);
     color: var(--text-color);
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
@@ -22,26 +31,38 @@ body {
 }
 
 .navbar {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-    padding: 0.8rem 0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    background: linear-gradient(135deg, #0f766e 0%, #134e4a 48%, #1f2937 100%) !important;
+    padding: 0.9rem 0;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(18px);
 }
 
 .navbar-brand {
     font-weight: 800;
-    letter-spacing: -0.5px;
+    letter-spacing: -0.7px;
+}
+
+.navbar .btn {
+    border-radius: 999px;
+    padding-inline: 1rem;
+}
+
+.navbar .nav-link {
+    font-weight: 600;
 }
 
 .card {
-    border: none;
-    border-radius: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    border: 1px solid rgba(216, 225, 223, 0.85);
+    border-radius: 24px;
+    background: var(--surface-color);
+    box-shadow: var(--shadow-soft) !important;
     overflow: hidden;
+    backdrop-filter: blur(16px);
 }
 
 .card-header {
-    background-color: #ffffff;
-    border-bottom: 1px solid var(--border-color);
+    background-color: rgba(255, 255, 255, 0.7);
+    border-bottom: 1px solid rgba(216, 225, 223, 0.85);
     padding: 1.25rem 1.5rem;
     font-weight: 700;
 }
@@ -54,7 +75,7 @@ h1, h2, h3, h4, h5 {
 .btn-primary {
     background-color: var(--primary-color);
     border: none;
-    border-radius: 8px;
+    border-radius: 999px;
     padding: 0.6rem 1.5rem;
     font-weight: 600;
     transition: all 0.2s;
@@ -63,7 +84,13 @@ h1, h2, h3, h4, h5 {
 .btn-primary:hover {
     background-color: var(--primary-dark);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 10px 24px rgba(15, 118, 110, 0.24);
+}
+
+.btn-outline-secondary,
+.btn-outline-light,
+.btn-outline-primary {
+    border-radius: 999px;
 }
 
 .form-label {
@@ -74,15 +101,303 @@ h1, h2, h3, h4, h5 {
 }
 
 .form-control, .form-select {
-    border-radius: 8px;
+    border-radius: 14px;
     border: 1px solid var(--border-color);
     padding: 0.6rem 0.8rem;
     font-size: 0.95rem;
+    background: rgba(255, 255, 255, 0.92);
 }
 
-.form-control:focus {
+.form-control:focus,
+.form-select:focus {
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+}
+
+.app-shell {
+    position: relative;
+}
+
+.section-hero {
+    position: relative;
+    padding: 1.75rem;
+    border-radius: 28px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 248, 0.78) 100%),
+        linear-gradient(120deg, rgba(20, 184, 166, 0.12), rgba(245, 158, 11, 0.12));
+    border: 1px solid rgba(216, 225, 223, 0.95);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+}
+
+.section-hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -4rem -5rem auto;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.18), transparent 68%);
+}
+
+.hero-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.10);
+    color: var(--primary-dark);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.hero-title {
+    font-size: clamp(1.9rem, 2.5vw, 3rem);
+    line-height: 1.02;
+    letter-spacing: -0.05em;
+}
+
+.hero-subtitle {
+    max-width: 52rem;
+    color: var(--muted-color);
+    font-size: 1rem;
+}
+
+.stat-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.9rem;
+}
+
+.stat-card {
+    padding: 1rem 1.1rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(216, 225, 223, 0.9);
+}
+
+.stat-card .label {
+    color: var(--muted-color);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 800;
+}
+
+.stat-card .value {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.pill-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.pill-nav .nav-link {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1rem;
+    color: #334155;
+    background: rgba(255, 255, 255, 0.72);
+    font-weight: 700;
+}
+
+.pill-nav .nav-link.active {
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    box-shadow: 0 12px 24px rgba(15, 118, 110, 0.2);
+}
+
+.chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.calendar-chip,
+.filter-chip {
+    border-radius: 999px !important;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.25rem;
+}
+
+.patient-card {
+    min-height: 100%;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.patient-card-clickable {
+    cursor: pointer;
+}
+
+.patient-card.patient-status-ongoing {
+    background: linear-gradient(135deg, #def7ec 0%, #c7f9e8 100%);
+}
+
+.patient-card.patient-status-candidate {
+    background: linear-gradient(135deg, #fff4d8 0%, #ffe7a8 100%);
+}
+
+.patient-card.patient-status-waiting {
+    background: linear-gradient(135deg, #e4f0ff 0%, #c7dbff 100%);
+}
+
+.patient-card.patient-status-archived {
+    background: linear-gradient(135deg, #eef2f5 0%, #d7dde4 100%);
+}
+
+.patient-card.patient-status-ongoing .text-muted,
+.patient-card.patient-status-candidate .text-muted,
+.patient-card.patient-status-waiting .text-muted,
+.patient-card.patient-status-archived .text-muted {
+    color: #334155 !important;
+}
+
+.patient-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 22px 40px rgba(15, 23, 42, 0.12) !important;
+    border-color: rgba(15, 118, 110, 0.24);
+}
+
+.patient-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.patient-avatar {
+    width: 3.25rem;
+    height: 3.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.patient-meta-row,
+.patient-footer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.patient-info-list {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.patient-info-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.5);
+    color: #334155;
+    font-size: 0.84rem;
+    max-width: 100%;
+}
+
+.patient-info-pill i {
+    color: var(--primary-dark);
+}
+
+.patient-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(290px, 0.95fr);
+    gap: 1.25rem;
+}
+
+.calendar-side-stack {
+    display: grid;
+    gap: 1rem;
+}
+
+.calendar-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.9rem;
+}
+
+.calendar-mini-card {
+    padding: 1rem 1.1rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(216, 225, 223, 0.9);
+}
+
+.calendar-mini-card .eyebrow {
+    color: var(--muted-color);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+}
+
+.calendar-mini-card .big {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.calendar-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.calendar-form-grid .full-span {
+    grid-column: 1 / -1;
+}
+
+.calendar-aux-note {
+    padding: 0.9rem 1rem;
+    border-radius: 18px;
+    background: rgba(15, 118, 110, 0.08);
+    color: #134e4a;
+    border: 1px solid rgba(15, 118, 110, 0.14);
+}
+
+.slot-day-details {
+    padding: 0.85rem 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(216, 225, 223, 0.9);
+    background: rgba(255, 255, 255, 0.62);
+}
+
+.slot-day-details[open] {
+    background: rgba(255, 255, 255, 0.88);
+}
+
+.weekend-stack {
+    display: grid;
+    gap: 0.85rem;
 }
 
 .note-item {
@@ -106,8 +421,9 @@ h1, h2, h3, h4, h5 {
 
 footer {
     margin-top: auto;
-    background-color: white !important;
+    background-color: rgba(255, 255, 255, 0.85) !important;
     border-top: 1px solid var(--border-color);
+    backdrop-filter: blur(12px);
 }
 
 .badge {
@@ -124,10 +440,11 @@ footer {
 
 /* FullCalendar Modernization */
 .fc-theme-standard .fc-scrollgrid {
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border: 1px solid rgba(216, 225, 223, 0.95);
+    border-radius: 24px;
     overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+    background: rgba(255,255,255,0.85);
 }
 
 .fc-theme-standard td, .fc-theme-standard th {
@@ -135,9 +452,9 @@ footer {
 }
 
 .fc-event {
-    border-radius: 6px;
+    border-radius: 12px;
     border: none;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 18px rgba(15,23,42,0.16);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -149,15 +466,15 @@ footer {
 
 .fc-v-event .fc-event-main {
     color: #fff;
-    font-weight: 500;
-    padding: 2px 4px;
+    font-weight: 600;
+    padding: 0.3rem 0.45rem;
 }
 
 #weeklyCalendar .fc-col-header-cell-cushion,
 #weeklyCalendar .fc-timegrid-axis-cushion,
 #weeklyCalendar .fc-timegrid-slot-label-cushion {
     color: #334155;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
     font-weight: 700;
 }
 
@@ -168,7 +485,7 @@ footer {
 
 #weeklyCalendar .fc-event-title,
 #weeklyCalendar .fc-event-time {
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
     font-weight: 700;
     letter-spacing: 0.1px;
 }
@@ -176,10 +493,6 @@ footer {
 .slot-day-details summary {
     cursor: pointer;
     color: #0f172a;
-}
-
-.slot-day-details[open] {
-    background: #f8fafc;
 }
 
 /* Softer event colors */
@@ -222,6 +535,10 @@ footer {
 }
 
 @media (max-width: 1199.98px) {
+    .calendar-layout {
+        grid-template-columns: 1fr;
+    }
+
     .patient-actions-panel {
         position: static;
     }
@@ -236,6 +553,21 @@ footer {
 }
 
 @media (max-width: 575.98px) {
+    .section-hero {
+        padding: 1.2rem;
+        border-radius: 22px;
+    }
+
+    .calendar-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .patient-meta-row,
+    .patient-footer-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .patient-actions-panel .card-body {
         grid-template-columns: 1fr;
     }

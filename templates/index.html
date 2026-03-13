@@ -1,130 +1,134 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="row g-3 align-items-center mb-4">
-    <div class="col-lg-8">
-        <h2 class="mb-2 text-primary">
-            <i class="bi bi-people-fill me-2"></i>
-            {% if status == 'all' %}
-                {{ t('All Patients') }}
-            {% elif status in ['candidate', 'waiting for scheduling'] %}
-                {{ t('Candidates & Waiting') }}
-            {% else %}
-                {{ t(status|capitalize) }} {{ t('Patients') }}
-            {% endif %}
-        </h2>
-        <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} {{ t('Total') }}</span>
-    </div>
-    <div class="col-lg-4 text-lg-end">
-        {% if current_user.is_authenticated and current_user.role == 'admin' %}
-        <form method="POST" action="{{ url_for('seed_data') }}" class="d-inline-block">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
-                <i class="bi bi-database-add me-1"></i> Load Example Patients
-            </button>
-        </form>
-        {% endif %}
-    </div>
-</div>
+{% set stats = namespace(ongoing=0, candidates=0, waiting=0, recurring=0) %}
+{% for patient in patients %}
+    {% if patient['status'] == 'ongoing' %}{% set stats.ongoing = stats.ongoing + 1 %}{% endif %}
+    {% if patient['status'] == 'candidate' %}{% set stats.candidates = stats.candidates + 1 %}{% endif %}
+    {% if patient['status'] in ['waiting', 'waiting for scheduling'] %}{% set stats.waiting = stats.waiting + 1 %}{% endif %}
+    {% if patient['has_recurring'] %}{% set stats.recurring = stats.recurring + 1 %}{% endif %}
+{% endfor %}
 
-<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+<section class="section-hero mb-4">
+    <div class="row g-4 align-items-end">
+        <div class="col-xl-8">
+            <span class="hero-kicker"><i class="bi bi-heart-pulse"></i> {{ t('Patient Overview') }}</span>
+            <h1 class="hero-title mt-3 mb-3">
+                {% if status == 'all' %}
+                    {{ t('A clearer view of every patient in care') }}
+                {% elif status in ['candidate', 'waiting for scheduling'] %}
+                    {{ t('Candidates and waiting patients, ready for action') }}
+                {% else %}
+                    {{ t('Focus on') }} {{ t(status|capitalize) }} {{ t('patients') }}
+                {% endif %}
+            </h1>
+            <p class="hero-subtitle mb-0">
+                {{ t('Track readiness, follow-up risk, and recurring care from one dashboard. Open any card to continue directly into the patient record.') }}
+            </p>
+        </div>
+        <div class="col-xl-4">
+            <div class="d-flex flex-wrap gap-2 justify-content-xl-end">
+                {% if current_user.is_authenticated and current_user.role == 'admin' %}
+                <a href="{{ url_for('add_patient') }}" class="btn btn-primary">
+                    <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
+                </a>
+                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary bg-white">
+                    <i class="bi bi-calendar3 me-1"></i>{{ t('Open Calendar') }}
+                </a>
+                <form method="POST" action="{{ url_for('seed_data') }}" class="d-inline-block">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-secondary bg-white">
+                        <i class="bi bi-database-add me-1"></i>{{ t('Load Example Patients') }}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-strip mt-4">
+        <div class="stat-card">
+            <span class="label">{{ t('Visible Patients') }}</span>
+            <span class="value">{{ patients|length }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="label">{{ t('Ongoing') }}</span>
+            <span class="value">{{ stats.ongoing }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="label">{{ t('Candidates') }}</span>
+            <span class="value">{{ stats.candidates + stats.waiting }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="label">{{ t('Recurring Active') }}</span>
+            <span class="value">{{ stats.recurring }}</span>
+        </div>
+    </div>
+</section>
+
+<div class="dashboard-grid">
     {% for patient in patients %}
-        <div class="col">
-            <div class="card h-100 border-0 shadow-sm patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] else 'info') }}">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
-                            <i class="bi bi-person-fill fs-4"></i>
-                        </div>
-                        <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-                            {% if patient['status'] == 'ongoing' and patient['has_recurring'] %}
-                                <span class="badge bg-success-subtle text-success border">Recurring</span>
-                            {% endif %}
-                            {% if patient['status'] == 'candidate' and patient['needs_followup_decision'] %}
-                                <span class="badge bg-warning text-dark">Decision Needed</span>
-                            {% endif %}
-                        </div>
+        <div class="card patient-card patient-card-clickable {% if patient['patient_type'] == 'initial-intake' or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] else 'info') }}">
+            <div class="card-body p-4 patient-card-body">
+                <div class="patient-meta-row">
+                    <div class="patient-avatar text-primary">
+                        <i class="bi bi-person-fill fs-4"></i>
                     </div>
+                    <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
+                        {% if patient['status'] == 'ongoing' and patient['has_recurring'] %}
+                            <span class="badge bg-success-subtle text-success border">{{ t('Recurring') }}</span>
+                        {% endif %}
+                        {% if patient['status'] == 'candidate' and patient['needs_followup_decision'] %}
+                            <span class="badge bg-warning text-dark">{{ t('Decision Needed') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
                     <h5 class="card-title fw-bold mb-1">
                         {{ patient['name'] }}
                         {% if patient['status'] == 'ongoing' and not patient['has_recurring'] %}
                             <i class="bi bi-exclamation-triangle-fill text-danger ms-2" title="{{ t('Missing Recurring Appointment') }}"></i>
                         {% endif %}
                     </h5>
-                    <p class="text-muted small mb-3 d-flex justify-content-between align-items-center w-100">
+                    <div class="patient-footer-row text-muted small mt-2">
                         <span>{{ t('ID:') }} #{{ patient['id'] }}</span>
-                        <span>
                         {% if patient['patient_type'] == 'residency' %}
-                            <span class="badge" style="background:#5b21b6;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>Residency</span>
+                            <span class="badge" style="background:#92400e;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}</span>
+                        {% elif patient['patient_type'] == 'initial-intake' %}
+                            <span class="badge" style="background:#1d4ed8;font-size:0.72em;"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Intake') }}</span>
                         {% else %}
-                            <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>Private</span>
-                        {% endif %}
-                        </span>
-                    </p>
-                    
-                    <div class="mb-4">
-                        {% if patient['email'] %}
-                            <div class="d-flex align-items-center mb-1 text-muted small">
-                                <i class="bi bi-envelope me-2"></i> {{ patient['email'] }}
-                            </div>
-                        {% endif %}
-                        {% if patient['phone'] %}
-                            <div class="d-flex align-items-center text-muted small">
-                                <i class="bi bi-telephone me-2"></i> {{ patient['phone'] }}
-                            </div>
+                            <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>{{ t('Private') }}</span>
                         {% endif %}
                     </div>
-                    
+                </div>
+
+                <div class="patient-info-list">
+                    {% if patient['email'] %}
+                        <div class="patient-info-pill"><i class="bi bi-envelope"></i><span>{{ patient['email'] }}</span></div>
+                    {% endif %}
+                    {% if patient['phone'] %}
+                        <div class="patient-info-pill"><i class="bi bi-telephone"></i><span>{{ patient['phone'] }}</span></div>
+                    {% endif %}
+                    <div class="patient-info-pill"><i class="bi bi-activity"></i><span>{{ t('Status:') }} {{ t(patient['status']|capitalize) }}</span></div>
+                </div>
+
+                <div class="patient-footer-row mt-auto">
+                    <span class="small text-muted">{{ t('Open full timeline, notes, billing, and booking tools') }}</span>
+                    <span class="patient-cta">{{ t('Open Profile') }} <i class="bi bi-arrow-up-right"></i></span>
                 </div>
             </div>
         </div>
     {% else %}
-        <div class="col-12 w-100 text-center py-5">
-            <div class="bg-white p-5 rounded-4 shadow-sm">
+        <div class="card text-center p-5">
+            <div class="card-body py-4">
                 <i class="bi bi-person-exclamation fs-1 text-muted mb-3 d-block"></i>
-                <h5 class="text-muted">No patients found in this category.</h5>
-                <a href="{{ url_for('add_patient') }}" class="btn btn-primary mt-3">Add First Patient</a>
+                <h5 class="text-muted">{{ t('No patients found in this category.') }}</h5>
+                <p class="text-muted small mb-4">{{ t('Start by adding a patient or switch to another segment.') }}</p>
+                <a href="{{ url_for('add_patient') }}" class="btn btn-primary">{{ t('Add First Patient') }}</a>
             </div>
         </div>
     {% endfor %}
 </div>
-
-<style>
-.patient-card {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.patient-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-}
-
-.patient-card-clickable {
-    cursor: pointer;
-}
-
-.patient-card.patient-status-ongoing {
-    background: linear-gradient(135deg, #dcfce7 0%, #86efac 100%);
-}
-
-.patient-card.patient-status-candidate {
-    background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
-}
-
-.patient-card.patient-status-waiting {
-    background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
-}
-
-.patient-card.patient-status-archived {
-    background: linear-gradient(135deg, #e5e7eb 0%, #cbd5e1 100%);
-}
-
-.patient-card.patient-status-ongoing .text-muted,
-.patient-card.patient-status-candidate .text-muted,
-.patient-card.patient-status-waiting .text-muted,
-.patient-card.patient-status-archived .text-muted {
-    color: #334155 !important;
-}
-</style>
 <!-- Notification Toast Container -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1055;">
 </div>
