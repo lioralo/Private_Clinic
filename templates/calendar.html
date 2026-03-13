@@ -547,24 +547,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 modalCancelBtn.classList.remove('d-none');
                 actionModal.show();
 
+                const editSaveGoogleBtn = document.getElementById('editSaveToGoogleBtn');
+                if (editSaveGoogleBtn) {
+                    editSaveGoogleBtn.onclick = function() {
+                        openGoogleCalendarEvent(
+                            document.getElementById('editMeetingDate').value,
+                            document.getElementById('editMeetingTime').value,
+                            document.getElementById('editMeetingEndTime').value,
+                            document.getElementById('editMeetingTitle').value,
+                            document.getElementById('editMeetingLink').value
+                        );
+                    };
+                }
+
                 const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
                 if (deleteBtn) {
                     deleteBtn.onclick = function() {
-                                        const editSaveGoogleBtn = document.getElementById('editSaveToGoogleBtn');
-                                        if (editSaveGoogleBtn) {
-                                            editSaveGoogleBtn.onclick = function() {
-                                                openGoogleCalendarEvent(
-                                                    document.getElementById('editMeetingDate').value,
-                                                    document.getElementById('editMeetingTime').value,
-                                                    document.getElementById('editMeetingEndTime').value,
-                                                    document.getElementById('editMeetingTitle').value,
-                                                    document.getElementById('editMeetingLink').value
-                                                );
-                                            };
-                                        }
-                                        const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
-                                        if (deleteBtn) {
-                                            deleteBtn.onclick = function() {
                         fetch(`/api/calendar/appointment/${appointmentId}/delete`, {
                             method: 'POST',
                             headers: { 'X-CSRFToken': csrfToken }
