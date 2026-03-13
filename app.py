@@ -345,6 +345,50 @@ def _get_or_create_backup_key():
     return generated
 
 
+def _database_backup_fingerprint(db_file_path):
+    """Build a compact fingerprint so backup verification checks meaningful data parity."""
+    conn = sqlite3.connect(str(db_file_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        tables = [
+            row['name'] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        ]
+
+        table_counts = {}
+        for table_name in tables:
+            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{table_name}"').fetchone()
+            table_counts[table_name] = int(count_row['c'] if count_row else 0)
+
+        appointment_stats = conn.execute('''
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN COALESCE(is_recurring, 0) = 1 THEN 1 ELSE 0 END) AS recurring_total,
+                SUM(CASE WHEN COALESCE(meeting_link, '') <> '' THEN 1 ELSE 0 END) AS with_meeting_link,
+                SUM(CASE WHEN COALESCE(recurrence_days, '') <> '' THEN 1 ELSE 0 END) AS with_recurrence_days,
+                SUM(CASE WHEN COALESCE(recurrence_interval, 0) > 0 THEN 1 ELSE 0 END) AS with_recurrence_interval,
+                SUM(CASE WHEN COALESCE(recurrence_end_date, '') <> '' THEN 1 ELSE 0 END) AS with_recurrence_end_date,
+                SUM(CASE WHEN COALESCE(recurrence_count, 0) > 0 THEN 1 ELSE 0 END) AS with_recurrence_count
+            FROM appointments
+        ''').fetchone()
+
+        return {
+            'table_counts': table_counts,
+            'appointment_stats': {
+                'total': int(appointment_stats['total'] or 0),
+                'recurring_total': int(appointment_stats['recurring_total'] or 0),
+                'with_meeting_link': int(appointment_stats['with_meeting_link'] or 0),
+                'with_recurrence_days': int(appointment_stats['with_recurrence_days'] or 0),
+                'with_recurrence_interval': int(appointment_stats['with_recurrence_interval'] or 0),
+                'with_recurrence_end_date': int(appointment_stats['with_recurrence_end_date'] or 0),
+                'with_recurrence_count': int(appointment_stats['with_recurrence_count'] or 0),
+            }
+        }
+    finally:
+        conn.close()
+
+
 def perform_encrypted_backup(db_path):
     db_source = Path(db_path)
     if not db_source.exists():
@@ -365,6 +409,9 @@ def perform_encrypted_backup(db_path):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     raw_backup_path = backup_root / f'clinic_{timestamp}.db'
     encrypted_path = backup_root / f'clinic_{timestamp}.db.enc'
+    verify_backup_path = backup_root / f'.verify_{timestamp}.db'
+
+    source_fingerprint = _database_backup_fingerprint(db_path)
 
     src = sqlite3.connect(db_path)
     dst = sqlite3.connect(raw_backup_path)
@@ -384,12 +431,19 @@ def perform_encrypted_backup(db_path):
         probe = cipher.decrypt(encrypted_bytes)
         if not probe.startswith(b'SQLite format 3'):
             raise RuntimeError('Encrypted backup verification failed: invalid SQLite header')
+
+        verify_backup_path.write_bytes(probe)
+        backup_fingerprint = _database_backup_fingerprint(verify_backup_path)
+        if backup_fingerprint != source_fingerprint:
+            raise RuntimeError('Encrypted backup verification failed: data fingerprint mismatch')
     except Exception as exc:
         encrypted_path.unlink(missing_ok=True)
         raw_backup_path.unlink(missing_ok=True)
+        verify_backup_path.unlink(missing_ok=True)
         raise RuntimeError(f'Encrypted backup verification failed: {exc}')
 
     raw_backup_path.unlink(missing_ok=True)
+    verify_backup_path.unlink(missing_ok=True)
     return str(encrypted_path)
 
 
@@ -1268,7 +1322,25 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
 def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority'):
     base_query = '''
         SELECT p.*,
-        (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1) as has_recurring,
+        (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
+        (
+            CASE
+                WHEN p.status = 'candidate' AND EXISTS (
+                    SELECT 1 FROM appointments a1
+                    WHERE a1.patient_id = p.id
+                      AND a1.is_recurring = 0
+                      AND COALESCE(a1.status, 'scheduled') = 'scheduled'
+                      AND a1.appointment_date < DATE('now')
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM appointments a2
+                    WHERE a2.patient_id = p.id
+                      AND COALESCE(a2.status, 'scheduled') = 'scheduled'
+                      AND a2.appointment_date >= DATE('now')
+                )
+                THEN 1
+                ELSE 0
+            END
+        ) AS needs_followup_decision,
         (
             SELECT GROUP_CONCAT(g.name, ', ')
             FROM group_members gm
@@ -1842,13 +1914,14 @@ def build_week_calendar_snapshot(db, week_start, user):
     weekend_specials = {'friday': [], 'saturday': []}
     follow_up_alerts = []
 
-    # One-time past intake/diagnostic indicator for candidates/waiting.
+        # Candidate with a past one-time session and no future booking needs a decision.
     follow_up_rows = db.execute('''
         SELECT p.id AS patient_id, p.name, p.status, MAX(a.appointment_date) AS last_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
-        WHERE p.status IN ('candidate', 'waiting for scheduling', 'waiting')
+                WHERE p.status = 'candidate'
           AND a.is_recurring = 0
+                    AND COALESCE(a.status, 'scheduled') = 'scheduled'
           AND a.appointment_date < ?
         GROUP BY p.id, p.name, p.status
     ''', (today.isoformat(),)).fetchall()
@@ -1857,6 +1930,7 @@ def build_week_calendar_snapshot(db, week_start, user):
         has_future = db.execute('''
             SELECT 1 FROM appointments
             WHERE patient_id = ? AND appointment_date >= ?
+              AND COALESCE(status, 'scheduled') = 'scheduled'
             LIMIT 1
         ''', (row['patient_id'], today.isoformat())).fetchone()
         if not has_future:
@@ -1865,7 +1939,7 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'patient_name': row['name'],
                 'status': row['status'],
                 'last_meeting_date': row['last_date'],
-                'message': 'Past one-time meeting with no next booking. Review for follow-up or archive.'
+                'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
             })
 
     for appt in appointment_rows:
@@ -1911,6 +1985,8 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'meta': {
                     'type': 'appointment',
                     'appointment_id': appt['id'],
+                    'patient_id': appt['patient_id'],
+                    'patient_name': appt['patient_name'],
                     'patient_status': appt['patient_status'],
                     'is_recurring': is_recurring,
                     'meeting_type': appt['meeting_type'],
@@ -2374,9 +2450,11 @@ def api_calendar_book():
             return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
 
     patient_type = None
+    patient_status = None
     if booking_type != 'special' and patient_id:
-        patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
         patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
+        patient_status = (patient_row['status'] if patient_row else '') or ''
 
     def slot_is_available(date_iso, start_time_str, slot_duration):
         date_obj = parse_date_safe(date_iso)
@@ -2445,6 +2523,12 @@ def api_calendar_book():
     if patient_type == 'initial-intake':
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
+    # Business rule: ongoing patients are booked as weekly recurring sessions.
+    # Candidate/waiting/initial-intake remain one-time bookings.
+    is_recurring = 1 if patient_status == 'ongoing' else 0
+    recurrence_interval = 1 if is_recurring else None
+    recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
+
     week_start = anchor - timedelta(days=custom_weekday(anchor))
     snapshot = build_week_calendar_snapshot(
         db,
@@ -2457,9 +2541,22 @@ def api_calendar_book():
 
     db.execute('''
         INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 0)
-    ''', (patient_id, booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration, meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None, save_to_google))
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_interval, recurrence_days)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
+    ''', (
+        patient_id,
+        booking_date,
+        parse_time_safe(booking_time).strftime('%H:%M'),
+        duration,
+        meeting_type,
+        meeting_link or None,
+        meeting_platform or None,
+        meeting_title or None,
+        save_to_google,
+        is_recurring,
+        recurrence_interval,
+        recurrence_days
+    ))
     db.commit()
     return jsonify({'status': 'success'})
 

@@ -161,6 +161,7 @@
                         <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ p['patient_type'] or 'private' }}">{{ p['name'] }} ({{ p['status'] }})</option>
                         {% endfor %}
                     </select>
+                    <div class="form-text" id="bookingStatusHint">Select a patient to see booking mode.</div>
                 </div>
                 {% endif %}
                 <div class="mb-2">
@@ -338,6 +339,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const bookingEndTimeInput = document.getElementById('bookingEndTimeInput');
     const meetingTypeSelect = document.getElementById('meetingTypeSelect');
     const meetingTitleInput = document.getElementById('meetingTitleInput');
+    const bookingStatusHint = document.getElementById('bookingStatusHint');
     const bookingTypeSelect = document.getElementById('bookingTypeSelect');
     const specialMetaWrap = document.getElementById('specialMetaWrap');
     const specialPatternSelect = document.getElementById('specialPatternSelect');
@@ -458,6 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const meta = props.meta || {};
             const platform = meta.meeting_platform || '';
             const mtype = meta.meeting_type || '';
+            const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
             let icon = '';
             if (platform === 'zoom' || mtype === 'zoom') {
                 icon = '<i class="bi bi-camera-video-fill me-1" title="Zoom meeting"></i>';
@@ -465,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 icon = '<i class="bi bi-camera-video me-1" title="Google Meet"></i>';
             }
             const timeText = arg.timeText ? `<div class="fc-event-time">${arg.timeText}</div>` : '';
-            const titleText = `<div class="fc-event-title">${icon}${arg.event.title || ''}</div>`;
+            const titleText = `<div class="fc-event-title">${recurringTag}${icon}${arg.event.title || ''}</div>`;
             return { html: `<div class="fc-event-main-frame">${timeText}${titleText}</div>` };
         },
         selectMinDistance: 0,
@@ -532,8 +535,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 const startTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
                 const endTime = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
                 const defaultTitle = meta.meeting_title || (meta.patient_status === 'ongoing' ? '### private meeting' : '');
+                const patientLinkHtml = (isAdmin && meta.patient_id)
+                    ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${meta.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">Open Patient Profile</a></div>`
+                    : '';
+                const recurringInfo = meta.is_recurring
+                    ? '<div class="alert alert-info py-1 px-2 small mb-2">Recurring meeting</div>'
+                    : '';
                 modalTitle.textContent = 'Edit Meeting';
                 modalBody.innerHTML = `
+                    ${patientLinkHtml}
+                    ${recurringInfo}
                     <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${startDate}"></div>
                     <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${startTime}"></div>
                     <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${endTime}"></div>
@@ -821,6 +832,15 @@ document.addEventListener('DOMContentLoaded', function() {
         bookingPatient.addEventListener('change', function() {
             const selected = bookingPatient.options[bookingPatient.selectedIndex];
             const status = selected ? (selected.dataset.patientStatus || '') : '';
+            if (bookingStatusHint) {
+                if (!status) {
+                    bookingStatusHint.textContent = 'Select a patient to see booking mode.';
+                } else if (status === 'ongoing') {
+                    bookingStatusHint.textContent = 'Ongoing patient: this booking will be created as a recurring weekly meeting.';
+                } else {
+                    bookingStatusHint.textContent = 'Candidate/Waiting patient: this booking will be created as a one-time meeting.';
+                }
+            }
             if (!meetingTitleInput.value && status === 'ongoing') {
                 meetingTitleInput.value = '### private meeting';
             }
@@ -959,7 +979,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         followUpAlerts.innerHTML = list.map(item => {
             return `<div class="alert alert-warning py-2 mb-2 small">
-                <strong>${item.patient_name}</strong> (${item.status})<br>
+                <a href="/patient/${item.patient_id}?tab=info" class="fw-bold text-dark text-decoration-underline">${item.patient_name}</a> (${item.status})<br>
                 Last one-time meeting: ${item.last_meeting_date}<br>
                 ${item.message}
             </div>`;

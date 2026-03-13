@@ -3,6 +3,7 @@ import unittest
 import tempfile
 import sqlite3
 import json
+import app as app_module
 from datetime import datetime, timedelta
 from flask import g
 from app import app, init_db, get_db
@@ -353,6 +354,103 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         assert rv.get_json().get('status') == 'success'
 
+    def test_calendar_booking_sets_ongoing_as_recurring(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Recurring Ongoing Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
+        self.add_vacancy(booking_date, booking_time, 60)
+
+        end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
+        rv = self.client.post('/api/calendar/book', data=dict(
+            patient_id='1',
+            date=booking_date,
+            time=booking_time,
+            end_time=end_time,
+            meeting_type='in-person'
+        ))
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('''
+                SELECT is_recurring, recurrence_interval, recurrence_days
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert row is not None
+            assert int(row['is_recurring'] or 0) == 1
+            assert int(row['recurrence_interval'] or 0) == 1
+
+            booked_day = datetime.strptime(booking_date, '%Y-%m-%d').date()
+            expected_day_code = str((booked_day.weekday() + 1) % 7)
+            assert row['recurrence_days'] == expected_day_code
+
+    def test_calendar_booking_sets_candidate_as_one_time(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='One Time Candidate',
+            status='candidate'
+        ), follow_redirects=True)
+
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
+        self.add_vacancy(booking_date, booking_time, 60)
+
+        end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
+        rv = self.client.post('/api/calendar/book', data=dict(
+            patient_id='1',
+            date=booking_date,
+            time=booking_time,
+            end_time=end_time,
+            meeting_type='in-person'
+        ))
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('''
+                SELECT is_recurring, recurrence_interval, recurrence_days
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert row is not None
+            assert int(row['is_recurring'] or 0) == 0
+            assert row['recurrence_interval'] is None
+            assert row['recurrence_days'] is None
+
+    def test_calendar_follow_up_alert_for_candidate_decision_needed(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Decision Candidate',
+            status='candidate'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            past_date = (datetime.now().date() - timedelta(days=7)).isoformat()
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '10:00', 60, 'scheduled', 0)
+            ''', (past_date,))
+            db.commit()
+
+        rv = self.client.get('/api/calendar/snapshot')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        alerts = payload.get('follow_up_alerts', [])
+        assert any(a.get('patient_id') == 1 for a in alerts)
+        alert = next(a for a in alerts if a.get('patient_id') == 1)
+        assert 'Further decision is needed' in alert.get('message', '')
+
     def test_initial_intake_keeps_single_scheduled_meeting(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
@@ -402,6 +500,72 @@ class ClinicTestCase(unittest.TestCase):
             assert len(rows) == 1
             assert rows[0]['appointment_time'] == second_time
             assert int(rows[0]['is_recurring'] or 0) == 0
+
+    def test_encrypted_backup_preserves_meeting_fields(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Backup Meeting Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    is_recurring, recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count,
+                    meeting_type, meeting_link, meeting_platform, meeting_title, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                1,
+                '2026-04-05',
+                '10:30',
+                60,
+                1,
+                1,
+                '0,2',
+                '2026-08-01',
+                20,
+                'zoom',
+                'https://zoom.us/j/123',
+                'zoom',
+                'Weekly therapy',
+                'scheduled'
+            ))
+            db.commit()
+
+        with tempfile.TemporaryDirectory() as tmp_backup_dir:
+            original_backup_dir = app_module.BACKUP_DIR
+            app_module.BACKUP_DIR = tmp_backup_dir
+            try:
+                with app.app_context():
+                    encrypted_path = app_module.perform_encrypted_backup(app.config['DATABASE'])
+                    restored_from, _ = app_module.perform_encrypted_restore(app.config['DATABASE'], os.path.basename(encrypted_path))
+                    assert restored_from.endswith('.db.enc')
+
+                    db = get_db()
+                    row = db.execute('''
+                        SELECT
+                            is_recurring, recurrence_interval, recurrence_days,
+                            recurrence_end_date, recurrence_count,
+                            meeting_type, meeting_link, meeting_platform, meeting_title
+                        FROM appointments
+                        WHERE patient_id = 1
+                        ORDER BY id DESC
+                        LIMIT 1
+                    ''').fetchone()
+                    assert row is not None
+                    assert int(row['is_recurring'] or 0) == 1
+                    assert int(row['recurrence_interval'] or 0) == 1
+                    assert row['recurrence_days'] == '0,2'
+                    assert row['recurrence_end_date'] == '2026-08-01'
+                    assert int(row['recurrence_count'] or 0) == 20
+                    assert row['meeting_type'] == 'zoom'
+                    assert row['meeting_link'] == 'https://zoom.us/j/123'
+                    assert row['meeting_platform'] == 'zoom'
+                    assert row['meeting_title'] == 'Weekly therapy'
+            finally:
+                app_module.BACKUP_DIR = original_backup_dir
 
 if __name__ == '__main__':
     unittest.main()
