@@ -142,7 +142,11 @@ CREATE TABLE IF NOT EXISTS slots_override (
     slot_date DATE NOT NULL,
     slot_time TIME NOT NULL,
     status TEXT NOT NULL,
-    duration_minutes INTEGER DEFAULT 60
+    duration_minutes INTEGER DEFAULT 60,
+    share_token TEXT,
+    booked_by_name TEXT,
+    booked_by_phone TEXT,
+    booked_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS slots_recurring (

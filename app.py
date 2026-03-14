@@ -3,6 +3,7 @@ import sqlite3
 import socket
 import json
 import shutil
+import secrets
 from collections import Counter
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
@@ -731,6 +732,22 @@ def init_db():
             pass
         try:
             db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
         except sqlite3.OperationalError:
             pass
 
@@ -2335,7 +2352,7 @@ def build_week_calendar_snapshot(db, week_start, user):
 
     # Available slots are restricted to admin-enabled vacancy overrides.
     vacancy_rows = db.execute('''
-        SELECT slot_date, slot_time, duration_minutes
+        SELECT id, slot_date, slot_time, duration_minutes, share_token, booked_by_name, status
         FROM slots_override
         WHERE status = 'available' AND slot_date BETWEEN ? AND ?
         ORDER BY slot_date ASC, slot_time ASC
@@ -2370,6 +2387,8 @@ def build_week_calendar_snapshot(db, week_start, user):
             })
             # Show vacant slots as calendar events for admins
             if user.role == 'admin':
+                share_token = row['share_token'] or ''
+                share_url = url_for('open_booking_page', token=share_token, _external=True) if share_token else ''
                 events.append({
                     'id': f"vacancy-{day.isoformat()}-{slot_start.strftime('%H:%M')}",
                     'title': f"Vacant ({duration}min)",
@@ -2377,7 +2396,14 @@ def build_week_calendar_snapshot(db, week_start, user):
                     'end': slot_end.isoformat(),
                     'editable': False,
                     'color': '#10b981',
-                    'meta': {'type': 'vacancy', 'can_delete': False}
+                    'meta': {
+                        'type': 'vacancy',
+                        'slot_id': row['id'],
+                        'share_token': share_token,
+                        'share_url': share_url,
+                        'duration_minutes': duration,
+                        'can_delete': True
+                    }
                 })
 
     return {
@@ -2732,14 +2758,230 @@ def api_calendar_vacancy():
     if conflict_message:
         return jsonify({'status': 'error', 'message': f'Vacancy conflict: {conflict_message}'}), 409
 
+    share_token = secrets.token_urlsafe(32)
     db.execute('''
         DELETE FROM slots_override
         WHERE slot_date = ? AND slot_time = ? AND status = 'available'
     ''', (slot_date, start_time.strftime('%H:%M')))
     db.execute('''
-        INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
-        VALUES (?, ?, 'available', ?)
-    ''', (slot_date, start_time.strftime('%H:%M'), duration))
+        INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes, share_token)
+        VALUES (?, ?, 'available', ?, ?)
+    ''', (slot_date, start_time.strftime('%H:%M'), duration, share_token))
+    db.commit()
+    share_url = url_for('open_booking_page', token=share_token, _external=True)
+    return jsonify({'status': 'success', 'share_token': share_token, 'share_url': share_url})
+
+
+@app.route('/calendar/open/<token>')
+def open_booking_page(token):
+    """Public booking page – no login required. Patients use this to book a shared vacancy slot."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
+        (token,)
+    ).fetchone()
+
+    if not row:
+        booked_row = db.execute(
+            "SELECT * FROM slots_override WHERE share_token = ?",
+            (token,)
+        ).fetchone()
+        if booked_row:
+            return render_template('open_booking.html', slot=None, already_booked=True, token=token)
+        return render_template('open_booking.html', slot=None, already_booked=False, token=token, not_found=True)
+
+    date_obj = parse_date_safe(row['slot_date'])
+    t_obj = parse_time_safe(row['slot_time'])
+    duration = int(row['duration_minutes'] or 60)
+    end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
+    slot = {
+        'id': row['id'],
+        'date': date_obj.strftime('%A, %B %d, %Y') if date_obj else row['slot_date'],
+        'date_iso': row['slot_date'],
+        'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
+        'end_time': end_dt.strftime('%H:%M') if end_dt else '',
+        'duration_minutes': duration,
+    }
+    return render_template('open_booking.html', slot=slot, already_booked=False, not_found=False, token=token)
+
+
+@app.route('/api/calendar/open/<token>/book', methods=['POST'])
+@csrf.exempt
+def api_open_slot_book(token):
+    """Public endpoint – books a shared vacancy slot. No authentication required."""
+    booker_name = (request.form.get('name') or '').strip()
+    booker_phone = (request.form.get('phone') or '').strip()
+    booker_notes = (request.form.get('notes') or '').strip()
+
+    if not booker_name:
+        return jsonify({'status': 'error', 'message': 'Name is required.'}), 400
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
+        (token,)
+    ).fetchone()
+
+    if not row:
+        return jsonify({'status': 'error', 'message': 'This slot is no longer available.'}), 409
+
+    date_obj = parse_date_safe(row['slot_date'])
+    t_obj = parse_time_safe(row['slot_time'])
+    if not date_obj or not t_obj:
+        return jsonify({'status': 'error', 'message': 'Invalid slot data.'}), 500
+
+    duration = int(row['duration_minutes'] or 60)
+    slot_start = datetime.combine(date_obj, t_obj)
+    slot_end = slot_start + timedelta(minutes=duration)
+
+    conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
+    if conflict:
+        return jsonify({'status': 'error', 'message': 'This slot is no longer available – another booking was just made.'}), 409
+
+    full_title = booker_name
+    if booker_notes:
+        full_title = f"{booker_name} – {booker_notes}"
+
+    db.execute('''
+        INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
+        VALUES (?, ?, ?, ?, 0, 'special')
+    ''', (row['slot_date'], row['slot_time'], duration, full_title))
+
+    db.execute('''
+        UPDATE slots_override
+        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
+        WHERE id = ?
+    ''', (booker_name, booker_phone, datetime.now().isoformat(), row['id']))
+    db.commit()
+    return jsonify({'status': 'success', 'message': f'Your booking for {row["slot_date"]} at {row["slot_time"]} has been confirmed!'})
+
+
+@app.route('/api/calendar/vacancy/<int:override_id>/occupy', methods=['POST'])
+@login_required
+def api_calendar_vacancy_occupy(override_id):
+    """Admin manually occupies a vacant slot – assigns a patient or enters a name."""
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM slots_override WHERE id = ? AND status = 'available'",
+        (override_id,)
+    ).fetchone()
+
+    if not row:
+        return jsonify({'status': 'error', 'message': 'Slot not found or already occupied.'}), 404
+
+    patient_id_raw = (request.form.get('patient_id') or '').strip()
+    occupant_name = (request.form.get('occupant_name') or '').strip()
+
+    if not patient_id_raw and not occupant_name:
+        return jsonify({'status': 'error', 'message': 'Provide a patient or a name.'}), 400
+
+    date_obj = parse_date_safe(row['slot_date'])
+    t_obj = parse_time_safe(row['slot_time'])
+    if not date_obj or not t_obj:
+        return jsonify({'status': 'error', 'message': 'Invalid slot data.'}), 500
+
+    duration = int(row['duration_minutes'] or 60)
+    slot_start = datetime.combine(date_obj, t_obj)
+    slot_end = slot_start + timedelta(minutes=duration)
+
+    conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
+    if conflict:
+        return jsonify({'status': 'error', 'message': f'Cannot occupy slot: {conflict}'}), 409
+
+    if patient_id_raw:
+        try:
+            patient_id = int(patient_id_raw)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid patient id.'}), 400
+        patient = db.execute('SELECT id, name, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if not patient:
+            return jsonify({'status': 'error', 'message': 'Patient not found.'}), 404
+        is_ongoing = (patient['status'] or '').lower() == 'ongoing'
+        db.execute('''
+            INSERT INTO appointments
+            (patient_id, appointment_date, appointment_time, status, duration_minutes,
+             is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_title)
+            VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, 'in-person', '### private meeting')
+        ''', (
+            patient_id,
+            row['slot_date'],
+            row['slot_time'],
+            duration,
+            1 if is_ongoing else 0,
+            1 if is_ongoing else None,
+            str(custom_weekday(date_obj)) if is_ongoing else None
+        ))
+        booked_label = patient['name']
+    else:
+        db.execute('''
+            INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
+            VALUES (?, ?, ?, ?, 0, 'special')
+        ''', (row['slot_date'], row['slot_time'], duration, occupant_name))
+        booked_label = occupant_name
+
+    db.execute('''
+        UPDATE slots_override
+        SET status = 'booked', booked_by_name = ?, booked_at = ?
+        WHERE id = ?
+    ''', (booked_label, datetime.now().isoformat(), override_id))
+    db.commit()
+    return jsonify({'status': 'success', 'message': f'Slot occupied by {booked_label}.'})
+
+
+@app.route('/api/calendar/vacancies')
+@login_required
+def api_calendar_vacancies():
+    """Admin: list all vacancy slots (open + recently booked)."""
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    today = datetime.now().date()
+    rows = db.execute('''
+        SELECT id, slot_date, slot_time, duration_minutes, status, share_token,
+               booked_by_name, booked_by_phone, booked_at
+        FROM slots_override
+        WHERE slot_date >= ?
+        ORDER BY slot_date ASC, slot_time ASC
+    ''', ((today - timedelta(days=7)).isoformat(),)).fetchall()
+
+    items = []
+    for row in rows:
+        date_obj = parse_date_safe(row['slot_date'])
+        t_obj = parse_time_safe(row['slot_time'])
+        duration = int(row['duration_minutes'] or 60)
+        end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
+        share_token = row['share_token'] or ''
+        share_url = url_for('open_booking_page', token=share_token, _external=True) if share_token else ''
+        items.append({
+            'id': row['id'],
+            'date': row['slot_date'],
+            'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
+            'end_time': end_dt.strftime('%H:%M') if end_dt else '',
+            'duration_minutes': duration,
+            'status': row['status'],
+            'share_token': share_token,
+            'share_url': share_url,
+            'booked_by_name': row['booked_by_name'] or '',
+            'booked_by_phone': row['booked_by_phone'] or '',
+            'booked_at': row['booked_at'] or '',
+        })
+
+    return jsonify({'items': items})
+
+
+@app.route('/api/calendar/vacancy/<int:override_id>/delete', methods=['POST'])
+@login_required
+def api_calendar_vacancy_delete(override_id):
+    """Admin: delete a vacancy slot."""
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    db.execute('DELETE FROM slots_override WHERE id = ?', (override_id,))
     db.commit()
     return jsonify({'status': 'success'})
 

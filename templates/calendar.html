@@ -316,6 +316,16 @@
             </div>
         </div>
     </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mt-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0" style="color:#10b981;">{{ t('Open Vacancies') }}</h6>
+            <span class="badge text-white" style="background:#10b981;" id="vacancyCount">0</span>
+        </div>
+        <div class="card-body" id="vacanciesContainer">
+            <div class="small text-muted">Loading vacancies...</div>
+        </div>
+    </div>
     {% endif %}
 </div>
 </div>
@@ -859,6 +869,260 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    const vacanciesContainer = document.getElementById('vacanciesContainer');
+    const vacancyCount = document.getElementById('vacancyCount');
+
+    function showShareLinkModal(shareUrl, date, time) {
+        modalTitle.textContent = 'Vacant Slot Created';
+        modalBody.innerHTML = `
+            <p class="small mb-2">This slot is now open for patient self-booking. Share this link:</p>
+            <div class="input-group input-group-sm mb-3">
+                <input type="text" class="form-control form-control-sm" id="shareLinkInput" value="${shareUrl}" readonly>
+                <button class="btn btn-outline-secondary" type="button" id="copyShareLinkBtn"><i class="bi bi-clipboard"></i> Copy</button>
+            </div>
+            <div class="small text-muted">Date: <strong>${date}</strong> &nbsp; Time: <strong>${time}</strong></div>
+        `;
+        modalConfirmBtn.textContent = 'Close';
+        modalConfirmBtn.className = 'btn btn-primary';
+        modalCancelBtn.classList.add('d-none');
+        actionModal.show();
+        const copyBtn = document.getElementById('copyShareLinkBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const inp = document.getElementById('shareLinkInput');
+                if (inp) {
+                    navigator.clipboard.writeText(inp.value).then(() => {
+                        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                        setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
+                    }).catch(() => {
+                        inp.select();
+                        document.execCommand('copy');
+                        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                        setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
+                    });
+                }
+            });
+        }
+        modalConfirmBtn.onclick = function() { actionModal.hide(); };
+    }
+
+    function openVacancyManager(payload) {
+        if (!payload || !payload.slot_id) {
+            showActionModal({ title: 'Error', message: 'Vacancy slot data missing.' });
+            return;
+        }
+
+        const shareUrl = payload.share_url || '';
+        const shareHtml = shareUrl
+            ? `<div class="mb-3">
+                <label class="form-label small fw-semibold">Shareable Link</label>
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control form-control-sm" id="vacMgrLink" value="${shareUrl}" readonly>
+                    <button class="btn btn-outline-secondary" type="button" id="vacMgrCopyBtn"><i class="bi bi-clipboard"></i> Copy</button>
+                </div>
+               </div>`
+            : '';
+
+        const patientOptions = Array.from(
+            (document.getElementById('bookingPatient') || {}).options || []
+        ).filter(o => o.value && o.value !== '' && o.value !== 'other')
+         .map(o => `<option value="${o.value}">${o.text}</option>`)
+         .join('');
+
+        modalTitle.textContent = 'Open Vacancy Slot';
+        modalBody.innerHTML = `
+            <div class="d-flex gap-2 mb-3 small text-muted">
+                <span><i class="bi bi-calendar3 me-1"></i>${payload.date}</span>
+                <span><i class="bi bi-clock me-1"></i>${payload.time}–${payload.end_time}</span>
+                <span>${payload.duration_minutes} min</span>
+            </div>
+            ${shareHtml}
+            <hr>
+            <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
+            <div class="mb-2">
+                <label class="form-label small">Select Patient</label>
+                <select class="form-select form-select-sm" id="vacMgrPatient">
+                    <option value="">— enter name below instead —</option>
+                    ${patientOptions}
+                </select>
+            </div>
+            <div class="mb-2" id="vacMgrNameWrap">
+                <label class="form-label small">Or Enter Name Directly</label>
+                <input type="text" class="form-control form-control-sm" id="vacMgrName" placeholder="Name / guest">
+            </div>
+            <div id="vacMgrFeedback" class="d-none small mt-2"></div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="vacMgrDeleteBtn">Delete This Vacancy</button>
+        `;
+
+        modalConfirmBtn.textContent = 'Occupy Slot';
+        modalConfirmBtn.className = 'btn btn-success';
+        modalCancelBtn.classList.remove('d-none');
+        actionModal.show();
+
+        const copyBtn = document.getElementById('vacMgrCopyBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const inp = document.getElementById('vacMgrLink');
+                if (inp) {
+                    navigator.clipboard.writeText(inp.value).catch(() => {
+                        inp.select();
+                        document.execCommand('copy');
+                    });
+                    copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                    setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
+                }
+            });
+        }
+
+        const patientSelect = document.getElementById('vacMgrPatient');
+        const nameWrap = document.getElementById('vacMgrNameWrap');
+        if (patientSelect) {
+            patientSelect.addEventListener('change', function() {
+                if (nameWrap) nameWrap.classList.toggle('d-none', !!this.value);
+            });
+        }
+
+        const deleteBtn = document.getElementById('vacMgrDeleteBtn');
+        if (deleteBtn) {
+            deleteBtn.onclick = function() {
+                fetch(`/api/calendar/vacancy/${payload.slot_id}/delete`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        actionModal.hide();
+                        loadSnapshot();
+                        loadVacancies();
+                    } else {
+                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete vacancy.' });
+                    }
+                });
+            };
+        }
+
+        modalConfirmBtn.onclick = function() {
+            const patientId = patientSelect ? patientSelect.value : '';
+            const nameInput = document.getElementById('vacMgrName');
+            const occupantName = nameInput ? nameInput.value.trim() : '';
+            if (!patientId && !occupantName) {
+                const fb = document.getElementById('vacMgrFeedback');
+                if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = 'Select a patient or enter a name.'; }
+                return;
+            }
+            const body = new URLSearchParams({ patient_id: patientId, occupant_name: occupantName });
+            fetch(`/api/calendar/vacancy/${payload.slot_id}/occupy`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    actionModal.hide();
+                    loadSnapshot();
+                    loadVacancies();
+                    loadBookingManagement();
+                    showActionModal({ title: 'Slot Occupied', message: data.message || 'Done.' });
+                } else {
+                    const fb = document.getElementById('vacMgrFeedback');
+                    if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = data.message || 'Failed.'; }
+                }
+            }).catch(() => {
+                const fb = document.getElementById('vacMgrFeedback');
+                if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = 'Network error.'; }
+            });
+        };
+    }
+
+    function renderVacancies(items) {
+        if (!vacanciesContainer) return;
+        if (vacancyCount) vacancyCount.textContent = items.filter(i => i.status === 'available').length;
+        if (!items || !items.length) {
+            vacanciesContainer.innerHTML = '<div class="small text-muted">No open vacancy slots.</div>';
+            return;
+        }
+        vacanciesContainer.innerHTML = items.map(item => {
+            const isOpen = item.status === 'available';
+            const statusBadge = isOpen
+                ? '<span class="badge bg-success">Open</span>'
+                : `<span class="badge bg-secondary">Booked${item.booked_by_name ? ' · ' + item.booked_by_name : ''}</span>`;
+            const shareBtn = (isOpen && item.share_url)
+                ? `<button type="button" class="btn btn-sm btn-outline-success vac-copy" data-url="${item.share_url}" title="Copy link"><i class="bi bi-share"></i></button>`
+                : '';
+            const occupyBtn = isOpen
+                ? `<button type="button" class="btn btn-sm btn-outline-primary vac-occupy" data-item="${encodeURIComponent(JSON.stringify(item))}"><i class="bi bi-person-check"></i> Occupy</button>`
+                : '';
+            const deleteBtn = `<button type="button" class="btn btn-sm btn-outline-danger vac-del" data-id="${item.id}"><i class="bi bi-trash"></i></button>`;
+            return `<div class="border rounded-3 p-2 mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span class="small fw-semibold">${item.date} ${item.time}–${item.end_time}</span>
+                    <span class="small text-muted ms-2">${item.duration_minutes} min</span>
+                    <div class="mt-1">${statusBadge}</div>
+                </div>
+                <div class="d-flex gap-1">
+                    ${shareBtn}${occupyBtn}${deleteBtn}
+                </div>
+            </div>`;
+        }).join('');
+
+        vacanciesContainer.querySelectorAll('.vac-copy').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const url = this.dataset.url;
+                navigator.clipboard.writeText(url).catch(() => {});
+                this.innerHTML = '<i class="bi bi-check2"></i>';
+                setTimeout(() => { this.innerHTML = '<i class="bi bi-share"></i>'; }, 2000);
+            });
+        });
+
+        vacanciesContainer.querySelectorAll('.vac-occupy').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const item = JSON.parse(decodeURIComponent(this.dataset.item || '{}'));
+                openVacancyManager({
+                    slot_id: item.id,
+                    share_url: item.share_url || '',
+                    date: item.date,
+                    time: item.time,
+                    end_time: item.end_time,
+                    duration_minutes: item.duration_minutes
+                });
+            });
+        });
+
+        vacanciesContainer.querySelectorAll('.vac-del').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                showActionModal({
+                    title: 'Delete Vacancy',
+                    message: 'Remove this vacancy slot?',
+                    confirmText: 'Delete',
+                    confirmClass: 'btn-danger',
+                    showCancel: true
+                }).then(confirmed => {
+                    if (!confirmed) return;
+                    fetch(`/api/calendar/vacancy/${id}/delete`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken }
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            loadSnapshot();
+                            loadVacancies();
+                        } else {
+                            showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    function loadVacancies() {
+        if (!isAdmin || !vacanciesContainer) return;
+        fetch('/api/calendar/vacancies')
+            .then(r => r.json())
+            .then(data => renderVacancies(data.items || []))
+            .catch(() => {
+                if (vacanciesContainer) vacanciesContainer.innerHTML = '<div class="small text-danger">Failed loading vacancies.</div>';
+            });
+    }
+
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
         height: 'auto',
@@ -982,6 +1246,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     title: meta.title || info.event.title || '',
                     block_type: meta.block_type || 'blocked',
                     is_private: !!meta.is_private
+                });
+            }
+
+            if (meta.type === 'vacancy' && isAdmin) {
+                openVacancyManager({
+                    slot_id: meta.slot_id,
+                    share_token: meta.share_token || '',
+                    share_url: meta.share_url || '',
+                    date: info.event.start ? info.event.start.toISOString().slice(0, 10) : '',
+                    time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : '',
+                    end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
+                    duration_minutes: meta.duration_minutes || 60
                 });
             }
         }
@@ -1303,6 +1579,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderAvailableSlots(data.available_slots || []);
                 renderOngoingList(data.events || []);
                 loadBookingManagement();
+                loadVacancies();
             });
     }
 
@@ -1388,8 +1665,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: new URLSearchParams({ slot_date: bookingDate.value, slot_time: bookingTime.value, end_time: bookingEndTime.value })
             }).then(r => r.json()).then(data => {
                 if (data.status === 'success') {
-                    showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
                     loadSnapshot();
+                    loadVacancies();
+                    if (data.share_url) {
+                        showShareLinkModal(data.share_url, bookingDate.value, bookingTime.value);
+                    } else {
+                        showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
+                    }
                 } else {
                     showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
                 }
