@@ -788,101 +788,62 @@ class ClinicTestCase(unittest.TestCase):
             finally:
                 app_module.BACKUP_DIR = original_backup_dir
 
-    def test_vacancy_create_returns_share_url(self):
-        """Admin creates a vacancy slot and receives a shareable link."""
+    def test_vacancy_create_supports_one_time_and_weekly(self):
+        """Admin can create vacancy slots as one-time or weekly recurring."""
         self.login('admin', 'admin')
         future_day = (datetime.now().date() + timedelta(days=3)).isoformat()
-        rv = self.client.post('/api/calendar/vacancy', data=dict(
+
+        one_time_rv = self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
             slot_time='15:00',
-            end_time='16:00'
+            end_time='16:00',
+            recurrence_pattern='one-time'
         ))
-        assert rv.status_code == 200
-        data = rv.get_json()
-        assert data.get('status') == 'success'
-        assert data.get('override_id')
-        assert data.get('share_token')
-        assert '/calendar/open/' in (data.get('share_url') or '')
+        assert one_time_rv.status_code == 200
+        one_time_data = one_time_rv.get_json()
+        assert one_time_data.get('status') == 'success'
+        assert one_time_data.get('recurrence_pattern') == 'one-time'
+        assert one_time_data.get('override_id')
 
-    def test_open_booking_page_accessible_without_login(self):
-        """The public booking page is accessible without authentication."""
-        self.login('admin', 'admin')
-        future_day = (datetime.now().date() + timedelta(days=4)).isoformat()
-        create_rv = self.client.post('/api/calendar/vacancy', data=dict(
+        weekly_rv = self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
-            slot_time='11:00',
-            end_time='12:00'
+            slot_time='10:00',
+            end_time='11:00',
+            recurrence_pattern='weekly'
         ))
-        token = create_rv.get_json().get('share_token', '')
-        assert token
-
-        # Access public page WITHOUT admin session
-        self.logout()
-        page_rv = self.client.get(f'/calendar/open/{token}')
-        assert page_rv.status_code == 200
-        assert b'Book an Appointment' in page_rv.data
-
-    def test_public_slot_booking(self):
-        """A visitor can book a slot via the public link."""
-        self.login('admin', 'admin')
-        future_day = (datetime.now().date() + timedelta(days=5)).isoformat()
-        create_rv = self.client.post('/api/calendar/vacancy', data=dict(
-            slot_date=future_day,
-            slot_time='14:00',
-            end_time='15:00'
-        ))
-        token = create_rv.get_json().get('share_token', '')
-        assert token
-
-        # Book without login
-        self.logout()
-        book_rv = self.client.post(f'/api/calendar/open/{token}/book', data=dict(
-            name='Public Visitor',
-            phone='054-1234567',
-            notes='Looking forward to it'
-        ))
-        assert book_rv.status_code == 200
-        data = book_rv.get_json()
-        assert data.get('status') == 'success'
+        assert weekly_rv.status_code == 200
+        weekly_data = weekly_rv.get_json()
+        assert weekly_data.get('status') == 'success'
+        assert weekly_data.get('recurrence_pattern') == 'weekly'
+        assert weekly_data.get('recurring_id')
 
         with app.app_context():
             db = get_db()
-            # Slot should now be marked as booked
-            row = db.execute(
-                "SELECT status, booked_by_name FROM slots_override WHERE share_token = ?",
-                (token,)
-            ).fetchone()
-            assert row is not None
-            assert row['status'] == 'booked'
-            assert row['booked_by_name'] == 'Public Visitor'
-            # A blocked_slots entry should have been created with the visitor's name
-            block = db.execute(
-                "SELECT title FROM blocked_slots WHERE blocked_date = ? AND blocked_time = '14:00'",
-                (future_day,)
-            ).fetchone()
-            assert block is not None
-            assert 'Public Visitor' in block['title']
+            recurring = db.execute('SELECT * FROM vacancy_recurring WHERE id = ?', (weekly_data['recurring_id'],)).fetchone()
+            assert recurring is not None
 
-    def test_double_booking_public_slot_is_rejected(self):
-        """A slot that has already been booked cannot be booked again via the public link."""
+    def test_weekly_vacancy_appears_in_next_week_snapshot(self):
+        """Weekly recurring vacancy should appear again in the next week's snapshot."""
         self.login('admin', 'admin')
-        future_day = (datetime.now().date() + timedelta(days=6)).isoformat()
+        anchor_date = datetime.now().date() + timedelta(days=2)
+        anchor_iso = anchor_date.isoformat()
+
         create_rv = self.client.post('/api/calendar/vacancy', data=dict(
-            slot_date=future_day,
-            slot_time='09:00',
-            end_time='10:00'
+            slot_date=anchor_iso,
+            slot_time='09:30',
+            end_time='10:30',
+            recurrence_pattern='weekly'
         ))
-        token = create_rv.get_json().get('share_token', '')
-        assert token
+        assert create_rv.status_code == 200
+        assert create_rv.get_json().get('status') == 'success'
 
-        self.logout()
-        # First booking succeeds
-        r1 = self.client.post(f'/api/calendar/open/{token}/book', data=dict(name='First Person'))
-        assert r1.get_json().get('status') == 'success'
-
-        # Second booking on the same token fails (already booked)
-        r2 = self.client.post(f'/api/calendar/open/{token}/book', data=dict(name='Second Person'))
-        assert r2.status_code == 409
+        next_week_day = anchor_date + timedelta(days=7)
+        next_week_start = next_week_day - timedelta(days=(next_week_day.weekday() + 1) % 7)
+        snapshot_rv = self.client.get(f'/api/calendar/snapshot?week_start={next_week_start.isoformat()}')
+        assert snapshot_rv.status_code == 200
+        payload = snapshot_rv.get_json()
+        available = payload.get('available_slots', [])
+        assert any(slot['date'] == next_week_day.isoformat() and slot['time'] == '09:30' for slot in available)
 
     def test_admin_vacancy_occupy(self):
         """Admin can manually occupy a vacancy slot using a patient ID."""
@@ -896,7 +857,8 @@ class ClinicTestCase(unittest.TestCase):
         create_rv = self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
             slot_time='13:00',
-            end_time='14:00'
+            end_time='14:00',
+            recurrence_pattern='one-time'
         ))
         assert create_rv.get_json().get('status') == 'success'
 
@@ -930,29 +892,41 @@ class ClinicTestCase(unittest.TestCase):
         self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
             slot_time='16:00',
-            end_time='17:00'
+            end_time='17:00',
+            recurrence_pattern='one-time'
+        ))
+        self.client.post('/api/calendar/vacancy', data=dict(
+            slot_date=future_day,
+            slot_time='18:00',
+            end_time='19:00',
+            recurrence_pattern='weekly'
         ))
         rv = self.client.get('/api/calendar/vacancies')
         assert rv.status_code == 200
         items = rv.get_json().get('items', [])
-        assert any(i['date'] == future_day and i['status'] == 'available' for i in items)
+        assert any(i['kind'] == 'one-time' and i['date'] == future_day and i['status'] == 'available' for i in items)
+        assert any(i['kind'] == 'weekly' and i['status'] == 'active' for i in items)
 
-    def test_vacancy_page_shows_already_booked(self):
-        """After booking, the public page shows already booked message."""
+    def test_admin_can_delete_weekly_vacancy(self):
         self.login('admin', 'admin')
-        future_day = (datetime.now().date() + timedelta(days=9)).isoformat()
+        future_day = (datetime.now().date() + timedelta(days=10)).isoformat()
         create_rv = self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
             slot_time='10:00',
-            end_time='11:00'
+            end_time='11:00',
+            recurrence_pattern='weekly'
         ))
-        token = create_rv.get_json().get('share_token', '')
-        self.logout()
-        self.client.post(f'/api/calendar/open/{token}/book', data=dict(name='Already Booked User'))
-        # Now load the page again
-        page_rv = self.client.get(f'/calendar/open/{token}')
-        assert page_rv.status_code == 200
-        assert b'Already Booked' in page_rv.data
+        recurring_id = create_rv.get_json().get('recurring_id')
+        assert recurring_id
+
+        del_rv = self.client.post(f'/api/calendar/vacancy/{recurring_id}/delete', data=dict(kind='weekly'))
+        assert del_rv.status_code == 200
+        assert del_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT id FROM vacancy_recurring WHERE id = ?', (recurring_id,)).fetchone()
+            assert row is None
 
 if __name__ == '__main__':
     unittest.main()

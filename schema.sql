@@ -149,6 +149,15 @@ CREATE TABLE IF NOT EXISTS slots_override (
     booked_at TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS vacancy_recurring (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6),
+    slot_time TEXT NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS slots_recurring (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6), -- 0=Sunday, 6=Saturday

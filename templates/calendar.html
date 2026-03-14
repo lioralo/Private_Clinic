@@ -137,7 +137,7 @@
                 <input type="hidden" id="bookingTime" name="time">
                 <input type="hidden" id="bookingEndTime" name="end_time">
                 {% if current_user.role == 'admin' %}
-                <div class="calendar-aux-note full-span mb-3">{{ t('Click a free time, set end time, then use Create Vacancy Link to open it for patient booking. Use Book Selected Slot for direct booking.') }}</div>
+                <div class="calendar-aux-note full-span mb-3">{{ t('Click a free time, set end time, then use Create Vacancy. You will be asked if it is one-time or weekly recurring. Use Book Selected Slot for direct booking.') }}</div>
                 {% endif %}
                 <div class="calendar-form-grid">
                 {% if current_user.role == 'admin' %}
@@ -217,7 +217,7 @@
                 <input type="hidden" name="meeting_platform" id="meetingPlatformHidden">
                 <div class="full-span d-flex justify-content-end">
                     {% if current_user.role == 'admin' %}
-                    <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-4 me-2" id="createVacancyBtn">{{ t('Create Vacancy Link') }}</button>
+                    <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-4 me-2" id="createVacancyBtn">{{ t('Create Vacancy') }}</button>
                     {% endif %}
                     <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4" id="bookSlotSubmitBtn">{{ t('Book Selected Slot') }}</button>
                 </div>
@@ -373,9 +373,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const bookSlotSubmitBtn = document.getElementById('bookSlotSubmitBtn');
     const meetingLinkInput = document.getElementById('meetingLinkInput');
     const meetingPlatformHidden = document.getElementById('meetingPlatformHidden');
-        const vacantHintBooking = document.getElementById('vacantHintBooking');
-        const otherNameWrap = document.getElementById('otherNameWrap');
-        const otherNameInput = document.getElementById('otherNameInput');
+    const otherNameWrap = document.getElementById('otherNameWrap');
+    const otherNameInput = document.getElementById('otherNameInput');
     const filterButtons = document.querySelectorAll('.filter-chip');
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
@@ -872,64 +871,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const vacanciesContainer = document.getElementById('vacanciesContainer');
     const vacancyCount = document.getElementById('vacancyCount');
 
-    function showShareLinkModal(shareUrl, date, time) {
-        modalTitle.textContent = 'Vacant Slot Created';
-        modalBody.innerHTML = `
-            <p class="small mb-2">This slot is now open for patient self-booking. Share this link:</p>
-            <div class="input-group input-group-sm mb-3">
-                <input type="text" class="form-control form-control-sm" id="shareLinkInput" value="${shareUrl}" readonly>
-                <button class="btn btn-outline-secondary" type="button" id="copyShareLinkBtn"><i class="bi bi-clipboard"></i> Copy</button>
-                <button class="btn btn-outline-primary" type="button" id="openShareLinkBtn"><i class="bi bi-box-arrow-up-right"></i> Open</button>
-            </div>
-            <div class="small text-muted">Date: <strong>${date}</strong> &nbsp; Time: <strong>${time}</strong></div>
-        `;
-        modalConfirmBtn.textContent = 'Close';
-        modalConfirmBtn.className = 'btn btn-primary';
-        modalCancelBtn.classList.add('d-none');
-        actionModal.show();
-        const copyBtn = document.getElementById('copyShareLinkBtn');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', function() {
-                const inp = document.getElementById('shareLinkInput');
-                if (inp) {
-                    navigator.clipboard.writeText(inp.value).then(() => {
-                        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
-                        setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
-                    }).catch(() => {
-                        inp.select();
-                        document.execCommand('copy');
-                        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
-                        setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
-                    });
-                }
-            });
-        }
-        const openBtn = document.getElementById('openShareLinkBtn');
-        if (openBtn) {
-            openBtn.addEventListener('click', function() {
-                window.open(shareUrl, '_blank', 'noopener,noreferrer');
-            });
-        }
-        modalConfirmBtn.onclick = function() { actionModal.hide(); };
-    }
-
     function openVacancyManager(payload) {
         if (!payload || !payload.slot_id) {
             showActionModal({ title: 'Error', message: 'Vacancy slot data missing.' });
             return;
         }
-
-        const shareUrl = payload.share_url || '';
-        const shareHtml = shareUrl
-            ? `<div class="mb-3">
-                <label class="form-label small fw-semibold">Shareable Link</label>
-                <div class="input-group input-group-sm">
-                    <input type="text" class="form-control form-control-sm" id="vacMgrLink" value="${shareUrl}" readonly>
-                    <button class="btn btn-outline-secondary" type="button" id="vacMgrCopyBtn"><i class="bi bi-clipboard"></i> Copy</button>
-                    <button class="btn btn-outline-primary" type="button" id="vacMgrOpenBtn"><i class="bi bi-box-arrow-up-right"></i> Open</button>
-                </div>
-               </div>`
-            : '';
 
         const patientOptions = Array.from(
             (document.getElementById('bookingPatient') || {}).options || []
@@ -944,8 +890,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span><i class="bi bi-clock me-1"></i>${payload.time}–${payload.end_time}</span>
                 <span>${payload.duration_minutes} min</span>
             </div>
-            ${shareHtml}
-            <hr>
             <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
             <div class="mb-2">
                 <label class="form-label small">Select Patient</label>
@@ -966,27 +910,6 @@ document.addEventListener('DOMContentLoaded', function() {
         modalConfirmBtn.className = 'btn btn-success';
         modalCancelBtn.classList.remove('d-none');
         actionModal.show();
-
-        const copyBtn = document.getElementById('vacMgrCopyBtn');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', function() {
-                const inp = document.getElementById('vacMgrLink');
-                if (inp) {
-                    navigator.clipboard.writeText(inp.value).catch(() => {
-                        inp.select();
-                        document.execCommand('copy');
-                    });
-                    copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
-                    setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
-                }
-            });
-        }
-        const openBtn = document.getElementById('vacMgrOpenBtn');
-        if (openBtn && shareUrl) {
-            openBtn.addEventListener('click', function() {
-                window.open(shareUrl, '_blank', 'noopener,noreferrer');
-            });
-        }
 
         const patientSelect = document.getElementById('vacMgrPatient');
         const nameWrap = document.getElementById('vacMgrNameWrap');
@@ -1048,26 +971,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderVacancies(items) {
         if (!vacanciesContainer) return;
-        if (vacancyCount) vacancyCount.textContent = items.filter(i => i.status === 'available').length;
+        if (vacancyCount) vacancyCount.textContent = items.filter(i => i.status === 'available' || i.kind === 'weekly').length;
         if (!items || !items.length) {
             vacanciesContainer.innerHTML = '<div class="small text-muted">No open vacancy slots.</div>';
             return;
         }
         vacanciesContainer.innerHTML = items.map(item => {
-            const isOpen = item.status === 'available';
-            const statusBadge = isOpen
-                ? '<span class="badge bg-success">Open</span>'
-                : `<span class="badge bg-secondary">Booked${item.booked_by_name ? ' · ' + item.booked_by_name : ''}</span>`;
-            const shareBtn = (isOpen && item.share_url)
-                ? `<button type="button" class="btn btn-sm btn-outline-success vac-copy" data-url="${item.share_url}" title="Copy link"><i class="bi bi-share"></i></button>`
-                : '';
-            const openBtn = (isOpen && item.share_url)
-                ? `<button type="button" class="btn btn-sm btn-outline-primary vac-open" data-url="${item.share_url}" title="Open link"><i class="bi bi-box-arrow-up-right"></i></button>`
-                : '';
-            const occupyBtn = isOpen
+            const isWeekly = item.kind === 'weekly';
+            const isOpen = item.status === 'available' || isWeekly;
+            let statusBadge = '<span class="badge bg-secondary">Booked</span>';
+            if (isWeekly) {
+                statusBadge = '<span class="badge bg-success">Recurring Weekly</span>';
+            } else if (isOpen) {
+                statusBadge = '<span class="badge bg-success">Open</span>';
+            } else if (item.booked_by_name) {
+                statusBadge = `<span class="badge bg-secondary">Booked · ${item.booked_by_name}</span>`;
+            }
+            const occupyBtn = (isOpen && item.kind !== 'weekly')
                 ? `<button type="button" class="btn btn-sm btn-outline-primary vac-occupy" data-item="${encodeURIComponent(JSON.stringify(item))}"><i class="bi bi-person-check"></i> Occupy</button>`
                 : '';
-            const deleteBtn = `<button type="button" class="btn btn-sm btn-outline-danger vac-del" data-id="${item.id}"><i class="bi bi-trash"></i></button>`;
+            const deleteBtn = `<button type="button" class="btn btn-sm btn-outline-danger vac-del" data-id="${item.id}" data-kind="${item.kind || 'one-time'}"><i class="bi bi-trash"></i></button>`;
             return `<div class="border rounded-3 p-2 mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <span class="small fw-semibold">${item.date} ${item.time}–${item.end_time}</span>
@@ -1075,35 +998,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="mt-1">${statusBadge}</div>
                 </div>
                 <div class="d-flex gap-1">
-                    ${shareBtn}${openBtn}${occupyBtn}${deleteBtn}
+                    ${occupyBtn}${deleteBtn}
                 </div>
             </div>`;
         }).join('');
-
-        vacanciesContainer.querySelectorAll('.vac-copy').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const url = this.dataset.url;
-                navigator.clipboard.writeText(url).catch(() => {});
-                this.innerHTML = '<i class="bi bi-check2"></i>';
-                setTimeout(() => { this.innerHTML = '<i class="bi bi-share"></i>'; }, 2000);
-            });
-        });
-
-        vacanciesContainer.querySelectorAll('.vac-open').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const url = this.dataset.url;
-                if (url) {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                }
-            });
-        });
 
         vacanciesContainer.querySelectorAll('.vac-occupy').forEach(btn => {
             btn.addEventListener('click', function() {
                 const item = JSON.parse(decodeURIComponent(this.dataset.item || '{}'));
                 openVacancyManager({
                     slot_id: item.id,
-                    share_url: item.share_url || '',
                     date: item.date,
                     time: item.time,
                     end_time: item.end_time,
@@ -1115,6 +1019,7 @@ document.addEventListener('DOMContentLoaded', function() {
         vacanciesContainer.querySelectorAll('.vac-del').forEach(btn => {
             btn.addEventListener('click', function() {
                 const id = this.dataset.id;
+                const kind = this.dataset.kind || 'one-time';
                 showActionModal({
                     title: 'Delete Vacancy',
                     message: 'Remove this vacancy slot?',
@@ -1125,7 +1030,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!confirmed) return;
                     fetch(`/api/calendar/vacancy/${id}/delete`, {
                         method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken }
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ kind })
                     }).then(r => r.json()).then(data => {
                         if (data.status === 'success') {
                             loadSnapshot();
@@ -1276,15 +1182,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (meta.type === 'vacancy' && isAdmin) {
-                openVacancyManager({
-                    slot_id: meta.slot_id,
-                    share_token: meta.share_token || '',
-                    share_url: meta.share_url || '',
-                    date: info.event.start ? info.event.start.toISOString().slice(0, 10) : '',
-                    time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : '',
-                    end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
-                    duration_minutes: meta.duration_minutes || 60
+                const selectedDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : '';
+                const selectedTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
+                const duration = meta.duration_minutes || 60;
+                setSelectedSlot(selectedDate, selectedTime, duration);
+                if (bookingTabTrigger) {
+                    bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+                }
+                showActionModal({
+                    title: 'Vacancy Selected',
+                    message: 'Use Book Selected Slot to book it now, or Create Vacancy to keep it open.'
                 });
+                return;
             }
         }
     });
@@ -1382,27 +1291,48 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        fetch('/api/calendar/vacancy', {
-            method: 'POST',
-            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                slot_date: bookingDate.value,
-                slot_time: bookingTime.value,
-                end_time: bookingEndTime.value
-            })
-        }).then(r => r.json()).then(data => {
-            if (data.status === 'success') {
-                loadSnapshot();
-                loadVacancies();
-                if (data.share_url) {
-                    showShareLinkModal(data.share_url, bookingDate.value, bookingTime.value);
+        modalTitle.textContent = 'Vacancy Type';
+        modalBody.innerHTML = `
+            <div class="mb-2 small text-muted">Should this vacancy apply only once or recur every week?</div>
+            <div class="mb-2">
+                <label class="form-label small">Vacancy Pattern</label>
+                <select class="form-select form-select-sm" id="vacancyPatternChoice">
+                    <option value="one-time">One-time (this date only)</option>
+                    <option value="weekly" selected>Weekly recurring</option>
+                </select>
+            </div>
+        `;
+        modalConfirmBtn.textContent = 'Create Vacancy';
+        modalConfirmBtn.className = 'btn btn-success';
+        modalCancelBtn.classList.remove('d-none');
+        actionModal.show();
+
+        modalConfirmBtn.onclick = function() {
+            const patternNode = document.getElementById('vacancyPatternChoice');
+            const recurrencePattern = patternNode ? patternNode.value : 'weekly';
+            fetch('/api/calendar/vacancy', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    slot_date: bookingDate.value,
+                    slot_time: bookingTime.value,
+                    end_time: bookingEndTime.value,
+                    recurrence_pattern: recurrencePattern
+                })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    actionModal.hide();
+                    loadSnapshot();
+                    loadVacancies();
+                    const msg = recurrencePattern === 'weekly'
+                        ? 'Weekly recurring vacancy created. Patients can book this same time each week unless occupied.'
+                        : 'One-time vacancy created for this date.';
+                    showActionModal({ title: 'Vacancy Created', message: msg });
                 } else {
-                    showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
+                    showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
                 }
-            } else {
-                showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
-            }
-        });
+            });
+        };
     }
 
     if (createVacancyBtn) {
