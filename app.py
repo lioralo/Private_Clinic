@@ -1782,6 +1782,15 @@ def patient_detail(patient_id):
     intake_enabled = patient['patient_type'] == 'initial-intake' or int(patient['has_intake_tab'] or 0) == 1
     if active_tab == 'intake' and not intake_enabled:
         active_tab = 'info'
+
+    if user and active_tab == 'messages' and unread_messages_count:
+        db.execute(
+            'UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ? AND COALESCE(is_read, 0) = 0',
+            (user['id'], current_user.id)
+        )
+        db.commit()
+        unread_messages_count = 0
+
     latest_note = notes[0] if notes else None
     intake_form_data = parse_intake_questionnaire(patient['intake_questionnaire'])
     next_session_row = db.execute('''
@@ -1850,6 +1859,24 @@ def admin_portal_preview(patient_id):
 def redirect_to_patient_tab(patient_id, default_tab='info'):
     tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
     return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
+@app.route('/patient/<int:patient_id>/toggle_self_booking', methods=('POST',))
+@login_required
+def toggle_self_booking(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    patient = db.execute('SELECT id, name, can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return 'Patient not found', 404
+
+    new_value = 0 if int(patient['can_self_schedule'] or 0) == 1 else 1
+    db.execute('UPDATE patients SET can_self_schedule = ? WHERE id = ?', (new_value, patient_id))
+    db.commit()
+    flash(f"Self-booking {'enabled' if new_value == 1 else 'disabled'} for {patient['name']}.")
+    return redirect_to_patient_tab(patient_id, 'info')
 
 
 def parse_date_safe(value):
@@ -4455,6 +4482,13 @@ def api_get_messages():
                 (current_user.id, requested_user)
             )
             db.commit()
+            normalized = []
+            for c in conversations:
+                c_dict = dict(c)
+                if c_dict.get('user_id') == requested_user:
+                    c_dict['unread_count'] = 0
+                normalized.append(c_dict)
+            conversations = normalized
 
         messages = db.execute('''
             SELECT m.*, u.username as sender_name

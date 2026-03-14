@@ -63,6 +63,11 @@
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Showing') }}</span>
         <span class="big" id="calendarWeekLabel">{{ t('Current week') }}</span>
+        <div class="mt-2 d-flex gap-1" id="calendarWeekNav">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarPrevWeek"><i class="bi bi-chevron-left"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">Today</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarNextWeek"><i class="bi bi-chevron-right"></i></button>
+        </div>
     </div>
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Ongoing this week') }}</span>
@@ -228,7 +233,10 @@
     <div class="card border-0 shadow-sm rounded-4 mt-3">
         <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
             <h6 class="fw-bold mb-0 text-primary">{{ t('Available Slots This Week') }}</h6>
-            <span class="badge bg-light text-dark" id="availableCount">0</span>
+            <div class="d-flex align-items-center gap-2">
+                <select id="availableWeekSelect" class="form-select form-select-sm" style="min-width: 210px;"></select>
+                <span class="badge bg-light text-dark" id="availableCount">0</span>
+            </div>
         </div>
         <div class="card-body" id="availableSlots"></div>
     </div>
@@ -378,9 +386,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterButtons = document.querySelectorAll('.filter-chip');
     const availableSlotsContainer = document.getElementById('availableSlots');
     const availableCount = document.getElementById('availableCount');
+    const availableWeekSelect = document.getElementById('availableWeekSelect');
     const followUpAlerts = document.getElementById('followUpAlerts');
     const ongoingThisWeek = document.getElementById('ongoingThisWeek');
     const calendarWeekLabel = document.getElementById('calendarWeekLabel');
+    const calendarPrevWeek = document.getElementById('calendarPrevWeek');
+    const calendarTodayWeek = document.getElementById('calendarTodayWeek');
+    const calendarNextWeek = document.getElementById('calendarNextWeek');
     const fridaySpecials = document.getElementById('fridaySpecials');
     const saturdaySpecials = document.getElementById('saturdaySpecials');
     const bookingTabTrigger = document.getElementById('booking-tab');
@@ -426,6 +438,40 @@ document.addEventListener('DOMContentLoaded', function() {
         end.setDate(end.getDate() + 4);
         const fmt = new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
         return `${fmt.format(start)} - ${fmt.format(end)}`;
+    }
+
+    function shiftWeek(isoStart, weeksDelta) {
+        const d = parseIsoDate(isoStart);
+        d.setDate(d.getDate() + (weeksDelta * 7));
+        return getWeekStartString(d);
+    }
+
+    function syncWeekFromAnchor() {
+        currentWeekStart = nowWeekAnchor;
+        calendarWeekLabel.textContent = formatWeekLabel(currentWeekStart);
+        if (availableWeekSelect) {
+            availableWeekSelect.value = nowWeekAnchor;
+        }
+    }
+
+    function refreshWeekOptions() {
+        if (!availableWeekSelect) return;
+        const options = [];
+        for (let i = -2; i <= 8; i += 1) {
+            const weekStart = shiftWeek(nowWeekAnchor, i);
+            const labelPrefix = i === 0 ? 'Current week' : (i > 0 ? `+${i} week` : `${i} week`);
+            options.push(`<option value="${weekStart}">${labelPrefix} · ${formatWeekLabel(weekStart)}</option>`);
+        }
+        availableWeekSelect.innerHTML = options.join('');
+        availableWeekSelect.value = nowWeekAnchor;
+    }
+
+    function goToWeek(isoStart) {
+        nowWeekAnchor = isoStart;
+        syncWeekFromAnchor();
+        refreshWeekOptions();
+        calendar.gotoDate(parseIsoDate(isoStart));
+        loadSnapshot();
     }
 
     function showActionModal(config) {
@@ -1186,8 +1232,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 const selectedTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
                 const duration = meta.duration_minutes || 60;
                 setSelectedSlot(selectedDate, selectedTime, duration);
+                if (bookingTypeSelect) {
+                    bookingTypeSelect.value = 'appointment';
+                    refreshSpecialControls();
+                }
                 if (bookingTabTrigger) {
                     bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+                }
+                if (bookingPatient && isAdmin) {
+                    bookingPatient.focus();
                 }
                 showActionModal({
                     title: 'Vacancy Selected',
@@ -1527,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const entries = daySlots.map(slot => (
                 `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
                     <div class="small text-muted">${slot.time} · ${slot.duration_minutes} min</div>
-                    <button class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Use Slot</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Use Slot</button>
                 </div>`
             )).join('');
 
@@ -1536,14 +1589,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="mt-2">${entries}</div>
             </details>`;
         }).join('');
+    }
 
-        document.querySelectorAll('.pick-slot').forEach(btn => {
-            btn.addEventListener('click', function() {
-                setSelectedSlot(this.dataset.date, this.dataset.time, parseInt(this.dataset.duration || '60', 10));
-                if (bookingTabTrigger) {
-                    bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
-                }
-            });
+    if (availableSlotsContainer) {
+        availableSlotsContainer.addEventListener('click', function(event) {
+            const btn = event.target.closest('.pick-slot');
+            if (!btn) return;
+            event.preventDefault();
+            setSelectedSlot(btn.dataset.date, btn.dataset.time, parseInt(btn.dataset.duration || '60', 10));
+            if (bookingTypeSelect) {
+                bookingTypeSelect.value = 'appointment';
+                refreshSpecialControls();
+            }
+            if (bookingTabTrigger) {
+                bootstrap.Tab.getOrCreateInstance(bookingTabTrigger).show();
+            }
+            if (bookingPatient && isAdmin) {
+                bookingPatient.focus();
+            }
         });
     }
 
@@ -1577,6 +1640,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.classList.add('btn-primary');
                 loadBookingManagement();
             });
+        });
+    }
+
+    if (calendarPrevWeek) {
+        calendarPrevWeek.addEventListener('click', function() {
+            goToWeek(shiftWeek(nowWeekAnchor, -1));
+        });
+    }
+    if (calendarTodayWeek) {
+        calendarTodayWeek.addEventListener('click', function() {
+            goToWeek(getWeekStartString(new Date()));
+        });
+    }
+    if (calendarNextWeek) {
+        calendarNextWeek.addEventListener('click', function() {
+            goToWeek(shiftWeek(nowWeekAnchor, 1));
+        });
+    }
+
+    if (availableWeekSelect) {
+        refreshWeekOptions();
+        availableWeekSelect.addEventListener('change', function() {
+            const targetWeek = this.value;
+            if (targetWeek) {
+                goToWeek(targetWeek);
+            }
         });
     }
 

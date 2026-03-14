@@ -51,7 +51,7 @@
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="billing-tab" data-bs-toggle="tab" data-bs-target="#billing" type="button" role="tab" aria-controls="billing" aria-selected="false"><i class="bi bi-receipt me-2"></i>{{ t('Billing') }}</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}{% if unread_messages_count %} <span class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}</button>
+                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}{% if unread_messages_count %} <span id="messagesUnreadBadge" class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}</button>
             </li>
         </ul>
 
@@ -955,6 +955,18 @@
                 <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
                     <i class="bi bi-download me-1"></i>{{ t('Export History') }}
                 </a>
+                <form method="post" action="{{ url_for('toggle_self_booking', patient_id=patient['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="active_tab" value="info">
+                    <button type="submit" class="btn btn-sm {% if patient['can_self_schedule'] %}btn-outline-danger{% else %}btn-outline-success{% endif %} rounded-pill w-100">
+                        <i class="bi {% if patient['can_self_schedule'] %}bi-lock-fill{% else %}bi-unlock-fill{% endif %} me-1"></i>
+                        {% if patient['can_self_schedule'] %}
+                        {{ 'Disable Self-Booking' if lang == 'en' else 'כבה קביעה עצמית' }}
+                        {% else %}
+                        {{ 'Enable Self-Booking' if lang == 'en' else 'הפעל קביעה עצמית' }}
+                        {% endif %}
+                    </button>
+                </form>
                 {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
                 <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#intake">
                     <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
@@ -1126,6 +1138,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const tabs = document.querySelectorAll('#patientTabs button[data-bs-toggle="tab"]');
+    const messagesUnreadBadge = document.getElementById('messagesUnreadBadge');
     const intakeFormBlock = document.getElementById('intakeFormBlock');
     const intakeFormHost = document.getElementById('intakeFormHost');
     if (intakeFormBlock && intakeFormHost) {
@@ -1171,6 +1184,9 @@ document.addEventListener('DOMContentLoaded', function() {
             url.searchParams.set('tab', tabId);
             window.history.replaceState({}, '', url.toString());
             syncActiveTabInputs();
+            if (tabId === 'messages' && messagesUnreadBadge) {
+                messagesUnreadBadge.remove();
+            }
         });
     });
 
