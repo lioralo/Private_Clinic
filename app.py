@@ -1831,7 +1831,7 @@ def overlaps(start_a, end_a, start_b, end_b):
     return start_a < end_b and start_b < end_a
 
 
-def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None, exclude_group_session_id=None):
+def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None, exclude_group_session_id=None, exclude_block_id=None):
     day_iso = day_obj.isoformat()
 
     appointment_rows = db.execute('''
@@ -1848,11 +1848,13 @@ def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None
             return 'Time overlaps an existing appointment.'
 
     block_rows = db.execute('''
-        SELECT blocked_time, duration_minutes
+        SELECT id, blocked_time, duration_minutes
         FROM blocked_slots
         WHERE blocked_date = ?
     ''', (day_iso,)).fetchall()
     for row in block_rows:
+        if exclude_block_id and int(row['id']) == int(exclude_block_id):
+            continue
         row_start = combine_dt(day_obj, row['blocked_time'])
         row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
         if overlaps(start_dt, end_dt, row_start, row_end):
@@ -1935,6 +1937,182 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
     if converted:
         db.commit()
     return converted
+
+
+def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=600):
+    base_date = parse_date_safe(appt['appointment_date'])
+    if not base_date:
+        return []
+
+    interval = int(appt['recurrence_interval'] or 1)
+    if interval <= 0:
+        interval = 1
+
+    recurrence_end = parse_date_safe(appt['recurrence_end_date'])
+    recurrence_count = int(appt['recurrence_count'] or 0)
+    days = parse_recurrence_days(appt)
+
+    anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
+    occurrences = []
+    produced = 0
+    week_index = 0
+
+    while len(occurrences) < max_occurrences:
+        block_week_start = anchor_week_start + timedelta(weeks=week_index * interval)
+        if block_week_start > range_end:
+            break
+
+        for day_code in days:
+            occ_date = block_week_start + timedelta(days=day_code)
+            if occ_date < base_date:
+                continue
+            if recurrence_end and occ_date > recurrence_end:
+                continue
+
+            produced += 1
+            if recurrence_count and produced > recurrence_count:
+                return occurrences
+
+            if range_start <= occ_date <= range_end:
+                occurrences.append(occ_date)
+
+        week_index += 1
+
+    return sorted(occurrences)
+
+
+def build_booking_management_payload(db, mode='upcoming', future_days=180, history_days=120):
+    today = datetime.now().date()
+    if mode == 'history':
+        range_start = today - timedelta(days=history_days)
+        range_end = today - timedelta(days=1)
+        sort_reverse = True
+    else:
+        range_start = today
+        range_end = today + timedelta(days=future_days)
+        sort_reverse = False
+
+    items = []
+
+    appointment_rows = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.status AS patient_status
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND ((COALESCE(a.is_recurring, 0) = 0 AND a.appointment_date BETWEEN ? AND ?)
+               OR (COALESCE(a.is_recurring, 0) = 1 AND a.appointment_date <= ?))
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (range_start.isoformat(), range_end.isoformat(), range_end.isoformat())).fetchall()
+
+    for appt in appointment_rows:
+        is_recurring = int(appt['is_recurring'] or 0) == 1
+        if is_recurring:
+            occ_dates = recurring_occurrences_between(appt, range_start, range_end)
+        else:
+            occ_date = parse_date_safe(appt['appointment_date'])
+            occ_dates = [occ_date] if occ_date else []
+
+        for occ_date in occ_dates:
+            start_dt = combine_dt(occ_date, appt['appointment_time'])
+            duration = int(appt['duration_minutes'] or 60)
+            end_dt = start_dt + timedelta(minutes=duration)
+            items.append({
+                'kind': 'appointment',
+                'source_id': appt['id'],
+                'occurrence_id': f"appointment-{appt['id']}-{occ_date.isoformat()}",
+                'date': occ_date.isoformat(),
+                'time': start_dt.strftime('%H:%M'),
+                'end_time': end_dt.strftime('%H:%M'),
+                'duration_minutes': duration,
+                'title': appt['patient_name'],
+                'type_label': 'Recurring Appointment' if is_recurring else 'Appointment',
+                'status': appt['patient_status'] or '',
+                'meeting_type': appt['meeting_type'] or 'in-person',
+                'meeting_link': appt['meeting_link'] or '',
+                'meeting_title': appt['meeting_title'] or '',
+                'is_recurring': is_recurring,
+                'can_edit': True,
+                'can_delete': True
+            })
+
+    block_rows = db.execute('''
+        SELECT *
+        FROM blocked_slots
+        WHERE blocked_date BETWEEN ? AND ?
+        ORDER BY blocked_date ASC, blocked_time ASC
+    ''', (range_start.isoformat(), range_end.isoformat())).fetchall()
+
+    for block in block_rows:
+        block_date = parse_date_safe(block['blocked_date'])
+        if not block_date:
+            continue
+        start_dt = combine_dt(block_date, block['blocked_time'])
+        duration = int(block['duration_minutes'] or 60)
+        end_dt = start_dt + timedelta(minutes=duration)
+        block_type = (block['block_type'] or 'blocked').strip().lower()
+        items.append({
+            'kind': 'block',
+            'source_id': block['id'],
+            'occurrence_id': f"block-{block['id']}",
+            'date': block_date.isoformat(),
+            'time': start_dt.strftime('%H:%M'),
+            'end_time': end_dt.strftime('%H:%M'),
+            'duration_minutes': duration,
+            'title': block['title'] or ('Special Occasion' if block_type == 'special' else 'Blocked Slot'),
+            'type_label': 'Special' if block_type == 'special' else 'Blocked',
+            'status': '',
+            'meeting_type': '',
+            'meeting_link': '',
+            'meeting_title': '',
+            'is_recurring': False,
+            'block_type': block_type,
+            'is_private': int(block['is_private'] or 0),
+            'can_edit': True,
+            'can_delete': True
+        })
+
+    group_rows = db.execute('''
+        SELECT gs.*, g.name AS group_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE COALESCE(gs.status, 'scheduled') = 'scheduled'
+          AND gs.session_date BETWEEN ? AND ?
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''', (range_start.isoformat(), range_end.isoformat())).fetchall()
+
+    for row in group_rows:
+        session_date = parse_date_safe(row['session_date'])
+        if not session_date:
+            continue
+        start_dt = combine_dt(session_date, row['session_time'])
+        duration = int(row['duration_minutes'] or 60)
+        end_dt = start_dt + timedelta(minutes=duration)
+        items.append({
+            'kind': 'group_session',
+            'source_id': row['id'],
+            'occurrence_id': f"group-session-{row['id']}",
+            'date': session_date.isoformat(),
+            'time': start_dt.strftime('%H:%M'),
+            'end_time': end_dt.strftime('%H:%M'),
+            'duration_minutes': duration,
+            'title': row['title'] or f"Group: {row['group_name']}",
+            'type_label': 'Group Session',
+            'status': row['group_name'],
+            'meeting_type': row['meeting_type'] or 'in-person',
+            'meeting_link': row['meeting_link'] or '',
+            'meeting_title': row['title'] or '',
+            'is_recurring': False,
+            'can_edit': True,
+            'can_delete': True
+        })
+
+    items.sort(key=lambda item: (item['date'], item['time']), reverse=sort_reverse)
+    return {
+        'mode': mode,
+        'range_start': range_start.isoformat(),
+        'range_end': range_end.isoformat(),
+        'items': items
+    }
 
 
 def build_week_calendar_snapshot(db, week_start, user):
@@ -2125,8 +2303,14 @@ def build_week_calendar_snapshot(db, week_start, user):
             'color': '#dc2626' if block_type == 'blocked' else '#7c3aed',
             'meta': {
                 'type': 'block',
+                'block_id': block['id'],
+                'title': raw_title,
+                'blocked_date': block['blocked_date'],
+                'blocked_time': block['blocked_time'],
+                'duration_minutes': duration,
                 'block_type': block_type,
                 'is_private': is_private,
+                'can_edit': user.role == 'admin',
                 'can_delete': user.role == 'admin'
             }
         })
@@ -2389,15 +2573,20 @@ def api_calendar_block():
     blocked_time = request.form.get('blocked_time', '').strip()
     end_time_raw = request.form.get('end_time', '').strip()
     title = request.form.get('title', '').strip()
-    block_type = 'blocked'
+    block_type = request.form.get('block_type', 'blocked').strip().lower() or 'blocked'
+    if block_type not in ('blocked', 'special'):
+        block_type = 'blocked'
     is_private = 1 if request.form.get('is_private') else 0
+    recurrence_pattern = request.form.get('recurrence_pattern', 'one-time').strip().lower() or 'one-time'
+    repeat_until_raw = request.form.get('repeat_until', '').strip()
 
-    if not parse_date_safe(blocked_date) or not parse_time_safe(blocked_time):
+    anchor_date = parse_date_safe(blocked_date)
+    parsed_start = parse_time_safe(blocked_time)
+    if not anchor_date or not parsed_start:
         return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
 
     # Compute duration from start + end time.
     duration_value = 60
-    parsed_start = parse_time_safe(blocked_time)
     parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
     if parsed_start and parsed_end:
         start_minutes = parsed_start.hour * 60 + parsed_start.minute
@@ -2406,12 +2595,82 @@ def api_calendar_block():
         if computed > 0:
             duration_value = computed
 
+    dates_to_create = [anchor_date]
+    if recurrence_pattern == 'weekly':
+        repeat_until = parse_date_safe(repeat_until_raw)
+        if not repeat_until or repeat_until < anchor_date:
+            return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring block.'}), 400
+        dates_to_create = []
+        current_date = anchor_date
+        while current_date <= repeat_until:
+            dates_to_create.append(current_date)
+            current_date += timedelta(days=7)
+
     db = get_db()
+    for block_day in dates_to_create:
+        start_dt = datetime.combine(block_day, parsed_start)
+        end_dt = start_dt + timedelta(minutes=duration_value)
+        conflict_message = has_time_conflict(db, block_day, start_dt, end_dt)
+        if conflict_message:
+            return jsonify({'status': 'error', 'message': f'{conflict_message} ({block_day.isoformat()})'}), 409
+
+    for block_day in dates_to_create:
+        db.execute('''
+            INSERT INTO blocked_slots
+            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id))
+
+    db.commit()
+    return jsonify({'status': 'success', 'created': len(dates_to_create)})
+
+
+@app.route('/api/calendar/block/<int:block_id>/update', methods=['POST'])
+@login_required
+def api_calendar_block_update(block_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    existing = db.execute('SELECT * FROM blocked_slots WHERE id = ?', (block_id,)).fetchone()
+    if not existing:
+        return jsonify({'status': 'error', 'message': 'Block not found.'}), 404
+
+    blocked_date = request.form.get('blocked_date', '').strip()
+    blocked_time = request.form.get('blocked_time', '').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
+    title = request.form.get('title', '').strip()
+    block_type = request.form.get('block_type', (existing['block_type'] or 'blocked')).strip().lower() or 'blocked'
+    if block_type not in ('blocked', 'special'):
+        block_type = 'blocked'
+    is_private = 1 if request.form.get('is_private') in ('1', 'true', 'on') else 0
+
+    day_obj = parse_date_safe(blocked_date)
+    start_time = parse_time_safe(blocked_time)
+    end_time = parse_time_safe(end_time_raw) if end_time_raw else None
+    if not day_obj or not start_time:
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    duration = int(existing['duration_minutes'] or 60)
+    if end_time:
+        start_minutes = start_time.hour * 60 + start_time.minute
+        end_minutes = end_time.hour * 60 + end_time.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration = computed
+
+    start_dt = datetime.combine(day_obj, start_time)
+    end_dt = start_dt + timedelta(minutes=duration)
+    conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_block_id=block_id)
+    if conflict_message:
+        return jsonify({'status': 'error', 'message': conflict_message}), 409
+
     db.execute('''
-        INSERT INTO blocked_slots
-        (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (blocked_date, blocked_time, duration_value, title or None, is_private, block_type, current_user.id))
+        UPDATE blocked_slots
+        SET blocked_date = ?, blocked_time = ?, duration_minutes = ?,
+            title = ?, is_private = ?, block_type = ?
+        WHERE id = ?
+    ''', (day_obj.isoformat(), start_time.strftime('%H:%M'), duration, title or None, is_private, block_type, block_id))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -2426,6 +2685,21 @@ def api_calendar_block_delete(block_id):
     db.execute('DELETE FROM blocked_slots WHERE id = ?', (block_id,))
     db.commit()
     return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/bookings')
+@login_required
+def api_calendar_bookings():
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    mode = (request.args.get('mode') or 'upcoming').strip().lower()
+    if mode not in ('upcoming', 'history'):
+        mode = 'upcoming'
+
+    db = get_db()
+    payload = build_booking_management_payload(db, mode=mode)
+    return jsonify(payload)
 
 
 @app.route('/api/calendar/vacancy', methods=['POST'])

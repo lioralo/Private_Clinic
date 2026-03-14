@@ -24,11 +24,6 @@
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="booking-tab" data-bs-toggle="tab" data-bs-target="#booking-pane" type="button" role="tab" aria-controls="booking-pane" aria-selected="false">{{ t('Booking Panel') }}</button>
     </li>
-    {% if current_user.role == 'admin' %}
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="blocks-tab" data-bs-toggle="tab" data-bs-target="#blocks-pane" type="button" role="tab" aria-controls="blocks-pane" aria-selected="false">{{ t('Add Block') }}</button>
-    </li>
-    {% endif %}
 </ul>
 
 <div class="tab-content" id="calendarTabContent">
@@ -238,15 +233,37 @@
         </div>
         <div class="card-body" id="availableSlots"></div>
     </div>
-</div>
-
-{% if current_user.role == 'admin' %}
-<div class="tab-pane fade" id="blocks-pane" role="tabpanel" aria-labelledby="blocks-tab" tabindex="0">
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Add Block') }}</h6>
+    {% if current_user.role == 'admin' %}
+    <div class="card border-0 shadow-sm rounded-4 mt-3">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary">Booking Management</h6>
+            <div class="btn-group btn-group-sm" role="group" id="bookingManagementMode">
+                <button type="button" class="btn btn-primary" data-mode="upcoming">Upcoming</button>
+                <button type="button" class="btn btn-outline-primary" data-mode="history">History</button>
+            </div>
         </div>
         <div class="card-body">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-2">
+                    <label class="form-label small">{{ t('Type') }}</label>
+                    <select name="block_type" form="addBlockForm" class="form-select form-select-sm">
+                        <option value="blocked">Blocked</option>
+                        <option value="special">Special</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Repeat</label>
+                    <select name="recurrence_pattern" form="addBlockForm" id="blockRecurrencePattern" class="form-select form-select-sm">
+                        <option value="one-time">One-time</option>
+                        <option value="weekly">Weekly</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-none" id="blockRepeatUntilWrap">
+                    <label class="form-label small">{{ t('Repeat Until') }}</label>
+                    <input type="date" name="repeat_until" form="addBlockForm" class="form-control form-control-sm" id="blockRepeatUntilInput">
+                </div>
+            </div>
+
             <form id="addBlockForm">
                 <div class="row g-2">
                     <div class="col-md-4">
@@ -261,7 +278,6 @@
                         <label class="form-label small">{{ t('End Time') }}</label>
                         <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
                     </div>
-                    <input type="hidden" name="block_type" value="blocked">
                     <div class="col-12">
                         <label class="form-label small">{{ t('Admin title') }}</label>
                         <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
@@ -275,15 +291,33 @@
                         </div>
                     </div>
                     <div class="col-12">
-                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">{{ t('Save Override') }}</button>
+                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Block/Special</button>
                     </div>
                 </div>
             </form>
+
+            <hr>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle" id="bookingManagementTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Title</th>
+                            <th>Details</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookingManagementBody">
+                        <tr><td colspan="6" class="text-muted small">Loading bookings...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-
+    {% endif %}
 </div>
-{% endif %}
 </div>
 
 <div class="modal fade" id="calendarActionModal" tabindex="-1" aria-hidden="true">
@@ -341,6 +375,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const fridaySpecials = document.getElementById('fridaySpecials');
     const saturdaySpecials = document.getElementById('saturdaySpecials');
     const bookingTabTrigger = document.getElementById('booking-tab');
+    const bookingManagementMode = document.getElementById('bookingManagementMode');
+    const bookingManagementBody = document.getElementById('bookingManagementBody');
+    const blockRecurrencePattern = document.getElementById('blockRecurrencePattern');
+    const blockRepeatUntilWrap = document.getElementById('blockRepeatUntilWrap');
+    const blockRepeatUntilInput = document.getElementById('blockRepeatUntilInput');
 
     const modalRoot = document.getElementById('calendarActionModal');
     const modalTitle = document.getElementById('calendarActionModalTitle');
@@ -353,6 +392,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentWeekStart = null;
     let activeFilter = 'all';
     let nowWeekAnchor = getWeekStartString(new Date());
+    let activeManagementMode = 'upcoming';
 
     function pad2(v) {
         return String(v).padStart(2, '0');
@@ -417,6 +457,406 @@ document.addEventListener('DOMContentLoaded', function() {
             modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
             actionModal.show();
         });
+    }
+
+    function openAppointmentEditor(payload) {
+        if (!payload || !payload.source_id) {
+            showActionModal({ title: 'Edit Failed', message: 'Missing appointment id.' });
+            return;
+        }
+
+        const recurringInfo = payload.is_recurring
+            ? '<div class="alert alert-info py-1 px-2 small mb-2">Recurring meeting</div>'
+            : '';
+        const patientLinkHtml = (isAdmin && payload.patient_id)
+            ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">Open Patient Profile</a></div>`
+            : '';
+
+        modalTitle.textContent = 'Edit Meeting';
+        modalBody.innerHTML = `
+            ${patientLinkHtml}
+            ${recurringInfo}
+            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${payload.meeting_title || ''}"></div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>Add to Google Calendar</button>
+            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+                <select class="form-select form-select-sm" id="editMeetingType">
+                    <option value="in-person">In-person</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="google-meet">Google Meet</option>
+                </select>
+            </div>
+            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${payload.meeting_link || ''}"></div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">Delete Meeting</button>
+        `;
+
+        const typeSelect = document.getElementById('editMeetingType');
+        if (typeSelect) {
+            typeSelect.value = payload.meeting_type || 'in-person';
+        }
+
+        modalConfirmBtn.textContent = 'Save';
+        modalConfirmBtn.className = 'btn btn-primary';
+        modalCancelBtn.classList.remove('d-none');
+        actionModal.show();
+
+        const editSaveGoogleBtn = document.getElementById('editSaveToGoogleBtn');
+        if (editSaveGoogleBtn) {
+            editSaveGoogleBtn.onclick = function() {
+                openGoogleCalendarEvent(
+                    document.getElementById('editMeetingDate').value,
+                    document.getElementById('editMeetingTime').value,
+                    document.getElementById('editMeetingEndTime').value,
+                    document.getElementById('editMeetingTitle').value,
+                    document.getElementById('editMeetingLink').value
+                );
+            };
+        }
+
+        const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
+        if (deleteBtn) {
+            deleteBtn.onclick = function() {
+                fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        actionModal.hide();
+                        loadSnapshot();
+                        loadBookingManagement();
+                    } else {
+                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete meeting.' });
+                    }
+                }).catch(() => {
+                    showActionModal({ title: 'Delete Failed', message: 'Could not delete meeting.' });
+                });
+            };
+        }
+
+        modalConfirmBtn.onclick = function() {
+            const selectedType = document.getElementById('editMeetingType').value;
+            const body = new URLSearchParams({
+                date: document.getElementById('editMeetingDate').value,
+                time: document.getElementById('editMeetingTime').value,
+                end_time: document.getElementById('editMeetingEndTime').value,
+                meeting_type: selectedType,
+                meeting_link: document.getElementById('editMeetingLink').value || '',
+                meeting_title: document.getElementById('editMeetingTitle').value || '',
+                save_to_google: '0',
+                meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
+            });
+            fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    actionModal.hide();
+                    loadSnapshot();
+                    loadBookingManagement();
+                } else {
+                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not save meeting changes.' });
+                }
+            }).catch(() => {
+                showActionModal({ title: 'Save Failed', message: 'Could not save meeting changes.' });
+            });
+        };
+    }
+
+    function openGroupSessionEditor(payload) {
+        if (!payload || !payload.source_id) {
+            showActionModal({ title: 'Edit Failed', message: 'Missing group session id.' });
+            return;
+        }
+
+        modalTitle.textContent = 'Edit Group Session';
+        modalBody.innerHTML = `
+            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${payload.date || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${payload.time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${payload.end_time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${payload.meeting_title || payload.title || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${payload.facilitator || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+                <select class="form-select form-select-sm" id="editGroupMeetingType">
+                    <option value="in-person">In-person</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="google-meet">Google Meet</option>
+                </select>
+            </div>
+            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${payload.meeting_link || ''}"></div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
+        `;
+
+        const groupTypeSelect = document.getElementById('editGroupMeetingType');
+        if (groupTypeSelect) {
+            groupTypeSelect.value = payload.meeting_type || 'in-person';
+        }
+
+        modalConfirmBtn.textContent = 'Save';
+        modalConfirmBtn.className = 'btn btn-primary';
+        modalCancelBtn.classList.remove('d-none');
+        actionModal.show();
+
+        const deleteGroupBtn = document.getElementById('deleteGroupSessionInsideEdit');
+        if (deleteGroupBtn) {
+            deleteGroupBtn.onclick = function() {
+                fetch(`/api/groups/sessions/${payload.source_id}/delete`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        actionModal.hide();
+                        loadSnapshot();
+                        loadBookingManagement();
+                    } else {
+                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete group session.' });
+                    }
+                }).catch(() => {
+                    showActionModal({ title: 'Delete Failed', message: 'Could not delete group session.' });
+                });
+            };
+        }
+
+        modalConfirmBtn.onclick = function() {
+            const body = new URLSearchParams({
+                session_date: document.getElementById('editGroupDate').value,
+                session_time: document.getElementById('editGroupStart').value,
+                end_time: document.getElementById('editGroupEnd').value,
+                title: document.getElementById('editGroupTitle').value || '',
+                facilitator: document.getElementById('editGroupFacilitator').value || '',
+                meeting_type: document.getElementById('editGroupMeetingType').value || 'in-person',
+                meeting_link: document.getElementById('editGroupMeetingLink').value || ''
+            });
+            fetch(`/api/groups/sessions/${payload.source_id}/update`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    actionModal.hide();
+                    loadSnapshot();
+                    loadBookingManagement();
+                } else {
+                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not save group session.' });
+                }
+            }).catch(() => {
+                showActionModal({ title: 'Save Failed', message: 'Could not save group session.' });
+            });
+        };
+    }
+
+    function openBlockEditor(payload) {
+        if (!payload || !payload.source_id) {
+            showActionModal({ title: 'Edit Failed', message: 'Missing block id.' });
+            return;
+        }
+
+        modalTitle.textContent = 'Edit Block/Special';
+        modalBody.innerHTML = `
+            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editBlockDate" value="${payload.date || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editBlockTime" value="${payload.time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editBlockEndTime" value="${payload.end_time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">Type</label>
+                <select class="form-select form-select-sm" id="editBlockType">
+                    <option value="blocked">Blocked</option>
+                    <option value="special">Special</option>
+                </select>
+            </div>
+            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editBlockTitle" value="${payload.title || ''}"></div>
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="editBlockPrivate" ${payload.is_private ? 'checked' : ''}>
+                <label class="form-check-label small" for="editBlockPrivate">Hide title from patients</label>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="deleteBlockInsideEdit">Delete</button>
+        `;
+
+        const blockTypeSelect = document.getElementById('editBlockType');
+        if (blockTypeSelect) {
+            blockTypeSelect.value = payload.block_type || 'blocked';
+        }
+
+        modalConfirmBtn.textContent = 'Save';
+        modalConfirmBtn.className = 'btn btn-primary';
+        modalCancelBtn.classList.remove('d-none');
+        actionModal.show();
+
+        const deleteBlockBtn = document.getElementById('deleteBlockInsideEdit');
+        if (deleteBlockBtn) {
+            deleteBlockBtn.onclick = function() {
+                fetch(`/api/calendar/block/${payload.source_id}/delete`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        actionModal.hide();
+                        loadSnapshot();
+                        loadBookingManagement();
+                    } else {
+                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete block.' });
+                    }
+                }).catch(() => {
+                    showActionModal({ title: 'Delete Failed', message: 'Could not delete block.' });
+                });
+            };
+        }
+
+        modalConfirmBtn.onclick = function() {
+            const body = new URLSearchParams({
+                blocked_date: document.getElementById('editBlockDate').value,
+                blocked_time: document.getElementById('editBlockTime').value,
+                end_time: document.getElementById('editBlockEndTime').value,
+                block_type: document.getElementById('editBlockType').value,
+                title: document.getElementById('editBlockTitle').value || '',
+                is_private: document.getElementById('editBlockPrivate').checked ? '1' : '0'
+            });
+            fetch(`/api/calendar/block/${payload.source_id}/update`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    actionModal.hide();
+                    loadSnapshot();
+                    loadBookingManagement();
+                } else {
+                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not save block.' });
+                }
+            }).catch(() => {
+                showActionModal({ title: 'Save Failed', message: 'Could not save block.' });
+            });
+        };
+    }
+
+    function openBookingEditor(payload) {
+        if (!payload) {
+            return;
+        }
+        if (payload.kind === 'appointment') {
+            openAppointmentEditor(payload);
+            return;
+        }
+        if (payload.kind === 'group_session') {
+            openGroupSessionEditor(payload);
+            return;
+        }
+        if (payload.kind === 'block') {
+            openBlockEditor(payload);
+        }
+    }
+
+    function deleteBookingItem(payload) {
+        if (!payload || !payload.source_id) {
+            return;
+        }
+
+        const endpointByKind = {
+            appointment: `/api/calendar/appointment/${payload.source_id}/delete`,
+            group_session: `/api/groups/sessions/${payload.source_id}/delete`,
+            block: `/api/calendar/block/${payload.source_id}/delete`
+        };
+        const endpoint = endpointByKind[payload.kind];
+        if (!endpoint) {
+            return;
+        }
+
+        showActionModal({
+            title: 'Delete Booking',
+            message: 'Delete this item?',
+            confirmText: 'Delete',
+            confirmClass: 'btn-danger',
+            showCancel: true
+        }).then((confirmed) => {
+            if (!confirmed) {
+                return;
+            }
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    loadSnapshot();
+                    loadBookingManagement();
+                } else {
+                    showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete item.' });
+                }
+            }).catch(() => {
+                showActionModal({ title: 'Delete Failed', message: 'Could not delete item.' });
+            });
+        });
+    }
+
+    function renderBookingManagement(items) {
+        if (!bookingManagementBody) {
+            return;
+        }
+        if (!items || !items.length) {
+            bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-muted small">No bookings found in this range.</td></tr>';
+            return;
+        }
+
+        bookingManagementBody.innerHTML = items.map((item) => {
+            const details = [];
+            if (item.meeting_type) {
+                details.push(item.meeting_type);
+            }
+            if (item.status) {
+                details.push(item.status);
+            }
+            if (item.is_recurring) {
+                details.push('REC');
+            }
+            const escaped = encodeURIComponent(JSON.stringify(item));
+            return `<tr>
+                <td>${item.date}</td>
+                <td>${item.time} - ${item.end_time}</td>
+                <td>${item.type_label || item.kind}</td>
+                <td>${item.title || ''}</td>
+                <td class="small text-muted">${details.join(' · ')}</td>
+                <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-primary me-1 manage-edit" data-item="${escaped}">Edit</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger manage-delete" data-item="${escaped}">Delete</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        bookingManagementBody.querySelectorAll('.manage-edit').forEach((btn) => {
+            btn.addEventListener('click', function() {
+                const payload = JSON.parse(decodeURIComponent(this.dataset.item || ''));
+                openBookingEditor(payload);
+            });
+        });
+
+        bookingManagementBody.querySelectorAll('.manage-delete').forEach((btn) => {
+            btn.addEventListener('click', function() {
+                const payload = JSON.parse(decodeURIComponent(this.dataset.item || ''));
+                deleteBookingItem(payload);
+            });
+        });
+    }
+
+    function loadBookingManagement() {
+        if (!isAdmin || !bookingManagementBody) {
+            return;
+        }
+        fetch(`/api/calendar/bookings?mode=${encodeURIComponent(activeManagementMode)}`)
+            .then(r => r.json())
+            .then(data => {
+                renderBookingManagement(data.items || []);
+            })
+            .catch(() => {
+                bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-danger small">Failed loading bookings.</td></tr>';
+            });
     }
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
@@ -498,236 +938,50 @@ document.addEventListener('DOMContentLoaded', function() {
             const meta = props.meta || {};
 
             if (meta.type === 'appointment') {
-                if (!meta.can_delete) {
+                if (!meta.can_edit && !meta.can_delete) {
                     showActionModal({ title: 'Not Allowed', message: 'You cannot edit this meeting.' });
                     return;
                 }
-
-                const appointmentId = props.appointment_id || meta.appointment_id;
-                if (!appointmentId) {
-                    showActionModal({ title: 'Edit Failed', message: 'Missing appointment id.' });
-                    return;
-                }
-
-                const startDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : '';
-                const startTime = info.event.start ? info.event.start.toTimeString().slice(0, 5) : '';
-                const endTime = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
-                const defaultTitle = meta.meeting_title || (meta.patient_status === 'ongoing' ? '### private meeting' : '');
-                const patientLinkHtml = (isAdmin && meta.patient_id)
-                    ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${meta.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">Open Patient Profile</a></div>`
-                    : '';
-                const recurringInfo = meta.is_recurring
-                    ? '<div class="alert alert-info py-1 px-2 small mb-2">Recurring meeting</div>'
-                    : '';
-                modalTitle.textContent = 'Edit Meeting';
-                modalBody.innerHTML = `
-                    ${patientLinkHtml}
-                    ${recurringInfo}
-                    <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${startDate}"></div>
-                    <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${startTime}"></div>
-                    <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${endTime}"></div>
-                    <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${defaultTitle}"></div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>Add to Google Calendar</button>
-                    <div class="mb-2"><label class="form-label small">Meeting Type</label>
-                        <select class="form-select form-select-sm" id="editMeetingType">
-                            <option value="in-person">In-person</option>
-                            <option value="zoom">Zoom</option>
-                            <option value="google-meet">Google Meet</option>
-                        </select>
-                    </div>
-                    <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${meta.meeting_link || ''}"></div>
-                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">Delete Meeting</button>
-                `;
-                const typeSelect = document.getElementById('editMeetingType');
-                if (typeSelect) {
-                    typeSelect.value = meta.meeting_type || 'in-person';
-                }
-                modalConfirmBtn.textContent = 'Save';
-                modalConfirmBtn.className = 'btn btn-primary';
-                modalCancelBtn.classList.remove('d-none');
-                actionModal.show();
-
-                const editSaveGoogleBtn = document.getElementById('editSaveToGoogleBtn');
-                if (editSaveGoogleBtn) {
-                    editSaveGoogleBtn.onclick = function() {
-                        openGoogleCalendarEvent(
-                            document.getElementById('editMeetingDate').value,
-                            document.getElementById('editMeetingTime').value,
-                            document.getElementById('editMeetingEndTime').value,
-                            document.getElementById('editMeetingTitle').value,
-                            document.getElementById('editMeetingLink').value
-                        );
-                    };
-                }
-
-                const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
-                if (deleteBtn) {
-                    deleteBtn.onclick = function() {
-                        fetch(`/api/calendar/appointment/${appointmentId}/delete`, {
-                            method: 'POST',
-                            headers: { 'X-CSRFToken': csrfToken }
-                        }).then(r => r.json()).then(data => {
-                            if (data.status === 'success') {
-                                actionModal.hide();
-                                loadSnapshot();
-                            } else {
-                                showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete meeting.' });
-                            }
-                        }).catch(() => {
-                            showActionModal({ title: 'Delete Failed', message: 'Could not delete meeting.' });
-                        });
-                    };
-                }
-
-                modalConfirmBtn.onclick = function() {
-                    const selectedDate = document.getElementById('editMeetingDate').value;
-                    const selectedTime = document.getElementById('editMeetingTime').value;
-                    const selectedEndTime = document.getElementById('editMeetingEndTime').value;
-                    const selectedTitle = document.getElementById('editMeetingTitle').value || '';
-                    const selectedLink = document.getElementById('editMeetingLink').value || '';
-                    const selectedType = document.getElementById('editMeetingType').value;
-                    const body = new URLSearchParams({
-                        date: selectedDate,
-                        time: selectedTime,
-                        end_time: selectedEndTime,
-                        meeting_type: selectedType,
-                        meeting_link: selectedLink,
-                        meeting_title: selectedTitle,
-                        save_to_google: '0',
-                        meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
-                    });
-                    fetch(`/api/calendar/appointment/${appointmentId}/update`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': csrfToken,
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: body.toString()
-                    }).then(r => r.json()).then(data => {
-                        if (data.status === 'success') {
-                            actionModal.hide();
-                            loadSnapshot();
-                        } else {
-                            showActionModal({ title: 'Save Failed', message: data.message || 'Could not save meeting changes.' });
-                        }
-                    }).catch(() => {
-                        showActionModal({ title: 'Save Failed', message: 'Could not save meeting changes.' });
-                    });
-                };
-
+                openAppointmentEditor({
+                    kind: 'appointment',
+                    source_id: props.appointment_id || meta.appointment_id,
+                    patient_id: meta.patient_id,
+                    date: info.event.start ? info.event.start.toISOString().slice(0, 10) : '',
+                    time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : '',
+                    end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
+                    meeting_type: meta.meeting_type || 'in-person',
+                    meeting_link: meta.meeting_link || '',
+                    meeting_title: meta.meeting_title || '',
+                    is_recurring: !!meta.is_recurring
+                });
                 return;
             }
 
             if (meta.type === 'group_session' && isAdmin) {
-                const groupSessionId = props.group_session_id || meta.group_session_id;
-                if (!groupSessionId) {
-                    showActionModal({ title: 'Edit Failed', message: 'Missing group session id.' });
-                    return;
-                }
-
-                const sessionDate = info.event.start ? info.event.start.toISOString().slice(0, 10) : (meta.session_date || '');
-                const sessionStart = info.event.start ? info.event.start.toTimeString().slice(0, 5) : (meta.session_time || '');
-                const sessionEnd = info.event.end ? info.event.end.toTimeString().slice(0, 5) : '';
-                modalTitle.textContent = 'Edit Group Session';
-                modalBody.innerHTML = `
-                    <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${sessionDate}"></div>
-                    <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${sessionStart}"></div>
-                    <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${sessionEnd}"></div>
-                    <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${meta.title || ''}"></div>
-                    <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${meta.facilitator || ''}"></div>
-                    <div class="mb-2"><label class="form-label small">Meeting Type</label>
-                        <select class="form-select form-select-sm" id="editGroupMeetingType">
-                            <option value="in-person">In-person</option>
-                            <option value="zoom">Zoom</option>
-                            <option value="google-meet">Google Meet</option>
-                        </select>
-                    </div>
-                    <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${meta.meeting_link || ''}"></div>
-                    <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
-                `;
-                const groupTypeSelect = document.getElementById('editGroupMeetingType');
-                if (groupTypeSelect) {
-                    groupTypeSelect.value = meta.meeting_type || 'in-person';
-                }
-                modalConfirmBtn.textContent = 'Save';
-                modalConfirmBtn.className = 'btn btn-primary';
-                modalCancelBtn.classList.remove('d-none');
-                actionModal.show();
-
-                const deleteGroupBtn = document.getElementById('deleteGroupSessionInsideEdit');
-                if (deleteGroupBtn) {
-                    deleteGroupBtn.onclick = function() {
-                        fetch(`/api/groups/sessions/${groupSessionId}/delete`, {
-                            method: 'POST',
-                            headers: { 'X-CSRFToken': csrfToken }
-                        }).then(r => r.json()).then(data => {
-                            if (data.status === 'success') {
-                                actionModal.hide();
-                                loadSnapshot();
-                            } else {
-                                showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete group session.' });
-                            }
-                        }).catch(() => {
-                            showActionModal({ title: 'Delete Failed', message: 'Could not delete group session.' });
-                        });
-                    };
-                }
-
-                modalConfirmBtn.onclick = function() {
-                    const body = new URLSearchParams({
-                        session_date: document.getElementById('editGroupDate').value,
-                        session_time: document.getElementById('editGroupStart').value,
-                        end_time: document.getElementById('editGroupEnd').value,
-                        title: document.getElementById('editGroupTitle').value || '',
-                        facilitator: document.getElementById('editGroupFacilitator').value || '',
-                        meeting_type: document.getElementById('editGroupMeetingType').value || 'in-person',
-                        meeting_link: document.getElementById('editGroupMeetingLink').value || ''
-                    });
-                    fetch(`/api/groups/sessions/${groupSessionId}/update`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': csrfToken,
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: body.toString()
-                    }).then(r => r.json()).then(data => {
-                        if (data.status === 'success') {
-                            actionModal.hide();
-                            loadSnapshot();
-                        } else {
-                            showActionModal({ title: 'Save Failed', message: data.message || 'Could not save group session.' });
-                        }
-                    }).catch(() => {
-                        showActionModal({ title: 'Save Failed', message: 'Could not save group session.' });
-                    });
-                };
-
+                openGroupSessionEditor({
+                    kind: 'group_session',
+                    source_id: props.group_session_id || meta.group_session_id,
+                    date: info.event.start ? info.event.start.toISOString().slice(0, 10) : (meta.session_date || ''),
+                    time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : (meta.session_time || ''),
+                    end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
+                    title: meta.title || '',
+                    facilitator: meta.facilitator || '',
+                    meeting_type: meta.meeting_type || 'in-person',
+                    meeting_link: meta.meeting_link || ''
+                });
                 return;
             }
 
             if (meta.type === 'block' && isAdmin) {
-                showActionModal({
-                    title: 'Delete Block',
-                    message: 'Delete this block/special item?',
-                    confirmText: 'Delete',
-                    confirmClass: 'btn-danger',
-                    showCancel: true
-                }).then((confirmed) => {
-                    if (!confirmed) {
-                        return;
-                    }
-                    fetch(`/api/calendar/block/${props.block_id}/delete`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': csrfToken
-                        }
-                    }).then(r => r.json()).then(data => {
-                        if (data.status === 'success') {
-                            loadSnapshot();
-                        } else {
-                            showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete override.' });
-                        }
-                    });
+                openBlockEditor({
+                    kind: 'block',
+                    source_id: props.block_id || meta.block_id,
+                    date: info.event.start ? info.event.start.toISOString().slice(0, 10) : (meta.blocked_date || ''),
+                    time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : (meta.blocked_time || ''),
+                    end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
+                    title: meta.title || info.event.title || '',
+                    block_type: meta.block_type || 'blocked',
+                    is_private: !!meta.is_private
                 });
             }
         }
@@ -1048,7 +1302,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderFollowUps(data.follow_up_alerts || []);
                 renderAvailableSlots(data.available_slots || []);
                 renderOngoingList(data.events || []);
+                loadBookingManagement();
             });
+    }
+
+    if (bookingManagementMode) {
+        bookingManagementMode.querySelectorAll('button[data-mode]').forEach((btn) => {
+            btn.addEventListener('click', function() {
+                activeManagementMode = this.dataset.mode || 'upcoming';
+                bookingManagementMode.querySelectorAll('button[data-mode]').forEach((b) => {
+                    b.classList.remove('btn-primary');
+                    b.classList.add('btn-outline-primary');
+                });
+                this.classList.remove('btn-outline-primary');
+                this.classList.add('btn-primary');
+                loadBookingManagement();
+            });
+        });
+    }
+
+    if (blockRecurrencePattern) {
+        blockRecurrencePattern.addEventListener('change', function() {
+            const isWeekly = this.value === 'weekly';
+            if (blockRepeatUntilWrap) {
+                blockRepeatUntilWrap.classList.toggle('d-none', !isWeekly);
+            }
+            if (!isWeekly && blockRepeatUntilInput) {
+                blockRepeatUntilInput.value = '';
+            }
+        });
     }
 
     const addBlockForm = document.getElementById('addBlockForm');
@@ -1067,7 +1349,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.status === 'success') {
                     addBlockForm.reset();
+                    if (blockRepeatUntilWrap) {
+                        blockRepeatUntilWrap.classList.add('d-none');
+                    }
                     loadSnapshot();
+                    loadBookingManagement();
                 } else {
                     showActionModal({ title: 'Save Failed', message: data.message || 'Could not save override.' });
                 }

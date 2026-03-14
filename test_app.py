@@ -514,6 +514,126 @@ class ClinicTestCase(unittest.TestCase):
         alert = next(a for a in alerts if a.get('patient_id') == 1)
         assert 'Further decision is needed' in alert.get('message', '')
 
+    def test_admin_recurring_block_creation(self):
+        self.login('admin', 'admin')
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
+        anchor = datetime.strptime(booking_date, '%Y-%m-%d').date()
+        repeat_until = (anchor + timedelta(days=14)).isoformat()
+        end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
+
+        rv = self.client.post('/api/calendar/block', data=dict(
+            blocked_date=booking_date,
+            blocked_time=booking_time,
+            end_time=end_time,
+            block_type='blocked',
+            recurrence_pattern='weekly',
+            repeat_until=repeat_until,
+            title='Clinic Block'
+        ))
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload.get('status') == 'success'
+        assert int(payload.get('created') or 0) == 3
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT blocked_date, blocked_time
+                FROM blocked_slots
+                WHERE title = 'Clinic Block'
+                ORDER BY blocked_date ASC
+            ''').fetchall()
+            assert len(rows) == 3
+            assert rows[0]['blocked_date'] == booking_date
+
+    def test_admin_can_update_special_block(self):
+        self.login('admin', 'admin')
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
+        end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
+
+        create_rv = self.client.post('/api/calendar/block', data=dict(
+            blocked_date=booking_date,
+            blocked_time=booking_time,
+            end_time=end_time,
+            block_type='special',
+            title='Original Special',
+            is_private='1'
+        ))
+        assert create_rv.status_code == 200
+        assert create_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT id FROM blocked_slots ORDER BY id DESC LIMIT 1').fetchone()
+            assert row is not None
+            block_id = row['id']
+
+        update_rv = self.client.post(f'/api/calendar/block/{block_id}/update', data=dict(
+            blocked_date=booking_date,
+            blocked_time=booking_time,
+            end_time=end_time,
+            block_type='blocked',
+            title='Updated Block',
+            is_private='0'
+        ))
+        assert update_rv.status_code == 200
+        assert update_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            updated = db.execute('''
+                SELECT title, block_type, is_private
+                FROM blocked_slots
+                WHERE id = ?
+            ''', (block_id,)).fetchone()
+            assert updated is not None
+            assert updated['title'] == 'Updated Block'
+            assert updated['block_type'] == 'blocked'
+            assert int(updated['is_private'] or 0) == 0
+
+    def test_booking_management_api_upcoming_and_history(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Management Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        today = datetime.now().date()
+        past_day = (today - timedelta(days=2)).isoformat()
+        future_day = (today + timedelta(days=2)).isoformat()
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '10:00', 60, 'scheduled', 0)
+            ''', (future_day,))
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '11:00', 60, 'scheduled', 0)
+            ''', (past_day,))
+            db.execute('''
+                INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '12:00', 60, 'Future Block', 0, 'blocked', 1)
+            ''', (future_day,))
+            db.execute('''
+                INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '13:00', 60, 'Past Block', 0, 'special', 1)
+            ''', (past_day,))
+            db.commit()
+
+        upcoming_rv = self.client.get('/api/calendar/bookings?mode=upcoming')
+        assert upcoming_rv.status_code == 200
+        upcoming_items = upcoming_rv.get_json().get('items', [])
+        assert any(item.get('kind') == 'appointment' and item.get('date') == future_day for item in upcoming_items)
+        assert any(item.get('kind') == 'block' and item.get('date') == future_day for item in upcoming_items)
+
+        history_rv = self.client.get('/api/calendar/bookings?mode=history')
+        assert history_rv.status_code == 200
+        history_items = history_rv.get_json().get('items', [])
+        assert any(item.get('kind') == 'appointment' and item.get('date') == past_day for item in history_items)
+        assert any(item.get('kind') == 'block' and item.get('date') == past_day for item in history_items)
+
     def test_ongoing_previous_week_auto_promoted_to_recurring(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
