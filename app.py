@@ -5,7 +5,7 @@ import json
 import shutil
 from collections import Counter
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -1477,20 +1477,14 @@ def patient_home():
     patient_id = current_user.patient_id
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
 
-    today = datetime.now().strftime('%Y-%m-%d')
-    upcoming = db.execute('''
-        SELECT * FROM appointments
-        WHERE patient_id = ? AND appointment_date >= ?
-        ORDER BY appointment_date ASC, appointment_time ASC
-        LIMIT 10
-    ''', (patient_id, today)).fetchall()
+    upcoming = build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=10)
 
     messages = db.execute('''
         SELECT m.*, u.username as sender_name
         FROM messages m
         LEFT JOIN users u ON m.sender_id = u.id
         WHERE m.sender_id = ? OR m.recipient_id = ?
-        ORDER BY m.timestamp DESC
+        ORDER BY m.timestamp ASC
         LIMIT 20
     ''', (current_user.id, current_user.id)).fetchall()
 
@@ -1502,12 +1496,51 @@ def patient_home():
         ORDER BY pr.assigned_at DESC
     ''', (patient_id,)).fetchall()
 
+    receipts = db.execute('''
+        SELECT *
+        FROM receipts
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+    ''', (patient_id,)).fetchall()
+
     db.execute('UPDATE messages SET is_read = 1 WHERE recipient_id = ?', (current_user.id,))
     db.commit()
 
     return render_template('patient_home.html', patient=patient,
                            upcoming=upcoming, messages=messages,
-                           assigned_resources=assigned_resources)
+                           assigned_resources=assigned_resources,
+                           receipts=receipts)
+
+
+@app.route('/patient/receipt/<int:receipt_id>/download')
+@login_required
+def download_receipt(receipt_id):
+    db = get_db()
+    receipt = db.execute('SELECT * FROM receipts WHERE id = ?', (receipt_id,)).fetchone()
+    if not receipt:
+        return 'Receipt not found', 404
+
+    if current_user.role == 'patient':
+        if int(receipt['patient_id']) != int(current_user.patient_id or 0):
+            return 'Unauthorized', 403
+    elif current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    content = (
+        'Private Clinic Service Receipt\n'
+        '-----------------------------\n'
+        f'Receipt ID: {receipt["id"]}\n'
+        f'Patient ID: {receipt["patient_id"]}\n'
+        f'Amount: {receipt["amount"]}\n'
+        f'Description: {receipt["description"] or ""}\n'
+        f'Created At: {receipt["created_at"] or ""}\n'
+    )
+    filename = f'receipt_{receipt["id"]}.txt'
+    return Response(
+        content,
+        mimetype='text/plain',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
 
 @app.route('/resources')
 def public_resources():
@@ -1680,10 +1713,13 @@ def patient_detail(patient_id):
     messages = []
     if user:
         messages = db.execute('''
-            SELECT * FROM messages
-            WHERE sender_id = ? OR recipient_id = ?
+            SELECT m.*, u.username as sender_name
+            FROM messages m
+            LEFT JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = ? AND m.recipient_id = ?)
+               OR (m.sender_id = ? AND m.recipient_id = ?)
             ORDER BY timestamp ASC
-        ''', (user['id'], user['id'])).fetchall()
+        ''', (current_user.id, user['id'], user['id'], current_user.id)).fetchall()
 
     # Get resources for assignment
     all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
@@ -2012,6 +2048,46 @@ def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=
     return sorted(occurrences)
 
 
+def build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=20):
+    """Return upcoming patient-facing appointment occurrences including recurring series."""
+    today = datetime.now().date()
+    range_end = today + timedelta(days=days_ahead)
+
+    rows = db.execute('''
+        SELECT *
+        FROM appointments
+        WHERE patient_id = ?
+          AND COALESCE(status, 'scheduled') = 'scheduled'
+          AND ((COALESCE(is_recurring, 0) = 0 AND appointment_date BETWEEN ? AND ?)
+               OR (COALESCE(is_recurring, 0) = 1 AND appointment_date <= ?))
+        ORDER BY appointment_date ASC, appointment_time ASC
+    ''', (patient_id, today.isoformat(), range_end.isoformat(), range_end.isoformat())).fetchall()
+
+    upcoming = []
+    for appt in rows:
+        is_recurring = int(appt['is_recurring'] or 0) == 1
+        if is_recurring:
+            occ_dates = recurring_occurrences_between(appt, today, range_end)
+        else:
+            occ = parse_date_safe(appt['appointment_date'])
+            occ_dates = [occ] if occ else []
+
+        for occ_date in occ_dates:
+            upcoming.append({
+                'id': appt['id'],
+                'appointment_date': occ_date.isoformat(),
+                'appointment_time': appt['appointment_time'],
+                'duration_minutes': int(appt['duration_minutes'] or 60),
+                'meeting_type': appt['meeting_type'] or 'in-person',
+                'meeting_link': appt['meeting_link'] or '',
+                'meeting_title': appt['meeting_title'] or '',
+                'is_recurring': is_recurring
+            })
+
+    upcoming.sort(key=lambda row: (row['appointment_date'], row['appointment_time']))
+    return upcoming[:limit]
+
+
 def build_booking_management_payload(db, mode='upcoming', future_days=180, history_days=120):
     today = datetime.now().date()
     if mode == 'history':
@@ -2223,9 +2299,12 @@ def build_week_calendar_snapshot(db, week_start, user):
             duration = int(appt['duration_minutes'] or 60)
             end_dt = start_dt + timedelta(minutes=duration)
 
-            title = appt['patient_name']
+            # Patients should not see other patients' bookings, only their own.
             if user.role == 'patient' and appt['patient_id'] != user.patient_id:
-                title = 'Unavailable'
+                occupied.append((start_dt, end_dt))
+                continue
+
+            title = appt['patient_name']
 
             is_own = (user.role == 'patient' and appt['patient_id'] == user.patient_id)
             can_delete = user.role == 'admin' or is_own
@@ -2278,6 +2357,11 @@ def build_week_calendar_snapshot(db, week_start, user):
         session_start = combine_dt(session_date, group_session['session_time'])
         session_duration = int(group_session['duration_minutes'] or 60)
         session_end = session_start + timedelta(minutes=session_duration)
+
+        # Keep group slots occupied for availability math, but hide group events from patients.
+        if user.role != 'admin':
+            occupied.append((session_start, session_end))
+            continue
 
         events.append({
             'id': f"group-session-{group_session['id']}",
@@ -2473,6 +2557,9 @@ def weekly_calendar():
     else:
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
         can_self_schedule = bool(patient and int(patient['can_self_schedule'] or 0) == 1)
+        if not can_self_schedule:
+            flash('Self-booking is currently disabled by your therapist.')
+            return redirect(url_for('patient_home'))
     return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
                            is_admin=(current_user.role == 'admin'))
 

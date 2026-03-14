@@ -8,9 +8,15 @@
         </h2>
         <p class="text-muted small mb-0 mt-1">{{ t('Here is your current status') }}</p>
     </div>
+    {% if patient['can_self_schedule'] %}
     <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
         <i class="bi bi-calendar3 me-1"></i> Weekly Calendar
     </a>
+    {% else %}
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" disabled title="Self-booking is disabled">
+        <i class="bi bi-lock me-1"></i> Weekly Calendar Locked
+    </button>
+    {% endif %}
 </div>
 
 <div class="row g-4">
@@ -37,7 +43,7 @@
                             </div>
                             <div class="flex-grow-1">
                                 <div class="fw-semibold">
-                                    {% if appt['meeting_type'] == 'online' %}
+                                    {% if appt['meeting_type'] in ['zoom', 'google-meet'] %}
                                         <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
                                     {% else %}
                                         <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}
@@ -115,15 +121,15 @@
             </div>
         </div>
 
-        <!-- Assigned Resources -->
-        {% if assigned_resources %}
+        <!-- Shared Documents -->
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
-                    <i class="bi bi-journal-bookmark-fill text-primary me-2"></i>{{ t('Resources') }}
+                    <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>Shared Documents
                 </h5>
             </div>
             <div class="card-body px-4 pb-4">
+                {% if assigned_resources %}
                 <div class="list-group list-group-flush">
                 {% for res in assigned_resources %}
                     <div class="list-group-item border-0 px-0 py-2">
@@ -139,9 +145,39 @@
                     </div>
                 {% endfor %}
                 </div>
+                {% else %}
+                <div class="text-muted small">No shared documents yet.</div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
+
+        <!-- Billing / Receipts -->
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-receipt-cutoff text-primary me-2"></i>{{ t('Receipts') }}
+                </h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                {% if receipts %}
+                <div class="list-group list-group-flush">
+                    {% for receipt in receipts %}
+                    <div class="list-group-item border-0 px-0 py-2 d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-semibold small">{{ receipt['description'] or t('Service Receipt') }}</div>
+                            <div class="text-muted" style="font-size:.8rem">{{ receipt['created_at'][:10] if receipt['created_at'] else '' }} · {{ receipt['amount'] }}</div>
+                        </div>
+                        <a href="{{ url_for('download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                            <i class="bi bi-download me-1"></i>{{ t('Download') }}
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted small">No receipts yet.</div>
+                {% endif %}
+            </div>
+        </div>
 
     </div>
 </div>

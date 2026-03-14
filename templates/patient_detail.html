@@ -913,7 +913,10 @@
                         <div class="chat-history mb-3 p-3 bg-light rounded-4" style="max-height: 400px; overflow-y: auto;">
                             {% for msg in messages %}
                                 <div class="mb-3 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
-                                    <div class="d-inline-block p-3 rounded-4 shadow-sm {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-white text-dark{% endif %}">
+                                    <div class="smallest text-muted mb-1">
+                                        {% if msg['sender_id'] == current_user.id %}You{% else %}{{ msg['sender_name'] or patient['name'] }}{% endif %}
+                                    </div>
+                                    <div class="d-inline-block p-3 rounded-4 shadow-sm {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-white text-dark{% endif %}" style="max-width: 85%; word-break: break-word;">
                                         {{ msg['content'] }}
                                     </div>
                                     <small class="text-muted d-block mt-1 smallest">{{ msg['timestamp'] }}</small>
