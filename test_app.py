@@ -197,6 +197,53 @@ class ClinicTestCase(unittest.TestCase):
         assert b'id="billing-tab"' in rv.data
         assert b'id="messages-tab"' in rv.data
 
+    def test_patient_detail_messages_tab_marks_unread_messages_read(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Unread Message Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='message_patient',
+            password='password'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            patient_user = db.execute(
+                'SELECT id FROM users WHERE patient_id = ? AND role = ?',
+                (1, 'patient')
+            ).fetchone()
+            admin_user = db.execute(
+                'SELECT id FROM users WHERE username = ?',
+                ('admin',)
+            ).fetchone()
+            db.execute(
+                'INSERT INTO messages (sender_id, recipient_id, content, is_read) VALUES (?, ?, ?, 0)',
+                (patient_user['id'], admin_user['id'], 'Unread test message')
+            )
+            db.commit()
+
+            unread_before = db.execute(
+                'SELECT COUNT(*) AS c FROM messages WHERE recipient_id = ? AND sender_id = ? AND COALESCE(is_read, 0) = 0',
+                (admin_user['id'], patient_user['id'])
+            ).fetchone()['c']
+
+        assert unread_before == 1
+
+        rv = self.client.get('/patient/1?tab=messages', follow_redirects=True)
+        assert b'Unread test message' in rv.data
+        assert b'id="messagesUnreadBadge"' not in rv.data
+
+        with app.app_context():
+            db = get_db()
+            unread_after = db.execute(
+                'SELECT COUNT(*) AS c FROM messages WHERE recipient_id = ? AND sender_id = ? AND COALESCE(is_read, 0) = 0',
+                (admin_user['id'], patient_user['id'])
+            ).fetchone()['c']
+
+        assert unread_after == 0
+
     def test_import_treatment_log_json_list(self):
         import json
         self.login('admin', 'admin')
