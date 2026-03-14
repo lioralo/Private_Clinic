@@ -196,7 +196,6 @@
                     <label class="form-label small">{{ t('Meeting Type') }}</label>
                     <select name="meeting_type" id="meetingTypeSelect" class="form-select form-select-sm">
                         <option value="in-person">In-person</option>
-                        <option value="vacant">{{ t('Vacant (open for patients)') }}</option>
                         <option value="zoom">Zoom</option>
                         <option value="google-meet">Google Meet</option>
                     </select>
@@ -220,6 +219,9 @@
                 </div>
                 <input type="hidden" name="meeting_platform" id="meetingPlatformHidden">
                 <div class="full-span d-flex justify-content-end">
+                    {% if current_user.role == 'admin' %}
+                    <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-4 me-2" id="createVacancyBtn">{{ t('Create Vacancy Link') }}</button>
+                    {% endif %}
                     <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4" id="bookSlotSubmitBtn">{{ t('Book Selected Slot') }}</button>
                 </div>
                 </div>
@@ -364,6 +366,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const meetingTitleInput = document.getElementById('meetingTitleInput');
     const bookingStatusHint = document.getElementById('bookingStatusHint');
     const bookingTypeSelect = document.getElementById('bookingTypeSelect');
+    const createVacancyBtn = document.getElementById('createVacancyBtn');
     const specialMetaWrap = document.getElementById('specialMetaWrap');
     const specialPatternSelect = document.getElementById('specialPatternSelect');
     const specialRepeatUntilWrap = document.getElementById('specialRepeatUntilWrap');
@@ -1360,27 +1363,53 @@ document.addEventListener('DOMContentLoaded', function() {
             if (meetingPlatformHidden) meetingPlatformHidden.value = 'zoom';
         });
     }
-    // Auto-set platform hidden field; handle vacant slot mode
+    // Auto-set platform hidden field based on selected meeting type
     if (meetingTypeSelect) {
         meetingTypeSelect.addEventListener('change', function() {
-            const isVacant = this.value === 'vacant';
-            if (bookingPatient) {
-                bookingPatient.disabled = isVacant;
-                if (isVacant) {
-                    bookingPatient.value = '';
-                    if (otherNameWrap) otherNameWrap.classList.add('d-none');
-                    if (bookingStatusHint) bookingStatusHint.textContent = 'Slot will be open for patient self-booking.';
-                } else if (!bookingPatient.value) {
-                    if (bookingStatusHint) bookingStatusHint.textContent = 'Select a patient to see booking mode.';
-                }
-            }
-            if (vacantHintBooking) {
-                vacantHintBooking.classList.toggle('d-none', !isVacant);
-            }
             if (meetingPlatformHidden) {
                 meetingPlatformHidden.value = (this.value === 'zoom' || this.value === 'google-meet') ? this.value : '';
             }
         });
+    }
+
+    function createVacancyFromSelectedSlot() {
+        if (!bookingDate.value || !bookingTime.value) {
+            showActionModal({ title: 'Time Required', message: 'Please select a time on the calendar first.' });
+            return;
+        }
+        if (bookingEndTimeInput && bookingEndTimeInput.value) {
+            bookingEndTime.value = bookingEndTimeInput.value;
+        }
+        if (!bookingEndTime.value) {
+            showActionModal({ title: 'End Time Required', message: 'Please set an end time for the vacancy.' });
+            return;
+        }
+
+        fetch('/api/calendar/vacancy', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                slot_date: bookingDate.value,
+                slot_time: bookingTime.value,
+                end_time: bookingEndTime.value
+            })
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'success') {
+                loadSnapshot();
+                loadVacancies();
+                if (data.share_url) {
+                    showShareLinkModal(data.share_url, bookingDate.value, bookingTime.value);
+                } else {
+                    showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
+                }
+            } else {
+                showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
+            }
+        });
+    }
+
+    if (createVacancyBtn) {
+        createVacancyBtn.addEventListener('click', createVacancyFromSelectedSlot);
     }
 
     if (bookingPatient && meetingTitleInput) {
@@ -1680,28 +1709,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (!bookingEndTime.value) {
             showActionModal({ title: 'End Time Required', message: 'Please set an end time for the booking.' });
-            return;
-        }
-
-        // Vacant slot: submit to vacancy endpoint instead
-        if (meetingTypeSelect && meetingTypeSelect.value === 'vacant') {
-            fetch('/api/calendar/vacancy', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ slot_date: bookingDate.value, slot_time: bookingTime.value, end_time: bookingEndTime.value })
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'success') {
-                    loadSnapshot();
-                    loadVacancies();
-                    if (data.share_url) {
-                        showShareLinkModal(data.share_url, bookingDate.value, bookingTime.value);
-                    } else {
-                        showActionModal({ title: 'Slot Enabled', message: 'Vacant slot created and open for patient self-booking.' });
-                    }
-                } else {
-                    showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
-                }
-            });
             return;
         }
 

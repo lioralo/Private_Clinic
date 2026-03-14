@@ -2763,13 +2763,14 @@ def api_calendar_vacancy():
         DELETE FROM slots_override
         WHERE slot_date = ? AND slot_time = ? AND status = 'available'
     ''', (slot_date, start_time.strftime('%H:%M')))
-    db.execute('''
+    insert_cur = db.execute('''
         INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes, share_token)
         VALUES (?, ?, 'available', ?, ?)
     ''', (slot_date, start_time.strftime('%H:%M'), duration, share_token))
     db.commit()
+    override_id = insert_cur.lastrowid
     share_url = url_for('open_booking_page', token=share_token, _external=True)
-    return jsonify({'status': 'success', 'share_token': share_token, 'share_url': share_url})
+    return jsonify({'status': 'success', 'share_token': share_token, 'share_url': share_url, 'override_id': override_id})
 
 
 @app.route('/calendar/open/<token>')

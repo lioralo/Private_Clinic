@@ -800,6 +800,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         data = rv.get_json()
         assert data.get('status') == 'success'
+        assert data.get('override_id')
         assert data.get('share_token')
         assert '/calendar/open/' in (data.get('share_url') or '')
 
