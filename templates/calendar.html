@@ -879,6 +879,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="input-group input-group-sm mb-3">
                 <input type="text" class="form-control form-control-sm" id="shareLinkInput" value="${shareUrl}" readonly>
                 <button class="btn btn-outline-secondary" type="button" id="copyShareLinkBtn"><i class="bi bi-clipboard"></i> Copy</button>
+                <button class="btn btn-outline-primary" type="button" id="openShareLinkBtn"><i class="bi bi-box-arrow-up-right"></i> Open</button>
             </div>
             <div class="small text-muted">Date: <strong>${date}</strong> &nbsp; Time: <strong>${time}</strong></div>
         `;
@@ -903,6 +904,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+        const openBtn = document.getElementById('openShareLinkBtn');
+        if (openBtn) {
+            openBtn.addEventListener('click', function() {
+                window.open(shareUrl, '_blank', 'noopener,noreferrer');
+            });
+        }
         modalConfirmBtn.onclick = function() { actionModal.hide(); };
     }
 
@@ -919,6 +926,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control form-control-sm" id="vacMgrLink" value="${shareUrl}" readonly>
                     <button class="btn btn-outline-secondary" type="button" id="vacMgrCopyBtn"><i class="bi bi-clipboard"></i> Copy</button>
+                    <button class="btn btn-outline-primary" type="button" id="vacMgrOpenBtn"><i class="bi bi-box-arrow-up-right"></i> Open</button>
                 </div>
                </div>`
             : '';
@@ -971,6 +979,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     copyBtn.innerHTML = '<i class="bi bi-check2"></i> Copied!';
                     setTimeout(() => { copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 2000);
                 }
+            });
+        }
+        const openBtn = document.getElementById('vacMgrOpenBtn');
+        if (openBtn && shareUrl) {
+            openBtn.addEventListener('click', function() {
+                window.open(shareUrl, '_blank', 'noopener,noreferrer');
             });
         }
 
@@ -1047,6 +1061,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const shareBtn = (isOpen && item.share_url)
                 ? `<button type="button" class="btn btn-sm btn-outline-success vac-copy" data-url="${item.share_url}" title="Copy link"><i class="bi bi-share"></i></button>`
                 : '';
+            const openBtn = (isOpen && item.share_url)
+                ? `<button type="button" class="btn btn-sm btn-outline-primary vac-open" data-url="${item.share_url}" title="Open link"><i class="bi bi-box-arrow-up-right"></i></button>`
+                : '';
             const occupyBtn = isOpen
                 ? `<button type="button" class="btn btn-sm btn-outline-primary vac-occupy" data-item="${encodeURIComponent(JSON.stringify(item))}"><i class="bi bi-person-check"></i> Occupy</button>`
                 : '';
@@ -1058,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="mt-1">${statusBadge}</div>
                 </div>
                 <div class="d-flex gap-1">
-                    ${shareBtn}${occupyBtn}${deleteBtn}
+                    ${shareBtn}${openBtn}${occupyBtn}${deleteBtn}
                 </div>
             </div>`;
         }).join('');
@@ -1069,6 +1086,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 navigator.clipboard.writeText(url).catch(() => {});
                 this.innerHTML = '<i class="bi bi-check2"></i>';
                 setTimeout(() => { this.innerHTML = '<i class="bi bi-share"></i>'; }, 2000);
+            });
+        });
+
+        vacanciesContainer.querySelectorAll('.vac-open').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const url = this.dataset.url;
+                if (url) {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                }
             });
         });
 
