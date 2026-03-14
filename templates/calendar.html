@@ -137,7 +137,7 @@
                 <input type="hidden" id="bookingTime" name="time">
                 <input type="hidden" id="bookingEndTime" name="end_time">
                 {% if current_user.role == 'admin' %}
-                <div class="calendar-aux-note full-span mb-3">{{ t('Click any free time in the calendar or pick a slot from the list. Use Vacant when you want to open time for patient self-booking.') }}</div>
+                <div class="calendar-aux-note full-span mb-3">{{ t('Click a free time, set end time, then use Create Vacancy Link to open it for patient booking. Use Book Selected Slot for direct booking.') }}</div>
                 {% endif %}
                 <div class="calendar-form-grid">
                 {% if current_user.role == 'admin' %}
@@ -154,9 +154,6 @@
                     <div class="mb-2 d-none" id="otherNameWrap">
                         <label class="form-label small mt-1">{{ t('Name / Description') }}</label>
                         <input type="text" id="otherNameInput" class="form-control form-control-sm" placeholder="{{ t('External client / Guest name') }}">
-                    </div>
-                    <div class="mb-2 d-none alert alert-success py-2 px-3 small" id="vacantHintBooking">
-                        <i class="bi bi-unlock me-1"></i>{{ t('This time slot will be marked as available for patient self-booking.') }}
                     </div>
                 </div>
                 {% endif %}
