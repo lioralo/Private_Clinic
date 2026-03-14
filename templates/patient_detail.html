@@ -51,7 +51,7 @@
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="billing-tab" data-bs-toggle="tab" data-bs-target="#billing" type="button" role="tab" aria-controls="billing" aria-selected="false"><i class="bi bi-receipt me-2"></i>{{ t('Billing') }}</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}</button>
+                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}{% if unread_messages_count %} <span class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}</button>
             </li>
         </ul>
 
@@ -969,6 +969,9 @@
                 {% endif %}
                 <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-outline-info rounded-pill w-100" title="View and book available appointment slots">
                     <i class="bi bi-calendar-check me-1"></i>{{ 'Book Appointment' if lang == 'en' else 'זמן פגישה' }}
+                </a>
+                <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-dark rounded-pill w-100" title="Preview what this patient sees in their portal">
+                    <i class="bi bi-eye me-1"></i>{{ 'Portal Preview' if lang == 'en' else 'תצוגת פורטל' }}
                 </a>
                 <div class="border rounded-3 p-2 bg-light bg-opacity-50 mt-1">
                     <div class="small fw-bold text-primary mb-2">

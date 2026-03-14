@@ -1350,10 +1350,32 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
     return False
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority'):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None):
+    unread_case = '0'
+    if admin_user_id is not None:
+        unread_case = f'''(
+            SELECT COUNT(*)
+            FROM messages m
+            JOIN users pu ON pu.patient_id = p.id AND pu.role = 'patient'
+            WHERE m.sender_id = pu.id
+              AND m.recipient_id = {int(admin_user_id)}
+              AND COALESCE(m.is_read, 0) = 0
+        )'''
+
     base_query = '''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
+        (SELECT MIN(a0.appointment_date) FROM appointments a0 WHERE a0.patient_id = p.id AND COALESCE(a0.status, 'scheduled') = 'scheduled' AND a0.appointment_date >= DATE('now')) AS next_appointment_date,
+        (
+            SELECT a1.appointment_time
+            FROM appointments a1
+            WHERE a1.patient_id = p.id
+              AND COALESCE(a1.status, 'scheduled') = 'scheduled'
+              AND a1.appointment_date >= DATE('now')
+            ORDER BY a1.appointment_date ASC, a1.appointment_time ASC
+            LIMIT 1
+        ) AS next_appointment_time,
+        ''' + unread_case + ''' AS unread_messages,
         (
             CASE
                 WHEN p.status = 'candidate' AND EXISTS (
@@ -1457,7 +1479,7 @@ def crm_dashboard():
         'sort': sort_by
     }
 
-    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by)
+    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id)
     counts = {
         'all': db.execute('SELECT COUNT(*) AS c FROM patients WHERE COALESCE(is_deleted, 0) = 0').fetchone()['c'],
         'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing' AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
@@ -1711,7 +1733,13 @@ def patient_detail(patient_id):
 
     # Get messages
     messages = []
+    unread_messages_count = 0
     if user:
+        unread_messages_count = db.execute('''
+            SELECT COUNT(*) AS c
+            FROM messages
+            WHERE sender_id = ? AND recipient_id = ? AND COALESCE(is_read, 0) = 0
+        ''', (user['id'], current_user.id)).fetchone()['c']
         messages = db.execute('''
             SELECT m.*, u.username as sender_name
             FROM messages m
@@ -1764,7 +1792,59 @@ def patient_detail(patient_id):
     suggested_session_number = int(next_session_row['max_session'] or 0) + 1
     suggested_note_date = datetime.now().date().isoformat()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count)
+
+
+@app.route('/admin/patient/<int:patient_id>/portal_preview')
+@login_required
+def admin_portal_preview(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if patient is None:
+        return 'Patient not found', 404
+
+    patient_user = db.execute('SELECT * FROM users WHERE patient_id = ? AND role = "patient"', (patient_id,)).fetchone()
+    upcoming = build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=10)
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+        ORDER BY pr.assigned_at DESC
+    ''', (patient_id,)).fetchall()
+    receipts = db.execute('''
+        SELECT *
+        FROM receipts
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+    ''', (patient_id,)).fetchall()
+
+    messages = []
+    if patient_user:
+        messages = db.execute('''
+            SELECT m.*, u.username as sender_name
+            FROM messages m
+            LEFT JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = ? AND m.recipient_id = ?)
+               OR (m.sender_id = ? AND m.recipient_id = ?)
+            ORDER BY m.timestamp ASC
+            LIMIT 20
+        ''', (current_user.id, patient_user['id'], patient_user['id'], current_user.id)).fetchall()
+
+    return render_template(
+        'patient_home.html',
+        patient=patient,
+        upcoming=upcoming,
+        messages=messages,
+        assigned_resources=assigned_resources,
+        receipts=receipts,
+        preview_mode=True,
+        preview_patient_id=patient_id,
+        unread_messages=0
+    )
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):
