@@ -2,6 +2,34 @@
 
 ---
 
+## Session 23
+
+**Date:** March 15, 2026
+
+**Objective:** Fix intake tab placement so Summary and Intake sections render in the correct tabs for patient profiles.
+
+**Root Cause:**
+- The JavaScript tab relocation helper moves the element with id `intakeEvaluationFormBlock` into the Intake tab host.
+- That id was incorrectly attached to the **Background** card, causing Background to appear under Intake.
+
+**Changes Made:**
+
+1. **Template ID Correction**
+- In `templates/patient_detail.html`:
+  - Removed `id="intakeEvaluationFormBlock"` from the Background card in Summary.
+  - Assigned `id="intakeEvaluationFormBlock"` to the Intake Evaluation Form card (the one with DOCX export).
+
+2. **Behavior After Fix**
+- Summary tab keeps the Background section.
+- Intake tab receives the Intake Evaluation Form block, including DOCX export button.
+
+**Verification Performed:**
+- Full app tests (`python test_app.py`).
+- Security tests (`python test_security.py`).
+
+**Result:**
+- Tab content placement corrected with no functional regressions observed in automated tests.
+
 ## Session 22
 
 **Date:** March 15, 2026
