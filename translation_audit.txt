@@ -1,0 +1,241 @@
+templates/admin_profile.html:15:                            <label class="form-label fw-bold small">Display Name</label>
+templates/admin_profile.html:19:                            <label class="form-label fw-bold small">Username</label>
+templates/admin_profile.html:23:                            <label class="form-label fw-bold small">Email</label>
+templates/admin_profile.html:27:                            <label class="form-label fw-bold small">Phone</label>
+templates/admin_profile.html:31:                            <label class="form-label fw-bold small">ID Number</label>
+templates/admin_profile.html:35:                            <label class="form-label fw-bold small">Date of Birth</label>
+templates/admin_profile.html:58:                            <label class="form-label fw-bold small">Backup File</label>
+templates/admin_profile.html:63:                                <option value="">No encrypted backups found</option>
+templates/calendar.html:68:            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">Today</button>
+templates/calendar.html:158:                    <div class="form-text" id="bookingStatusHint">Select a patient to see booking mode.</div>
+templates/calendar.html:200:                        <option value="in-person">In-person</option>
+templates/calendar.html:201:                        <option value="zoom">Zoom</option>
+templates/calendar.html:202:                        <option value="google-meet">Google Meet</option>
+templates/calendar.html:207:                    <input type="text" name="meeting_title" id="meetingTitleInput" class="form-control form-control-sm" placeholder="### private meeting">
+templates/calendar.html:213:                        <button type="button" class="btn btn-outline-success btn-sm" id="openGoogleMeetBtn" title="Open Google Meet to create a new meeting">
+templates/calendar.html:216:                        <button type="button" class="btn btn-outline-primary btn-sm" id="openZoomBtn" title="Open Zoom to start a meeting">
+templates/calendar.html:246:            <h6 class="fw-bold mb-0 text-primary">Booking Management</h6>
+templates/calendar.html:248:                <button type="button" class="btn btn-primary" data-mode="upcoming">Upcoming</button>
+templates/calendar.html:249:                <button type="button" class="btn btn-outline-primary" data-mode="history">History</button>
+templates/calendar.html:257:                        <option value="blocked">Blocked</option>
+templates/calendar.html:258:                        <option value="special">Special</option>
+templates/calendar.html:262:                    <label class="form-label small">Repeat</label>
+templates/calendar.html:264:                        <option value="one-time">One-time</option>
+templates/calendar.html:265:                        <option value="weekly">Weekly</option>
+templates/calendar.html:290:                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
+templates/calendar.html:301:                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Block/Special</button>
+templates/calendar.html:311:                            <th>Date</th>
+templates/calendar.html:312:                            <th>Time</th>
+templates/calendar.html:313:                            <th>Type</th>
+templates/calendar.html:314:                            <th>Title</th>
+templates/calendar.html:315:                            <th>Details</th>
+templates/calendar.html:316:                            <th class="text-end">Actions</th>
+templates/calendar.html:320:                        <tr><td colspan="6" class="text-muted small">Loading bookings...</td></tr>
+templates/calendar.html:333:            <div class="small text-muted">Loading vacancies...</div>
+templates/calendar.html:524:            ? '<div class="alert alert-info py-1 px-2 small mb-2">Recurring meeting</div>'
+templates/calendar.html:527:            ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">Open Patient Profile</a></div>`
+templates/calendar.html:534:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
+templates/calendar.html:535:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
+templates/calendar.html:536:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
+templates/calendar.html:537:            <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${payload.meeting_title || ''}"></div>
+templates/calendar.html:539:            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+templates/calendar.html:541:                    <option value="in-person">In-person</option>
+templates/calendar.html:542:                    <option value="zoom">Zoom</option>
+templates/calendar.html:543:                    <option value="google-meet">Google Meet</option>
+templates/calendar.html:546:            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${payload.meeting_link || ''}"></div>
+templates/calendar.html:547:            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">Delete Meeting</button>
+templates/calendar.html:634:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${payload.date || ''}"></div>
+templates/calendar.html:635:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${payload.time || ''}"></div>
+templates/calendar.html:636:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${payload.end_time || ''}"></div>
+templates/calendar.html:637:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${payload.meeting_title || payload.title || ''}"></div>
+templates/calendar.html:638:            <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${payload.facilitator || ''}"></div>
+templates/calendar.html:639:            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+templates/calendar.html:641:                    <option value="in-person">In-person</option>
+templates/calendar.html:642:                    <option value="zoom">Zoom</option>
+templates/calendar.html:643:                    <option value="google-meet">Google Meet</option>
+templates/calendar.html:646:            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${payload.meeting_link || ''}"></div>
+templates/calendar.html:647:            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
+templates/calendar.html:719:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editBlockDate" value="${payload.date || ''}"></div>
+templates/calendar.html:720:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editBlockTime" value="${payload.time || ''}"></div>
+templates/calendar.html:721:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editBlockEndTime" value="${payload.end_time || ''}"></div>
+templates/calendar.html:722:            <div class="mb-2"><label class="form-label small">Type</label>
+templates/calendar.html:724:                    <option value="blocked">Blocked</option>
+templates/calendar.html:725:                    <option value="special">Special</option>
+templates/calendar.html:728:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editBlockTitle" value="${payload.title || ''}"></div>
+templates/calendar.html:731:                <label class="form-check-label small" for="editBlockPrivate">Hide title from patients</label>
+templates/calendar.html:733:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="deleteBlockInsideEdit">Delete</button>
+templates/calendar.html:859:            bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-muted small">No bookings found in this range.</td></tr>';
+templates/calendar.html:882:                    <button type="button" class="btn btn-sm btn-outline-primary me-1 manage-edit" data-item="${escaped}">Edit</button>
+templates/calendar.html:883:                    <button type="button" class="btn btn-sm btn-outline-danger manage-delete" data-item="${escaped}">Delete</button>
+templates/calendar.html:913:                bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-danger small">Failed loading bookings.</td></tr>';
+templates/calendar.html:939:            <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
+templates/calendar.html:941:                <label class="form-label small">Select Patient</label>
+templates/calendar.html:943:                    <option value="">— enter name below instead —</option>
+templates/calendar.html:948:                <label class="form-label small">Or Enter Name Directly</label>
+templates/calendar.html:949:                <input type="text" class="form-control form-control-sm" id="vacMgrName" placeholder="Name / guest">
+templates/calendar.html:952:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="vacMgrDeleteBtn">Delete This Vacancy</button>
+templates/calendar.html:1022:            vacanciesContainer.innerHTML = '<div class="small text-muted">No open vacancy slots.</div>';
+templates/calendar.html:1028:            let statusBadge = '<span class="badge bg-secondary">Booked</span>';
+templates/calendar.html:1030:                statusBadge = '<span class="badge bg-success">Recurring Weekly</span>';
+templates/calendar.html:1032:                statusBadge = '<span class="badge bg-success">Open</span>';
+templates/calendar.html:1100:                if (vacanciesContainer) vacanciesContainer.innerHTML = '<div class="small text-danger">Failed loading vacancies.</div>';
+templates/calendar.html:1123:            const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
+templates/calendar.html:1349:            <div class="mb-2 small text-muted">Should this vacancy apply only once or recur every week?</div>
+templates/calendar.html:1351:                <label class="form-label small">Vacancy Pattern</label>
+templates/calendar.html:1353:                    <option value="one-time">One-time (this date only)</option>
+templates/calendar.html:1354:                    <option value="weekly" selected>Weekly recurring</option>
+templates/calendar.html:1521:            container.innerHTML = '<div class="small text-muted">No weekend items.</div>';
+templates/calendar.html:1539:            followUpAlerts.innerHTML = '<div class="small text-muted">No pending follow-up indicators.</div>';
+templates/calendar.html:1564:            availableSlotsContainer.innerHTML = '<div class="small text-muted">No open slots this week.</div>';
+templates/calendar.html:1583:                    <button type="button" class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Use Slot</button>
+templates/crm.html:111:                    <span class="badge bg-success-subtle text-success border">Self-booking ON</span>
+templates/crm.html:113:                    <span class="badge bg-secondary-subtle text-secondary border">Self-booking OFF</span>
+templates/edit_patient.html:10:            <h2 class="mb-0 fw-bold text-primary">Edit Patient</h2>
+templates/edit_patient.html:17:                    <p class="text-muted small">Update patient information</p>
+templates/edit_patient.html:25:                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
+templates/edit_patient.html:30:                            <label for="status" class="form-label text-uppercase smallest fw-bold">Status</label>
+templates/edit_patient.html:40:                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+templates/edit_patient.html:48:                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+templates/edit_patient.html:71:                                <div class="small text-muted mt-1">When enabled, this patient can see available vacancy slots and book them from their calendar.</div>
+templates/edit_patient.html:76:                            <label class="form-label text-uppercase smallest fw-bold">Patient Type</label>
+templates/edit_patient.html:110:                            <label for="intake_assessment" class="form-label text-uppercase smallest fw-bold">Initial Intake Assessment</label>
+templates/edit_patient.html:112:                            <label for="intake_questionnaire" class="form-label text-uppercase smallest fw-bold">Initial Intake Questionnaire</label>
+templates/groups.html:10:        <p class="text-muted small mb-0">Manage groups, members, and scheduled group sessions.</p>
+templates/groups.html:19:                <h6 class="fw-bold mb-0 text-primary">Create Group</h6>
+templates/groups.html:25:                        <label class="form-label small">Group Name</label>
+templates/groups.html:29:                        <label class="form-label small">Group Type</label>
+templates/groups.html:31:                            <option value="support">Support</option>
+templates/groups.html:32:                            <option value="skills">Skills</option>
+templates/groups.html:33:                            <option value="psychoeducation">Psychoeducation</option>
+templates/groups.html:34:                            <option value="therapy">Therapy</option>
+templates/groups.html:38:                        <label class="form-label small">Description</label>
+templates/groups.html:42:                        <button type="submit" class="btn btn-primary btn-sm rounded-pill">Create Group</button>
+templates/groups.html:50:                <h6 class="fw-bold mb-0 text-primary">Upcoming Group Sessions</h6>
+templates/groups.html:70:                    <div class="list-group-item text-muted small">No sessions yet.</div>
+templates/groups.html:89:                        <h6 class="small text-uppercase text-muted">Members</h6>
+templates/groups.html:97:                                    <button class="btn btn-outline-danger btn-sm rounded-pill" type="submit">Remove</button>
+templates/groups.html:101:                            <div class="list-group-item small text-muted">No members added yet.</div>
+templates/groups.html:107:                                <option value="">Add patient...</option>
+templates/groups.html:112:                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">Add</button>
+templates/groups.html:116:                        <h6 class="small text-uppercase text-muted">Schedule Session</h6>
+templates/groups.html:120:                                <label class="form-label small">Date</label>
+templates/groups.html:124:                                <label class="form-label small">Start</label>
+templates/groups.html:128:                                <label class="form-label small">End</label>
+templates/groups.html:132:                                <label class="form-label small">Title</label>
+templates/groups.html:133:                                <input type="text" name="title" class="form-control form-control-sm" placeholder="Optional">
+templates/groups.html:136:                                <label class="form-label small">Facilitator</label>
+templates/groups.html:140:                                <label class="form-label small">Meeting Type</label>
+templates/groups.html:142:                                    <option value="in-person">In-person</option>
+templates/groups.html:143:                                    <option value="zoom">Zoom</option>
+templates/groups.html:144:                                    <option value="google-meet">Google Meet</option>
+templates/groups.html:148:                                <label class="form-label small">Meeting Link</label>
+templates/groups.html:152:                                <button type="submit" class="btn btn-success btn-sm rounded-pill">Add Session</button>
+templates/groups.html:162:                <h6 class="small text-uppercase text-muted mb-2">Scheduled Sessions</h6>
+templates/groups.html:195:                                    <label class="form-label small mb-1">Date</label>
+templates/groups.html:199:                                    <label class="form-label small mb-1">Start</label>
+templates/groups.html:203:                                    <label class="form-label small mb-1">End</label>
+templates/groups.html:207:                                    <label class="form-label small mb-1">Title</label>
+templates/groups.html:211:                                    <label class="form-label small mb-1">Facilitator</label>
+templates/groups.html:215:                                    <label class="form-label small mb-1">Meeting Type</label>
+templates/groups.html:217:                                        <option value="in-person">In-person</option>
+templates/groups.html:218:                                        <option value="zoom">Zoom</option>
+templates/groups.html:219:                                        <option value="google-meet">Google Meet</option>
+templates/groups.html:223:                                    <label class="form-label small mb-1">Meeting Link</label>
+templates/groups.html:253:                <h5 class="modal-title fw-bold">Edit Group Session</h5>
+templates/groups.html:260:                        <label class="form-label small">Date</label>
+templates/groups.html:264:                        <label class="form-label small">Start Time</label>
+templates/groups.html:268:                        <label class="form-label small">End Time</label>
+templates/groups.html:272:                        <label class="form-label small">Title</label>
+templates/groups.html:273:                        <input type="text" class="form-control form-control-sm" id="modalTitle" placeholder="Optional">
+templates/groups.html:276:                        <label class="form-label small">Facilitator</label>
+templates/groups.html:280:                        <label class="form-label small">Meeting Type</label>
+templates/groups.html:282:                            <option value="in-person">In-person</option>
+templates/groups.html:283:                            <option value="zoom">Zoom</option>
+templates/groups.html:284:                            <option value="google-meet">Google Meet</option>
+templates/groups.html:288:                        <label class="form-label small">Meeting Link</label>
+templates/groups.html:294:                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill me-auto" id="modalDeleteBtn">Delete Session</button>
+templates/groups.html:295:                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-dismiss="modal">Cancel</button>
+templates/groups.html:296:                <button type="button" class="btn btn-primary btn-sm rounded-pill" id="modalSaveBtn">Save Changes</button>
+templates/layout.html:6:    <title>Private Psychotherapy Clinic</title>
+templates/layout.html:125:             <span class="text-muted small">© 2026 Private Psychotherapy Clinic. Calm operations for modern care.</span>
+templates/layout.html:138:            <label for="conversationSearch" class="form-label small text-muted mb-1">Search Patient</label>
+templates/layout.html:139:            <input id="conversationSearch" class="form-control form-control-sm mb-2" placeholder="Type patient name...">
+templates/layout.html:143:                        <option value="all">All Types</option>
+templates/layout.html:144:                        <option value="private">Private</option>
+templates/layout.html:145:                        <option value="residency">Residency</option>
+templates/layout.html:146:                        <option value="initial-intake">Initial Intake</option>
+templates/layout.html:151:                        <option value="all">All Statuses</option>
+templates/layout.html:152:                        <option value="ongoing">Ongoing</option>
+templates/layout.html:153:                        <option value="candidate">Candidate</option>
+templates/layout.html:154:                        <option value="waiting">Waiting</option>
+templates/layout.html:155:                        <option value="waiting for scheduling">Waiting for Scheduling</option>
+templates/layout.html:156:                        <option value="archived">Archived</option>
+templates/layout.html:160:            <label for="conversationSelect" class="form-label small text-muted mb-1">Patient Conversation</label>
+templates/layout.html:175:                <input type="text" id="messageContent" class="form-control" placeholder="Type a message..." required>
+templates/layout.html:284:                                conversationSelect.innerHTML = '<option value="">No patient conversations</option>';
+templates/layout.html:324:                        container.innerHTML = '<div class="text-center py-4 text-muted small">No messages yet.</div>';
+templates/layout.html:372:                                            <strong class="me-auto">New Activity</strong>
+templates/layout.html:373:                                            <small class="text-white-50">Just now</small>
+templates/manage_resources.html:14:                        <label class="form-label smallest text-uppercase fw-bold">Title</label>
+templates/manage_resources.html:18:                        <label class="form-label smallest text-uppercase fw-bold">Description</label>
+templates/manage_resources.html:22:                        <label class="form-label smallest text-uppercase fw-bold">URL</label>
+templates/manage_resources.html:27:                        <label class="form-check-label" for="isPublicCheck">Public (visible to everyone)</label>
+templates/manage_resources.html:29:                    <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">Add Resource</button>
+templates/manage_resources.html:45:                                <th class="ps-4">Title</th>
+templates/manage_resources.html:46:                                <th>Access</th>
+templates/manage_resources.html:47:                                <th>Date Added</th>
+templates/manage_resources.html:48:                                <th class="pe-4">Actions</th>
+templates/manage_resources.html:60:                                        <span class="badge bg-success">Public</span>
+templates/manage_resources.html:62:                                        <span class="badge bg-secondary">Private</span>
+templates/manage_resources.html:74:                                <td colspan="4" class="text-center py-4 text-muted">No resources found.</td>
+templates/open_booking.html:6:    <title>Book an Appointment</title>
+templates/open_booking.html:20:            <h4>Slot Not Found</h4>
+templates/open_booking.html:21:            <p class="text-muted">This booking link is invalid or has expired.</p>
+templates/open_booking.html:27:            <h4>Already Booked</h4>
+templates/open_booking.html:28:            <p class="text-muted">This time slot has already been taken. Please contact us directly for another appointment.</p>
+templates/open_booking.html:35:                <h4 class="fw-bold">Book an Appointment</h4>
+templates/open_booking.html:36:                <p class="text-muted small mb-0">Please fill in your details to reserve this time slot.</p>
+templates/open_booking.html:51:                    <label class="form-label fw-semibold">Your Name <span class="text-danger">*</span></label>
+templates/open_booking.html:52:                    <input type="text" id="bookerName" name="name" class="form-control" placeholder="First and last name" required maxlength="120">
+templates/open_booking.html:55:                    <label class="form-label fw-semibold">Phone Number</label>
+templates/open_booking.html:56:                    <input type="tel" id="bookerPhone" name="phone" class="form-control" placeholder="+972 5x-xxx-xxxx" maxlength="40">
+templates/open_booking.html:59:                    <label class="form-label fw-semibold">Notes (optional)</label>
+templates/open_booking.html:60:                    <textarea id="bookerNotes" name="notes" class="form-control" rows="2" placeholder="Anything you'd like us to know..." maxlength="300"></textarea>
+templates/patient_detail.html:672:                            <h6 class="text-uppercase smallest text-muted mb-3">Last Meeting Record</h6>
+templates/patient_detail.html:691:                                                <strong>Behavior Checklist:</strong>
+templates/patient_detail.html:705:                                    <p class="text-muted mb-0 small">No meeting has been recorded yet.</p>
+templates/patient_detail.html:711:                            <h6 class="text-uppercase smallest text-muted mb-3">Treatment Log</h6>
+templates/patient_detail.html:714:                                <label class="form-label smallest text-uppercase fw-bold text-primary mb-2">Import treatment log (JSON)</label>
+templates/patient_detail.html:736:                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
+templates/patient_detail.html:740:                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior checklist</label>
+templates/patient_detail.html:753:                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Mood summary</label>
+templates/patient_detail.html:757:                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior notes</label>
+templates/patient_detail.html:787:                                                    <strong>Behavior Checklist:</strong>
+templates/patient_detail.html:803:                                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">Delete</button>
+templates/patient_detail.html:811:                                                        <label class="form-label smallest">Meeting #</label>
+templates/patient_detail.html:815:                                                        <label class="form-label smallest">Date</label>
+templates/patient_detail.html:819:                                                        <label class="form-label smallest">Appearance overview</label>
+templates/patient_detail.html:823:                                                        <label class="form-label smallest">Behavior checklist</label>
+templates/patient_detail.html:837:                                                        <label class="form-label smallest">Mood summary</label>
+templates/patient_detail.html:841:                                                        <label class="form-label smallest">Behavior notes</label>
+templates/patient_detail.html:845:                                                        <label class="form-label smallest">Content</label>
+templates/patient_detail.html:849:                                                <button type="submit" class="btn btn-sm btn-primary mt-2 rounded-pill px-3">Save changes</button>
+templates/patient_detail.html:883:                                    <label class="form-label smallest text-uppercase fw-bold">External receipt upload (coming soon)</label>
+templates/patient_detail.html:1006:                            <option value="zoom">Zoom</option>
+templates/patient_detail.html:1007:                            <option value="google-meet">Google Meet</option>
+templates/patient_detail.html:1055:                        <option value="30">30 minutes</option>
+templates/patient_detail.html:1056:                        <option value="60" selected>60 minutes</option>
+templates/patient_detail.html:1057:                        <option value="90">90 minutes</option>
+templates/patient_detail.html:1058:                        <option value="120">120 minutes</option>
+templates/patient_home.html:22:    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" disabled title="Self-booking is disabled">
+templates/patient_home.html:35:    <span class="badge bg-primary-subtle text-primary border">Recurring</span>
+templates/patient_home.html:141:                <div class="small text-muted">Message composer is disabled in preview mode.</div>
+templates/patient_home.html:171:                <div class="text-muted small">No shared documents yet.</div>
+templates/patient_home.html:199:                <div class="text-muted small">No receipts yet.</div>
+templates/register.html:7:            <h2 class="mb-0 fw-bold text-primary">Register as Candidate</h2>
+templates/register.html:17:                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
+templates/register.html:18:                            <input type="text" class="form-control" name="name" id="name" placeholder="John Doe" required>
+templates/register.html:22:                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+templates/register.html:25:                                <input type="email" class="form-control" name="email" id="email" placeholder="john@example.com">
+templates/register.html:30:                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+templates/resources.html:30:                        <p class="text-muted">No public resources available at this time.</p>
