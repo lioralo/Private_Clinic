@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang or 'en' }}" {% if lang == 'he' %}dir="rtl"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book an Appointment</title>
+    <title>{{ t('Book an Appointment') }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
@@ -17,23 +17,23 @@
         {% if not_found %}
         <div class="booking-card card border-0 shadow p-4 text-center">
             <i class="bi bi-calendar-x display-4 text-muted mb-3"></i>
-            <h4>Slot Not Found</h4>
-            <p class="text-muted">This booking link is invalid or has expired.</p>
+            <h4>{{ t('Slot Not Found') }}</h4>
+            <p class="text-muted">{{ t('This booking link is invalid or has expired.') }}</p>
         </div>
 
         {% elif already_booked %}
         <div class="booking-card card border-0 shadow p-4 text-center">
             <i class="bi bi-check-circle-fill display-4 text-success mb-3"></i>
-            <h4>Already Booked</h4>
-            <p class="text-muted">This time slot has already been taken. Please contact us directly for another appointment.</p>
+            <h4>{{ t('Already Booked') }}</h4>
+            <p class="text-muted">{{ t('This time slot has already been taken. Please contact us directly for another appointment.') }}</p>
         </div>
 
         {% elif slot %}
         <div class="booking-card card border-0 shadow p-4">
             <div class="text-center mb-4">
                 <i class="bi bi-calendar2-check display-5 text-primary mb-2"></i>
-                <h4 class="fw-bold">Book an Appointment</h4>
-                <p class="text-muted small mb-0">Please fill in your details to reserve this time slot.</p>
+                <h4 class="fw-bold">{{ t('Book an Appointment') }}</h4>
+                <p class="text-muted small mb-0">{{ t('Please fill in your details to reserve this time slot.') }}</p>
             </div>
 
             <div class="slot-badge mb-4 d-flex align-items-center gap-3">
@@ -46,21 +46,28 @@
 
             <div id="bookingResult" class="d-none alert mb-3"></div>
 
-            <form id="openBookingForm">
+            <form
+                id="openBookingForm"
+                data-msg-booking="{{ t('Booking...') }}"
+                data-msg-confirmed="{{ t('Booking confirmed!') }}"
+                data-msg-failed="{{ t('Booking failed. Please try again.') }}"
+                data-msg-network="{{ t('Network error. Please try again.') }}"
+                data-msg-confirm="{{ t('Confirm Booking') }}"
+            >
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Your Name <span class="text-danger">*</span></label>
-                    <input type="text" id="bookerName" name="name" class="form-control" placeholder="First and last name" required maxlength="120">
+                    <label class="form-label fw-semibold">{{ t('Your Name') }} <span class="text-danger">*</span></label>
+                    <input type="text" id="bookerName" name="name" class="form-control" placeholder="{{ t('First and last name') }}" required maxlength="120">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Phone Number</label>
+                    <label class="form-label fw-semibold">{{ t('Phone Number') }}</label>
                     <input type="tel" id="bookerPhone" name="phone" class="form-control" placeholder="+972 5x-xxx-xxxx" maxlength="40">
                 </div>
                 <div class="mb-4">
-                    <label class="form-label fw-semibold">Notes (optional)</label>
-                    <textarea id="bookerNotes" name="notes" class="form-control" rows="2" placeholder="Anything you'd like us to know..." maxlength="300"></textarea>
+                    <label class="form-label fw-semibold">{{ t('Notes (optional)') }}</label>
+                    <textarea id="bookerNotes" name="notes" class="form-control" rows="2" placeholder="{{ t('Anything you would like us to know...') }}" maxlength="300"></textarea>
                 </div>
                 <button type="submit" id="submitBookingBtn" class="btn btn-primary w-100 fw-semibold">
-                    <i class="bi bi-calendar-check me-1"></i> Confirm Booking
+                    <i class="bi bi-calendar-check me-1"></i> {{ t('Confirm Booking') }}
                 </button>
             </form>
         </div>
@@ -70,11 +77,19 @@
             const form = document.getElementById('openBookingForm');
             const resultBox = document.getElementById('bookingResult');
             const submitBtn = document.getElementById('submitBookingBtn');
+            const ds = form ? form.dataset : {};
+            const I18N = {
+                booking: ds.msgBooking || 'Booking...',
+                confirmed: ds.msgConfirmed || 'Booking confirmed!',
+                failed: ds.msgFailed || 'Booking failed. Please try again.',
+                network: ds.msgNetwork || 'Network error. Please try again.',
+                confirm: ds.msgConfirm || 'Confirm Booking'
+            };
 
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 submitBtn.disabled = true;
-                submitBtn.textContent = 'Booking...';
+                submitBtn.textContent = I18N.booking;
 
                 const body = new URLSearchParams({
                     name: document.getElementById('bookerName').value.trim(),
@@ -92,21 +107,21 @@
                     resultBox.classList.remove('d-none', 'alert-success', 'alert-danger');
                     if (data.status === 'success') {
                         resultBox.classList.add('alert-success');
-                        resultBox.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + (data.message || 'Booking confirmed!');
+                        resultBox.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + (data.message || I18N.confirmed);
                         form.innerHTML = '';
                     } else {
                         resultBox.classList.add('alert-danger');
-                        resultBox.textContent = data.message || 'Booking failed. Please try again.';
+                        resultBox.textContent = data.message || I18N.failed;
                         submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="bi bi-calendar-check me-1"></i> Confirm Booking';
+                        submitBtn.innerHTML = '<i class="bi bi-calendar-check me-1"></i> ' + I18N.confirm;
                     }
                 })
                 .catch(() => {
                     resultBox.classList.remove('d-none', 'alert-success');
                     resultBox.classList.add('alert-danger');
-                    resultBox.textContent = 'Network error. Please try again.';
+                    resultBox.textContent = I18N.network;
                     submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="bi bi-calendar-check me-1"></i> Confirm Booking';
+                    submitBtn.innerHTML = '<i class="bi bi-calendar-check me-1"></i> ' + I18N.confirm;
                 });
             });
         });

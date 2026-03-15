@@ -1,53 +1,45 @@
-templates/admin_profile.html:15:                            <label class="form-label fw-bold small">Display Name</label>
-templates/admin_profile.html:19:                            <label class="form-label fw-bold small">Username</label>
-templates/admin_profile.html:23:                            <label class="form-label fw-bold small">Email</label>
-templates/admin_profile.html:27:                            <label class="form-label fw-bold small">Phone</label>
-templates/admin_profile.html:31:                            <label class="form-label fw-bold small">ID Number</label>
-templates/admin_profile.html:35:                            <label class="form-label fw-bold small">Date of Birth</label>
-templates/admin_profile.html:58:                            <label class="form-label fw-bold small">Backup File</label>
-templates/admin_profile.html:63:                                <option value="">No encrypted backups found</option>
 templates/calendar.html:202:                        <option value="google-meet">Google Meet</option>
-templates/calendar.html:581:                    <option value="google-meet">Google Meet</option>
-templates/calendar.html:672:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${payload.date || ''}"></div>
-templates/calendar.html:673:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${payload.time || ''}"></div>
-templates/calendar.html:674:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${payload.end_time || ''}"></div>
-templates/calendar.html:675:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${payload.meeting_title || payload.title || ''}"></div>
-templates/calendar.html:676:            <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${payload.facilitator || ''}"></div>
-templates/calendar.html:677:            <div class="mb-2"><label class="form-label small">Meeting Type</label>
-templates/calendar.html:679:                    <option value="in-person">In-person</option>
-templates/calendar.html:680:                    <option value="zoom">Zoom</option>
-templates/calendar.html:681:                    <option value="google-meet">Google Meet</option>
-templates/calendar.html:684:            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${payload.meeting_link || ''}"></div>
-templates/calendar.html:685:            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
-templates/calendar.html:757:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editBlockDate" value="${payload.date || ''}"></div>
-templates/calendar.html:758:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editBlockTime" value="${payload.time || ''}"></div>
-templates/calendar.html:759:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editBlockEndTime" value="${payload.end_time || ''}"></div>
-templates/calendar.html:760:            <div class="mb-2"><label class="form-label small">Type</label>
-templates/calendar.html:762:                    <option value="blocked">Blocked</option>
-templates/calendar.html:763:                    <option value="special">Special</option>
-templates/calendar.html:766:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editBlockTitle" value="${payload.title || ''}"></div>
-templates/calendar.html:769:                <label class="form-check-label small" for="editBlockPrivate">Hide title from patients</label>
-templates/calendar.html:771:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="deleteBlockInsideEdit">Delete</button>
-templates/calendar.html:897:            bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-muted small">No bookings found in this range.</td></tr>';
-templates/calendar.html:920:                    <button type="button" class="btn btn-sm btn-outline-primary me-1 manage-edit" data-item="${escaped}">Edit</button>
-templates/calendar.html:921:                    <button type="button" class="btn btn-sm btn-outline-danger manage-delete" data-item="${escaped}">Delete</button>
-templates/calendar.html:951:                bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-danger small">Failed loading bookings.</td></tr>';
-templates/calendar.html:977:            <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
-templates/calendar.html:979:                <label class="form-label small">Select Patient</label>
-templates/calendar.html:981:                    <option value="">— enter name below instead —</option>
-templates/calendar.html:986:                <label class="form-label small">Or Enter Name Directly</label>
-templates/calendar.html:987:                <input type="text" class="form-control form-control-sm" id="vacMgrName" placeholder="Name / guest">
-templates/calendar.html:990:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="vacMgrDeleteBtn">Delete This Vacancy</button>
-templates/calendar.html:1060:            vacanciesContainer.innerHTML = '<div class="small text-muted">No open vacancy slots.</div>';
-templates/calendar.html:1066:            let statusBadge = '<span class="badge bg-secondary">Booked</span>';
-templates/calendar.html:1068:                statusBadge = '<span class="badge bg-success">Recurring Weekly</span>';
-templates/calendar.html:1070:                statusBadge = '<span class="badge bg-success">Open</span>';
-templates/calendar.html:1138:                if (vacanciesContainer) vacanciesContainer.innerHTML = '<div class="small text-danger">Failed loading vacancies.</div>';
-templates/calendar.html:1161:            const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
-templates/calendar.html:1387:            <div class="mb-2 small text-muted">Should this vacancy apply only once or recur every week?</div>
-templates/calendar.html:1389:                <label class="form-label small">Vacancy Pattern</label>
-templates/calendar.html:1391:                    <option value="one-time">One-time (this date only)</option>
-templates/calendar.html:1392:                    <option value="weekly" selected>Weekly recurring</option>
+templates/calendar.html:602:                    <option value="google-meet">Google Meet</option>
+templates/calendar.html:693:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editGroupDate" value="${payload.date || ''}"></div>
+templates/calendar.html:694:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editGroupStart" value="${payload.time || ''}"></div>
+templates/calendar.html:695:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editGroupEnd" value="${payload.end_time || ''}"></div>
+templates/calendar.html:696:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editGroupTitle" value="${payload.meeting_title || payload.title || ''}"></div>
+templates/calendar.html:697:            <div class="mb-2"><label class="form-label small">Facilitator</label><input type="text" class="form-control form-control-sm" id="editGroupFacilitator" value="${payload.facilitator || ''}"></div>
+templates/calendar.html:698:            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+templates/calendar.html:700:                    <option value="in-person">In-person</option>
+templates/calendar.html:701:                    <option value="zoom">Zoom</option>
+templates/calendar.html:702:                    <option value="google-meet">Google Meet</option>
+templates/calendar.html:705:            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editGroupMeetingLink" value="${payload.meeting_link || ''}"></div>
+templates/calendar.html:706:            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteGroupSessionInsideEdit">Delete Group Session</button>
+templates/calendar.html:778:            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editBlockDate" value="${payload.date || ''}"></div>
+templates/calendar.html:779:            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editBlockTime" value="${payload.time || ''}"></div>
+templates/calendar.html:780:            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editBlockEndTime" value="${payload.end_time || ''}"></div>
+templates/calendar.html:781:            <div class="mb-2"><label class="form-label small">Type</label>
+templates/calendar.html:783:                    <option value="blocked">Blocked</option>
+templates/calendar.html:784:                    <option value="special">Special</option>
+templates/calendar.html:787:            <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editBlockTitle" value="${payload.title || ''}"></div>
+templates/calendar.html:790:                <label class="form-check-label small" for="editBlockPrivate">Hide title from patients</label>
+templates/calendar.html:792:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="deleteBlockInsideEdit">Delete</button>
+templates/calendar.html:918:            bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-muted small">No bookings found in this range.</td></tr>';
+templates/calendar.html:941:                    <button type="button" class="btn btn-sm btn-outline-primary me-1 manage-edit" data-item="${escaped}">Edit</button>
+templates/calendar.html:942:                    <button type="button" class="btn btn-sm btn-outline-danger manage-delete" data-item="${escaped}">Delete</button>
+templates/calendar.html:972:                bookingManagementBody.innerHTML = '<tr><td colspan="6" class="text-danger small">Failed loading bookings.</td></tr>';
+templates/calendar.html:998:            <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
+templates/calendar.html:1000:                <label class="form-label small">Select Patient</label>
+templates/calendar.html:1002:                    <option value="">— enter name below instead —</option>
+templates/calendar.html:1007:                <label class="form-label small">Or Enter Name Directly</label>
+templates/calendar.html:1008:                <input type="text" class="form-control form-control-sm" id="vacMgrName" placeholder="Name / guest">
+templates/calendar.html:1011:            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="vacMgrDeleteBtn">Delete This Vacancy</button>
+templates/calendar.html:1081:            vacanciesContainer.innerHTML = '<div class="small text-muted">No open vacancy slots.</div>';
+templates/calendar.html:1087:            let statusBadge = '<span class="badge bg-secondary">Booked</span>';
+templates/calendar.html:1089:                statusBadge = '<span class="badge bg-success">Recurring Weekly</span>';
+templates/calendar.html:1091:                statusBadge = '<span class="badge bg-success">Open</span>';
+templates/calendar.html:1159:                if (vacanciesContainer) vacanciesContainer.innerHTML = '<div class="small text-danger">Failed loading vacancies.</div>';
+templates/calendar.html:1182:            const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
+templates/calendar.html:1408:            <div class="mb-2 small text-muted">Should this vacancy apply only once or recur every week?</div>
+templates/calendar.html:1410:                <label class="form-label small">Vacancy Pattern</label>
+templates/calendar.html:1412:                    <option value="one-time">One-time (this date only)</option>
+templates/calendar.html:1413:                    <option value="weekly" selected>Weekly recurring</option>
 templates/crm.html:111:                    <span class="badge bg-success-subtle text-success border">Self-booking ON</span>
 templates/crm.html:113:                    <span class="badge bg-secondary-subtle text-secondary border">Self-booking OFF</span>
 templates/edit_patient.html:10:            <h2 class="mb-0 fw-bold text-primary">Edit Patient</h2>
@@ -148,19 +140,7 @@ templates/manage_resources.html:48:                                <th class="pe
 templates/manage_resources.html:60:                                        <span class="badge bg-success">Public</span>
 templates/manage_resources.html:62:                                        <span class="badge bg-secondary">Private</span>
 templates/manage_resources.html:74:                                <td colspan="4" class="text-center py-4 text-muted">No resources found.</td>
-templates/open_booking.html:6:    <title>Book an Appointment</title>
-templates/open_booking.html:20:            <h4>Slot Not Found</h4>
-templates/open_booking.html:21:            <p class="text-muted">This booking link is invalid or has expired.</p>
-templates/open_booking.html:27:            <h4>Already Booked</h4>
-templates/open_booking.html:28:            <p class="text-muted">This time slot has already been taken. Please contact us directly for another appointment.</p>
-templates/open_booking.html:35:                <h4 class="fw-bold">Book an Appointment</h4>
-templates/open_booking.html:36:                <p class="text-muted small mb-0">Please fill in your details to reserve this time slot.</p>
-templates/open_booking.html:51:                    <label class="form-label fw-semibold">Your Name <span class="text-danger">*</span></label>
-templates/open_booking.html:52:                    <input type="text" id="bookerName" name="name" class="form-control" placeholder="First and last name" required maxlength="120">
-templates/open_booking.html:55:                    <label class="form-label fw-semibold">Phone Number</label>
 templates/open_booking.html:56:                    <input type="tel" id="bookerPhone" name="phone" class="form-control" placeholder="+972 5x-xxx-xxxx" maxlength="40">
-templates/open_booking.html:59:                    <label class="form-label fw-semibold">Notes (optional)</label>
-templates/open_booking.html:60:                    <textarea id="bookerNotes" name="notes" class="form-control" rows="2" placeholder="Anything you'd like us to know..." maxlength="300"></textarea>
 templates/patient_detail.html:672:                            <h6 class="text-uppercase smallest text-muted mb-3">Last Meeting Record</h6>
 templates/patient_detail.html:691:                                                <strong>Behavior Checklist:</strong>
 templates/patient_detail.html:705:                                    <p class="text-muted mb-0 small">No meeting has been recorded yet.</p>

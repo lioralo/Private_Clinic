@@ -2,6 +2,30 @@
 
 ---
 
+## Session 20
+
+**Date:** March 15, 2026
+
+**Objective:** Continue localization pass 3 by reducing untranslated UI text in high-impact pages.
+
+**Changes Made:**
+
+1. **Admin Profile Localization**
+- Converted static labels/buttons/messages in `templates/admin_profile.html` to translation helper calls.
+
+2. **Legacy Open Booking Page Localization**
+- Localized static text in `templates/open_booking.html`.
+- Refactored JavaScript message localization to use `data-*` attributes, avoiding template syntax in JS and fixing diagnostics.
+
+3. **Hebrew Dictionary Expansion**
+- Added new keys in `translations/he.json` for admin profile and legacy open-booking text.
+
+4. **Translation Audit Improvement**
+- Regenerated `translation_audit.txt` and reduced remaining unmatched entries from `201` to `181`.
+
+**Test Results:**
+- `python test_app.py` passed (`36` tests).
+
 ## Session 19
 
 **Date:** March 15, 2026
