@@ -15,7 +15,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re
 from docx import Document
 from datetime import datetime, timedelta
-from flask import jsonify
 
 
 app = Flask(__name__)
@@ -317,8 +316,8 @@ def routine_backup_guard():
     try:
         perform_routine_encrypted_backup(app.config.get('DATABASE', DATABASE))
     except Exception:
-        # Keep requests alive even if backup fails.
-        pass
+        # Keep requests alive even if backup fails, but surface diagnostics.
+        app.logger.exception('Routine encrypted backup failed')
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None, display_name=None):
@@ -1514,11 +1513,20 @@ def crm_dashboard():
     }
 
     patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id)
+    counts_row = db.execute('''
+        SELECT
+            COUNT(*) AS all_count,
+            SUM(CASE WHEN status = 'ongoing' THEN 1 ELSE 0 END) AS ongoing_count,
+            SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS candidate_waiting_count,
+            SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_count
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+    ''').fetchone()
     counts = {
-        'all': db.execute('SELECT COUNT(*) AS c FROM patients WHERE COALESCE(is_deleted, 0) = 0').fetchone()['c'],
-        'ongoing': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'ongoing' AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
-        'candidate_waiting': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status IN ('candidate', 'waiting for scheduling', 'waiting') AND COALESCE(is_deleted, 0) = 0").fetchone()['c'],
-        'archived': db.execute("SELECT COUNT(*) AS c FROM patients WHERE status = 'archived' AND COALESCE(is_deleted, 0) = 0").fetchone()['c']
+        'all': counts_row['all_count'] or 0,
+        'ongoing': counts_row['ongoing_count'] or 0,
+        'candidate_waiting': counts_row['candidate_waiting_count'] or 0,
+        'archived': counts_row['archived_count'] or 0
     }
     return render_template('crm.html', patients=patients, status=status, counts=counts,
                            patient_type=patient_type, search_query=search_query, sort_by=sort_by)
@@ -4092,8 +4100,6 @@ def export_patient_history(patient_id):
         'receipts': receipts
     }
 
-    import json
-    from flask import Response
     response = Response(json.dumps(data, indent=4), mimetype='application/json')
     response.headers['Content-Disposition'] = f'attachment; filename=patient_{patient_id}_history.json'
     return response
@@ -4112,9 +4118,6 @@ def export_calendar():
         FROM appointments
         ORDER BY appointment_date ASC, appointment_time ASC
     ''').fetchall()
-
-    import json
-    from flask import Response
 
     data = [dict(row) for row in appointments]
     response = Response(json.dumps(data, indent=4), mimetype='application/json')
@@ -4367,7 +4370,6 @@ def import_calendar():
         return redirect(url_for('patients'))
 
     if file and file.filename.endswith('.json'):
-        import json
         try:
             data = json.load(file)
             # Sort by date and time
@@ -4425,8 +4427,6 @@ def import_patient_history(patient_id):
         return redirect_to_patient_tab(patient_id, 'notes')
 
     if file and file.filename.endswith('.json'):
-
-        import json
         try:
             data = json.load(file)
             db = get_db()

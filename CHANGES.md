@@ -2,6 +2,42 @@
 
 ---
 
+## Session 21
+
+**Date:** March 15, 2026
+
+**Objective:** Remove redundant script, improve runtime efficiency in CRM counts, and strengthen operational diagnostics while preserving behavior.
+
+**Changes Made:**
+
+1. **Removed Redundant Script**
+- Deleted unused frontend script file `static/script.js`.
+- Verified no template references were using this file.
+
+2. **Import Cleanup in App Module**
+- Removed duplicate top-level `jsonify` import from `app.py`.
+- Removed redundant function-local imports of `json` and `Response` in export/import routes, using existing module-level imports instead.
+
+3. **CRM Dashboard Query Optimization**
+- Replaced four separate patient `COUNT(*)` queries with a single aggregated SQL query in `/crm` route.
+- Preserved count semantics for:
+  - all active patients,
+  - ongoing,
+  - candidate/waiting,
+  - archived.
+
+4. **Backup Robustness and Debug Visibility**
+- Updated routine backup guard to log backup failures via Flask logger while continuing request processing.
+- Behavior remains non-blocking for end users if backup execution fails.
+
+**Verification Performed:**
+- Syntax compilation check for `app.py`.
+- Full app tests via `python test_app.py`.
+- Security tests via `python test_security.py`.
+
+**Result:**
+- No behavioral regressions observed in automated verification.
+
 ## Session 20
 
 **Date:** March 15, 2026
