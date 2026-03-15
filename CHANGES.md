@@ -2,6 +2,41 @@
 
 ---
 
+## Session 17
+
+**Date:** March 15, 2026
+
+**Objective:** Address intake tab layout issues, quick-book recurrence control, and make Hebrew translation editing easier through a dictionary file.
+
+**Changes Made:**
+
+1. **Initial Intake Add-Patient Cleanup**
+  - Removed the two free-text intake fields from the Add Patient page.
+  - Intake setup now starts cleanly from the dedicated intake evaluation workflow.
+
+2. **Quick Book Recurrence Switch (Patient Quick Actions)**
+  - Added recurrence mode selector to quick-book form:
+    - Auto (by patient type)
+    - One-time meeting
+    - Recurring weekly meeting
+  - Backend now respects this selector and validates constraints.
+  - Recurring mode is rejected for initial-intake patients with a clear validation message.
+
+3. **Intake Tab Layout Fix**
+  - Restored summary information cards to Summary tab.
+  - Moved the actual Intake Evaluation form card to the Intake tab using the correct DOM block.
+
+4. **Hebrew Translation Dictionary File**
+  - Added editable dictionary file: `translations/he.json`.
+  - Added override loader in `app.py` so dictionary edits apply without code changes.
+  - Localized additional hardcoded form/button text in add-patient and quick-actions sections.
+
+5. **Documentation**
+  - Updated README with Hebrew dictionary usage notes.
+
+**Test Results:**
+- `python test_app.py` passed (`34` tests).
+
 ## Session 16
 
 **Date:** March 12, 2026

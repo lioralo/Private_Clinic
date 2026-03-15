@@ -60,7 +60,7 @@
             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
                 <div class="row">
                     <div class="col-lg-7">
-                        <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeFormBlock">
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
                             <div class="card-body p-4 bg-light bg-opacity-10">
                                 <div class="row g-4">
                                     <div class="col-md-6">
@@ -102,7 +102,7 @@
                         </div>
 
                         <!-- Background Info Section -->
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                        <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeEvaluationFormBlock">
                             <div class="card-header bg-white py-3 border-0">
                                 <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-person-lines-fill me-2"></i>{{ t('Background') }}</h5>
                             </div>
@@ -941,7 +941,7 @@
     <div class="col-xl-3 order-1 order-xl-2">
         <div class="card border-0 shadow-sm rounded-4 patient-actions-panel">
             <div class="card-header bg-white border-0">
-                <h6 class="mb-0 text-primary fw-bold"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</h6>
+                <h6 class="mb-0 text-primary fw-bold"><i class="bi bi-lightning-charge me-2"></i>{{ t('Quick Actions') }}</h6>
             </div>
             <div class="card-body d-grid gap-2">
                 {% if patient['status'] == 'candidate' %}
@@ -979,10 +979,10 @@
                     </button>
                 </form>
                 {% endif %}
-                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-outline-info rounded-pill w-100" title="View and book available appointment slots">
+                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-outline-info rounded-pill w-100" title="{{ t('View and book available appointment slots') }}">
                     <i class="bi bi-calendar-check me-1"></i>{{ 'Book Appointment' if lang == 'en' else 'זמן פגישה' }}
                 </a>
-                <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-dark rounded-pill w-100" title="Preview what this patient sees in their portal">
+                <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-dark rounded-pill w-100" title="{{ t('Preview what this patient sees in their portal') }}">
                     <i class="bi bi-eye me-1"></i>{{ 'Portal Preview' if lang == 'en' else 'תצוגת פורטל' }}
                 </a>
                 <div class="border rounded-3 p-2 bg-light bg-opacity-50 mt-1">
@@ -1002,11 +1002,16 @@
                             </div>
                         </div>
                         <select name="meeting_type" class="form-select form-select-sm">
-                            <option value="in-person">In-person</option>
+                            <option value="in-person">{{ t('In-person') }}</option>
                             <option value="zoom">Zoom</option>
                             <option value="google-meet">Google Meet</option>
                         </select>
-                        <input type="text" name="meeting_title" class="form-control form-control-sm" placeholder="### private meeting">
+                        <select name="recurrence_mode" class="form-select form-select-sm">
+                            <option value="auto">{{ 'Auto (by patient type)' if lang == 'en' else 'אוטומטי (לפי סוג מטופל)' }}</option>
+                            <option value="one-time">{{ 'One-time meeting' if lang == 'en' else 'פגישה חד-פעמית' }}</option>
+                            <option value="recurring">{{ 'Recurring weekly meeting' if lang == 'en' else 'פגישה שבועית חוזרת' }}</option>
+                        </select>
+                        <input type="text" name="meeting_title" class="form-control form-control-sm" placeholder="{{ t('Meeting title (optional)') }}">
                         <button type="submit" class="btn btn-sm btn-primary rounded-pill">{{ 'Book Now' if lang == 'en' else 'קבע עכשיו' }}</button>
                     </form>
                 </div>
@@ -1139,10 +1144,10 @@
 document.addEventListener('DOMContentLoaded', function() {
     const tabs = document.querySelectorAll('#patientTabs button[data-bs-toggle="tab"]');
     const messagesUnreadBadge = document.getElementById('messagesUnreadBadge');
-    const intakeFormBlock = document.getElementById('intakeFormBlock');
+    const intakeEvaluationFormBlock = document.getElementById('intakeEvaluationFormBlock');
     const intakeFormHost = document.getElementById('intakeFormHost');
-    if (intakeFormBlock && intakeFormHost) {
-        intakeFormHost.appendChild(intakeFormBlock);
+    if (intakeEvaluationFormBlock && intakeFormHost) {
+        intakeFormHost.appendChild(intakeEvaluationFormBlock);
     }
 
     let initialTab = '{{ active_tab or "info" }}';

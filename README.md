@@ -28,3 +28,9 @@ Run the tests with:
 ```bash
 python test_app.py
 ```
+
+## Hebrew Dictionary
+- The app supports an editable Hebrew dictionary file at `translations/he.json`.
+- You can update or correct translations there without changing Python code.
+- Keys are the original English text and values are Hebrew translations.
+- Missing keys gracefully fall back to the built-in translation map and then to the original English text.

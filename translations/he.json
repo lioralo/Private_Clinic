@@ -1,0 +1,19 @@
+{
+  "Candidate": "מועמד",
+  "Waiting for Scheduling": "ממתין לקביעת תור",
+  "Patient Type": "סוג מטופל",
+  "Private": "פרטי",
+  "Residency": "התמחות",
+  "Group": "קבוצתי",
+  "Initial Intake": "אינטייק ראשוני",
+  "Register Patient Record": "רישום תיק מטופל",
+  "New records are automatically initialized in the database.": "רשומות חדשות מאותחלות אוטומטית במסד הנתונים.",
+  "Quick Actions": "פעולות מהירות",
+  "View and book available appointment slots": "צפייה וקביעה של תורים זמינים",
+  "Preview what this patient sees in their portal": "תצוגה מקדימה של מה שהמטופל רואה בפורטל",
+  "Meeting title (optional)": "כותרת פגישה (אופציונלי)",
+  "Auto (by patient type)": "אוטומטי (לפי סוג מטופל)",
+  "One-time meeting": "פגישה חד-פעמית",
+  "Recurring weekly meeting": "פגישה שבועית חוזרת",
+  "Initial-intake patients can only be booked as one-time meetings.": "מטופלי אינטייק יכולים להיקבע רק כפגישה חד-פעמית."
+}

@@ -259,6 +259,27 @@ HEBREW_TRANSLATIONS = {
     "List": "רשימה"
 }
 
+TRANSLATION_OVERRIDES_FILE = Path(__file__).resolve().parent / 'translations' / 'he.json'
+
+
+def load_hebrew_translation_overrides():
+    if not TRANSLATION_OVERRIDES_FILE.exists():
+        return {}
+    try:
+        payload = json.loads(TRANSLATION_OVERRIDES_FILE.read_text(encoding='utf-8'))
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            str(k): str(v)
+            for k, v in payload.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
+    except Exception:
+        return {}
+
+
+HEBREW_TRANSLATIONS.update(load_hebrew_translation_overrides())
+
 @app.context_processor
 def inject_translations():
     def t(text):
@@ -3500,6 +3521,7 @@ def quick_book_patient_appointment(patient_id):
     time_raw = (request.form.get('time') or '').strip()
     end_time_raw = (request.form.get('end_time') or '').strip()
     meeting_type = (request.form.get('meeting_type') or 'in-person').strip() or 'in-person'
+    recurrence_mode = (request.form.get('recurrence_mode') or 'auto').strip().lower()
     meeting_link = (request.form.get('meeting_link') or '').strip()
     meeting_title = (request.form.get('meeting_title') or '').strip()
     save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
@@ -3540,7 +3562,20 @@ def quick_book_patient_appointment(patient_id):
     if patient_type == 'initial-intake':
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
-    is_recurring = 1 if patient_status == 'ongoing' and patient_type != 'initial-intake' else 0
+    default_recurring = 1 if patient_status == 'ongoing' and patient_type != 'initial-intake' else 0
+    if recurrence_mode not in ('auto', 'one-time', 'recurring'):
+        recurrence_mode = 'auto'
+
+    if recurrence_mode == 'one-time':
+        is_recurring = 0
+    elif recurrence_mode == 'recurring':
+        if patient_type == 'initial-intake':
+            flash('Initial-intake patients can only be booked as one-time meetings.', 'error')
+            return redirect_to_patient_tab(patient_id, 'info')
+        is_recurring = 1
+    else:
+        is_recurring = default_recurring
+
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(booking_date)) if is_recurring else None
     recurrence_end_date = (booking_date + timedelta(days=365)).isoformat() if is_recurring else None

@@ -7,7 +7,7 @@
             <a href="{{ url_for('patients', status='ongoing') }}" class="btn btn-outline-secondary btn-sm rounded-circle p-2 me-3 lh-1">
                 <i class="bi bi-chevron-left"></i>
             </a>
-            <h2 class="mb-0 fw-bold text-primary">Add New Patient</h2>
+            <h2 class="mb-0 fw-bold text-primary">{{ t('Add New Patient') }}</h2>
         </div>
 
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
@@ -17,33 +17,33 @@
                     
                     <div class="row g-4">
                         <div class="col-md-8">
-                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
-                            <input type="text" class="form-control" name="name" id="name" placeholder="John Doe" required>
+                            <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }}</label>
+                            <input type="text" class="form-control" name="name" id="name" placeholder="{{ t('Full Name') }}" required>
                         </div>
 
                         <div class="col-md-4">
-                            <label for="status" class="form-label text-uppercase smallest fw-bold">Initial Status</label>
+                            <label for="status" class="form-label text-uppercase smallest fw-bold">{{ t('Initial Status') }}</label>
                             <select class="form-select" name="status" id="status" required>
-                                <option value="ongoing">Ongoing</option>
-                                <option value="candidate">Candidate</option>
-                                <option value="waiting for scheduling">Waiting for Scheduling</option>
-                                <option value="archived">Archived</option>
+                                <option value="ongoing">{{ t('Ongoing') }}</option>
+                                <option value="candidate">{{ t('Candidate') }}</option>
+                                <option value="waiting for scheduling">{{ t('Waiting for Scheduling') }}</option>
+                                <option value="archived">{{ t('Archived') }}</option>
                             </select>
                         </div>
 
                         <div class="col-md-12">
-                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+                            <label for="email" class="form-label text-uppercase smallest fw-bold">{{ t('Email Address') }}</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
-                                <input type="email" class="form-control" name="email" id="email" placeholder="john@example.com">
+                                <input type="email" class="form-control" name="email" id="email" placeholder="{{ t('Email Address') }}">
                             </div>
                         </div>
 
                         <div class="col-md-12">
-                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+                            <label for="phone" class="form-label text-uppercase smallest fw-bold">{{ t('Phone Number') }}</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
-                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="+1 (234) 567-890">
+                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="{{ t('Phone Number') }}">
                             </div>
                         </div>
 
@@ -54,49 +54,42 @@
 
                         <div class="col-md-6">
                             <label for="id_number" class="form-label text-uppercase smallest fw-bold">{{ t('ID Number') }}</label>
-                            <input type="text" class="form-control" name="id_number" id="id_number" placeholder="000000000" maxlength="20">
+                            <input type="text" class="form-control" name="id_number" id="id_number" placeholder="{{ t('ID Number') }}" maxlength="20">
                         </div>
 
                         <div class="col-md-12">
-                            <label class="form-label text-uppercase smallest fw-bold">Patient Type</label>
+                            <label class="form-label text-uppercase smallest fw-bold">{{ t('Patient Type') }}</label>
                             <div class="d-flex gap-3 mt-1">
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="patient_type" id="typePrivate" value="private" checked>
                                     <label class="form-check-label" for="typePrivate">
-                                        <i class="bi bi-person me-1"></i>Private
+                                        <i class="bi bi-person me-1"></i>{{ t('Private') }}
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="patient_type" id="typeResidency" value="residency">
                                     <label class="form-check-label" for="typeResidency">
-                                        <i class="bi bi-mortarboard me-1"></i>Residency
+                                        <i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="patient_type" id="typeGroup" value="group">
                                     <label class="form-check-label" for="typeGroup">
-                                        <i class="bi bi-people-fill me-1"></i>Group
+                                        <i class="bi bi-people-fill me-1"></i>{{ t('Group') }}
                                     </label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="patient_type" id="typeInitialIntake" value="initial-intake">
                                     <label class="form-check-label" for="typeInitialIntake">
-                                        <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
+                                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Initial Intake') }}
                                     </label>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-md-12 d-none" id="intakeFieldsWrap">
-                            <label for="intake_assessment" class="form-label text-uppercase smallest fw-bold">Initial Intake Assessment</label>
-                            <textarea class="form-control mb-3" name="intake_assessment" id="intake_assessment" rows="3" placeholder="Brief intake assessment"></textarea>
-                            <label for="intake_questionnaire" class="form-label text-uppercase smallest fw-bold">Initial Intake Questionnaire</label>
-                            <textarea class="form-control" name="intake_questionnaire" id="intake_questionnaire" rows="3" placeholder="Intake questionnaire summary"></textarea>
-                        </div>
-
                         <div class="col-12 mt-5">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
-                                <i class="bi bi-person-check me-2"></i> Register Patient Record
+                                <i class="bi bi-person-check me-2"></i> {{ t('Register Patient Record') }}
                             </button>
                         </div>
                     </div>
@@ -104,7 +97,7 @@
             </div>
         </div>
         <p class="text-center mt-4 text-muted small">
-            New records are automatically initialized in the database.
+            {{ t('New records are automatically initialized in the database.') }}
         </p>
     </div>
 </div>
@@ -112,20 +105,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const typeInputs = document.querySelectorAll('input[name="patient_type"]');
-    const intakeWrap = document.getElementById('intakeFieldsWrap');
-    const intakeAssessment = document.getElementById('intake_assessment');
-    const intakeQuestionnaire = document.getElementById('intake_questionnaire');
-
-    function syncIntakeFields() {
-        const selected = document.querySelector('input[name="patient_type"]:checked');
-        const isIntake = selected && selected.value === 'initial-intake';
-        intakeWrap.classList.toggle('d-none', !isIntake);
-        intakeAssessment.disabled = !isIntake;
-        intakeQuestionnaire.disabled = !isIntake;
-    }
-
-    typeInputs.forEach((input) => input.addEventListener('change', syncIntakeFields));
-    syncIntakeFields();
+    typeInputs.forEach((input) => input.addEventListener('change', function () {
+        if (input.checked && input.value === 'initial-intake') {
+            document.getElementById('status').value = 'candidate';
+        }
+    }));
 });
 </script>
 {% endblock %}
