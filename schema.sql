@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS patients (
     birth_date DATE,
     id_number TEXT,
     status TEXT NOT NULL, -- 'ongoing', 'archived', 'candidate'
+    is_deleted BOOLEAN DEFAULT 0,
+    deleted_at TIMESTAMP,
     can_self_schedule BOOLEAN DEFAULT 0,
     patient_type TEXT DEFAULT 'private',
     has_intake_tab BOOLEAN DEFAULT 0,
@@ -214,3 +216,28 @@ CREATE TABLE IF NOT EXISTS group_sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES groups (id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id);
+
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date);
+CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status);
+
+CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp);
+
+CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status);
+CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time);
+CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time);
+
+CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at);
+CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at);
+CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status);

@@ -2,6 +2,37 @@
 
 ---
 
+## Session 22
+
+**Date:** March 15, 2026
+
+**Objective:** Apply deeper database performance hardening with zero feature changes.
+
+**Changes Made:**
+
+1. **Database Indexing Hardening**
+- Added a conservative, idempotent index set in `init_db()` (`app.py`) for high-frequency query patterns.
+- Added matching index declarations in `schema.sql` so new database setups are optimized immediately.
+
+2. **Index Coverage Added**
+- Patients filters: status/type with soft-delete flag.
+- Users by `patient_id` lookup.
+- Appointments by patient/date/time and status/date lookup patterns.
+- Notes, receipts, files by `patient_id` + `created_at` sort/filter paths.
+- Messages by recipient/read/timestamp and sender-recipient conversations.
+- Calendar availability/blocks tables by date/time/status.
+- Group membership/session lookup paths.
+- Notifications unread sorting and goals by patient/status.
+
+**Verification Performed:**
+- Syntax compilation for app module.
+- Full application tests (`python test_app.py`).
+- Security tests (`python test_security.py`).
+
+**Result:**
+- No functional behavior changes introduced.
+- Automated tests remained green after index hardening.
+
 ## Session 21
 
 **Date:** March 15, 2026

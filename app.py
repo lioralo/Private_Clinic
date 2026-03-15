@@ -875,6 +875,32 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # Performance indexes for common filters and sort paths.
+        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
+
+        db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
+
         db.commit()
 
         # Check if admin exists
