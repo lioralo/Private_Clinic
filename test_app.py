@@ -593,6 +593,84 @@ class ClinicTestCase(unittest.TestCase):
             count = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id = 1').fetchone()['c']
             assert count == 0
 
+    def test_public_self_booking_requires_phone_or_email(self):
+        self.login('admin', 'admin')
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['09:00', '10:00', '12:30', '14:00'])
+        self.add_vacancy(booking_date, booking_time, duration_minutes=60)
+
+        link_rv = self.client.post('/api/calendar/public-link')
+        assert link_rv.status_code == 200
+        token = link_rv.get_json().get('token')
+        assert token
+
+        public_rv = self.client.post(f'/api/calendar/public/{token}/book', data=dict(
+            name='Public Booker',
+            date=booking_date,
+            time=booking_time,
+            duration_minutes='60'
+        ))
+        assert public_rv.status_code == 400
+        assert public_rv.get_json().get('message') == 'Phone or email is required.'
+
+    def test_public_self_booking_creates_pending_patient_and_notification(self):
+        self.login('admin', 'admin')
+        booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['09:00', '10:00', '12:30', '14:00'])
+        self.add_vacancy(booking_date, booking_time, duration_minutes=60)
+
+        link_rv = self.client.post('/api/calendar/public-link')
+        assert link_rv.status_code == 200
+        payload = link_rv.get_json()
+        token = payload.get('token')
+        assert token
+        assert '/calendar/public/' in payload.get('url', '')
+
+        public_rv = self.client.post(f'/api/calendar/public/{token}/book', data=dict(
+            name='Dana Public',
+            birth_date='1990-05-10',
+            phone='050-1234567',
+            date=booking_date,
+            time=booking_time,
+            duration_minutes='60'
+        ))
+        assert public_rv.status_code == 200
+        assert public_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute('''
+                SELECT id, name, status, phone, birth_date
+                FROM patients
+                WHERE name = ?
+                ORDER BY id DESC
+                LIMIT 1
+            ''', ('Dana Public',)).fetchone()
+            assert patient is not None
+            assert patient['status'] == 'waiting'
+            assert patient['phone'] == '050-1234567'
+            assert patient['birth_date'] == '1990-05-10'
+
+            appt = db.execute('''
+                SELECT patient_id, appointment_date, appointment_time, is_recurring
+                FROM appointments
+                WHERE patient_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+            ''', (patient['id'],)).fetchone()
+            assert appt is not None
+            assert appt['appointment_date'] == booking_date
+            assert appt['appointment_time'] == booking_time
+            assert int(appt['is_recurring'] or 0) == 0
+
+            notif = db.execute('''
+                SELECT message
+                FROM notifications
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert notif is not None
+            assert 'New pending patient' in notif['message']
+            assert 'Dana Public' in notif['message']
+
     def test_calendar_follow_up_alert_for_candidate_decision_needed(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(

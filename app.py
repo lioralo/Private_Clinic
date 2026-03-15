@@ -3,8 +3,10 @@ import sqlite3
 import socket
 import json
 import shutil
+import secrets
 from collections import Counter
 from pathlib import Path
+from urllib.parse import quote
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -802,6 +804,17 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message TEXT NOT NULL,
                 is_read BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS public_booking_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT UNIQUE NOT NULL,
+                created_by INTEGER,
+                is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''')
         except sqlite3.OperationalError:
@@ -2670,6 +2683,41 @@ def build_week_calendar_snapshot(db, week_start, user):
     }
 
 
+def collect_public_available_slots(db, weeks_ahead=10):
+    today = datetime.now().date()
+    week_start = today - timedelta(days=custom_weekday(today))
+    proxy_user = User(0, 'public', 'admin', None, 'public')
+    seen = set()
+    slots = []
+
+    for offset in range(max(1, weeks_ahead)):
+        target_week = week_start + timedelta(days=7 * offset)
+        snapshot = build_week_calendar_snapshot(db, target_week, proxy_user)
+        for slot in snapshot['available_slots']:
+            slot_date = parse_date_safe(slot.get('date'))
+            slot_time = parse_time_safe(slot.get('time'))
+            duration = int(slot.get('duration_minutes') or 60)
+            if not slot_date or not slot_time:
+                continue
+            if slot_date < today:
+                continue
+            key = (slot_date.isoformat(), slot_time.strftime('%H:%M'), duration)
+            if key in seen:
+                continue
+            seen.add(key)
+            end_dt = datetime.combine(slot_date, slot_time) + timedelta(minutes=duration)
+            slots.append({
+                'date': slot_date.isoformat(),
+                'time': slot_time.strftime('%H:%M'),
+                'duration_minutes': duration,
+                'end_time': end_dt.strftime('%H:%M'),
+                'label': f"{slot_date.isoformat()} {slot_time.strftime('%H:%M')} - {end_dt.strftime('%H:%M')} ({duration} min)"
+            })
+
+    slots.sort(key=lambda s: (s['date'], s['time']))
+    return slots
+
+
 @app.route('/calendar')
 @login_required
 def weekly_calendar():
@@ -2690,6 +2738,151 @@ def weekly_calendar():
             return redirect(url_for('patient_home'))
     return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
                            is_admin=(current_user.role == 'admin'))
+
+
+@app.route('/api/calendar/public-link', methods=['POST'])
+@login_required
+def api_create_public_booking_link():
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    token = None
+    for _ in range(10):
+        candidate = secrets.token_urlsafe(16)
+        exists = db.execute('SELECT 1 FROM public_booking_links WHERE token = ?', (candidate,)).fetchone()
+        if not exists:
+            token = candidate
+            break
+    if not token:
+        return jsonify({'status': 'error', 'message': 'Could not create booking link.'}), 500
+
+    db.execute(
+        'INSERT INTO public_booking_links (token, created_by, is_active) VALUES (?, ?, 1)',
+        (token, current_user.id)
+    )
+    db.commit()
+
+    public_url = url_for('open_public_booking_calendar', token=token, _external=True)
+    subject = quote('Self-booking calendar link')
+    body = quote(f'You can book an available slot using this secure link:\n{public_url}')
+    return jsonify({
+        'status': 'success',
+        'token': token,
+        'url': public_url,
+        'mailto': f'mailto:?subject={subject}&body={body}'
+    })
+
+
+@app.route('/calendar/public/<token>')
+def open_public_booking_calendar(token):
+    db = get_db()
+    link_row = db.execute(
+        'SELECT id FROM public_booking_links WHERE token = ? AND COALESCE(is_active, 1) = 1',
+        (token,)
+    ).fetchone()
+
+    if not link_row:
+        return render_template('open_booking_calendar.html', token=token, slots=[], link_invalid=True)
+
+    slots = collect_public_available_slots(db, weeks_ahead=10)
+    return render_template('open_booking_calendar.html', token=token, slots=slots, link_invalid=False)
+
+
+@app.route('/api/calendar/public/<token>/book', methods=['POST'])
+@csrf.exempt
+def api_public_calendar_book(token):
+    db = get_db()
+    link_row = db.execute(
+        'SELECT id FROM public_booking_links WHERE token = ? AND COALESCE(is_active, 1) = 1',
+        (token,)
+    ).fetchone()
+    if not link_row:
+        return jsonify({'status': 'error', 'message': 'Booking link is invalid or expired.'}), 404
+
+    name = (request.form.get('name') or '').strip()
+    birth_date_raw = (request.form.get('birth_date') or '').strip()
+    phone = (request.form.get('phone') or '').strip()
+    email = (request.form.get('email') or '').strip()
+    selected_date = (request.form.get('date') or '').strip()
+    selected_time = (request.form.get('time') or '').strip()
+    selected_duration_raw = (request.form.get('duration_minutes') or '').strip()
+
+    if not name:
+        return jsonify({'status': 'error', 'message': 'Name is required.'}), 400
+    if not phone and not email:
+        return jsonify({'status': 'error', 'message': 'Phone or email is required.'}), 400
+
+    birth_date = None
+    if birth_date_raw:
+        birth_date = parse_date_safe(birth_date_raw)
+        if not birth_date:
+            return jsonify({'status': 'error', 'message': 'Birth date is invalid.'}), 400
+
+    booking_date = parse_date_safe(selected_date)
+    booking_time = parse_time_safe(selected_time)
+    try:
+        duration = int(selected_duration_raw or '60')
+    except ValueError:
+        duration = 60
+    if duration <= 0:
+        duration = 60
+
+    if not booking_date or not booking_time:
+        return jsonify({'status': 'error', 'message': 'Please choose an available slot.'}), 400
+
+    available_keys = {
+        (slot['date'], slot['time'], int(slot['duration_minutes'] or 60))
+        for slot in collect_public_available_slots(db, weeks_ahead=10)
+    }
+    request_key = (booking_date.isoformat(), booking_time.strftime('%H:%M'), duration)
+    if request_key not in available_keys:
+        return jsonify({'status': 'error', 'message': 'Selected slot is no longer available.'}), 409
+
+    slot_start = datetime.combine(booking_date, booking_time)
+    slot_end = slot_start + timedelta(minutes=duration)
+    conflict = has_time_conflict(db, booking_date, slot_start, slot_end)
+    if conflict:
+        return jsonify({'status': 'error', 'message': 'Selected slot is no longer available.'}), 409
+
+    patient_cur = db.execute('''
+        INSERT INTO patients (name, status, email, phone, birth_date, patient_type)
+        VALUES (?, 'waiting', ?, ?, ?, 'private')
+    ''', (name, email or None, phone or None, birth_date.isoformat() if birth_date else None))
+    patient_id = patient_cur.lastrowid
+
+    db.execute('''
+        INSERT INTO appointments (
+            patient_id, appointment_date, appointment_time, duration_minutes,
+            meeting_type, meeting_title, status, is_recurring
+        ) VALUES (?, ?, ?, ?, 'in-person', 'Self-booked via public link', 'scheduled', 0)
+    ''', (patient_id, booking_date.isoformat(), booking_time.strftime('%H:%M'), duration))
+
+    db.execute('''
+        UPDATE slots_override
+        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
+        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+    ''', (
+        name,
+        phone or email,
+        datetime.now().isoformat(),
+        booking_date.isoformat(),
+        booking_time.strftime('%H:%M')
+    ))
+
+    contact_text = phone or email
+    message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.'
+    db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (patient_id, 'public-self-book', message)
+    )
+    db.commit()
+
+    return jsonify({
+        'status': 'success',
+        'message': 'Booking received. We created a pending patient record and reserved the slot.'
+    })
 
 
 @app.route('/groups', methods=['GET', 'POST'])

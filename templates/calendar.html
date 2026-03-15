@@ -325,6 +325,23 @@
     </div>
 
     <div class="card border-0 shadow-sm rounded-4 mt-3">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-primary">{{ t('Public Self-Booking Link') }}</h6>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-2">{{ t('Create a secure link that shows only available slots for self-booking.') }}</p>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="createPublicBookingLinkBtn">{{ t('Create Link') }}</button>
+                <a href="#" class="btn btn-sm btn-outline-secondary d-none" id="sendPublicBookingMailBtn">{{ t('Send by Email') }}</a>
+            </div>
+            <div class="input-group input-group-sm">
+                <input type="text" class="form-control" id="publicBookingLinkInput" readonly placeholder="{{ t('Generated link will appear here') }}">
+                <button type="button" class="btn btn-outline-secondary" id="copyPublicBookingLinkBtn">{{ t('Copy') }}</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mt-3">
         <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
             <h6 class="fw-bold mb-0" style="color:#10b981;">{{ t('Open Vacancies') }}</h6>
             <span class="badge text-white" style="background:#10b981;" id="vacancyCount">0</span>
@@ -398,6 +415,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const bookingTabTrigger = document.getElementById('booking-tab');
     const bookingManagementMode = document.getElementById('bookingManagementMode');
     const bookingManagementBody = document.getElementById('bookingManagementBody');
+    const createPublicBookingLinkBtn = document.getElementById('createPublicBookingLinkBtn');
+    const publicBookingLinkInput = document.getElementById('publicBookingLinkInput');
+    const copyPublicBookingLinkBtn = document.getElementById('copyPublicBookingLinkBtn');
+    const sendPublicBookingMailBtn = document.getElementById('sendPublicBookingMailBtn');
     const blockRecurrencePattern = document.getElementById('blockRecurrencePattern');
     const blockRepeatUntilWrap = document.getElementById('blockRepeatUntilWrap');
     const blockRepeatUntilInput = document.getElementById('blockRepeatUntilInput');
@@ -1743,6 +1764,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     showActionModal({ title: 'Save Failed', message: data.message || 'Could not save override.' });
                 }
+            });
+        });
+    }
+
+    if (createPublicBookingLinkBtn) {
+        createPublicBookingLinkBtn.addEventListener('click', function() {
+            fetch('/api/calendar/public-link', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    if (publicBookingLinkInput) {
+                        publicBookingLinkInput.value = data.url || '';
+                    }
+                    if (sendPublicBookingMailBtn && data.mailto) {
+                        sendPublicBookingMailBtn.href = data.mailto;
+                        sendPublicBookingMailBtn.classList.remove('d-none');
+                    }
+                    showActionModal({ title: 'Link Created', message: 'Public self-booking link is ready.' });
+                } else {
+                    showActionModal({ title: 'Error', message: data.message || 'Could not create link.' });
+                }
+            }).catch(() => {
+                showActionModal({ title: 'Error', message: 'Could not create link.' });
+            });
+        });
+    }
+
+    if (copyPublicBookingLinkBtn) {
+        copyPublicBookingLinkBtn.addEventListener('click', function() {
+            const value = (publicBookingLinkInput && publicBookingLinkInput.value) ? publicBookingLinkInput.value : '';
+            if (!value) {
+                showActionModal({ title: 'No Link', message: 'Generate a link first.' });
+                return;
+            }
+            navigator.clipboard.writeText(value).then(() => {
+                showActionModal({ title: 'Copied', message: 'Link copied to clipboard.' });
+            }).catch(() => {
+                showActionModal({ title: 'Copy Failed', message: 'Could not copy the link.' });
             });
         });
     }

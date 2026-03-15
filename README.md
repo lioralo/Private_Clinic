@@ -34,3 +34,15 @@ python test_app.py
 - You can update or correct translations there without changing Python code.
 - Keys are the original English text and values are Hebrew translations.
 - Missing keys gracefully fall back to the built-in translation map and then to the original English text.
+
+## Public Self-Booking Link
+- Admins can generate a public self-booking link from the Calendar booking tab.
+- The public page shows only currently available slots.
+- Public booking validation rules:
+   - Name is required.
+   - Date of birth is optional.
+   - At least one contact method is required: phone or email.
+- When a public booking is submitted:
+   - A new patient is created with `waiting` status.
+   - A one-time appointment is created for the selected slot.
+   - An admin notification is created for follow-up.

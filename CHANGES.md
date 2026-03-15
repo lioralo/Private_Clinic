@@ -2,6 +2,53 @@
 
 ---
 
+## Session 19
+
+**Date:** March 15, 2026
+
+**Objective:** Add public available-slot self-booking by shareable link/email, enforce booking field requirements, and notify admin as pending patient.
+
+**Changes Made:**
+
+1. **Public Self-Booking Link Generation**
+  - Added admin endpoint to create secure public booking links.
+  - Added calendar admin UI controls to:
+    - generate link,
+    - copy link,
+    - open prefilled email compose (`mailto`) for sharing.
+
+2. **Public Available-Slots Booking Page**
+  - Added new page: `templates/open_booking_calendar.html`.
+  - Displays only available slots and allows public self-booking.
+
+3. **Public Booking Validation Rules**
+  - Enforced on backend:
+    - name is required,
+    - date of birth optional,
+    - phone or email (at least one) required,
+    - selected slot must still be available.
+
+4. **Pending Patient + Notification Flow**
+  - On successful public booking:
+    - creates a new patient with `waiting` status,
+    - creates one-time appointment,
+    - updates one-time vacancy status when relevant,
+    - inserts admin notification for follow-up.
+
+5. **Data Model Additions**
+  - Added `public_booking_links` table migration in `init_db`.
+
+6. **Localization Support**
+  - Added translation wrappers and Hebrew dictionary entries for new public-link feature text.
+
+7. **Tests Added**
+  - Added regression tests for:
+    - missing phone/email rejection,
+    - successful public booking creating waiting patient, appointment, and notification.
+
+**Test Results:**
+- `python test_app.py` passed (`36` tests).
+
 ## Session 18
 
 **Date:** March 15, 2026
