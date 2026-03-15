@@ -42,7 +42,7 @@
                 <span class="badge rounded-pill calendar-chip" style="background:#8b5cf6;">{{ t('Group Session') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#10b981;">{{ t('Vacant Slot') }}</span>
                 {% endif %}
-                <span class="badge rounded-pill calendar-chip bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>Zoom</span>
+                <span class="badge rounded-pill calendar-chip bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>{{ t('Zoom') }}</span>
             </div>
             <div class="chip-row align-items-center" id="calendarFilters">
                 <span class="small fw-semibold text-muted me-1">{{ t('Filters:') }}</span>
@@ -65,7 +65,7 @@
         <span class="big" id="calendarWeekLabel">{{ t('Current week') }}</span>
         <div class="mt-2 d-flex gap-1" id="calendarWeekNav">
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarPrevWeek"><i class="bi bi-chevron-left"></i></button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">Today</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">{{ t('Today') }}</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarNextWeek"><i class="bi bi-chevron-right"></i></button>
         </div>
     </div>
@@ -155,7 +155,7 @@
                         {% endfor %}
                         <option value="other">── {{ t('Other (enter name below)') }} ──</option>
                     </select>
-                    <div class="form-text" id="bookingStatusHint">Select a patient to see booking mode.</div>
+                    <div class="form-text" id="bookingStatusHint">{{ t('Select a patient to see booking mode.') }}</div>
                     <div class="mb-2 d-none" id="otherNameWrap">
                         <label class="form-label small mt-1">{{ t('Name / Description') }}</label>
                         <input type="text" id="otherNameInput" class="form-control form-control-sm" placeholder="{{ t('External client / Guest name') }}">
@@ -197,23 +197,23 @@
                 <div class="mb-2">
                     <label class="form-label small">{{ t('Meeting Type') }}</label>
                     <select name="meeting_type" id="meetingTypeSelect" class="form-select form-select-sm">
-                        <option value="in-person">In-person</option>
-                        <option value="zoom">Zoom</option>
+                        <option value="in-person">{{ t('In-person') }}</option>
+                        <option value="zoom">{{ t('Zoom') }}</option>
                         <option value="google-meet">Google Meet</option>
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">{{ t('Meeting Title (optional)') }}</label>
-                    <input type="text" name="meeting_title" id="meetingTitleInput" class="form-control form-control-sm" placeholder="### private meeting">
+                    <input type="text" name="meeting_title" id="meetingTitleInput" class="form-control form-control-sm" placeholder="{{ t('Meeting title (optional)') }}">
                 </div>
                 <div class="mb-3">
                     <label class="form-label small">{{ t('Meeting Link (optional)') }}</label>
                     <div class="input-group input-group-sm">
-                        <input type="url" name="meeting_link" id="meetingLinkInput" class="form-control form-control-sm" placeholder="https://...">
-                        <button type="button" class="btn btn-outline-success btn-sm" id="openGoogleMeetBtn" title="Open Google Meet to create a new meeting">
+                        <input type="url" name="meeting_link" id="meetingLinkInput" class="form-control form-control-sm" placeholder="{{ t('Paste meeting link') }}">
+                        <button type="button" class="btn btn-outline-success btn-sm" id="openGoogleMeetBtn" title="{{ t('Open Google Meet to create a new meeting') }}">
                             <i class="bi bi-camera-video me-1"></i>Meet
                         </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="openZoomBtn" title="Open Zoom to start a meeting">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="openZoomBtn" title="{{ t('Open Zoom to start a meeting') }}">
                             <i class="bi bi-camera-video-fill me-1"></i>Zoom
                         </button>
                     </div>
@@ -243,10 +243,10 @@
     {% if current_user.role == 'admin' %}
     <div class="card border-0 shadow-sm rounded-4 mt-3">
         <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-primary">Booking Management</h6>
+            <h6 class="fw-bold mb-0 text-primary">{{ t('Booking Management') }}</h6>
             <div class="btn-group btn-group-sm" role="group" id="bookingManagementMode">
-                <button type="button" class="btn btn-primary" data-mode="upcoming">Upcoming</button>
-                <button type="button" class="btn btn-outline-primary" data-mode="history">History</button>
+                <button type="button" class="btn btn-primary" data-mode="upcoming">{{ t('Upcoming') }}</button>
+                <button type="button" class="btn btn-outline-primary" data-mode="history">{{ t('History') }}</button>
             </div>
         </div>
         <div class="card-body">
@@ -254,15 +254,15 @@
                 <div class="col-md-2">
                     <label class="form-label small">{{ t('Type') }}</label>
                     <select name="block_type" form="addBlockForm" class="form-select form-select-sm">
-                        <option value="blocked">Blocked</option>
-                        <option value="special">Special</option>
+                        <option value="blocked">{{ t('Blocked') }}</option>
+                        <option value="special">{{ t('Special') }}</option>
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small">Repeat</label>
+                    <label class="form-label small">{{ t('Repeat') }}</label>
                     <select name="recurrence_pattern" form="addBlockForm" id="blockRecurrencePattern" class="form-select form-select-sm">
-                        <option value="one-time">One-time</option>
-                        <option value="weekly">Weekly</option>
+                        <option value="one-time">{{ t('One-time') }}</option>
+                        <option value="weekly">{{ t('Weekly') }}</option>
                     </select>
                 </div>
                 <div class="col-md-3 d-none" id="blockRepeatUntilWrap">
@@ -287,7 +287,7 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label small">{{ t('Admin title') }}</label>
-                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Supervision / Seminar / Group meeting">
+                        <input type="text" name="title" class="form-control form-control-sm" placeholder="{{ t('Supervision / Seminar / Group meeting') }}">
                     </div>
                     <div class="col-12">
                         <div class="form-check mt-1">
@@ -298,7 +298,7 @@
                         </div>
                     </div>
                     <div class="col-12">
-                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">Save Block/Special</button>
+                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">{{ t('Save Block/Special') }}</button>
                     </div>
                 </div>
             </form>
@@ -308,16 +308,16 @@
                 <table class="table table-sm align-middle" id="bookingManagementTable">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Type</th>
-                            <th>Title</th>
-                            <th>Details</th>
-                            <th class="text-end">Actions</th>
+                            <th>{{ t('Date') }}</th>
+                            <th>{{ t('Time') }}</th>
+                            <th>{{ t('Type') }}</th>
+                            <th>{{ t('Title') }}</th>
+                            <th>{{ t('Details') }}</th>
+                            <th class="text-end">{{ t('Actions') }}</th>
                         </tr>
                     </thead>
                     <tbody id="bookingManagementBody">
-                        <tr><td colspan="6" class="text-muted small">Loading bookings...</td></tr>
+                        <tr><td colspan="6" class="text-muted small">{{ t('Loading bookings...') }}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -330,7 +330,7 @@
             <span class="badge text-white" style="background:#10b981;" id="vacancyCount">0</span>
         </div>
         <div class="card-body" id="vacanciesContainer">
-            <div class="small text-muted">Loading vacancies...</div>
+            <div class="small text-muted">{{ t('Loading vacancies...') }}</div>
         </div>
     </div>
     {% endif %}
@@ -408,6 +408,44 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalConfirmBtn = document.getElementById('calendarModalConfirmBtn');
     const modalCancelBtn = document.getElementById('calendarModalCancelBtn');
     const actionModal = modalRoot ? new bootstrap.Modal(modalRoot) : null;
+    const I18N = {
+        notice: {{ t('Notice')|tojson }},
+        ok: {{ t('OK')|tojson }},
+        cancel: {{ t('Cancel')|tojson }},
+        editFailed: {{ t('Edit Failed')|tojson }},
+        deleteFailed: {{ t('Delete Failed')|tojson }},
+        saveFailed: {{ t('Save Failed')|tojson }},
+        error: {{ t('Error')|tojson }},
+        today: {{ t('Today')|tojson }},
+        currentWeek: {{ t('Current week')|tojson }},
+        weekLabelMinus: {{ t('week ago')|tojson }},
+        weekLabelPlus: {{ t('week ahead')|tojson }},
+        selectPatientMode: {{ t('Select a patient to see booking mode.')|tojson }},
+        otherModeHint: {{ t('Other: creates a special time block with the specified name.')|tojson }},
+        ongoingModeHint: {{ t('Ongoing patient: this booking will be created as a recurring weekly meeting.')|tojson }},
+        candidateModeHint: {{ t('Candidate/Waiting patient: this booking will be created as a one-time meeting.')|tojson }},
+        noOpenSlotsWeek: {{ t('No open slots this week.')|tojson }},
+        useSlot: {{ t('Use Slot')|tojson }},
+        none: {{ t('None')|tojson }},
+        missingAppointmentId: {{ t('Missing appointment id.')|tojson }},
+        recurringMeeting: {{ t('Recurring meeting')|tojson }},
+        openPatientProfile: {{ t('Open Patient Profile')|tojson }},
+        date: {{ t('Date')|tojson }},
+        startTime: {{ t('Start Time')|tojson }},
+        endTime: {{ t('End Time')|tojson }},
+        meetingTitle: {{ t('Meeting Title')|tojson }},
+        addToGoogleCalendar: {{ t('Add to Google Calendar')|tojson }},
+        meetingType: {{ t('Meeting Type')|tojson }},
+        meetingLink: {{ t('Meeting Link')|tojson }},
+        deleteMeeting: {{ t('Delete Meeting')|tojson }},
+        inPerson: {{ t('In-person')|tojson }},
+        zoomLabel: {{ t('Zoom')|tojson }},
+        couldNotDeleteMeeting: {{ t('Could not delete meeting.')|tojson }},
+        couldNotSaveMeetingChanges: {{ t('Could not save meeting changes.')|tojson }},
+        privateMeeting: {{ t('Private meeting')|tojson }},
+        noWeekendItems: {{ t('No weekend items.')|tojson }},
+        noPendingFollowUps: {{ t('No pending follow-up indicators.')|tojson }}
+    };
 
     const calendarEl = document.getElementById('weeklyCalendar');
     let currentWeekStart = null;
@@ -459,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const options = [];
         for (let i = -2; i <= 8; i += 1) {
             const weekStart = shiftWeek(nowWeekAnchor, i);
-            const labelPrefix = i === 0 ? 'Current week' : (i > 0 ? `+${i} week` : `${i} week`);
+            const labelPrefix = i === 0 ? I18N.currentWeek : (i > 0 ? `+${i} ${I18N.weekLabelPlus}` : `${Math.abs(i)} ${I18N.weekLabelMinus}`);
             options.push(`<option value="${weekStart}">${labelPrefix} · ${formatWeekLabel(weekStart)}</option>`);
         }
         availableWeekSelect.innerHTML = options.join('');
@@ -480,14 +518,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return new Promise((resolve) => {
-            modalTitle.textContent = config.title || 'Notice';
+            modalTitle.textContent = config.title || I18N.notice;
             modalBody.textContent = config.message || '';
-            modalConfirmBtn.textContent = config.confirmText || 'OK';
+            modalConfirmBtn.textContent = config.confirmText || I18N.ok;
             modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
 
             if (config.showCancel) {
                 modalCancelBtn.classList.remove('d-none');
-                modalCancelBtn.textContent = config.cancelText || 'Cancel';
+                modalCancelBtn.textContent = config.cancelText || I18N.cancel;
             } else {
                 modalCancelBtn.classList.add('d-none');
             }
@@ -516,35 +554,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function openAppointmentEditor(payload) {
         if (!payload || !payload.source_id) {
-            showActionModal({ title: 'Edit Failed', message: 'Missing appointment id.' });
+            showActionModal({ title: I18N.editFailed, message: I18N.missingAppointmentId });
             return;
         }
 
         const recurringInfo = payload.is_recurring
-            ? '<div class="alert alert-info py-1 px-2 small mb-2">Recurring meeting</div>'
+            ? `<div class="alert alert-info py-1 px-2 small mb-2">${I18N.recurringMeeting}</div>`
             : '';
         const patientLinkHtml = (isAdmin && payload.patient_id)
-            ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">Open Patient Profile</a></div>`
+            ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">${I18N.openPatientProfile}</a></div>`
             : '';
 
-        modalTitle.textContent = 'Edit Meeting';
+        modalTitle.textContent = {{ t('Edit Meeting')|tojson }};
         modalBody.innerHTML = `
             ${patientLinkHtml}
             ${recurringInfo}
-            <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
-            <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
-            <div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
-            <div class="mb-2"><label class="form-label small">Meeting Title</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${payload.meeting_title || ''}"></div>
-            <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>Add to Google Calendar</button>
-            <div class="mb-2"><label class="form-label small">Meeting Type</label>
+            <div class="mb-2"><label class="form-label small">${I18N.date}</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
+            <div class="mb-2"><label class="form-label small">${I18N.startTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">${I18N.endTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
+            <div class="mb-2"><label class="form-label small">${I18N.meetingTitle}</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${payload.meeting_title || ''}"></div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>${I18N.addToGoogleCalendar}</button>
+            <div class="mb-2"><label class="form-label small">${I18N.meetingType}</label>
                 <select class="form-select form-select-sm" id="editMeetingType">
-                    <option value="in-person">In-person</option>
-                    <option value="zoom">Zoom</option>
+                    <option value="in-person">${I18N.inPerson}</option>
+                    <option value="zoom">${I18N.zoomLabel}</option>
                     <option value="google-meet">Google Meet</option>
                 </select>
             </div>
-            <div class="mb-2"><label class="form-label small">Meeting Link</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${payload.meeting_link || ''}"></div>
-            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">Delete Meeting</button>
+            <div class="mb-2"><label class="form-label small">${I18N.meetingLink}</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${payload.meeting_link || ''}"></div>
+            <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">${I18N.deleteMeeting}</button>
         `;
 
         const typeSelect = document.getElementById('editMeetingType');
@@ -552,7 +590,7 @@ document.addEventListener('DOMContentLoaded', function() {
             typeSelect.value = payload.meeting_type || 'in-person';
         }
 
-        modalConfirmBtn.textContent = 'Save';
+        modalConfirmBtn.textContent = {{ t('Save')|tojson }};
         modalConfirmBtn.className = 'btn btn-primary';
         modalCancelBtn.classList.remove('d-none');
         actionModal.show();
@@ -582,10 +620,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         loadSnapshot();
                         loadBookingManagement();
                     } else {
-                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete meeting.' });
+                        showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
                     }
                 }).catch(() => {
-                    showActionModal({ title: 'Delete Failed', message: 'Could not delete meeting.' });
+                    showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
                 });
             };
         }
@@ -615,10 +653,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadSnapshot();
                     loadBookingManagement();
                 } else {
-                    showActionModal({ title: 'Save Failed', message: data.message || 'Could not save meeting changes.' });
+                    showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
                 }
             }).catch(() => {
-                showActionModal({ title: 'Save Failed', message: 'Could not save meeting changes.' });
+                showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
             });
         };
     }
@@ -1411,17 +1449,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (bookingStatusHint) {
                 if (isOther) {
-                    bookingStatusHint.textContent = 'Other: creates a special time block with the specified name.';
+                    bookingStatusHint.textContent = I18N.otherModeHint;
                 } else if (!status) {
-                    bookingStatusHint.textContent = 'Select a patient to see booking mode.';
+                    bookingStatusHint.textContent = I18N.selectPatientMode;
                 } else if (status === 'ongoing') {
-                    bookingStatusHint.textContent = 'Ongoing patient: this booking will be created as a recurring weekly meeting.';
+                    bookingStatusHint.textContent = I18N.ongoingModeHint;
                 } else {
-                    bookingStatusHint.textContent = 'Candidate/Waiting patient: this booking will be created as a one-time meeting.';
+                    bookingStatusHint.textContent = I18N.candidateModeHint;
                 }
             }
             if (!meetingTitleInput.value && status === 'ongoing') {
-                meetingTitleInput.value = '### private meeting';
+                meetingTitleInput.value = I18N.privateMeeting;
             }
         });
     }
@@ -1518,7 +1556,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderWeekendList(container, list) {
         if (!list || list.length === 0) {
-            container.innerHTML = '<div class="small text-muted">No weekend items.</div>';
+            container.innerHTML = `<div class="small text-muted">${I18N.noWeekendItems}</div>`;
             return;
         }
         container.innerHTML = list.map(item => {
@@ -1536,7 +1574,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderFollowUps(list) {
         if (!list || list.length === 0) {
-            followUpAlerts.innerHTML = '<div class="small text-muted">No pending follow-up indicators.</div>';
+            followUpAlerts.innerHTML = `<div class="small text-muted">${I18N.noPendingFollowUps}</div>`;
             return;
         }
         followUpAlerts.innerHTML = list.map(item => {
@@ -1554,14 +1592,14 @@ document.addEventListener('DOMContentLoaded', function() {
             .map(evt => evt.title)
             .filter(name => name && name !== 'Unavailable');
         const uniqueNames = Array.from(new Set(names));
-        ongoingThisWeek.textContent = uniqueNames.length ? uniqueNames.join(', ') : 'None';
+        ongoingThisWeek.textContent = uniqueNames.length ? uniqueNames.join(', ') : I18N.none;
     }
 
     function renderAvailableSlots(slots) {
         availableCount.textContent = slots.length;
 
         if (!slots.length) {
-            availableSlotsContainer.innerHTML = '<div class="small text-muted">No open slots this week.</div>';
+            availableSlotsContainer.innerHTML = `<div class="small text-muted">${I18N.noOpenSlotsWeek}</div>`;
             return;
         }
 
@@ -1580,7 +1618,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const entries = daySlots.map(slot => (
                 `<div class="d-flex justify-content-between align-items-center border rounded-3 p-2 mb-2">
                     <div class="small text-muted">${slot.time} · ${slot.duration_minutes} min</div>
-                    <button type="button" class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">Use Slot</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary pick-slot" data-date="${slot.date}" data-time="${slot.time}" data-duration="${slot.duration_minutes}">${I18N.useSlot}</button>
                 </div>`
             )).join('');
 

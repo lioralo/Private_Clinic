@@ -2,6 +2,33 @@
 
 ---
 
+## Session 18
+
+**Date:** March 15, 2026
+
+**Objective:** Run a second Hebrew localization sweep focused on the calendar page and reduce remaining English UI strings.
+
+**Changes Made:**
+
+1. **Calendar Template Localization Sweep**
+  - Localized additional static labels/buttons/placeholders in `templates/calendar.html`.
+  - Added translation wrappers for booking management section labels and headers.
+
+2. **Dynamic Calendar UI Localization (JavaScript)**
+  - Added a centralized `I18N` dictionary object in calendar script.
+  - Replaced key dynamic modal/toast/editor strings with translatable values.
+  - Fixed string interpolation and ensured runtime messages respect active language.
+
+3. **Hebrew Dictionary Expansion**
+  - Added a broad set of calendar-specific keys to `translations/he.json`.
+
+4. **Translation Audit Refresh**
+  - Regenerated `translation_audit.txt` after the sweep.
+  - Remaining unmatched English entries reduced from 241 to 201.
+
+**Test Results:**
+- `python test_app.py` passed (`34` tests).
+
 ## Session 17
 
 **Date:** March 15, 2026
