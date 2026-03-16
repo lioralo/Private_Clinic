@@ -947,12 +947,17 @@ def init_db():
                 patient_id INTEGER NOT NULL,
                 attendance_status TEXT NOT NULL DEFAULT 'pending',
                 absence_reason TEXT,
+                notified_on_time BOOLEAN DEFAULT 0,
                 attendance_note TEXT,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (session_id, patient_id),
                 FOREIGN KEY (session_id) REFERENCES group_sessions (id),
                 FOREIGN KEY (patient_id) REFERENCES patients (id)
             )''')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
         except sqlite3.OperationalError:
             pass
 
@@ -2097,6 +2102,40 @@ def patient_detail(patient_id):
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    group_attendance_rows = db.execute('''
+        SELECT gsa.session_id,
+               gsa.attendance_status,
+               gsa.absence_reason,
+               gsa.notified_on_time,
+               gsa.attendance_note,
+               gsa.updated_at,
+               gs.group_id,
+               gs.session_date,
+               gs.session_time,
+               gs.title AS session_title,
+               gs.session_summary,
+               g.name AS group_name
+        FROM group_session_attendance gsa
+        JOIN group_sessions gs ON gs.id = gsa.session_id
+        JOIN groups g ON g.id = gs.group_id
+        WHERE gsa.patient_id = ?
+        ORDER BY gs.session_date DESC, gs.session_time DESC
+    ''', (patient_id,)).fetchall()
+
+    group_membership_rows = db.execute('''
+        SELECT h.id,
+               h.group_id,
+               g.name AS group_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN groups g ON g.id = h.group_id
+        WHERE h.patient_id = ?
+        ORDER BY h.joined_at DESC
+    ''', (patient_id,)).fetchall()
+
+    group_arrived_count = sum(1 for row in group_attendance_rows if (row['attendance_status'] or '') == 'present')
 
     # Get messages
     messages = []
@@ -2168,7 +2207,7 @@ def patient_detail(patient_id):
     suggested_session_number = int(next_session_row['max_session'] or 0) + 1
     suggested_note_date = datetime.now().date().isoformat()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count)
 
 
 @app.route('/admin/patient/<int:patient_id>/portal_preview')
@@ -3329,7 +3368,7 @@ def groups_dashboard():
     ''').fetchall()
 
     group_members = db.execute('''
-        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name
+        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, gm.joined_at, gm.left_at
         FROM group_members gm
         JOIN patients p ON p.id = gm.patient_id
         WHERE gm.left_at IS NULL AND COALESCE(p.is_deleted, 0) = 0
@@ -3348,7 +3387,8 @@ def groups_dashboard():
     ''').fetchall()
 
     member_history_rows = db.execute('''
-        SELECT h.group_id,
+         SELECT h.id,
+             h.group_id,
                h.patient_id,
                p.name AS patient_name,
                h.joined_at,
@@ -3381,7 +3421,7 @@ def groups_dashboard():
 
     if session_ids:
         marks = db.execute(f'''
-            SELECT session_id, patient_id, attendance_status, absence_reason, attendance_note
+            SELECT session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note
             FROM group_session_attendance
             WHERE session_id IN ({','.join(['?'] * len(session_ids))})
         ''', session_ids).fetchall()
@@ -3390,13 +3430,23 @@ def groups_dashboard():
             attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
                 'attendance_status': row['attendance_status'] or 'pending',
                 'absence_reason': row['absence_reason'] or '',
+                'notified_on_time': int(row['notified_on_time'] or 0),
                 'attendance_note': row['attendance_note'] or ''
             }
+
+    arrived_rows = db.execute('''
+        SELECT patient_id, COUNT(*) AS arrived_count
+        FROM group_session_attendance
+        WHERE attendance_status = 'present'
+        GROUP BY patient_id
+    ''').fetchall()
+    arrived_count_map = {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
 
     patients = db.execute('''
         SELECT id, name
         FROM patients
         WHERE COALESCE(is_deleted, 0) = 0
+          AND COALESCE(patient_type, 'private') = 'group'
         ORDER BY name ASC
     ''').fetchall()
 
@@ -3408,7 +3458,8 @@ def groups_dashboard():
         patients=patients,
         member_history_rows=member_history_rows,
         session_member_map=session_member_map,
-        attendance_by_session=attendance_by_session
+        attendance_by_session=attendance_by_session,
+        arrived_count_map=arrived_count_map
     )
 
 
@@ -3425,6 +3476,14 @@ def add_group_member(group_id):
 
     db = get_db()
     patient_id = int(patient_id_raw)
+    patient_row = db.execute('SELECT id, patient_type FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if not patient_row:
+        flash('Patient not found.')
+        return redirect(url_for('groups_dashboard'))
+    if (patient_row['patient_type'] or 'private') != 'group':
+        flash('Only group-type patients can be added to groups.')
+        return redirect(url_for('groups_dashboard'))
+
     existing_active = db.execute('''
         SELECT 1
         FROM group_members
@@ -3486,6 +3545,89 @@ def remove_group_member(group_id, patient_id):
     db.commit()
     flash('Patient removed from group.')
     return redirect(url_for('groups_dashboard'))
+
+
+def sync_group_member_current_record(db, group_id, patient_id):
+    """Keep group_members aligned with the latest history state."""
+    open_row = db.execute('''
+        SELECT joined_at
+        FROM group_member_history
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
+        ORDER BY joined_at DESC
+        LIMIT 1
+    ''', (group_id, patient_id)).fetchone()
+
+    if open_row:
+        db.execute('''
+            INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
+            VALUES (?, ?, ?, NULL, 'member')
+            ON CONFLICT(group_id, patient_id)
+            DO UPDATE SET joined_at = excluded.joined_at, left_at = NULL, role = 'member'
+        ''', (group_id, patient_id, open_row['joined_at']))
+        return
+
+    latest_row = db.execute('''
+        SELECT joined_at, left_at
+        FROM group_member_history
+        WHERE group_id = ? AND patient_id = ?
+        ORDER BY joined_at DESC
+        LIMIT 1
+    ''', (group_id, patient_id)).fetchone()
+    if latest_row:
+        db.execute('''
+            INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
+            VALUES (?, ?, ?, ?, 'member')
+            ON CONFLICT(group_id, patient_id)
+            DO UPDATE SET joined_at = excluded.joined_at, left_at = excluded.left_at, role = 'member'
+        ''', (group_id, patient_id, latest_row['joined_at'], latest_row['left_at']))
+
+
+@app.route('/groups/history/<int:history_id>/dates', methods=['POST'])
+@login_required
+def update_group_member_history_dates(history_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    joined_date_raw = (request.form.get('joined_date') or '').strip()
+    left_date_raw = (request.form.get('left_date') or '').strip()
+    return_patient_id_raw = (request.form.get('return_patient_id') or '').strip()
+
+    def redirect_target():
+        if return_patient_id_raw.isdigit():
+            return redirect_to_patient_tab(int(return_patient_id_raw), 'info')
+        return redirect(url_for('groups_dashboard'))
+
+    joined_date = parse_date_safe(joined_date_raw)
+    left_date = parse_date_safe(left_date_raw) if left_date_raw else None
+    if not joined_date:
+        flash('Joined date is required and must be valid.')
+        return redirect_target()
+    if left_date and left_date < joined_date:
+        flash('Left date cannot be before joined date.')
+        return redirect_target()
+
+    db = get_db()
+    history = db.execute('''
+        SELECT id, group_id, patient_id
+        FROM group_member_history
+        WHERE id = ?
+    ''', (history_id,)).fetchone()
+    if not history:
+        flash('Membership history row not found.')
+        return redirect_target()
+
+    joined_ts = f"{joined_date.isoformat()} 00:00:00"
+    left_ts = f"{left_date.isoformat()} 23:59:59" if left_date else None
+    db.execute('''
+        UPDATE group_member_history
+        SET joined_at = ?, left_at = ?
+        WHERE id = ?
+    ''', (joined_ts, left_ts, history_id))
+
+    sync_group_member_current_record(db, int(history['group_id']), int(history['patient_id']))
+    db.commit()
+    flash('Membership dates updated.')
+    return redirect_target()
 
 
 @app.route('/groups/<int:group_id>/sessions', methods=['POST'])
@@ -3628,38 +3770,133 @@ def record_group_session(session_id):
     ''', (session_summary or None, session_status, session_id))
 
     members = get_group_members_for_session(db, int(session_row['group_id']), session_row['session_date'])
+
+    def upsert_missed_group_note(pid, missed_reason_text):
+        marker = f"[Group Session #{session_id}]"
+        note_content = f"{marker} Missed group session on {session_row['session_date']} ({session_row['session_time']})."
+        if missed_reason_text:
+            note_content = f"{note_content} Reason: {missed_reason_text}"
+        existing_note = db.execute('''
+            SELECT id
+            FROM notes
+            WHERE patient_id = ?
+              AND content LIKE ?
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (pid, f'{marker}%')).fetchone()
+        if existing_note:
+            db.execute('''
+                UPDATE notes
+                SET note_date = ?, content = ?, is_missed_meeting = 1, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (session_row['session_date'], note_content, missed_reason_text or None, existing_note['id']))
+        else:
+            db.execute('''
+                INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
+                VALUES (?, ?, ?, 1, ?)
+            ''', (pid, session_row['session_date'], note_content, missed_reason_text or None))
+
     for member in members:
         pid = int(member['patient_id'])
         status_value = (request.form.get(f'attendance_{pid}') or 'pending').strip().lower()
         if status_value not in ('present', 'missed', 'pending'):
             status_value = 'pending'
         absence_reason = (request.form.get(f'absence_reason_{pid}') or '').strip()
+        notified_on_time = 1 if request.form.get(f'notified_on_time_{pid}') in ('1', 'true', 'on') else 0
         attendance_note = (request.form.get(f'attendance_note_{pid}') or '').strip()
         if status_value != 'missed':
             absence_reason = ''
+            notified_on_time = 0
 
         db.execute('''
-            INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, attendance_note, updated_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(session_id, patient_id)
             DO UPDATE SET attendance_status = excluded.attendance_status,
                           absence_reason = excluded.absence_reason,
+                          notified_on_time = excluded.notified_on_time,
                           attendance_note = excluded.attendance_note,
                           updated_at = CURRENT_TIMESTAMP
-        ''', (session_id, pid, status_value, absence_reason or None, attendance_note or None))
+        ''', (session_id, pid, status_value, absence_reason or None, notified_on_time, attendance_note or None))
 
         if status_value == 'missed':
-            note_content = f"Missed group session on {session_row['session_date']} ({session_row['session_time']})."
-            if absence_reason:
-                note_content = f"{note_content} Reason: {absence_reason}"
-            db.execute('''
-                INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
-                VALUES (?, ?, ?, 1, ?)
-            ''', (pid, session_row['session_date'], note_content, absence_reason or None))
+            upsert_missed_group_note(pid, absence_reason)
 
     db.commit()
     flash('Session record saved.')
     return redirect(url_for('groups_dashboard'))
+
+
+@app.route('/patient/<int:patient_id>/group_attendance/<int:session_id>/update', methods=['POST'])
+@login_required
+def update_patient_group_attendance(patient_id, session_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    session_row = db.execute('SELECT * FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    patient_row = db.execute('SELECT id FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if not session_row or not patient_row:
+        flash('Attendance row could not be updated.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    status_value = (request.form.get('attendance_status') or 'pending').strip().lower()
+    if status_value not in ('present', 'missed', 'pending'):
+        status_value = 'pending'
+    absence_reason = (request.form.get('absence_reason') or '').strip()
+    notified_on_time = 1 if request.form.get('notified_on_time') in ('1', 'true', 'on') else 0
+    attendance_note = (request.form.get('attendance_note') or '').strip()
+    session_summary = (request.form.get('session_summary') or '').strip()
+
+    if status_value != 'missed':
+        absence_reason = ''
+        notified_on_time = 0
+
+    db.execute('''
+        UPDATE group_sessions
+        SET session_summary = ?
+        WHERE id = ?
+    ''', (session_summary or None, session_id))
+
+    db.execute('''
+        INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(session_id, patient_id)
+        DO UPDATE SET attendance_status = excluded.attendance_status,
+                      absence_reason = excluded.absence_reason,
+                      notified_on_time = excluded.notified_on_time,
+                      attendance_note = excluded.attendance_note,
+                      updated_at = CURRENT_TIMESTAMP
+    ''', (session_id, patient_id, status_value, absence_reason or None, notified_on_time, attendance_note or None))
+
+    if status_value == 'missed':
+        marker = f"[Group Session #{session_id}]"
+        note_content = f"{marker} Missed group session on {session_row['session_date']} ({session_row['session_time']})."
+        if absence_reason:
+            note_content = f"{note_content} Reason: {absence_reason}"
+        existing_note = db.execute('''
+            SELECT id
+            FROM notes
+            WHERE patient_id = ?
+              AND content LIKE ?
+            ORDER BY id DESC
+            LIMIT 1
+        ''', (patient_id, f'{marker}%')).fetchone()
+        if existing_note:
+            db.execute('''
+                UPDATE notes
+                SET note_date = ?, content = ?, is_missed_meeting = 1, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (session_row['session_date'], note_content, absence_reason or None, existing_note['id']))
+        else:
+            db.execute('''
+                INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
+                VALUES (?, ?, ?, 1, ?)
+            ''', (patient_id, session_row['session_date'], note_content, absence_reason or None))
+
+    db.commit()
+    flash('Patient group attendance updated.')
+    return redirect_to_patient_tab(patient_id, 'info')
 
 
 @app.route('/api/calendar/snapshot')

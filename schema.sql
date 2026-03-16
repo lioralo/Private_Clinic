@@ -257,6 +257,7 @@ CREATE TABLE IF NOT EXISTS group_session_attendance (
     patient_id INTEGER NOT NULL,
     attendance_status TEXT NOT NULL DEFAULT 'pending',
     absence_reason TEXT,
+    notified_on_time BOOLEAN DEFAULT 0,
     attendance_note TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (session_id, patient_id),

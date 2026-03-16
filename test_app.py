@@ -1240,7 +1240,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_group_member_history_tracks_join_leave_cycles(self):
         self.login('admin', 'admin')
-        self.client.post('/add_patient', data=dict(name='Group Member A', status='ongoing'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Group Member A', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Trauma Group', group_type='therapy', description='Weekly group'), follow_redirects=True)
 
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
@@ -1269,8 +1269,8 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_group_recurrence_update_future_and_attendance_missed_reason(self):
         self.login('admin', 'admin')
-        self.client.post('/add_patient', data=dict(name='Group Patient One', status='ongoing'), follow_redirects=True)
-        self.client.post('/add_patient', data=dict(name='Group Patient Two', status='ongoing'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Group Patient One', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Group Patient Two', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Skills Group', group_type='skills', description='Skills training'), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='2'), follow_redirects=True)
@@ -1333,6 +1333,7 @@ class ClinicTestCase(unittest.TestCase):
             'attendance_1': 'present',
             'attendance_2': 'missed',
             'absence_reason_2': 'Fever',
+            'notified_on_time_2': 'on',
             'attendance_note_2': 'Will follow up next week'
         }, follow_redirects=True)
         assert record_rv.status_code == 200
@@ -1340,13 +1341,14 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             attendance = db.execute('''
-                SELECT attendance_status, absence_reason
+                SELECT attendance_status, absence_reason, notified_on_time
                 FROM group_session_attendance
                 WHERE session_id = ? AND patient_id = 2
             ''', (first_session_id,)).fetchone()
             assert attendance is not None
             assert attendance['attendance_status'] == 'missed'
             assert attendance['absence_reason'] == 'Fever'
+            assert int(attendance['notified_on_time'] or 0) == 1
 
             auto_note = db.execute('''
                 SELECT is_missed_meeting, missed_reason, content
@@ -1386,6 +1388,103 @@ class ClinicTestCase(unittest.TestCase):
             assert int(note['is_missed_meeting'] or 0) == 1
             assert note['missed_reason'] == 'Family emergency'
             assert 'Missed meeting documented' in note['content']
+
+    def test_groups_dashboard_suggests_only_group_patients(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Private Suggestion Patient',
+            status='ongoing',
+            patient_type='private'
+        ), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(
+            name='Group Suggestion Patient',
+            status='ongoing',
+            patient_type='group'
+        ), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Suggestion Group', group_type='support', description=''), follow_redirects=True)
+
+        rv = self.client.get('/groups', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'Group Suggestion Patient' in rv.data
+        assert b'Private Suggestion Patient' not in rv.data
+
+    def test_edit_group_membership_dates(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Membership Date Patient', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Date Edit Group', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            history_id = db.execute('''
+                SELECT id FROM group_member_history WHERE group_id = 1 AND patient_id = 1 ORDER BY id DESC LIMIT 1
+            ''').fetchone()['id']
+
+        self.client.post(f'/groups/history/{history_id}/dates', data=dict(
+            joined_date='2026-01-02',
+            left_date='2026-01-10'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            hist = db.execute('SELECT joined_at, left_at FROM group_member_history WHERE id = ?', (history_id,)).fetchone()
+            gm = db.execute('SELECT joined_at, left_at FROM group_members WHERE group_id = 1 AND patient_id = 1').fetchone()
+            assert hist is not None
+            assert hist['joined_at'].startswith('2026-01-02')
+            assert hist['left_at'].startswith('2026-01-10')
+            assert gm is not None
+            assert gm['left_at'] is not None
+
+    def test_patient_card_can_edit_group_attendance_and_summary(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Card Edit Patient', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Card Edit Group', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+
+        session_date = (datetime.now().date() + timedelta(days=2)).isoformat()
+        self.client.post('/groups/1/sessions', data=dict(
+            session_date=session_date,
+            session_time='09:00',
+            end_time='10:00',
+            title='Card Editable Session',
+            facilitator='Admin',
+            meeting_type='in-person',
+            recurrence_mode='one-time'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            session_id = db.execute('SELECT id FROM group_sessions ORDER BY id DESC LIMIT 1').fetchone()['id']
+            db.execute('''
+                INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note)
+                VALUES (?, 1, 'pending', NULL, 0, NULL)
+            ''', (session_id,))
+            db.commit()
+
+        rv = self.client.post(f'/patient/1/group_attendance/{session_id}/update', data=dict(
+            attendance_status='missed',
+            absence_reason='Transportation issue',
+            notified_on_time='on',
+            attendance_note='Patient called in advance',
+            session_summary='Group discussed coping plans',
+            active_tab='info'
+        ), follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            att = db.execute('''
+                SELECT attendance_status, absence_reason, notified_on_time, attendance_note
+                FROM group_session_attendance
+                WHERE session_id = ? AND patient_id = 1
+            ''', (session_id,)).fetchone()
+            sess = db.execute('SELECT session_summary FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+            assert att is not None
+            assert att['attendance_status'] == 'missed'
+            assert att['absence_reason'] == 'Transportation issue'
+            assert int(att['notified_on_time'] or 0) == 1
+            assert att['attendance_note'] == 'Patient called in advance'
+            assert sess['session_summary'] == 'Group discussed coping plans'
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,6 +2,49 @@
 
 ---
 
+## Session 25
+
+**Date:** March 16, 2026
+
+**Objective:** Refine group tab and group management so groups behave as ongoing treatment units with richer attendance controls and patient-card integration.
+
+**Changes Made:**
+
+1. **Group Membership Suggestions Restricted to Group Patients**
+- Group member picker now suggests only patients where `patient_type='group'`.
+- Backend now enforces this rule on add-member requests.
+
+2. **Editable Group Join/Leave Dates**
+- Added date editing for membership periods (`joined_date`, `left_date`) directly from:
+  - group management history panel,
+  - patient private card.
+- Added synchronization logic so current active membership state remains consistent.
+
+3. **Attendance: Missed + Notified Binary Flag**
+- Added `notified_on_time` boolean on group attendance records.
+- Group session recording now supports:
+  - arrived/missed status,
+  - missed reason,
+  - notified-correctly checkbox,
+  - per-patient attendance note.
+
+4. **Patient Private Card Integration for Group Meetings**
+- Added a dedicated **Group Participation** card in patient profile with:
+  - private arrived counter,
+  - attendance timeline per group meeting,
+  - group-wide session summary visibility,
+  - inline edit capability for attendance + summary from patient card.
+
+5. **Missed Group Note De-duplication**
+- Improved missed-group auto-note behavior to upsert by session marker instead of creating duplicates on repeated edits.
+
+6. **Tests Added/Updated**
+- Added/updated regression tests for:
+  - group-only suggestion/enforcement,
+  - membership date editing,
+  - notified flag persistence,
+  - patient-card attendance and summary editing.
+
 ## Session 24
 
 **Date:** March 16, 2026

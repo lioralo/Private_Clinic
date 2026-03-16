@@ -129,6 +129,93 @@
                             </div>
                         </div>
 
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-people me-2"></i>Group Participation</h5>
+                                <span class="badge bg-primary-subtle text-primary border">Arrived Counter: {{ group_arrived_count }}</span>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="small text-uppercase text-muted mb-2">Group Membership Periods</div>
+                                <div class="list-group list-group-flush border rounded-3 mb-3">
+                                    {% for row in group_membership_rows %}
+                                    <div class="list-group-item">
+                                        <div class="small fw-semibold mb-1">{{ row['group_name'] }}</div>
+                                        <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="return_patient_id" value="{{ patient['id'] }}">
+                                            <div class="col-md-5">
+                                                <label class="form-label smallest mb-1">Joined</label>
+                                                <input type="date" class="form-control form-control-sm" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" required>
+                                            </div>
+                                            <div class="col-md-5">
+                                                <label class="form-label smallest mb-1">Left</label>
+                                                <input type="date" class="form-control form-control-sm" name="left_date" value="{{ (row['left_at'] or '')[:10] }}">
+                                            </div>
+                                            <div class="col-md-2 d-flex align-items-end">
+                                                <button class="btn btn-sm btn-outline-secondary w-100" type="submit">Save</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    {% else %}
+                                    <div class="list-group-item small text-muted">No group memberships recorded.</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="small text-uppercase text-muted mb-2">Group Meeting Attendance</div>
+                                <div class="accordion" id="patientGroupAttendanceAccordion">
+                                    {% for row in group_attendance_rows %}
+                                    {% set collapse_id = 'groupAttendance' ~ loop.index %}
+                                    <div class="accordion-item border mb-2 rounded-3 overflow-hidden">
+                                        <h2 class="accordion-header" id="{{ collapse_id }}Head">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}Body">
+                                                <span class="fw-semibold me-2">{{ row['group_name'] }}</span>
+                                                <span class="text-muted small">{{ row['session_date'] }} {{ row['session_time'] }}</span>
+                                                <span class="badge ms-2 {% if row['attendance_status'] == 'present' %}bg-success{% elif row['attendance_status'] == 'missed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ row['attendance_status'] or 'pending' }}</span>
+                                            </button>
+                                        </h2>
+                                        <div id="{{ collapse_id }}Body" class="accordion-collapse collapse" data-bs-parent="#patientGroupAttendanceAccordion">
+                                            <div class="accordion-body">
+                                                <form method="post" action="{{ url_for('update_patient_group_attendance', patient_id=patient['id'], session_id=row['session_id']) }}" class="row g-2">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="active_tab" value="info">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label smallest mb-1">Attendance</label>
+                                                        <select class="form-select form-select-sm" name="attendance_status">
+                                                            <option value="pending" {% if row['attendance_status'] == 'pending' %}selected{% endif %}>Pending</option>
+                                                            <option value="present" {% if row['attendance_status'] == 'present' %}selected{% endif %}>Arrived</option>
+                                                            <option value="missed" {% if row['attendance_status'] == 'missed' %}selected{% endif %}>Missed</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <label class="form-label smallest mb-1">Group Summary (whole meeting)</label>
+                                                        <input type="text" class="form-control form-control-sm" name="session_summary" value="{{ row['session_summary'] or '' }}" placeholder="What happened in this group meeting">
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label smallest mb-1">Missed reason</label>
+                                                        <input type="text" class="form-control form-control-sm" name="absence_reason" value="{{ row['absence_reason'] or '' }}" placeholder="Reason if missed">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label smallest mb-1 d-block">Notified correctly</label>
+                                                        <input type="checkbox" class="form-check-input mt-2" name="notified_on_time" {% if row['notified_on_time'] %}checked{% endif %}>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label smallest mb-1">Private note</label>
+                                                        <input type="text" class="form-control form-control-sm" name="attendance_note" value="{{ row['attendance_note'] or '' }}" placeholder="Private attendance note">
+                                                    </div>
+                                                    <div class="col-12 text-end">
+                                                        <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill">Update From Patient Card</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted small">No group attendance records yet.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
                         {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
                         <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeEvaluationFormBlock">
                             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center gap-2 flex-wrap">
