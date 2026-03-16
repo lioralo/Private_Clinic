@@ -135,9 +135,16 @@
                                 <h5 class="fw-bold mb-0 text-primary">
                                     <i class="bi bi-clipboard2-pulse me-2"></i>{{ 'טופס אינטייק להערכה' if lang == 'he' else 'Intake Evaluation Form' }}
                                 </h5>
-                                <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
-                                    <i class="bi bi-file-earmark-word me-1"></i>{{ 'ייצוא DOCX' if lang == 'he' else 'Export DOCX' }}
-                                </a>
+                                <form method="get" action="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="d-flex align-items-center gap-2 flex-wrap">
+                                    <label for="exportIntakeLang" class="small text-muted mb-0">{{ 'שפת המסמך' if lang == 'he' else 'Document language' }}</label>
+                                    <select id="exportIntakeLang" name="lang" class="form-select form-select-sm" style="width:auto; min-width: 120px;">
+                                        <option value="en" {% if lang != 'he' %}selected{% endif %}>English</option>
+                                        <option value="he" {% if lang == 'he' %}selected{% endif %}>עברית</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">
+                                        <i class="bi bi-file-earmark-word me-1"></i>{{ 'ייצוא DOCX' if lang == 'he' else 'Export DOCX' }}
+                                    </button>
+                                </form>
                             </div>
                             <div class="card-body p-4">
                                 <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
@@ -145,6 +152,19 @@
                                     <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
                                     <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
                                     <input type="hidden" name="active_tab" value="intake">
+
+                                    {% set appearance_fit_values = intake_form_data.get('appearance_fit', '').replace(', ', ',').split(',') %}
+                                    {% set appearance_ordered_values = intake_form_data.get('appearance_ordered', '').replace(', ', ',').split(',') %}
+                                    {% set behavior_values = intake_form_data.get('behavior_normal', '').replace(', ', ',').split(',') %}
+                                    {% set speech_values = intake_form_data.get('speech_style', '').replace(', ', ',').split(',') %}
+                                    {% set mood_values = intake_form_data.get('mood', '').replace(', ', ',').split(',') %}
+                                    {% set affect_match_values = intake_form_data.get('affect_match', '').replace(', ', ',').split(',') %}
+                                    {% set affect_state_values = intake_form_data.get('affect_state', '').replace(', ', ',').split(',') %}
+                                    {% set thinking_normal_values = intake_form_data.get('thinking_normal', '').replace(', ', ',').split(',') %}
+                                    {% set thinking_rate_values = intake_form_data.get('thinking_rate', '').replace(', ', ',').split(',') %}
+                                    {% set thinking_sequence_values = intake_form_data.get('thinking_sequence', '').replace(', ', ',').split(',') %}
+                                    {% set thinking_content_values = intake_form_data.get('thinking_content', '').replace(', ', ',').split(',') %}
+                                    {% set referral_target_values = intake_form_data.get('referral_target', '').replace(', ', ',').split(',') %}
 
                                     <ul class="nav nav-pills intake-nav mb-3" role="tablist">
                                         <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="pill" data-bs-target="#intake-pre">{{ 'מקדים' if lang == 'he' else 'Prelim' }}</button></li>
@@ -157,14 +177,20 @@
 
                                     <div class="tab-content border rounded-3 p-3 bg-light">
                                         <div class="tab-pane fade show active" id="intake-pre">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרטים מקדימים' if lang == 'he' else 'Preliminary Details' }}</h6>
                                             <div class="row g-3">
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">{{ 'מקום הפגישה' if lang == 'he' else 'Meeting Location' }}</label>
-                                                    <select class="form-select" name="intake_meeting_location">
+                                                    <select class="form-select" id="intakeMeetingLocation" name="intake_meeting_location">
                                                         <option value="" {% if not intake_form_data.get('meeting_location') %}selected{% endif %}>{{ 'בחר' if lang == 'he' else 'Select' }}</option>
                                                         <option value="מרפאה" {% if intake_form_data.get('meeting_location') == 'מרפאה' %}selected{% endif %}>{{ 'מרפאה' if lang == 'he' else 'Clinic' }}</option>
                                                         <option value="טלפונית" {% if intake_form_data.get('meeting_location') == 'טלפונית' %}selected{% endif %}>{{ 'טלפונית' if lang == 'he' else 'Phone' }}</option>
+                                                        <option value="אחר" {% if intake_form_data.get('meeting_location') == 'אחר' %}selected{% endif %}>{{ 'אחר' if lang == 'he' else 'Elsewhere' }}</option>
                                                     </select>
+                                                </div>
+                                                <div class="col-md-6" id="intakeMeetingLocationSpecifyWrap">
+                                                    <label class="form-label fw-bold small">{{ 'אם אחר, פרט' if lang == 'he' else 'If Elsewhere, Specify' }}</label>
+                                                    <input class="form-control" id="intakeMeetingLocationSpecify" name="intake_meeting_location_specify" value="{{ intake_form_data.get('meeting_location_specify', '') }}">
                                                 </div>
                                                 <div class="col-md-3">
                                                     <label class="form-label fw-bold small">{{ 'זמן הפגישה' if lang == 'he' else 'Meeting Time' }}</label>
@@ -182,6 +208,7 @@
                                         </div>
 
                                         <div class="tab-pane fade" id="intake-background">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'רקע והפניה' if lang == 'he' else 'Background and Referral' }}</h6>
                                             <div class="row g-3">
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">{{ 'תלונה עיקרית' if lang == 'he' else 'Main Complaint' }}</label>
@@ -207,6 +234,7 @@
                                         </div>
 
                                         <div class="tab-pane fade" id="intake-admin">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרטים אדמיניסטרטיביים' if lang == 'he' else 'Administrative Details' }}</h6>
                                             <div class="row g-3">
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">{{ 'מצב משפחתי' if lang == 'he' else 'Family Status' }}</label>
@@ -222,7 +250,7 @@
                                                         {% endfor %}
                                                     </select>
                                                 </div>
-                                                <div class="col-md-12">
+                                                <div class="col-md-12" id="intakeGuardianSpecifyWrap">
                                                     <label class="form-label fw-bold small">{{ 'אם יש אפוטרופסות, על ידי מי' if lang == 'he' else 'Guardian Details' }}</label>
                                                     <input class="form-control" name="intake_guardian_by_whom" value="{{ intake_form_data.get('guardian_by_whom', '') }}">
                                                 </div>
@@ -236,7 +264,7 @@
                                                         {% endfor %}
                                                     </select>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6" id="intakeLivingWithOtherWrap">
                                                     <label class="form-label fw-bold small">{{ 'אם אחר, פרט' if lang == 'he' else 'If Other, Specify' }}</label>
                                                     <input class="form-control" name="intake_living_with_other" value="{{ intake_form_data.get('living_with_other', '') }}">
                                                 </div>
@@ -250,7 +278,7 @@
                                                         <option value="לא ידוע" {% if disability_value == 'לא ידוע' %}selected{% endif %}>{{ 'לא ידוע' if lang == 'he' else 'Unknown' }}</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-md-4" id="intakeDisabilityPercentWrap">
                                                     <label class="form-label fw-bold small">{{ 'אחוזי נכות' if lang == 'he' else 'Disability Percent' }}</label>
                                                     <input class="form-control" id="intakeDisabilityPercent" name="intake_disability_percent" value="{{ intake_form_data.get('disability_percent', '') }}" placeholder="%">
                                                 </div>
@@ -310,6 +338,7 @@
                                         </div>
 
                                         <div class="tab-pane fade" id="intake-medical">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'רקע רפואי' if lang == 'he' else 'Medical Background' }}</h6>
                                             <div class="row g-3">
                                                 <div class="col-md-12">
                                                     <label class="form-label fw-bold small">{{ 'מחלות רקע' if lang == 'he' else 'Medical Background Conditions' }}</label>
@@ -324,22 +353,31 @@
 
                                         <div class="tab-pane fade" id="intake-mental">
                                             <div class="row g-3">
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'הופעה - תואמת' if lang == 'he' else 'Appearance - Congruent' }}</label>
-                                                    {% set appearance_fit = intake_form_data.get('appearance_fit', '') %}
-                                                    <select class="form-select" name="intake_appearance_fit">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if appearance_fit == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if appearance_fit == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                    </select>
+                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'הופעה' if lang == 'he' else 'Appearance' }}</h6></div>
+                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'תואמת' if lang == 'he' else 'Congruent' }}</label>
+                                                    <div class="border rounded-3 p-2 bg-white">
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_fit" value="כן" id="appearanceFitYes" {% if 'כן' in appearance_fit_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="appearanceFitYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_fit" value="לא" id="appearanceFitNo" {% if 'לא' in appearance_fit_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="appearanceFitNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הופעה - הערה' if lang == 'he' else 'Appearance Note' }}</label><input class="form-control" name="intake_appearance_fit_note" value="{{ intake_form_data.get('appearance_fit_note', '') }}"></div>
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מסודרת' if lang == 'he' else 'Ordered' }}</label>
-                                                    {% set appearance_ordered = intake_form_data.get('appearance_ordered', '') %}
-                                                    <select class="form-select" name="intake_appearance_ordered">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if appearance_ordered == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if appearance_ordered == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                    </select>
+                                                    <div class="border rounded-3 p-2 bg-white">
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_ordered" value="כן" id="appearanceOrderedYes" {% if 'כן' in appearance_ordered_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="appearanceOrderedYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_ordered" value="לא" id="appearanceOrderedNo" {% if 'לא' in appearance_ordered_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="appearanceOrderedNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מסודרות/מוזנחת' if lang == 'he' else 'Ordering Note' }}</label><input class="form-control" name="intake_appearance_ordered_note" value="{{ intake_form_data.get('appearance_ordered_note', '') }}"></div>
 
@@ -365,93 +403,108 @@
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות קשר עין' if lang == 'he' else 'Eye Contact Note' }}</label><input class="form-control" name="intake_eye_contact_note" value="{{ intake_form_data.get('eye_contact_note', '') }}"></div>
 
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'התנהגות' if lang == 'he' else 'Behavior' }}</label>
-                                                    {% set behavior_normal = intake_form_data.get('behavior_normal', '') %}
-                                                    <select class="form-select" name="intake_behavior_normal">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="תקינה" {% if behavior_normal == 'תקינה' %}selected{% endif %}>{{ 'תקינה' if lang == 'he' else 'Normal' }}</option>
-                                                        <option value="לא תקינה" {% if behavior_normal == 'לא תקינה' %}selected{% endif %}>{{ 'לא תקינה' if lang == 'he' else 'Not normal' }}</option>
-                                                    </select>
+                                                    <div class="border rounded-3 p-2 bg-white">
+                                                        {% for opt in ['תקינה','לא תקינה'] %}
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_behavior_normal" value="{{ opt }}" id="behaviorNormal{{ loop.index }}" {% if opt in behavior_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="behaviorNormal{{ loop.index }}">{{ opt if lang == 'he' else {'תקינה':'Normal','לא תקינה':'Not normal'}[opt] }}</label>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות התנהגות' if lang == 'he' else 'Behavior Note' }}</label><input class="form-control" name="intake_behavior_note" value="{{ intake_form_data.get('behavior_note', '') }}"></div>
 
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'דיבור' if lang == 'he' else 'Speech' }}</label>
-                                                    {% set speech_style = intake_form_data.get('speech_style', '') %}
-                                                    <select class="form-select" name="intake_speech_style">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['מהיר','איטי','לא ברור','שפה דלה','שפה עשירה','שפה טכנית'] %}
-                                                        <option value="{{ opt }}" {% if speech_style == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'מהיר':'Fast','איטי':'Slow','לא ברור':'Unclear','שפה דלה':'Poor language','שפה עשירה':'Rich language','שפה טכנית':'Technical language'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_speech_style" value="{{ opt }}" id="speechStyle{{ loop.index }}" {% if opt in speech_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="speechStyle{{ loop.index }}">{{ opt if lang == 'he' else {'מהיר':'Fast','איטי':'Slow','לא ברור':'Unclear','שפה דלה':'Poor language','שפה עשירה':'Rich language','שפה טכנית':'Technical language'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות דיבור' if lang == 'he' else 'Speech Note' }}</label><input class="form-control" name="intake_speech_note" value="{{ intake_form_data.get('speech_note', '') }}"></div>
 
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מצב רוח' if lang == 'he' else 'Mood' }}</label>
-                                                    {% set mood = intake_form_data.get('mood', '') %}
-                                                    <select class="form-select" name="intake_mood">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['תקין','חרדתי','דיכאון','אאופורי','מצומצם','תוקפני','שטוח','מגוון','מעורבב'] %}
-                                                        <option value="{{ opt }}" {% if mood == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_mood" value="{{ opt }}" id="moodVal{{ loop.index }}" {% if opt in mood_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="moodVal{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מצב רוח' if lang == 'he' else 'Mood Note' }}</label><input class="form-control" name="intake_mood_note" value="{{ intake_form_data.get('mood_note', '') }}"></div>
 
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט תואם מצב רוח' if lang == 'he' else 'Affect Congruent with Mood' }}</label>
-                                                    {% set affect_match = intake_form_data.get('affect_match', '') %}
-                                                    <select class="form-select" name="intake_affect_match">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if affect_match == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if affect_match == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                    </select>
+                                                    <div class="border rounded-3 p-2 bg-white">
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_affect_match" value="כן" id="affectMatchYes" {% if 'כן' in affect_match_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="affectMatchYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
+                                                        </div>
+                                                        <div class="form-check form-check-inline">
+                                                            <input class="form-check-input" type="checkbox" name="intake_affect_match" value="לא" id="affectMatchNo" {% if 'לא' in affect_match_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="affectMatchNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט - מצב' if lang == 'he' else 'Affect State' }}</label>
-                                                    {% set affect_state = intake_form_data.get('affect_state', '') %}
-                                                    <select class="form-select" name="intake_affect_state">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['תקין','חרדתי','דיכאון','אאופורי','מצומצם','תוקפני','שטוח','מגוון','מעורבב'] %}
-                                                        <option value="{{ opt }}" {% if affect_state == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_affect_state" value="{{ opt }}" id="affectState{{ loop.index }}" {% if opt in affect_state_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="affectState{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-4"><label class="form-label fw-bold small">{{ 'הערות אפקט' if lang == 'he' else 'Affect Note' }}</label><input class="form-control" name="intake_affect_note" value="{{ intake_form_data.get('affect_note', '') }}"></div>
 
+                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'חשיבה' if lang == 'he' else 'Thinking' }}</h6></div>
                                                 <div class="col-md-3"><label class="form-label fw-bold small">{{ 'חשיבה תקינה' if lang == 'he' else 'Thinking Normal' }}</label>
-                                                    {% set thinking_normal = intake_form_data.get('thinking_normal', '') %}
-                                                    <select class="form-select" name="intake_thinking_normal">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if thinking_normal == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if thinking_normal == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                        <option value="מופחתת" {% if thinking_normal == 'מופחתת' %}selected{% endif %}>{{ 'מופחתת' if lang == 'he' else 'Reduced' }}</option>
-                                                    </select>
+                                                    <div class="border rounded-3 p-2 bg-white">
+                                                        {% for opt in ['כן','לא','מופחתת'] %}
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_normal" value="{{ opt }}" id="thinkingNormal{{ loop.index }}" {% if opt in thinking_normal_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="thinkingNormal{{ loop.index }}">{{ opt if lang == 'he' else {'כן':'Yes','לא':'No','מופחתת':'Reduced'}[opt] }}</label>
+                                                        </div>
+                                                        {% endfor %}
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-3"><label class="form-label fw-bold small">{{ 'קצב חשיבה' if lang == 'he' else 'Thinking Rate' }}</label>
-                                                    {% set thinking_rate = intake_form_data.get('thinking_rate', '') %}
-                                                    <select class="form-select" name="intake_thinking_rate">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['תקין','מהיר','איטי','מעורבב'] %}
-                                                        <option value="{{ opt }}" {% if thinking_rate == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Normal','מהיר':'Fast','איטי':'Slow','מעורבב':'Mixed'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_rate" value="{{ opt }}" id="thinkingRate{{ loop.index }}" {% if opt in thinking_rate_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="thinkingRate{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','מהיר':'Fast','איטי':'Slow','מעורבב':'Mixed'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-3"><label class="form-label fw-bold small">{{ 'רצף חשיבה' if lang == 'he' else 'Thinking Sequence' }}</label>
-                                                    {% set thinking_sequence = intake_form_data.get('thinking_sequence', '') %}
-                                                    <select class="form-select" name="intake_thinking_sequence">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['תקין','משיקני','פרסרטיבי','קוהרנטי','תקוע','אסוציאטיבי'] %}
-                                                        <option value="{{ opt }}" {% if thinking_sequence == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Normal','משיקני':'Tangential','פרסרטיבי':'Perseverative','קוהרנטי':'Coherent','תקוע':'Blocked','אסוציאטיבי':'Associative'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_sequence" value="{{ opt }}" id="thinkingSeq{{ loop.index }}" {% if opt in thinking_sequence_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="thinkingSeq{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','משיקני':'Tangential','פרסרטיבי':'Perseverative','קוהרנטי':'Coherent','תקוע':'Blocked','אסוציאטיבי':'Associative'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תוכן חשיבה' if lang == 'he' else 'Thinking Content' }}</label>
-                                                    {% set thinking_content = intake_form_data.get('thinking_content', '') %}
-                                                    <select class="form-select" name="intake_thinking_content">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['תקין','אובססיבי','פובי','חרדתי','דיכאוני','קונקרטי','אבסטרקטי'] %}
-                                                        <option value="{{ opt }}" {% if thinking_content == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Normal','אובססיבי':'Obsessive','פובי':'Phobic','חרדתי':'Anxious','דיכאוני':'Depressive','קונקרטי':'Concrete','אבסטרקטי':'Abstract'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_content" value="{{ opt }}" id="thinkingContent{{ loop.index }}" {% if opt in thinking_content_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="thinkingContent{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','אובססיבי':'Obsessive','פובי':'Phobic','חרדתי':'Anxious','דיכאוני':'Depressive','קונקרטי':'Concrete','אבסטרקטי':'Abstract'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
 
+                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'תפיסה' if lang == 'he' else 'Perception' }}</h6></div>
                                                 <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תפיסה תקינה' if lang == 'he' else 'Perception Normal' }}</label>
                                                     {% set perception_normal = intake_form_data.get('perception_normal', '') %}
                                                     <select class="form-select" name="intake_perception_normal">
@@ -518,16 +571,18 @@
                                         </div>
 
                                         <div class="tab-pane fade" id="intake-plan">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'תוכנית טיפול והפניה' if lang == 'he' else 'Treatment Plan and Referral' }}</h6>
                                             <div class="row g-3">
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">{{ 'הפניה' if lang == 'he' else 'Referral Target' }}</label>
-                                                    {% set referral_target = intake_form_data.get('referral_target', '') %}
-                                                    <select class="form-select" name="intake_referral_target">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
+                                                    <div class="border rounded-3 p-2 bg-white">
                                                         {% for opt in ['לא מופנה','פסיכיאטר','פסיכולוג','ספק חוץ','עובדת סוציאלית','רופא משפחה','רופא אחר','סל שיקום','מיון פסיכיאטרי'] %}
-                                                        <option value="{{ opt }}" {% if referral_target == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'לא מופנה':'No referral','פסיכיאטר':'Psychiatrist','פסיכולוג':'Psychologist','ספק חוץ':'External provider','עובדת סוציאלית':'Social worker','רופא משפחה':'Family physician','רופא אחר':'Other physician','סל שיקום':'Rehabilitation basket','מיון פסיכיאטרי':'Psychiatric ER'}[opt] }}</option>
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="intake_referral_target" value="{{ opt }}" id="referralTarget{{ loop.index }}" {% if opt in referral_target_values %}checked{% endif %}>
+                                                            <label class="form-check-label small" for="referralTarget{{ loop.index }}">{{ opt if lang == 'he' else {'לא מופנה':'No referral','פסיכיאטר':'Psychiatrist','פסיכולוג':'Psychologist','ספק חוץ':'External provider','עובדת סוציאלית':'Social worker','רופא משפחה':'Family physician','רופא אחר':'Other physician','סל שיקום':'Rehabilitation basket','מיון פסיכיאטרי':'Psychiatric ER'}[opt] }}</label>
+                                                        </div>
                                                         {% endfor %}
-                                                    </select>
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label fw-bold small">{{ 'הסכמת המטופל' if lang == 'he' else 'Patient Consent' }}</label>
@@ -539,7 +594,7 @@
                                                         <option value="חלקית" {% if patient_consent == 'חלקית' %}selected{% endif %}>{{ 'חלקית' if lang == 'he' else 'Partial' }}</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-12">
+                                                <div class="col-md-12" id="intakeReferralDetailsWrap">
                                                     <label class="form-label fw-bold small">{{ 'פירוט מטרות ההפניה' if lang == 'he' else 'Referral Details and Goals' }}</label>
                                                     <textarea class="form-control" rows="3" name="intake_referral_details">{{ intake_form_data.get('referral_details', '') }}</textarea>
                                                 </div>
@@ -1197,16 +1252,85 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const disabilityStatus = document.getElementById('intakeDisabilityStatus');
     const disabilityPercent = document.getElementById('intakeDisabilityPercent');
+    const disabilityPercentWrap = document.getElementById('intakeDisabilityPercentWrap');
+    const meetingLocation = document.getElementById('intakeMeetingLocation');
+    const meetingLocationSpecifyWrap = document.getElementById('intakeMeetingLocationSpecifyWrap');
+    const meetingLocationSpecify = document.getElementById('intakeMeetingLocationSpecify');
+    const guardianStatus = document.querySelector('select[name="intake_guardian_status"]');
+    const guardianSpecifyWrap = document.getElementById('intakeGuardianSpecifyWrap');
+    const guardianSpecifyInput = document.querySelector('input[name="intake_guardian_by_whom"]');
+    const livingWith = document.querySelector('select[name="intake_living_with"]');
+    const livingWithOtherWrap = document.getElementById('intakeLivingWithOtherWrap');
+    const livingWithOtherInput = document.querySelector('input[name="intake_living_with_other"]');
+    const referralTargetBoxes = document.querySelectorAll('input[name="intake_referral_target"]');
+    const referralDetailsWrap = document.getElementById('intakeReferralDetailsWrap');
+    const referralDetailsInput = document.querySelector('textarea[name="intake_referral_details"]');
+
+    function toggleFieldGroup(wrap, input, enabled) {
+        if (!wrap || !input) {
+            return;
+        }
+        wrap.classList.toggle('d-none', !enabled);
+        input.disabled = !enabled;
+    }
+
+    function syncMeetingLocationSpecify() {
+        const enabled = meetingLocation && meetingLocation.value === 'אחר';
+        toggleFieldGroup(meetingLocationSpecifyWrap, meetingLocationSpecify, enabled);
+    }
+
+    function syncGuardianSpecify() {
+        const enabled = guardianStatus && guardianStatus.value && guardianStatus.value !== 'לא';
+        toggleFieldGroup(guardianSpecifyWrap, guardianSpecifyInput, enabled);
+    }
+
+    function syncLivingWithOther() {
+        const enabled = livingWith && livingWith.value === 'אחר';
+        toggleFieldGroup(livingWithOtherWrap, livingWithOtherInput, enabled);
+    }
+
+    function syncReferralDetails() {
+        if (!referralDetailsWrap || !referralDetailsInput) {
+            return;
+        }
+        const hasTargets = Array.from(referralTargetBoxes || []).some((box) => box.checked && box.value !== 'לא מופנה');
+        referralDetailsWrap.classList.toggle('d-none', !hasTargets);
+        referralDetailsInput.disabled = !hasTargets;
+    }
+
     if (disabilityStatus && disabilityPercent) {
         const syncDisabilityPercent = () => {
             const enabled = disabilityStatus.value === 'כן';
             disabilityPercent.disabled = !enabled;
+            if (disabilityPercentWrap) {
+                disabilityPercentWrap.classList.toggle('d-none', !enabled);
+            }
             if (!enabled && disabilityPercent.value.trim() === '') {
                 disabilityPercent.placeholder = '';
             }
         };
         disabilityStatus.addEventListener('change', syncDisabilityPercent);
         syncDisabilityPercent();
+    }
+
+    if (meetingLocation) {
+        meetingLocation.addEventListener('change', syncMeetingLocationSpecify);
+        syncMeetingLocationSpecify();
+    }
+
+    if (guardianStatus) {
+        guardianStatus.addEventListener('change', syncGuardianSpecify);
+        syncGuardianSpecify();
+    }
+
+    if (livingWith) {
+        livingWith.addEventListener('change', syncLivingWithOther);
+        syncLivingWithOther();
+    }
+
+    if (referralTargetBoxes.length) {
+        referralTargetBoxes.forEach((box) => box.addEventListener('change', syncReferralDetails));
+        syncReferralDetails();
     }
 
     const selfHarmLevel = document.getElementById('intakeSelfHarmLevel');

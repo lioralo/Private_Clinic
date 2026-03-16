@@ -671,6 +671,33 @@ class ClinicTestCase(unittest.TestCase):
             assert 'New pending patient' in notif['message']
             assert 'Dana Public' in notif['message']
 
+    def test_public_link_uses_configured_public_base_url(self):
+        self.login('admin', 'admin')
+        previous_base = app.config.get('PUBLIC_BASE_URL', '')
+        app.config['PUBLIC_BASE_URL'] = 'https://clinic.example.com'
+        try:
+            rv = self.client.post('/api/calendar/public-link')
+            assert rv.status_code == 200
+            payload = rv.get_json()
+            assert payload['url'].startswith('https://clinic.example.com/calendar/public/')
+        finally:
+            app.config['PUBLIC_BASE_URL'] = previous_base
+
+    def test_public_link_uses_forwarded_proxy_headers(self):
+        self.login('admin', 'admin')
+        previous_base = app.config.get('PUBLIC_BASE_URL', '')
+        app.config['PUBLIC_BASE_URL'] = ''
+        try:
+            rv = self.client.post('/api/calendar/public-link', headers={
+                'X-Forwarded-Proto': 'https',
+                'X-Forwarded-Host': 'booking.public.example'
+            })
+            assert rv.status_code == 200
+            payload = rv.get_json()
+            assert payload['url'].startswith('https://booking.public.example/calendar/public/')
+        finally:
+            app.config['PUBLIC_BASE_URL'] = previous_base
+
     def test_calendar_follow_up_alert_for_candidate_decision_needed(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
@@ -902,6 +929,108 @@ class ClinicTestCase(unittest.TestCase):
             assert len(rows) == 1
             assert rows[0]['appointment_time'] == second_time
             assert int(rows[0]['is_recurring'] or 0) == 0
+
+    def test_intake_form_save_edit_and_export_docx(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Intake Flow Patient',
+            status='candidate',
+            patient_type='initial-intake'
+        ), follow_redirects=True)
+
+        # First save should persist intake questionnaire and assessment summary.
+        rv = self.client.post('/patient/1/edit_info', data=dict(
+            background='',
+            treatment_info='',
+            active_tab='intake',
+            intake_meeting_location='מרפאה',
+            intake_main_complaint='Initial complaint text',
+            intake_problem_history='Initial problem history'
+        ), follow_redirects=False)
+        assert rv.status_code == 302
+        assert '/patient/1?tab=intake' in rv.headers.get('Location', '')
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute(
+                'SELECT intake_questionnaire, intake_assessment FROM patients WHERE id = 1'
+            ).fetchone()
+            intake_payload = json.loads(row['intake_questionnaire'])
+            assert intake_payload['main_complaint'] == 'Initial complaint text'
+            assert intake_payload['problem_history'] == 'Initial problem history'
+            assert 'Initial complaint text' in (row['intake_assessment'] or '')
+
+        # Edit should overwrite the stored intake values.
+        self.client.post('/patient/1/edit_info', data=dict(
+            background='',
+            treatment_info='',
+            active_tab='intake',
+            intake_meeting_location='טלפונית',
+            intake_main_complaint='Edited complaint text',
+            intake_problem_history='Edited problem history'
+        ), follow_redirects=False)
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT intake_questionnaire FROM patients WHERE id = 1').fetchone()
+            intake_payload = json.loads(row['intake_questionnaire'])
+            assert intake_payload['meeting_location'] == 'טלפונית'
+            assert intake_payload['main_complaint'] == 'Edited complaint text'
+            assert intake_payload['problem_history'] == 'Edited problem history'
+
+        # Export should produce a DOCX file response.
+        export_rv = self.client.get('/patient/1/intake_docx', follow_redirects=False)
+        assert export_rv.status_code == 200
+        assert (
+            export_rv.headers.get('Content-Type')
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        export_rv.close()
+
+        export_he_rv = self.client.get('/patient/1/intake_docx?lang=he', follow_redirects=False)
+        assert export_he_rv.status_code == 200
+        assert (
+            export_he_rv.headers.get('Content-Type')
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        export_he_rv.close()
+
+    def test_legacy_plain_text_intake_can_be_loaded_edited_and_exported(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(
+            name='Legacy Intake Patient',
+            status='candidate',
+            patient_type='initial-intake',
+            intake_assessment='Main complaint:\nLegacy complaint',
+            intake_questionnaire='Main complaint:\nLegacy complaint\n\nProblem history / current illness:\nLegacy history'
+        ), follow_redirects=True)
+
+        intake_page = self.client.get('/patient/1?tab=intake', follow_redirects=True)
+        assert intake_page.status_code == 200
+        assert b'Legacy complaint' in intake_page.data
+
+        self.client.post('/patient/1/edit_info', data=dict(
+            background='',
+            treatment_info='',
+            active_tab='intake',
+            intake_main_complaint='Updated legacy complaint',
+            intake_problem_history='Updated legacy history'
+        ), follow_redirects=False)
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT intake_questionnaire FROM patients WHERE id = 1').fetchone()
+            parsed = json.loads(row['intake_questionnaire'])
+            assert parsed['main_complaint'] == 'Updated legacy complaint'
+            assert parsed['problem_history'] == 'Updated legacy history'
+
+        export_rv = self.client.get('/patient/1/intake_docx', follow_redirects=False)
+        assert export_rv.status_code == 200
+        assert (
+            export_rv.headers.get('Content-Type')
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+        export_rv.close()
 
     def test_encrypted_backup_preserves_meeting_fields(self):
         self.login('admin', 'admin')

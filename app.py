@@ -2,12 +2,14 @@ import os
 import sqlite3
 import socket
 import json
+import ast
+from io import BytesIO
 import shutil
 import secrets
 from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -19,6 +21,7 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 csrf = CSRFProtect(app)
 DATABASE = 'clinic.db'
@@ -1121,21 +1124,107 @@ def extract_recent_focus(notes):
     return ''
 
 
-def parse_intake_questionnaire(raw_value):
-    if not raw_value:
+def normalize_intake_payload(payload):
+    if not isinstance(payload, dict):
         return {}
-    try:
-        parsed = json.loads(raw_value)
-        if isinstance(parsed, dict):
-            return parsed
-    except (json.JSONDecodeError, TypeError):
+    allowed_fields = set(intake_form_fields())
+    normalized = {}
+    for key, value in payload.items():
+        key_text = str(key or '').strip()
+        if not key_text:
+            continue
+        if key_text.startswith('intake_'):
+            key_text = key_text[7:]
+        if key_text not in allowed_fields:
+            continue
+        if isinstance(value, list):
+            clean_values = [str(item or '').strip() for item in value if str(item or '').strip()]
+            normalized[key_text] = ', '.join(clean_values)
+        else:
+            normalized[key_text] = str(value or '').strip()
+    return normalized
+
+
+def parse_legacy_intake_text(raw_value):
+    text = str(raw_value or '').strip()
+    if not text:
         return {}
+
+    label_map = {
+        'main complaint': 'main_complaint',
+        'problem history / current illness': 'problem_history',
+        'problem history': 'problem_history',
+        'early anamnesis': 'early_anamnesis',
+    }
+
+    parsed = {}
+    current_key = None
+    current_lines = []
+
+    def flush_current():
+        if current_key is None:
+            return
+        value = '\n'.join(current_lines).strip()
+        if value:
+            parsed[current_key] = value
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        lowered = stripped.lower()
+        if lowered.endswith(':'):
+            candidate = lowered[:-1].strip()
+            mapped = label_map.get(candidate)
+            if mapped:
+                flush_current()
+                current_key = mapped
+                current_lines = []
+                continue
+        if current_key is not None:
+            current_lines.append(stripped)
+
+    flush_current()
+    if parsed:
+        return parsed
+
+    # Fall back to using the entire legacy text as the main complaint.
+    return {'main_complaint': text}
+
+
+def parse_intake_questionnaire(raw_value, fallback_assessment=None):
+    if raw_value:
+        try:
+            parsed = json.loads(raw_value)
+            normalized = normalize_intake_payload(parsed)
+            if normalized:
+                return normalized
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Some legacy records were stored as Python dict strings.
+        raw_text = str(raw_value).strip()
+        if raw_text.startswith('{') and raw_text.endswith('}'):
+            try:
+                literal = ast.literal_eval(raw_text)
+                normalized = normalize_intake_payload(literal)
+                if normalized:
+                    return normalized
+            except (ValueError, SyntaxError):
+                pass
+
+        legacy_from_questionnaire = parse_legacy_intake_text(raw_value)
+        if legacy_from_questionnaire:
+            return legacy_from_questionnaire
+
+    legacy_from_assessment = parse_legacy_intake_text(fallback_assessment)
+    if legacy_from_assessment:
+        return legacy_from_assessment
+
     return {}
 
 
 def intake_form_fields():
     return [
-        'meeting_location', 'meeting_time', 'meeting_duration', 'meeting_conductor',
+        'meeting_location', 'meeting_location_specify', 'meeting_time', 'meeting_duration', 'meeting_conductor',
         'main_complaint', 'problem_history', 'early_anamnesis', 'referral_source', 'referral_date',
         'family_status', 'guardian_status', 'guardian_by_whom', 'living_with', 'living_with_other',
         'disability_status', 'disability_percent', 'self_harm_level', 'self_harm_recent', 'self_harm_count',
@@ -1153,13 +1242,36 @@ def intake_form_fields():
     ]
 
 
+def intake_multi_select_fields():
+    return {
+        'appearance_fit',
+        'appearance_ordered',
+        'behavior_normal',
+        'speech_style',
+        'mood',
+        'affect_match',
+        'affect_state',
+        'thinking_normal',
+        'thinking_rate',
+        'thinking_sequence',
+        'thinking_content',
+        'referral_target',
+    }
+
+
 def intake_data_from_request(form):
     if not any(key.startswith('intake_') for key in form.keys()):
         return None
     data = {}
+    multi_fields = intake_multi_select_fields()
     for key in intake_form_fields():
-        raw = form.get(f'intake_{key}', '')
-        data[key] = (raw or '').strip()
+        field_name = f'intake_{key}'
+        if key in multi_fields:
+            values = [value.strip() for value in form.getlist(field_name) if value and value.strip()]
+            data[key] = ', '.join(values)
+        else:
+            raw = form.get(field_name, '')
+            data[key] = (raw or '').strip()
     return data
 
 
@@ -1178,93 +1290,193 @@ def serialize_intake_assessment(data):
 
 
 def add_intake_section_heading(doc, title):
-    heading = doc.add_paragraph()
-    heading.add_run(title).bold = True
+    doc.add_heading(title, level=2)
+
+
+def split_intake_values(value):
+    cleaned = (value or '').strip()
+    if not cleaned:
+        return []
+    if '\n' in cleaned:
+        return [line.strip() for line in cleaned.splitlines() if line.strip()]
+    if ',' in cleaned:
+        return [item.strip() for item in cleaned.split(',') if item.strip()]
+    return [cleaned]
 
 
 def add_intake_line(doc, label, value):
-    cleaned = (value or '').strip()
-    if not cleaned:
+    values = split_intake_values(value)
+    if not values:
         return
-    paragraph = doc.add_paragraph()
-    paragraph.add_run(f'{label}: ').bold = True
-    paragraph.add_run(cleaned)
+    if len(values) == 1:
+        paragraph = doc.add_paragraph()
+        paragraph.add_run(f'{label}: ').bold = True
+        paragraph.add_run(values[0])
+        return
+
+    heading = doc.add_paragraph()
+    heading.add_run(f'{label}:').bold = True
+    for item in values:
+        doc.add_paragraph(item, style='List Bullet')
 
 
-def build_intake_docx(patient_name, data):
+def build_intake_docx(patient_name, data, language='en'):
+    is_hebrew = language == 'he'
+    text = {
+        'title': 'טופס הערכת אינטייק' if is_hebrew else 'Intake Evaluation',
+        'patient': 'מטופל/ת' if is_hebrew else 'Patient',
+        'generated': 'הופק בתאריך' if is_hebrew else 'Generated',
+        'sections': {
+            'prelim': 'פרטים מקדימים' if is_hebrew else 'Prelim',
+            'background': 'רקע' if is_hebrew else 'Background',
+            'administrative': 'אדמיניסטרטיבי' if is_hebrew else 'Administrative',
+            'medical': 'רפואי' if is_hebrew else 'Medical',
+            'mental_status': 'סטטוס מנטלי' if is_hebrew else 'Mental Status',
+            'treatment_plan': 'תוכנית טיפול' if is_hebrew else 'Treatment Plan',
+        },
+        'labels': {
+            'meeting_location': 'מקום הפגישה' if is_hebrew else 'Meeting location',
+            'meeting_location_specify': 'מקום הפגישה (פירוט)' if is_hebrew else 'Meeting location (specify)',
+            'meeting_time': 'זמן הפגישה' if is_hebrew else 'Meeting time',
+            'meeting_duration': 'משך' if is_hebrew else 'Duration',
+            'meeting_conductor': 'מי מעביר' if is_hebrew else 'Conducted by',
+            'main_complaint': 'תלונה עיקרית' if is_hebrew else 'Main complaint',
+            'problem_history': 'היסטוריה של הבעיה / מחלה נוכחית' if is_hebrew else 'Problem history / current illness',
+            'early_anamnesis': 'אנמנזה מוקדמת' if is_hebrew else 'Early anamnesis',
+            'referral_source': 'מקור ההפניה' if is_hebrew else 'Referral source',
+            'referral_date': 'תאריך ההפניה' if is_hebrew else 'Referral date',
+            'family_status': 'מצב משפחתי' if is_hebrew else 'Family status',
+            'guardian_status': 'אפוטרופסות' if is_hebrew else 'Guardian status',
+            'guardian_by_whom': 'פרטי אפוטרופסות' if is_hebrew else 'Guardian details',
+            'living_with': 'עם מי גר/ה' if is_hebrew else 'Living arrangement',
+            'living_with_other': 'מגורים - אחר (פירוט)' if is_hebrew else 'Living arrangement (other)',
+            'disability_status': 'סטטוס נכות' if is_hebrew else 'Disability status',
+            'disability_percent': 'אחוזי נכות' if is_hebrew else 'Disability percent',
+            'self_harm_level': 'רמת סיכון לפגיעה עצמית' if is_hebrew else 'Self-harm level',
+            'self_harm_recent': 'מתי לאחרונה' if is_hebrew else 'Self-harm recent timing',
+            'self_harm_count': 'מספר מקרי עבר' if is_hebrew else 'Self-harm number of cases',
+            'forced_treatment': 'טיפולים כפויים בעבר' if is_hebrew else 'Forced treatment history',
+            'substance_use': 'שימוש בסמים' if is_hebrew else 'Substance use',
+            'medical_cannabis': 'קנאביס רפואי' if is_hebrew else 'Medical cannabis',
+            'alcohol_use': 'שימוש באלכוהול' if is_hebrew else 'Alcohol use',
+            'medical_conditions': 'מחלות רקע' if is_hebrew else 'Medical background conditions',
+            'psychiatric_conditions': 'מצבים פסיכיאטריים והיסטוריה' if is_hebrew else 'Psychiatric conditions and history',
+            'appearance_fit': 'הופעה - תואמת' if is_hebrew else 'Appearance - fit',
+            'appearance_fit_note': 'הופעה - הערה' if is_hebrew else 'Appearance - fit note',
+            'appearance_ordered': 'הופעה - מסודרת' if is_hebrew else 'Appearance - ordered',
+            'appearance_ordered_note': 'הופעה - הערת סדר' if is_hebrew else 'Appearance - ordered note',
+            'cooperation': 'שיתוף פעולה' if is_hebrew else 'Cooperation',
+            'cooperation_note': 'הערת שיתוף פעולה' if is_hebrew else 'Cooperation note',
+            'eye_contact': 'קשר עין' if is_hebrew else 'Eye contact',
+            'eye_contact_note': 'הערת קשר עין' if is_hebrew else 'Eye contact note',
+            'behavior_normal': 'התנהגות' if is_hebrew else 'Behavior',
+            'behavior_note': 'הערת התנהגות' if is_hebrew else 'Behavior note',
+            'speech_style': 'דיבור' if is_hebrew else 'Speech',
+            'speech_note': 'הערת דיבור' if is_hebrew else 'Speech note',
+            'mood': 'מצב רוח' if is_hebrew else 'Mood',
+            'mood_note': 'הערת מצב רוח' if is_hebrew else 'Mood note',
+            'affect_match': 'אפקט תואם' if is_hebrew else 'Affect congruence',
+            'affect_state': 'מצב אפקט' if is_hebrew else 'Affect state',
+            'affect_note': 'הערת אפקט' if is_hebrew else 'Affect note',
+            'thinking_normal': 'חשיבה תקינה' if is_hebrew else 'Thinking normal',
+            'thinking_rate': 'קצב חשיבה' if is_hebrew else 'Thinking rate',
+            'thinking_sequence': 'רצף חשיבה' if is_hebrew else 'Thinking sequence',
+            'thinking_content': 'תוכן חשיבה' if is_hebrew else 'Thinking content',
+            'perception_normal': 'תפיסה תקינה' if is_hebrew else 'Perception normal',
+            'perception_abnormal': 'תפיסה לא תקינה' if is_hebrew else 'Perception abnormal type',
+            'reality_testing': 'בוחן מציאות' if is_hebrew else 'Reality testing',
+            'judgment': 'שיפוט' if is_hebrew else 'Judgment',
+            'self_insight': 'תובנה עצמית' if is_hebrew else 'Self insight',
+            'orientation': 'התמצאות' if is_hebrew else 'Orientation',
+            'memory': 'זיכרון' if is_hebrew else 'Memory',
+            'referral_target': 'יעד הפניה' if is_hebrew else 'Referral target',
+            'referral_details': 'פירוט מטרות ההפניה' if is_hebrew else 'Referral details',
+            'patient_consent': 'הסכמת המטופל/ת' if is_hebrew else 'Patient consent',
+            'treatment_approach': 'גישה טיפולית' if is_hebrew else 'Treatment approach',
+            'treatment_frequency': 'תדירות מפגשים' if is_hebrew else 'Meeting frequency',
+            'treatment_estimated_duration': 'משך טיפול משוער' if is_hebrew else 'Estimated treatment duration',
+        }
+    }
+
     doc = Document()
-    doc.add_heading(f'Intake Evaluation - {patient_name}', level=1)
+    title = doc.add_heading(text['title'], level=1)
+    title.alignment = 1
+    subtitle = doc.add_paragraph(
+        f"{text['patient']}: {patient_name} | {text['generated']}: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    )
+    subtitle.alignment = 1
 
-    add_intake_section_heading(doc, 'Preliminary Details')
-    add_intake_line(doc, 'Meeting location', data.get('meeting_location'))
-    add_intake_line(doc, 'Meeting time', data.get('meeting_time'))
-    add_intake_line(doc, 'Duration', data.get('meeting_duration'))
-    add_intake_line(doc, 'Conducted by', data.get('meeting_conductor'))
+    add_intake_section_heading(doc, text['sections']['prelim'])
+    add_intake_line(doc, text['labels']['meeting_location'], data.get('meeting_location'))
+    add_intake_line(doc, text['labels']['meeting_location_specify'], data.get('meeting_location_specify'))
+    add_intake_line(doc, text['labels']['meeting_time'], data.get('meeting_time'))
+    add_intake_line(doc, text['labels']['meeting_duration'], data.get('meeting_duration'))
+    add_intake_line(doc, text['labels']['meeting_conductor'], data.get('meeting_conductor'))
 
-    add_intake_section_heading(doc, 'Background / Referral Reason')
-    add_intake_line(doc, 'Main complaint', data.get('main_complaint'))
-    add_intake_line(doc, 'Problem history / current illness', data.get('problem_history'))
-    add_intake_line(doc, 'Early anamnesis', data.get('early_anamnesis'))
-    add_intake_line(doc, 'Referral source', data.get('referral_source'))
-    add_intake_line(doc, 'Referral date', data.get('referral_date'))
+    add_intake_section_heading(doc, text['sections']['background'])
+    add_intake_line(doc, text['labels']['main_complaint'], data.get('main_complaint'))
+    add_intake_line(doc, text['labels']['problem_history'], data.get('problem_history'))
+    add_intake_line(doc, text['labels']['early_anamnesis'], data.get('early_anamnesis'))
+    add_intake_line(doc, text['labels']['referral_source'], data.get('referral_source'))
+    add_intake_line(doc, text['labels']['referral_date'], data.get('referral_date'))
 
-    add_intake_section_heading(doc, 'Administrative Anamnesis')
-    add_intake_line(doc, 'Family status', data.get('family_status'))
-    add_intake_line(doc, 'Guardian status', data.get('guardian_status'))
-    add_intake_line(doc, 'Guardian details', data.get('guardian_by_whom'))
-    add_intake_line(doc, 'Living arrangement', data.get('living_with'))
-    add_intake_line(doc, 'Living arrangement (other)', data.get('living_with_other'))
-    add_intake_line(doc, 'Disability status', data.get('disability_status'))
-    add_intake_line(doc, 'Disability percent', data.get('disability_percent'))
-    add_intake_line(doc, 'Self-harm level', data.get('self_harm_level'))
-    add_intake_line(doc, 'Self-harm recent timing', data.get('self_harm_recent'))
-    add_intake_line(doc, 'Self-harm number of cases', data.get('self_harm_count'))
-    add_intake_line(doc, 'Forced treatment history', data.get('forced_treatment'))
-    add_intake_line(doc, 'Substance use', data.get('substance_use'))
-    add_intake_line(doc, 'Medical cannabis', data.get('medical_cannabis'))
-    add_intake_line(doc, 'Alcohol use', data.get('alcohol_use'))
+    add_intake_section_heading(doc, text['sections']['administrative'])
+    add_intake_line(doc, text['labels']['family_status'], data.get('family_status'))
+    add_intake_line(doc, text['labels']['guardian_status'], data.get('guardian_status'))
+    add_intake_line(doc, text['labels']['guardian_by_whom'], data.get('guardian_by_whom'))
+    add_intake_line(doc, text['labels']['living_with'], data.get('living_with'))
+    add_intake_line(doc, text['labels']['living_with_other'], data.get('living_with_other'))
+    add_intake_line(doc, text['labels']['disability_status'], data.get('disability_status'))
+    add_intake_line(doc, text['labels']['disability_percent'], data.get('disability_percent'))
+    add_intake_line(doc, text['labels']['self_harm_level'], data.get('self_harm_level'))
+    add_intake_line(doc, text['labels']['self_harm_recent'], data.get('self_harm_recent'))
+    add_intake_line(doc, text['labels']['self_harm_count'], data.get('self_harm_count'))
+    add_intake_line(doc, text['labels']['forced_treatment'], data.get('forced_treatment'))
+    add_intake_line(doc, text['labels']['substance_use'], data.get('substance_use'))
+    add_intake_line(doc, text['labels']['medical_cannabis'], data.get('medical_cannabis'))
+    add_intake_line(doc, text['labels']['alcohol_use'], data.get('alcohol_use'))
 
-    add_intake_section_heading(doc, 'Medical Anamnesis')
-    add_intake_line(doc, 'Medical background conditions', data.get('medical_conditions'))
-    add_intake_line(doc, 'Psychiatric conditions and history', data.get('psychiatric_conditions'))
+    add_intake_section_heading(doc, text['sections']['medical'])
+    add_intake_line(doc, text['labels']['medical_conditions'], data.get('medical_conditions'))
+    add_intake_line(doc, text['labels']['psychiatric_conditions'], data.get('psychiatric_conditions'))
 
-    add_intake_section_heading(doc, 'Mental Status')
-    add_intake_line(doc, 'Appearance - fit', data.get('appearance_fit'))
-    add_intake_line(doc, 'Appearance - fit note', data.get('appearance_fit_note'))
-    add_intake_line(doc, 'Appearance - ordered', data.get('appearance_ordered'))
-    add_intake_line(doc, 'Appearance - ordered note', data.get('appearance_ordered_note'))
-    add_intake_line(doc, 'Cooperation', data.get('cooperation'))
-    add_intake_line(doc, 'Cooperation note', data.get('cooperation_note'))
-    add_intake_line(doc, 'Eye contact', data.get('eye_contact'))
-    add_intake_line(doc, 'Eye contact note', data.get('eye_contact_note'))
-    add_intake_line(doc, 'Behavior', data.get('behavior_normal'))
-    add_intake_line(doc, 'Behavior note', data.get('behavior_note'))
-    add_intake_line(doc, 'Speech', data.get('speech_style'))
-    add_intake_line(doc, 'Speech note', data.get('speech_note'))
-    add_intake_line(doc, 'Mood', data.get('mood'))
-    add_intake_line(doc, 'Mood note', data.get('mood_note'))
-    add_intake_line(doc, 'Affect congruence', data.get('affect_match'))
-    add_intake_line(doc, 'Affect state', data.get('affect_state'))
-    add_intake_line(doc, 'Affect note', data.get('affect_note'))
-    add_intake_line(doc, 'Thinking normal', data.get('thinking_normal'))
-    add_intake_line(doc, 'Thinking rate', data.get('thinking_rate'))
-    add_intake_line(doc, 'Thinking sequence', data.get('thinking_sequence'))
-    add_intake_line(doc, 'Thinking content', data.get('thinking_content'))
-    add_intake_line(doc, 'Perception normal', data.get('perception_normal'))
-    add_intake_line(doc, 'Perception abnormal type', data.get('perception_abnormal'))
-    add_intake_line(doc, 'Reality testing', data.get('reality_testing'))
-    add_intake_line(doc, 'Judgment', data.get('judgment'))
-    add_intake_line(doc, 'Self insight', data.get('self_insight'))
-    add_intake_line(doc, 'Orientation', data.get('orientation'))
-    add_intake_line(doc, 'Memory', data.get('memory'))
+    add_intake_section_heading(doc, text['sections']['mental_status'])
+    add_intake_line(doc, text['labels']['appearance_fit'], data.get('appearance_fit'))
+    add_intake_line(doc, text['labels']['appearance_fit_note'], data.get('appearance_fit_note'))
+    add_intake_line(doc, text['labels']['appearance_ordered'], data.get('appearance_ordered'))
+    add_intake_line(doc, text['labels']['appearance_ordered_note'], data.get('appearance_ordered_note'))
+    add_intake_line(doc, text['labels']['cooperation'], data.get('cooperation'))
+    add_intake_line(doc, text['labels']['cooperation_note'], data.get('cooperation_note'))
+    add_intake_line(doc, text['labels']['eye_contact'], data.get('eye_contact'))
+    add_intake_line(doc, text['labels']['eye_contact_note'], data.get('eye_contact_note'))
+    add_intake_line(doc, text['labels']['behavior_normal'], data.get('behavior_normal'))
+    add_intake_line(doc, text['labels']['behavior_note'], data.get('behavior_note'))
+    add_intake_line(doc, text['labels']['speech_style'], data.get('speech_style'))
+    add_intake_line(doc, text['labels']['speech_note'], data.get('speech_note'))
+    add_intake_line(doc, text['labels']['mood'], data.get('mood'))
+    add_intake_line(doc, text['labels']['mood_note'], data.get('mood_note'))
+    add_intake_line(doc, text['labels']['affect_match'], data.get('affect_match'))
+    add_intake_line(doc, text['labels']['affect_state'], data.get('affect_state'))
+    add_intake_line(doc, text['labels']['affect_note'], data.get('affect_note'))
+    add_intake_line(doc, text['labels']['thinking_normal'], data.get('thinking_normal'))
+    add_intake_line(doc, text['labels']['thinking_rate'], data.get('thinking_rate'))
+    add_intake_line(doc, text['labels']['thinking_sequence'], data.get('thinking_sequence'))
+    add_intake_line(doc, text['labels']['thinking_content'], data.get('thinking_content'))
+    add_intake_line(doc, text['labels']['perception_normal'], data.get('perception_normal'))
+    add_intake_line(doc, text['labels']['perception_abnormal'], data.get('perception_abnormal'))
+    add_intake_line(doc, text['labels']['reality_testing'], data.get('reality_testing'))
+    add_intake_line(doc, text['labels']['judgment'], data.get('judgment'))
+    add_intake_line(doc, text['labels']['self_insight'], data.get('self_insight'))
+    add_intake_line(doc, text['labels']['orientation'], data.get('orientation'))
+    add_intake_line(doc, text['labels']['memory'], data.get('memory'))
 
-    add_intake_section_heading(doc, 'Treatment Decisions')
-    add_intake_line(doc, 'Referral target', data.get('referral_target'))
-    add_intake_line(doc, 'Referral details', data.get('referral_details'))
-    add_intake_line(doc, 'Patient consent', data.get('patient_consent'))
-    add_intake_line(doc, 'Treatment approach', data.get('treatment_approach'))
-    add_intake_line(doc, 'Meeting frequency', data.get('treatment_frequency'))
-    add_intake_line(doc, 'Estimated treatment duration', data.get('treatment_estimated_duration'))
+    add_intake_section_heading(doc, text['sections']['treatment_plan'])
+    add_intake_line(doc, text['labels']['referral_target'], data.get('referral_target'))
+    add_intake_line(doc, text['labels']['referral_details'], data.get('referral_details'))
+    add_intake_line(doc, text['labels']['patient_consent'], data.get('patient_consent'))
+    add_intake_line(doc, text['labels']['treatment_approach'], data.get('treatment_approach'))
+    add_intake_line(doc, text['labels']['treatment_frequency'], data.get('treatment_frequency'))
+    add_intake_line(doc, text['labels']['treatment_estimated_duration'], data.get('treatment_estimated_duration'))
 
     return doc
 
@@ -1288,7 +1500,10 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     ''', (patient_id,)).fetchall()
 
     if not notes:
-        intake_questionnaire = parse_intake_questionnaire(patient_row['intake_questionnaire'] if patient_row else None)
+        intake_questionnaire = parse_intake_questionnaire(
+            patient_row['intake_questionnaire'] if patient_row else None,
+            patient_row['intake_assessment'] if patient_row else None
+        )
         main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
         problem_history = (intake_questionnaire.get('problem_history') or '').strip()
         intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
@@ -1327,7 +1542,10 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
     recent_focus = extract_recent_focus(notes)
 
-    intake_questionnaire = parse_intake_questionnaire(patient_row['intake_questionnaire'] if patient_row else None)
+    intake_questionnaire = parse_intake_questionnaire(
+        patient_row['intake_questionnaire'] if patient_row else None,
+        patient_row['intake_assessment'] if patient_row else None
+    )
     main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
     problem_history = (intake_questionnaire.get('problem_history') or '').strip()
 
@@ -1860,7 +2078,7 @@ def patient_detail(patient_id):
         unread_messages_count = 0
 
     latest_note = notes[0] if notes else None
-    intake_form_data = parse_intake_questionnaire(patient['intake_questionnaire'])
+    intake_form_data = parse_intake_questionnaire(patient['intake_questionnaire'], patient['intake_assessment'])
     next_session_row = db.execute('''
         SELECT COALESCE(MAX(CAST(COALESCE(session_number, '0') AS INTEGER)), 0) AS max_session
         FROM notes
@@ -1927,6 +2145,30 @@ def admin_portal_preview(patient_id):
 def redirect_to_patient_tab(patient_id, default_tab='info'):
     tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
     return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
+def build_external_public_url(endpoint, **values):
+    path = url_for(endpoint, _external=False, **values)
+    configured_base = (app.config.get('PUBLIC_BASE_URL') or '').strip()
+    if configured_base:
+        return f"{configured_base.rstrip('/')}{path}"
+
+    forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip()
+    forwarded_host = (request.headers.get('X-Forwarded-Host') or '').split(',')[0].strip()
+    forwarded_port = (request.headers.get('X-Forwarded-Port') or '').split(',')[0].strip()
+    forwarded_prefix = (request.headers.get('X-Forwarded-Prefix') or '').strip()
+
+    scheme = forwarded_proto or request.scheme
+    host = forwarded_host or request.host
+    if forwarded_port and forwarded_host and ':' not in forwarded_host and forwarded_port not in ('80', '443'):
+        host = f'{forwarded_host}:{forwarded_port}'
+
+    if forwarded_prefix:
+        if not forwarded_prefix.startswith('/'):
+            forwarded_prefix = f'/{forwarded_prefix}'
+        forwarded_prefix = forwarded_prefix.rstrip('/')
+
+    return f'{scheme}://{host}{forwarded_prefix}{path}'
 
 
 @app.route('/patient/<int:patient_id>/toggle_self_booking', methods=('POST',))
@@ -2797,7 +3039,7 @@ def api_create_public_booking_link():
     )
     db.commit()
 
-    public_url = url_for('open_public_booking_calendar', token=token, _external=True)
+    public_url = build_external_public_url('open_public_booking_calendar', token=token)
     subject = quote('Self-booking calendar link')
     body = quote(f'You can book an available slot using this secure link:\n{public_url}')
     return jsonify({
@@ -5229,19 +5471,33 @@ def export_patient_intake_docx(patient_id):
         return "Unauthorized", 403
 
     db = get_db()
-    patient = db.execute('SELECT id, name, intake_questionnaire FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    patient = db.execute('SELECT id, name, intake_questionnaire, intake_assessment FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if patient is None:
         return "Patient not found", 404
 
-    intake_data = parse_intake_questionnaire(patient['intake_questionnaire'])
+    intake_data = parse_intake_questionnaire(patient['intake_questionnaire'], patient['intake_assessment'])
     if not intake_data:
         flash('No intake form data found for export.')
         return redirect_to_patient_tab(patient_id, 'intake')
 
-    document = build_intake_docx(patient['name'], intake_data)
-    temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f'intake_{patient_id}.docx')
-    document.save(temp_path)
-    return send_from_directory(app.config['UPLOAD_FOLDER'], f'intake_{patient_id}.docx', as_attachment=True)
+    language = (request.args.get('lang') or 'en').strip().lower()
+    if language not in {'en', 'he'}:
+        language = 'en'
+
+    document = build_intake_docx(patient['name'], intake_data, language=language)
+    safe_name = secure_filename(patient['name'] or f'patient_{patient_id}')
+    if not safe_name:
+        safe_name = f'patient_{patient_id}'
+    output_name = f'intake_{safe_name}.docx'
+    buffer = BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=output_name,
+        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    )
 
 
 @app.route('/patient/<int:patient_id>/generate_background', methods=('POST',))
@@ -5286,8 +5542,20 @@ def edit_patient(patient_id):
         has_intake_tab = int(patient['has_intake_tab'] or 0)
         if patient_type == 'initial-intake':
             has_intake_tab = 1
-        intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
-        intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
+        if patient_type == 'initial-intake':
+            intake_assessment = request.form.get('intake_assessment')
+            intake_questionnaire = request.form.get('intake_questionnaire')
+            if intake_assessment is None:
+                intake_assessment = patient['intake_assessment'] or ''
+            else:
+                intake_assessment = intake_assessment.strip()
+            if intake_questionnaire is None:
+                intake_questionnaire = patient['intake_questionnaire'] or ''
+            else:
+                intake_questionnaire = intake_questionnaire.strip()
+        else:
+            intake_assessment = ''
+            intake_questionnaire = ''
 
         if not name:
             flash('Name is required!')
