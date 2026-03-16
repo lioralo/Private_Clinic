@@ -1303,6 +1303,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (meta.type === 'group_session' && isAdmin) {
+                const detailUrl = meta.detail_url || '';
+                if (detailUrl) {
+                    window.location.href = detailUrl;
+                    return;
+                }
                 openGroupSessionEditor({
                     kind: 'group_session',
                     source_id: props.group_session_id || meta.group_session_id,

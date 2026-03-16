@@ -2731,6 +2731,7 @@ def build_booking_management_payload(db, mode='upcoming', future_days=180, histo
         start_dt = combine_dt(session_date, row['session_time'])
         duration = int(row['duration_minutes'] or 60)
         end_dt = start_dt + timedelta(minutes=duration)
+        detail_url = url_for('group_detail', group_id=row['group_id'], show_upcoming='all') + f"#session-record-{row['id']}"
         items.append({
             'kind': 'group_session',
             'source_id': row['id'],
@@ -2745,6 +2746,7 @@ def build_booking_management_payload(db, mode='upcoming', future_days=180, histo
             'meeting_type': row['meeting_type'] or 'in-person',
             'meeting_link': row['meeting_link'] or '',
             'meeting_title': row['title'] or '',
+            'detail_url': detail_url,
             'is_recurring': False,
             'can_edit': True,
             'can_delete': True
@@ -2900,6 +2902,8 @@ def build_week_calendar_snapshot(db, week_start, user):
             occupied.append((session_start, session_end))
             continue
 
+        detail_url = url_for('group_detail', group_id=group_session['group_id'], show_upcoming='all') + f"#session-record-{group_session['id']}"
+
         events.append({
             'id': f"group-session-{group_session['id']}",
             'group_session_id': group_session['id'],
@@ -2920,6 +2924,7 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'group_name': group_session['group_name'],
                 'meeting_type': group_session['meeting_type'],
                 'meeting_link': group_session['meeting_link'],
+                'detail_url': detail_url,
                 'can_delete': user.role == 'admin',
                 'can_edit': user.role == 'admin'
             }
@@ -3191,6 +3196,117 @@ def build_group_recurrence_dates(start_date, recurrence_interval_weeks=1, recurr
     return dates
 
 
+def archive_patient_record(db, patient_id):
+    patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return None
+
+    db.execute('''
+        UPDATE patients
+        SET is_deleted = 1,
+            deleted_at = CURRENT_TIMESTAMP,
+            status = 'archived'
+        WHERE id = ?
+    ''', (patient_id,))
+    db.execute('UPDATE users SET is_active = 0 WHERE patient_id = ?', (patient_id,))
+    return patient
+
+
+def delete_patient_files(patient_id):
+    upload_root = app.config.get('UPLOAD_FOLDER') or ''
+    if not upload_root:
+        return
+
+    base_dir = Path(upload_root)
+    treatment_dir = base_dir / 'treatments' / str(patient_id)
+    if treatment_dir.exists():
+        shutil.rmtree(treatment_dir, ignore_errors=True)
+
+
+def permanently_delete_patient_record(db, patient_id):
+    patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return None
+
+    file_rows = db.execute('SELECT filename FROM files WHERE patient_id = ?', (patient_id,)).fetchall()
+    user_ids = [int(row['id']) for row in db.execute('SELECT id FROM users WHERE patient_id = ?', (patient_id,)).fetchall()]
+
+    upload_root = Path(app.config.get('UPLOAD_FOLDER') or '.')
+    for row in file_rows:
+        filename = (row['filename'] or '').strip()
+        if not filename:
+            continue
+        for candidate in (
+            upload_root / filename,
+            upload_root / 'treatments' / str(patient_id) / filename,
+        ):
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    delete_patient_files(patient_id)
+
+    if user_ids:
+        placeholders = ','.join(['?'] * len(user_ids))
+        db.execute(f'DELETE FROM messages WHERE sender_id IN ({placeholders}) OR recipient_id IN ({placeholders})', tuple(user_ids + user_ids))
+
+    db.execute('DELETE FROM group_session_attendance WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM group_member_history WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM group_members WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM patient_resources WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM goals WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM notes WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM receipts WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM appointments WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM files WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM audit_logs WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM users WHERE patient_id = ?', (patient_id,))
+    db.execute('DELETE FROM patients WHERE id = ?', (patient_id,))
+    return patient
+
+
+def build_group_session_collections(group_sessions, show_all_past=False, show_all_upcoming=False):
+    now = datetime.now()
+    past_sessions = []
+    upcoming_sessions = []
+
+    for row in group_sessions:
+        session = dict(row)
+        session_date = parse_date_safe(session['session_date'])
+        session_time = parse_time_safe(session['session_time'])
+        if session_date and session_time:
+            start_dt = datetime.combine(session_date, session_time)
+            end_dt = start_dt + timedelta(minutes=int(session['duration_minutes'] or 60))
+        else:
+            start_dt = None
+            end_dt = None
+        session['starts_at'] = start_dt
+        session['ends_at'] = end_dt
+
+        if end_dt and end_dt < now:
+            past_sessions.append(session)
+        else:
+            upcoming_sessions.append(session)
+
+    past_sessions.sort(key=lambda item: item['starts_at'] or datetime.min, reverse=True)
+    upcoming_sessions.sort(key=lambda item: item['starts_at'] or datetime.max)
+
+    visible_past = past_sessions if show_all_past else past_sessions[:2]
+    visible_upcoming = upcoming_sessions if show_all_upcoming else upcoming_sessions[:2]
+
+    return {
+        'past_sessions_all': past_sessions,
+        'upcoming_sessions_all': upcoming_sessions,
+        'visible_past_sessions': visible_past,
+        'visible_upcoming_sessions': visible_upcoming,
+        'hidden_past_count': max(0, len(past_sessions) - len(visible_past)),
+        'hidden_upcoming_count': max(0, len(upcoming_sessions) - len(visible_upcoming)),
+        'show_all_past': bool(show_all_past),
+        'show_all_upcoming': bool(show_all_upcoming),
+    }
+
+
 def get_group_members_for_session(db, group_id, session_date_iso):
     """Resolve members by membership periods active on the session date."""
     rows = db.execute('''
@@ -3380,7 +3496,7 @@ def groups_dashboard():
     return render_template('groups_overview.html', groups=groups)
 
 
-def build_group_detail_payload(db, group_id):
+def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcoming=False):
     group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group:
         return None
@@ -3472,6 +3588,12 @@ def build_group_detail_payload(db, group_id):
         ORDER BY name ASC
     ''').fetchall()
 
+    session_collections = build_group_session_collections(
+        group_sessions,
+        show_all_past=show_all_past,
+        show_all_upcoming=show_all_upcoming
+    )
+
     return {
         'group': group,
         'group_members': group_members,
@@ -3480,7 +3602,8 @@ def build_group_detail_payload(db, group_id):
         'member_history_rows': member_history_rows,
         'session_member_map': session_member_map,
         'attendance_by_session': attendance_by_session,
-        'arrived_count_map': arrived_count_map
+        'arrived_count_map': arrived_count_map,
+        **session_collections
     }
 
 
@@ -3491,11 +3614,55 @@ def group_detail(group_id):
         return redirect(url_for('patient_home'))
 
     db = get_db()
-    payload = build_group_detail_payload(db, group_id)
+    show_all_past = (request.args.get('show_past') or '').strip().lower() == 'all'
+    show_all_upcoming = (request.args.get('show_upcoming') or '').strip().lower() == 'all'
+    payload = build_group_detail_payload(
+        db,
+        group_id,
+        show_all_past=show_all_past,
+        show_all_upcoming=show_all_upcoming
+    )
     if payload is None:
         flash('Group not found.')
         return redirect(url_for('groups_dashboard'))
     return render_template('groups.html', **payload)
+
+
+@app.route('/groups/<int:group_id>/delete', methods=['POST'])
+@login_required
+def delete_group(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    delete_mode = (request.form.get('delete_mode') or 'archive').strip().lower()
+    return_to = (request.form.get('return_to') or 'dashboard').strip().lower()
+
+    db = get_db()
+    group = db.execute('SELECT id, name FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        flash('Group not found.')
+        return redirect(url_for('groups_dashboard'))
+
+    if delete_mode == 'delete':
+        session_ids = [int(row['id']) for row in db.execute('SELECT id FROM group_sessions WHERE group_id = ?', (group_id,)).fetchall()]
+        if session_ids:
+            placeholders = ','.join(['?'] * len(session_ids))
+            db.execute(f'DELETE FROM group_session_attendance WHERE session_id IN ({placeholders})', session_ids)
+        db.execute('DELETE FROM group_sessions WHERE group_id = ?', (group_id,))
+        db.execute('DELETE FROM group_session_series WHERE group_id = ?', (group_id,))
+        db.execute('DELETE FROM group_member_history WHERE group_id = ?', (group_id,))
+        db.execute('DELETE FROM group_members WHERE group_id = ?', (group_id,))
+        db.execute('DELETE FROM groups WHERE id = ?', (group_id,))
+        db.commit()
+        flash('Group and all related data deleted.')
+        return redirect(url_for('groups_dashboard'))
+
+    db.execute('UPDATE groups SET is_active = 0 WHERE id = ?', (group_id,))
+    db.commit()
+    flash('Group moved to history.')
+    if return_to == 'detail':
+        return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('groups_dashboard'))
 
 
 @app.route('/groups/<int:group_id>/update', methods=['POST'])
@@ -3508,9 +3675,12 @@ def update_group_info(group_id):
     group_type = (request.form.get('group_type') or 'support').strip() or 'support'
     description = (request.form.get('description') or '').strip()
     is_active = 1 if request.form.get('is_active') in ('1', 'true', 'on') else 0
+    return_to = (request.form.get('return_to') or 'detail').strip().lower()
 
     if not name:
         flash('Group name is required.')
+        if return_to == 'dashboard':
+            return redirect(url_for('groups_dashboard'))
         return redirect(url_for('group_detail', group_id=group_id))
 
     db = get_db()
@@ -3521,6 +3691,8 @@ def update_group_info(group_id):
     ''', (name, group_type, description or None, is_active, group_id))
     db.commit()
     flash('Group information updated.')
+    if return_to == 'dashboard':
+        return redirect(url_for('groups_dashboard'))
     return redirect(url_for('group_detail', group_id=group_id))
 
 
@@ -3586,7 +3758,24 @@ def remove_group_member(group_id, patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
+    removal_mode = (request.form.get('removal_mode') or 'keep').strip().lower()
+
     db = get_db()
+    group = db.execute('SELECT id, name FROM groups WHERE id = ?', (group_id,)).fetchone()
+    patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    active_membership = db.execute('''
+        SELECT 1
+        FROM group_members
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
+    ''', (group_id, patient_id)).fetchone()
+
+    if not group or not patient:
+        flash('Group member not found.')
+        return redirect(url_for('group_detail', group_id=group_id))
+    if not active_membership:
+        flash('Patient is not an active member in this group.')
+        return redirect(url_for('group_detail', group_id=group_id))
+
     db.execute('''
         UPDATE group_members
         SET left_at = CURRENT_TIMESTAMP
@@ -3603,8 +3792,17 @@ def remove_group_member(group_id, patient_id):
     if open_history:
         db.execute('UPDATE group_member_history SET left_at = CURRENT_TIMESTAMP WHERE id = ?', (open_history['id'],))
 
+    if removal_mode == 'archive':
+        archive_patient_record(db, patient_id)
+        message = 'Patient removed from group and moved to archived records.'
+    elif removal_mode == 'delete':
+        permanently_delete_patient_record(db, patient_id)
+        message = 'Patient removed from group and deleted with all related data.'
+    else:
+        message = 'Patient removed from group.'
+
     db.commit()
-    flash('Patient removed from group.')
+    flash(message)
     return redirect(url_for('group_detail', group_id=group_id))
 
 
@@ -3709,6 +3907,7 @@ def add_group_session(group_id):
     meeting_link = (request.form.get('meeting_link') or '').strip()
     recurrence_mode = (request.form.get('recurrence_mode') or 'one-time').strip().lower()
     recurrence_interval_raw = (request.form.get('recurrence_interval_weeks') or '1').strip()
+    recurrence_end_mode = (request.form.get('recurrence_end_mode') or 'count').strip().lower()
     recurrence_end_raw = (request.form.get('recurrence_end_date') or '').strip()
     recurrence_count_raw = (request.form.get('recurrence_count') or '').strip()
 
@@ -3743,6 +3942,18 @@ def add_group_session(group_id):
             recurrence_count = max(1, min(104, int(recurrence_count_raw)))
         except ValueError:
             recurrence_count = None
+
+    if recurrence_mode == 'weekly':
+        if recurrence_end_mode == 'date':
+            recurrence_count = None
+            if not recurrence_end_date:
+                flash('Please choose an end date for the recurring meetings.')
+                return redirect(url_for('group_detail', group_id=group_id))
+        else:
+            recurrence_end_date = None
+            if recurrence_count is None:
+                flash('Please choose how many meetings to create.')
+                return redirect(url_for('group_detail', group_id=group_id))
 
     recurrence_dates = [parsed_date]
     if recurrence_mode == 'weekly':
@@ -3784,8 +3995,9 @@ def add_group_session(group_id):
         ))
         series_id = cur.lastrowid
 
+    last_session_id = None
     for idx, date_item in enumerate(recurrence_dates, start=1):
-        db.execute('''
+        cur = db.execute('''
             INSERT INTO group_sessions
                 (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, meeting_link, series_id, occurrence_index, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
@@ -3801,13 +4013,17 @@ def add_group_session(group_id):
             series_id,
             idx if series_id else None
         ))
+        last_session_id = cur.lastrowid
 
     db.commit()
     if series_id:
         flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
     else:
         flash('Group session added.')
-    return redirect(url_for('group_detail', group_id=group_id))
+    destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
+    if last_session_id:
+        destination = f'{destination}#session-record-{last_session_id}'
+    return redirect(destination)
 
 
 @app.route('/groups/sessions/<int:session_id>/record', methods=['POST'])
@@ -3888,7 +4104,17 @@ def record_group_session(session_id):
 
     db.commit()
     flash('Session record saved.')
-    return redirect(url_for('group_detail', group_id=int(session_row['group_id'])))
+    destination_args = {'group_id': int(session_row['group_id'])}
+    session_date = parse_date_safe(session_row['session_date'])
+    session_time = parse_time_safe(session_row['session_time'])
+    if session_date and session_time:
+        session_end = datetime.combine(session_date, session_time) + timedelta(minutes=int(session_row['duration_minutes'] or 60))
+        if session_end < datetime.now():
+            destination_args['show_past'] = 'all'
+        else:
+            destination_args['show_upcoming'] = 'all'
+    destination = url_for('group_detail', **destination_args)
+    return redirect(f'{destination}#session-record-{session_id}')
 
 
 @app.route('/patient/<int:patient_id>/group_attendance/<int:session_id>/update', methods=['POST'])

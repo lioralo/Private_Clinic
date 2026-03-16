@@ -360,6 +360,30 @@ class ClinicTestCase(unittest.TestCase):
         assert 'available_slots' in payload
         assert 'weekend_specials' in payload
 
+    def test_calendar_snapshot_group_session_has_detail_url(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Calendar Group Patient', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Calendar Group', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+
+        session_date = (datetime.now().date() + timedelta(days=2)).isoformat()
+        self.client.post('/groups/1/sessions', data=dict(
+            session_date=session_date,
+            session_time='10:00',
+            end_time='11:00',
+            title='Calendar Linked Session',
+            recurrence_mode='one-time'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/api/calendar/snapshot')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        group_events = [event for event in payload.get('events', []) if (event.get('meta') or {}).get('type') == 'group_session']
+        assert group_events
+        detail_url = (group_events[0].get('meta') or {}).get('detail_url', '')
+        assert '/groups/1' in detail_url
+        assert '#session-record-' in detail_url
+
     def test_patient_self_booking_and_cancel(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
@@ -1434,6 +1458,100 @@ class ClinicTestCase(unittest.TestCase):
             assert hist['left_at'].startswith('2026-01-10')
             assert gm is not None
             assert gm['left_at'] is not None
+
+    def test_remove_group_member_can_archive_patient(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Archive Me', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Archive Group', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+
+        rv = self.client.post('/groups/1/members/1/remove', data=dict(removal_mode='archive'), follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute('SELECT is_deleted, status FROM patients WHERE id = 1').fetchone()
+            membership = db.execute('SELECT left_at FROM group_members WHERE group_id = 1 AND patient_id = 1').fetchone()
+            history = db.execute('SELECT left_at FROM group_member_history WHERE group_id = 1 AND patient_id = 1 ORDER BY id DESC LIMIT 1').fetchone()
+            assert patient is not None
+            assert int(patient['is_deleted'] or 0) == 1
+            assert patient['status'] == 'archived'
+            assert membership is not None
+            assert membership['left_at'] is not None
+            assert history is not None
+            assert history['left_at'] is not None
+
+    def test_remove_group_member_can_delete_patient_data(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Delete Me', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Delete Group', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+        self.client.post('/patient/1/add_note', data=dict(content='Delete note', session_number='1', note_date='2026-03-10'), follow_redirects=True)
+        self.client.post('/patient/1/add_appointment', data=dict(date='2026-03-11', time='10:00', cost='120.00'), follow_redirects=True)
+
+        rv = self.client.post('/groups/1/members/1/remove', data=dict(removal_mode='delete'), follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute('SELECT id FROM patients WHERE id = 1').fetchone()
+            membership = db.execute('SELECT group_id, patient_id FROM group_members WHERE group_id = 1 AND patient_id = 1').fetchone()
+            history = db.execute('SELECT patient_id FROM group_member_history WHERE group_id = 1 AND patient_id = 1').fetchone()
+            notes = db.execute('SELECT COUNT(*) AS c FROM notes WHERE patient_id = 1').fetchone()['c']
+            appointments = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id = 1').fetchone()['c']
+            assert patient is None
+            assert membership is None
+            assert history is None
+            assert notes == 0
+            assert appointments == 0
+
+    def test_group_delete_archive_and_full_delete(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Group Member One', status='ongoing', patient_type='group'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Group Member Two', status='ongoing', patient_type='group'), follow_redirects=True)
+
+        self.client.post('/groups', data=dict(name='Archive Target', group_type='support', description=''), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+        self.client.post('/groups/1/sessions', data=dict(
+            session_date=(datetime.now().date() + timedelta(days=2)).isoformat(),
+            session_time='09:00',
+            end_time='10:00',
+            title='Archive Session',
+            recurrence_mode='one-time'
+        ), follow_redirects=True)
+
+        archive_rv = self.client.post('/groups/1/delete', data=dict(delete_mode='archive', return_to='dashboard'), follow_redirects=True)
+        assert archive_rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            archived_group = db.execute('SELECT is_active FROM groups WHERE id = 1').fetchone()
+            assert archived_group is not None
+            assert int(archived_group['is_active'] or 0) == 0
+
+        self.client.post('/groups', data=dict(name='Delete Target', group_type='skills', description=''), follow_redirects=True)
+        self.client.post('/groups/2/members', data=dict(patient_id='2'), follow_redirects=True)
+        self.client.post('/groups/2/sessions', data=dict(
+            session_date=(datetime.now().date() + timedelta(days=3)).isoformat(),
+            session_time='11:00',
+            end_time='12:00',
+            title='Delete Session',
+            recurrence_mode='one-time'
+        ), follow_redirects=True)
+
+        delete_rv = self.client.post('/groups/2/delete', data=dict(delete_mode='delete', return_to='dashboard'), follow_redirects=True)
+        assert delete_rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            deleted_group = db.execute('SELECT id FROM groups WHERE id = 2').fetchone()
+            deleted_sessions = db.execute('SELECT COUNT(*) AS c FROM group_sessions WHERE group_id = 2').fetchone()['c']
+            deleted_members = db.execute('SELECT COUNT(*) AS c FROM group_members WHERE group_id = 2').fetchone()['c']
+            deleted_history = db.execute('SELECT COUNT(*) AS c FROM group_member_history WHERE group_id = 2').fetchone()['c']
+            assert deleted_group is None
+            assert deleted_sessions == 0
+            assert deleted_members == 0
+            assert deleted_history == 0
 
     def test_patient_card_can_edit_group_attendance_and_summary(self):
         self.login('admin', 'admin')

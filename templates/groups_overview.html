@@ -1,72 +1,104 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+<style>
+.create-group-panel,
+.overview-edit-panel,
+.overview-delete-panel {
+    display: none;
+}
+
+.create-group-panel.is-open,
+.overview-edit-panel.is-open,
+.overview-delete-panel.is-open {
+    display: block;
+}
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
-        <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-collection me-2"></i>Groups Management</h2>
-        <p class="text-muted small mb-0">Create groups and update core information. Open a group to manage sessions and attendance.</p>
+        <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-collection me-2"></i>Groups Management / ניהול קבוצות</h2>
+        <p class="text-muted small mb-0">Open any group for session work, or edit core details directly from this page. / פתיחת קבוצה לעבודה על מפגשים או עריכת פרטי הליבה ישירות מהעמוד הזה.</p>
     </div>
-    <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to Calendar</a>
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="toggleCreateGroupPanel()">Create Group / יצירת קבוצה</button>
+        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to Calendar</a>
+    </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Create Group</h6>
-            </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('groups_dashboard') }}" class="row g-2">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-12">
-                        <label class="form-label small">Group Name</label>
-                        <input type="text" name="name" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label small">Group Type</label>
-                        <select name="group_type" class="form-select form-select-sm">
-                            <option value="support">Support</option>
-                            <option value="skills">Skills</option>
-                            <option value="psychoeducation">Psychoeducation</option>
-                            <option value="therapy">Therapy</option>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label small">Description</label>
-                        <textarea name="description" rows="3" class="form-control form-control-sm"></textarea>
-                    </div>
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-primary btn-sm rounded-pill">Create Group</button>
-                    </div>
-                </form>
-            </div>
+<div class="card border-0 shadow-sm rounded-4 mb-4 create-group-panel" id="create-group-panel">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="fw-bold mb-0 text-primary">Create Group / יצירת קבוצה</h6>
+            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleCreateGroupPanel()">Close / סגירה</button>
         </div>
+        <form method="post" action="{{ url_for('groups_dashboard') }}" class="row g-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-5">
+                <label class="form-label small">Group Name / שם הקבוצה</label>
+                <input type="text" name="name" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Group Type / סוג קבוצה</label>
+                <select name="group_type" class="form-select form-select-sm">
+                    <option value="support">Support</option>
+                    <option value="skills">Skills</option>
+                    <option value="psychoeducation">Psychoeducation</option>
+                    <option value="therapy">Therapy</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Description / תיאור</label>
+                <input type="text" name="description" class="form-control form-control-sm">
+            </div>
+            <div class="col-12 d-flex justify-content-end">
+                <button type="submit" class="btn btn-success btn-sm rounded-pill">Create Group / יצירת קבוצה</button>
+            </div>
+        </form>
     </div>
+</div>
 
-    <div class="col-lg-8">
-        {% for group in groups %}
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                    <div>
-                        <h6 class="fw-bold mb-0 text-primary">{{ group['name'] }}</h6>
-                        <div class="small text-muted">
-                            {{ group['group_type'] }} · {{ group['member_count'] }} active members · {{ group['session_count'] }} sessions
-                            {% if group['next_session_date'] %}· next: {{ group['next_session_date'] }}{% endif %}
-                        </div>
+<div class="d-flex flex-column gap-3">
+    {% for group in groups %}
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <h5 class="fw-bold mb-0 text-primary">{{ group['name'] }}</h5>
+                        <span class="badge rounded-pill {% if group['is_active'] %}bg-success-subtle text-success{% else %}bg-secondary-subtle text-secondary{% endif %} border">
+                            {% if group['is_active'] %}Active / פעילה{% else %}History / היסטוריה{% endif %}
+                        </span>
                     </div>
-                    <a href="{{ url_for('group_detail', group_id=group['id']) }}" class="btn btn-outline-primary btn-sm rounded-pill">
-                        Open Group Sessions
-                    </a>
+                    <div class="small text-muted">
+                        {{ group['group_type'] }} · {{ group['member_count'] }} active members · {{ group['session_count'] }} sessions
+                        {% if group['next_session_date'] %} · next: {{ group['next_session_date'] }}{% endif %}
+                    </div>
+                    {% if group['description'] %}
+                    <div class="small mt-2">{{ group['description'] }}</div>
+                    {% endif %}
                 </div>
-                <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-2">
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{{ url_for('group_detail', group_id=group['id']) }}" class="btn btn-outline-primary btn-sm rounded-pill">Open Group / פתיחת קבוצה</a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleOverviewEdit({{ group['id'] }})">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="toggleOverviewDelete({{ group['id'] }})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="overview-edit-panel mt-3 border rounded-3 p-3 bg-light" id="overview-edit-{{ group['id'] }}">
+                <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_to" value="dashboard">
                     <div class="col-md-4">
-                        <label class="form-label small">Name</label>
+                        <label class="form-label small">Name / שם</label>
                         <input type="text" class="form-control form-control-sm" name="name" value="{{ group['name'] }}" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small">Type</label>
+                        <label class="form-label small">Type / סוג</label>
                         <select class="form-select form-select-sm" name="group_type">
                             <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>Support</option>
                             <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>Skills</option>
@@ -74,30 +106,75 @@
                             <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>Therapy</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Active</label>
-                        <div class="form-check mt-2">
+                    <div class="col-md-2 d-flex align-items-end">
+                        <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" name="is_active" id="groupActive{{ group['id'] }}" {% if group['is_active'] %}checked{% endif %}>
-                            <label class="form-check-label small" for="groupActive{{ group['id'] }}">Enabled</label>
+                            <label class="form-check-label small" for="groupActive{{ group['id'] }}">Active / פעילה</label>
                         </div>
                     </div>
-                    <div class="col-md-10">
-                        <label class="form-label small">Description</label>
+                    <div class="col-md-3">
+                        <label class="form-label small">Description / תיאור</label>
                         <input type="text" class="form-control form-control-sm" name="description" value="{{ group['description'] or '' }}">
                     </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button class="btn btn-outline-secondary btn-sm w-100" type="submit">Save</button>
+                    <div class="col-12 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleOverviewEdit({{ group['id'] }})">Cancel / ביטול</button>
+                        <button class="btn btn-primary btn-sm rounded-pill" type="submit">Save Changes / שמירת שינויים</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="overview-delete-panel mt-3 border rounded-3 p-3 bg-light" id="overview-delete-{{ group['id'] }}">
+                <form method="post" action="{{ url_for('delete_group', group_id=group['id']) }}" onsubmit="return confirmOverviewDelete(this)">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_to" value="dashboard">
+                    <div class="small fw-semibold mb-2">How should {{ group['name'] }} be deleted? / כיצד למחוק את {{ group['name'] }}?</div>
+                    <div class="d-flex flex-column gap-2 mb-3">
+                        <label class="border rounded-3 p-2 small">
+                            <input class="form-check-input me-2" type="radio" name="delete_mode" value="archive" checked>
+                            Delete and move to history / מחיקה והעברה להיסטוריה
+                        </label>
+                        <label class="border rounded-3 p-2 small text-danger">
+                            <input class="form-check-input me-2" type="radio" name="delete_mode" value="delete">
+                            Delete group data as well / מחיקת כל נתוני הקבוצה
+                        </label>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleOverviewDelete({{ group['id'] }})">Cancel / ביטול</button>
+                        <button type="submit" class="btn btn-danger btn-sm rounded-pill">Confirm Delete / אישור מחיקה</button>
                     </div>
                 </form>
             </div>
         </div>
-        {% else %}
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body text-center text-muted py-5">
-                No groups yet. Create your first group.
-            </div>
-        </div>
-        {% endfor %}
     </div>
+    {% else %}
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body text-center text-muted py-5">
+            No groups yet. Create your first group. / עדיין אין קבוצות. אפשר ליצור את הקבוצה הראשונה.
+        </div>
+    </div>
+    {% endfor %}
 </div>
+
+<script>
+function toggleCreateGroupPanel() {
+    document.getElementById('create-group-panel').classList.toggle('is-open');
+}
+
+function toggleOverviewEdit(groupId) {
+    document.getElementById('overview-edit-' + groupId).classList.toggle('is-open');
+}
+
+function toggleOverviewDelete(groupId) {
+    document.getElementById('overview-delete-' + groupId).classList.toggle('is-open');
+}
+
+function confirmOverviewDelete(form) {
+    const selected = form.querySelector('input[name="delete_mode"]:checked');
+    if (!selected) return false;
+    if (selected.value === 'delete') {
+        return confirm('Delete this group and all related group data? This cannot be undone.');
+    }
+    return confirm('Move this group to history?');
+}
+</script>
 {% endblock %}
