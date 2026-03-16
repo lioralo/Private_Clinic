@@ -2,6 +2,61 @@
 
 ---
 
+## Session 24
+
+**Date:** March 16, 2026
+
+**Objective:** Expand group lifecycle management with historical membership tracking, recurring group meetings, attendance + missed-reason documentation, and individual missed-meeting documentation in treatment logs.
+
+**Changes Made:**
+
+1. **Group Membership History + Durations**
+- Added persistent `group_member_history` tracking for join/leave cycles.
+- Updated member add/remove logic to preserve historical periods while keeping current active membership.
+- Added member-history UI in `groups` page showing joined date, left/active state, and days in group.
+
+2. **Recurring Group Session Scheduling + Future-Series Updates**
+- Added recurrence support when creating group sessions:
+  - one-time,
+  - weekly recurring,
+  - interval in weeks,
+  - count and/or end-date caps.
+- Added `group_session_series` metadata and linked sessions via `series_id`.
+- Enhanced group session update API to support:
+  - single-session update,
+  - apply-to-future updates for recurring series.
+
+3. **Group Session Outcomes + Attendance Tracking**
+- Added session outcome recording (`session_summary`, session status).
+- Added attendance table `group_session_attendance` with per-member:
+  - attendance status (pending/present/missed),
+  - missed reason,
+  - attendance note.
+- Added session recording form in `groups` UI to capture what happened and who arrived/missed.
+
+4. **Missed Meeting Documentation in Individual Treatment**
+- Added treatment-log support for missed sessions with:
+  - `is_missed_meeting`,
+  - `missed_reason`.
+- Updated create/edit note flows and patient detail UI to capture and display missed-session reasons.
+- Group missed attendance now auto-creates an individual missed-meeting note for that patient.
+
+5. **Schema + Migration Hardening**
+- Updated `schema.sql` and `init_db()` migrations for new fields/tables/indexes:
+  - `group_member_history`,
+  - `group_session_series`,
+  - `group_session_attendance`,
+  - `group_sessions.series_id/occurrence_index/session_summary`,
+  - `notes.is_missed_meeting/missed_reason`,
+  - `appointments.missed_reason`.
+
+6. **Automated Regression Coverage**
+- Added tests for:
+  - member history join/leave/rejoin periods,
+  - recurring group session creation and future-series update,
+  - attendance capture + missed reason + auto-created individual note,
+  - individual missed-treatment note reason persistence.
+
 ## Session 23
 
 **Date:** March 15, 2026

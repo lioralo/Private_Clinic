@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS notes (
     behavior_checklist TEXT,
     mood_summary TEXT,
     behavior_notes TEXT,
+    is_missed_meeting BOOLEAN DEFAULT 0,
+    missed_reason TEXT,
     updated_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
@@ -85,6 +87,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     meeting_link TEXT,
     meeting_platform TEXT,
     meeting_title TEXT,
+    missed_reason TEXT,
     save_to_google BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
@@ -212,9 +215,53 @@ CREATE TABLE IF NOT EXISTS group_sessions (
     facilitator TEXT,
     meeting_type TEXT DEFAULT 'in-person',
     meeting_link TEXT,
+    series_id INTEGER,
+    occurrence_index INTEGER,
+    session_summary TEXT,
     status TEXT DEFAULT 'scheduled',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (group_id) REFERENCES groups (id)
+);
+
+CREATE TABLE IF NOT EXISTS group_member_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    patient_id INTEGER NOT NULL,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    left_at TIMESTAMP,
+    role TEXT DEFAULT 'member',
+    FOREIGN KEY (group_id) REFERENCES groups (id),
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
+CREATE TABLE IF NOT EXISTS group_session_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL,
+    start_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    duration_minutes INTEGER DEFAULT 60,
+    recurrence_interval_weeks INTEGER DEFAULT 1,
+    recurrence_end_date DATE,
+    recurrence_count INTEGER,
+    title TEXT,
+    facilitator TEXT,
+    meeting_type TEXT DEFAULT 'in-person',
+    meeting_link TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES groups (id)
+);
+
+CREATE TABLE IF NOT EXISTS group_session_attendance (
+    session_id INTEGER NOT NULL,
+    patient_id INTEGER NOT NULL,
+    attendance_status TEXT NOT NULL DEFAULT 'pending',
+    absence_reason TEXT,
+    attendance_note TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, patient_id),
+    FOREIGN KEY (session_id) REFERENCES group_sessions (id),
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted);
@@ -238,6 +285,9 @@ CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_
 
 CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at);
 CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status);
+CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at);
+CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status);
 
 CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at);
 CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status);

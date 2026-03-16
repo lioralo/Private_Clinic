@@ -1238,5 +1238,154 @@ class ClinicTestCase(unittest.TestCase):
             row = db.execute('SELECT id FROM vacancy_recurring WHERE id = ?', (recurring_id,)).fetchone()
             assert row is None
 
+    def test_group_member_history_tracks_join_leave_cycles(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Group Member A', status='ongoing'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Trauma Group', group_type='therapy', description='Weekly group'), follow_redirects=True)
+
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+        self.client.post('/groups/1/members/1/remove', data=dict(), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            active = db.execute('''
+                SELECT left_at
+                FROM group_members
+                WHERE group_id = 1 AND patient_id = 1
+            ''').fetchone()
+            assert active is not None
+            assert active['left_at'] is None
+
+            history = db.execute('''
+                SELECT joined_at, left_at
+                FROM group_member_history
+                WHERE group_id = 1 AND patient_id = 1
+                ORDER BY id ASC
+            ''').fetchall()
+            assert len(history) == 2
+            assert history[0]['left_at'] is not None
+            assert history[1]['left_at'] is None
+
+    def test_group_recurrence_update_future_and_attendance_missed_reason(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Group Patient One', status='ongoing'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Group Patient Two', status='ongoing'), follow_redirects=True)
+        self.client.post('/groups', data=dict(name='Skills Group', group_type='skills', description='Skills training'), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
+        self.client.post('/groups/1/members', data=dict(patient_id='2'), follow_redirects=True)
+
+        start_date = (datetime.now().date() + timedelta(days=3)).isoformat()
+        add_rv = self.client.post('/groups/1/sessions', data=dict(
+            session_date=start_date,
+            session_time='10:00',
+            end_time='11:00',
+            title='Skills Practice',
+            facilitator='Dr. A',
+            meeting_type='in-person',
+            meeting_link='',
+            recurrence_mode='weekly',
+            recurrence_interval_weeks='1',
+            recurrence_count='3'
+        ), follow_redirects=True)
+        assert add_rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            sessions = db.execute('''
+                SELECT id, series_id, session_date, session_time
+                FROM group_sessions
+                WHERE group_id = 1
+                ORDER BY session_date ASC
+            ''').fetchall()
+            assert len(sessions) == 3
+            assert sessions[0]['series_id'] is not None
+            first_session_id = sessions[0]['id']
+
+        update_rv = self.client.post(f'/api/groups/sessions/{first_session_id}/update', data=dict(
+            session_date=(datetime.now().date() + timedelta(days=4)).isoformat(),
+            session_time='11:00',
+            end_time='12:00',
+            title='Skills Practice Updated',
+            facilitator='Dr. B',
+            meeting_type='zoom',
+            meeting_link='https://example.com/meeting',
+            apply_scope='future'
+        ))
+        assert update_rv.status_code == 200
+        assert update_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            updated = db.execute('''
+                SELECT session_time, title, facilitator, meeting_type, meeting_link
+                FROM group_sessions
+                WHERE group_id = 1
+                ORDER BY session_date ASC
+            ''').fetchall()
+            assert len(updated) == 3
+            assert all(row['session_time'] == '11:00' for row in updated)
+            assert all((row['meeting_type'] or '') == 'zoom' for row in updated)
+
+        record_rv = self.client.post(f'/groups/sessions/{first_session_id}/record', data={
+            'session_status': 'completed',
+            'session_summary': 'Reviewed coping strategies',
+            'attendance_1': 'present',
+            'attendance_2': 'missed',
+            'absence_reason_2': 'Fever',
+            'attendance_note_2': 'Will follow up next week'
+        }, follow_redirects=True)
+        assert record_rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            attendance = db.execute('''
+                SELECT attendance_status, absence_reason
+                FROM group_session_attendance
+                WHERE session_id = ? AND patient_id = 2
+            ''', (first_session_id,)).fetchone()
+            assert attendance is not None
+            assert attendance['attendance_status'] == 'missed'
+            assert attendance['absence_reason'] == 'Fever'
+
+            auto_note = db.execute('''
+                SELECT is_missed_meeting, missed_reason, content
+                FROM notes
+                WHERE patient_id = 2
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert auto_note is not None
+            assert int(auto_note['is_missed_meeting'] or 0) == 1
+            assert auto_note['missed_reason'] == 'Fever'
+            assert 'Missed group session' in auto_note['content']
+
+    def test_individual_treatment_note_can_record_missed_reason(self):
+        self.login('admin', 'admin')
+        self.client.post('/add_patient', data=dict(name='Missed Session Patient', status='ongoing'), follow_redirects=True)
+
+        rv = self.client.post('/patient/1/add_note', data=dict(
+            session_number='1',
+            note_date=datetime.now().date().isoformat(),
+            content='',
+            is_missed_meeting='on',
+            missed_reason='Family emergency'
+        ), follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            note = db.execute('''
+                SELECT content, is_missed_meeting, missed_reason
+                FROM notes
+                WHERE patient_id = 1
+                ORDER BY id DESC
+                LIMIT 1
+            ''').fetchone()
+            assert note is not None
+            assert int(note['is_missed_meeting'] or 0) == 1
+            assert note['missed_reason'] == 'Family emergency'
+            assert 'Missed meeting documented' in note['content']
+
 if __name__ == '__main__':
     unittest.main()

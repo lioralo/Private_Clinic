@@ -52,13 +52,14 @@
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
                     {% for session in group_sessions %}
+                    {% if (session['status'] or 'scheduled') == 'scheduled' %}
                     <div class="list-group-item" id="sidebar-session-{{ session['id'] }}">
                         <div class="fw-semibold">{{ session['group_name'] }}</div>
                         <div class="small text-muted">{{ session['session_date'] }} {{ session['session_time'] }} · {{ session['duration_minutes'] }} min</div>
                         {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
                         <div class="mt-2 d-flex gap-2">
                             <button type="button" class="btn btn-outline-primary btn-sm rounded-pill"
-                                onclick="openEditModal({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}')">
+                                onclick="openEditModal({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">
                                 <i class="bi bi-pencil me-1"></i>Edit
                             </button>
                             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
@@ -66,6 +67,7 @@
                             </button>
                         </div>
                     </div>
+                    {% endif %}
                     {% else %}
                     <div class="list-group-item text-muted small">No sessions yet.</div>
                     {% endfor %}
@@ -111,6 +113,31 @@
                             </select>
                             <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">Add</button>
                         </form>
+
+                        {% set history = member_history_rows | selectattr('group_id', 'equalto', group['id']) | list %}
+                        <div class="mt-3">
+                            <h6 class="small text-uppercase text-muted">Member History</h6>
+                            <div class="list-group list-group-flush border rounded-3" style="max-height: 180px; overflow-y: auto;">
+                                {% for row in history %}
+                                <div class="list-group-item py-2">
+                                    <div class="small fw-semibold">{{ row['patient_name'] }}</div>
+                                    <div class="small text-muted">
+                                        Joined: {{ (row['joined_at'] or '')[:10] or 'N/A' }}
+                                        {% if row['left_at'] %}
+                                            · Left: {{ row['left_at'][:10] }}
+                                        {% else %}
+                                            · Active
+                                        {% endif %}
+                                        {% if row['membership_days'] is not none %}
+                                            · {{ row['membership_days'] }} days
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="list-group-item small text-muted">No member history yet.</div>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <h6 class="small text-uppercase text-muted">Schedule Session</h6>
@@ -149,6 +176,25 @@
                                 <input type="url" name="meeting_link" class="form-control form-control-sm" placeholder="https://...">
                             </div>
                             <div class="col-12">
+                                <label class="form-label small">Recurrence</label>
+                                <select name="recurrence_mode" class="form-select form-select-sm">
+                                    <option value="one-time" selected>One-time</option>
+                                    <option value="weekly">Weekly recurring</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Every N weeks</label>
+                                <input type="number" name="recurrence_interval_weeks" class="form-control form-control-sm" min="1" value="1">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Occurrences</label>
+                                <input type="number" name="recurrence_count" class="form-control form-control-sm" min="1" max="104" placeholder="8">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">End date</label>
+                                <input type="date" name="recurrence_end_date" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-12">
                                 <button type="submit" class="btn btn-success btn-sm rounded-pill">Add Session</button>
                             </div>
                         </form>
@@ -174,13 +220,18 @@
                                 {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
                                 <div class="d-flex gap-2 mt-1 flex-wrap">
                                     <span class="badge bg-secondary-subtle text-secondary border small">{{ session['meeting_type'] or 'in-person' }}</span>
+                                    <span class="badge {% if (session['status'] or 'scheduled') == 'completed' %}bg-success-subtle text-success{% elif (session['status'] or 'scheduled') == 'cancelled' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %} border small">{{ session['status'] or 'scheduled' }}</span>
+                                    {% if session['series_id'] %}<span class="badge bg-info-subtle text-info border small">Recurring</span>{% endif %}
                                     {% if session['facilitator'] %}<span class="badge bg-light text-dark border small"><i class="bi bi-person me-1"></i>{{ session['facilitator'] }}</span>{% endif %}
                                     {% if session['meeting_link'] %}<a href="{{ session['meeting_link'] }}" target="_blank" rel="noopener noreferrer" class="badge bg-primary-subtle text-primary border small text-decoration-none"><i class="bi bi-box-arrow-up-right me-1"></i>Link</a>{% endif %}
                                 </div>
+                                {% if session['session_summary'] %}
+                                <div class="small mt-2 text-muted">Summary: {{ session['session_summary'] }}</div>
+                                {% endif %}
                             </div>
                             <div class="d-flex gap-1 ms-2 flex-shrink-0">
                                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill"
-                                    onclick="toggleEditRow({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}')">
+                                    onclick="toggleEditRow({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                                 <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
@@ -223,12 +274,76 @@
                                     <label class="form-label small mb-1">Meeting Link</label>
                                     <input type="url" class="form-control form-control-sm" id="edit-link-{{ session['id'] }}" placeholder="https://...">
                                 </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label small mb-1">Update Scope</label>
+                                    <select class="form-select form-select-sm" id="edit-scope-{{ session['id'] }}" {% if not session['series_id'] %}disabled{% endif %}>
+                                        <option value="single" selected>Only this session</option>
+                                        {% if session['series_id'] %}<option value="future">This and future recurring sessions</option>{% endif %}
+                                    </select>
+                                </div>
                                 <div class="col-12 d-flex gap-2 justify-content-end">
                                     <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="cancelEditRow({{ session['id'] }})">Cancel</button>
                                     <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="saveSession({{ session['id'] }})">Save Changes</button>
                                 </div>
                             </div>
                         </div>
+
+                        {% set session_members = session_member_map.get(session['id'], []) %}
+                        {% set marks = attendance_by_session.get(session['id'], {}) %}
+                        <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}" class="mt-2 border rounded-3 p-3 bg-light">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Session Status</label>
+                                    {% set status_value = session['status'] or 'scheduled' %}
+                                    <select class="form-select form-select-sm" name="session_status">
+                                        <option value="scheduled" {% if status_value == 'scheduled' %}selected{% endif %}>Scheduled</option>
+                                        <option value="completed" {% if status_value == 'completed' %}selected{% endif %}>Completed</option>
+                                        <option value="cancelled" {% if status_value == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">What happened in this meeting?</label>
+                                    <input type="text" class="form-control form-control-sm" name="session_summary" value="{{ session['session_summary'] or '' }}" placeholder="Summary and interventions">
+                                </div>
+                            </div>
+                            <div class="mt-3 small text-uppercase text-muted">Attendance</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-2">
+                                    <thead>
+                                        <tr>
+                                            <th>Member</th>
+                                            <th style="min-width: 160px;">Status</th>
+                                            <th>Missed reason</th>
+                                            <th>Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for member in session_members %}
+                                        {% set mark = marks.get(member['patient_id'], {}) %}
+                                        {% set attendance_status = mark.get('attendance_status', 'pending') %}
+                                        <tr>
+                                            <td>{{ member['patient_name'] }}</td>
+                                            <td>
+                                                <select class="form-select form-select-sm" name="attendance_{{ member['patient_id'] }}">
+                                                    <option value="pending" {% if attendance_status == 'pending' %}selected{% endif %}>Pending</option>
+                                                    <option value="present" {% if attendance_status == 'present' %}selected{% endif %}>Arrived</option>
+                                                    <option value="missed" {% if attendance_status == 'missed' %}selected{% endif %}>Missed</option>
+                                                </select>
+                                            </td>
+                                            <td><input type="text" class="form-control form-control-sm" name="absence_reason_{{ member['patient_id'] }}" value="{{ mark.get('absence_reason', '') }}" placeholder="Reason if missed"></td>
+                                            <td><input type="text" class="form-control form-control-sm" name="attendance_note_{{ member['patient_id'] }}" value="{{ mark.get('attendance_note', '') }}" placeholder="Optional note"></td>
+                                        </tr>
+                                        {% else %}
+                                        <tr><td colspan="4" class="text-muted small">No active members for this date.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="text-end">
+                                <button type="submit" class="btn btn-outline-success btn-sm rounded-pill">Save Session Record</button>
+                            </div>
+                        </form>
                     </div>
                     {% endfor %}
                 </div>
@@ -288,6 +403,13 @@
                         <label class="form-label small">Meeting Link</label>
                         <input type="url" class="form-control form-control-sm" id="modalMeetingLink" placeholder="https://...">
                     </div>
+                    <div class="col-12">
+                        <label class="form-label small">Update Scope</label>
+                        <select class="form-select form-select-sm" id="modalApplyScope">
+                            <option value="single" selected>Only this session</option>
+                            <option value="future">This and future recurring sessions</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -316,7 +438,7 @@ function timeToMinutes(hhmm) {
 }
 
 /* ---- Inline row editing (right-column sessions list) ---- */
-function toggleEditRow(id, date, start, durationMin, title, facilitator, type, link) {
+function toggleEditRow(id, date, start, durationMin, title, facilitator, type, link, seriesId) {
     document.getElementById('edit-date-' + id).value = date;
     document.getElementById('edit-start-' + id).value = start;
     document.getElementById('edit-end-' + id).value = minutesToTime(timeToMinutes(start) + durationMin);
@@ -324,6 +446,11 @@ function toggleEditRow(id, date, start, durationMin, title, facilitator, type, l
     document.getElementById('edit-facilitator-' + id).value = facilitator;
     document.getElementById('edit-type-' + id).value = type;
     document.getElementById('edit-link-' + id).value = link;
+    const scope = document.getElementById('edit-scope-' + id);
+    if (scope) {
+        scope.disabled = !seriesId;
+        scope.value = 'single';
+    }
     document.getElementById('session-view-' + id).classList.add('d-none');
     document.getElementById('session-edit-' + id).classList.remove('d-none');
 }
@@ -341,7 +468,8 @@ function saveSession(id) {
         title: document.getElementById('edit-title-' + id).value || '',
         facilitator: document.getElementById('edit-facilitator-' + id).value || '',
         meeting_type: document.getElementById('edit-type-' + id).value || 'in-person',
-        meeting_link: document.getElementById('edit-link-' + id).value || ''
+        meeting_link: document.getElementById('edit-link-' + id).value || '',
+        apply_scope: document.getElementById('edit-scope-' + id) ? document.getElementById('edit-scope-' + id).value : 'single'
     });
     fetch('/api/groups/sessions/' + id + '/update', {
         method: 'POST',
@@ -371,7 +499,7 @@ function deleteSession(id) {
 }
 
 /* ---- Modal editing (left sidebar sessions) ---- */
-function openEditModal(id, date, start, durationMin, title, facilitator, type, link) {
+function openEditModal(id, date, start, durationMin, title, facilitator, type, link, seriesId) {
     document.getElementById('modalSessionId').value = id;
     document.getElementById('modalDate').value = date;
     document.getElementById('modalStart').value = start;
@@ -380,6 +508,9 @@ function openEditModal(id, date, start, durationMin, title, facilitator, type, l
     document.getElementById('modalFacilitator').value = facilitator;
     document.getElementById('modalMeetingType').value = type;
     document.getElementById('modalMeetingLink').value = link;
+    const modalApplyScope = document.getElementById('modalApplyScope');
+    modalApplyScope.disabled = !seriesId;
+    modalApplyScope.value = 'single';
     if (editModal) editModal.show();
 }
 
@@ -392,7 +523,8 @@ document.getElementById('modalSaveBtn').addEventListener('click', function() {
         title: document.getElementById('modalTitle').value || '',
         facilitator: document.getElementById('modalFacilitator').value || '',
         meeting_type: document.getElementById('modalMeetingType').value || 'in-person',
-        meeting_link: document.getElementById('modalMeetingLink').value || ''
+        meeting_link: document.getElementById('modalMeetingLink').value || '',
+        apply_scope: document.getElementById('modalApplyScope').value || 'single'
     });
     fetch('/api/groups/sessions/' + id + '/update', {
         method: 'POST',

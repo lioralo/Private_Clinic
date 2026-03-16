@@ -646,6 +646,14 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
         except sqlite3.OperationalError:
             pass
@@ -732,6 +740,10 @@ def init_db():
             pass
         try:
             db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
         except sqlite3.OperationalError:
             pass
         try:
@@ -871,9 +883,75 @@ def init_db():
                 facilitator TEXT,
                 meeting_type TEXT DEFAULT 'in-person',
                 meeting_link TEXT,
+                series_id INTEGER,
+                occurrence_index INTEGER,
+                session_summary TEXT,
                 status TEXT DEFAULT 'scheduled',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (group_id) REFERENCES groups (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                patient_id INTEGER NOT NULL,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                left_at TIMESTAMP,
+                role TEXT DEFAULT 'member',
+                FOREIGN KEY (group_id) REFERENCES groups (id),
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS group_session_series (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                start_date DATE NOT NULL,
+                start_time TIME NOT NULL,
+                duration_minutes INTEGER DEFAULT 60,
+                recurrence_interval_weeks INTEGER DEFAULT 1,
+                recurrence_end_date DATE,
+                recurrence_count INTEGER,
+                title TEXT,
+                facilitator TEXT,
+                meeting_type TEXT DEFAULT 'in-person',
+                meeting_link TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (group_id) REFERENCES groups (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS group_session_attendance (
+                session_id INTEGER NOT NULL,
+                patient_id INTEGER NOT NULL,
+                attendance_status TEXT NOT NULL DEFAULT 'pending',
+                absence_reason TEXT,
+                attendance_note TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (session_id, patient_id),
+                FOREIGN KEY (session_id) REFERENCES group_sessions (id),
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
             )''')
         except sqlite3.OperationalError:
             pass
@@ -900,6 +978,9 @@ def init_db():
 
         db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status)')
 
         db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
@@ -3050,6 +3131,64 @@ def api_create_public_booking_link():
     })
 
 
+def build_group_recurrence_dates(start_date, recurrence_interval_weeks=1, recurrence_end_date=None, recurrence_count=None):
+    """Generate a bounded list of recurring group session dates."""
+    interval = max(1, int(recurrence_interval_weeks or 1))
+    cap = 104
+    max_count = int(recurrence_count or 0)
+    if max_count <= 0:
+        max_count = 8
+    max_count = min(max_count, cap)
+
+    dates = []
+    current = start_date
+    for _ in range(cap):
+        if recurrence_end_date and current > recurrence_end_date:
+            break
+        dates.append(current)
+        if len(dates) >= max_count:
+            break
+        current = current + timedelta(days=interval * 7)
+    return dates
+
+
+def get_group_members_for_session(db, group_id, session_date_iso):
+    """Resolve members by membership periods active on the session date."""
+    rows = db.execute('''
+        SELECT p.id AS patient_id,
+               p.name AS patient_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN patients p ON p.id = h.patient_id
+        WHERE h.group_id = ?
+          AND date(h.joined_at) <= date(?)
+          AND (h.left_at IS NULL OR date(h.left_at) >= date(?))
+          AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+    ''', (group_id, session_date_iso, session_date_iso)).fetchall()
+    members = [dict(row) for row in rows]
+    if members:
+        return members
+
+    fallback = db.execute('''
+        SELECT p.id AS patient_id,
+               p.name AS patient_name,
+               gm.joined_at,
+               gm.left_at,
+               COALESCE(gm.role, 'member') AS role
+        FROM group_members gm
+        JOIN patients p ON p.id = gm.patient_id
+        WHERE gm.group_id = ?
+          AND date(gm.joined_at) <= date(?)
+          AND (gm.left_at IS NULL OR date(gm.left_at) >= date(?))
+          AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+    ''', (group_id, session_date_iso, session_date_iso)).fetchall()
+    return [dict(row) for row in fallback]
+
+
 @app.route('/calendar/public/<token>')
 def open_public_booking_calendar(token):
     db = get_db()
@@ -3198,12 +3337,61 @@ def groups_dashboard():
     ''').fetchall()
 
     group_sessions = db.execute('''
-        SELECT gs.*, g.name AS group_name
+        SELECT gs.*, g.name AS group_name,
+               ss.recurrence_interval_weeks,
+               ss.recurrence_end_date,
+               ss.recurrence_count
         FROM group_sessions gs
         JOIN groups g ON g.id = gs.group_id
-        WHERE COALESCE(gs.status, 'scheduled') = 'scheduled'
+        LEFT JOIN group_session_series ss ON ss.id = gs.series_id
         ORDER BY gs.session_date ASC, gs.session_time ASC
     ''').fetchall()
+
+    member_history_rows = db.execute('''
+        SELECT h.group_id,
+               h.patient_id,
+               p.name AS patient_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN patients p ON p.id = h.patient_id
+        WHERE COALESCE(p.is_deleted, 0) = 0
+        ORDER BY h.group_id ASC, h.joined_at DESC
+    ''').fetchall()
+
+    member_history_rows = [dict(row) for row in member_history_rows]
+    now_date = datetime.now().date()
+    for row in member_history_rows:
+        joined_date = parse_date_safe((row.get('joined_at') or '')[:10])
+        left_date = parse_date_safe((row.get('left_at') or '')[:10]) if row.get('left_at') else None
+        if joined_date:
+            end_date = left_date or now_date
+            row['membership_days'] = max(0, (end_date - joined_date).days)
+        else:
+            row['membership_days'] = None
+
+    session_member_map = {}
+    attendance_by_session = {}
+    session_ids = [int(row['id']) for row in group_sessions]
+    for session in group_sessions:
+        session_member_map[int(session['id'])] = get_group_members_for_session(
+            db, int(session['group_id']), session['session_date']
+        )
+
+    if session_ids:
+        marks = db.execute(f'''
+            SELECT session_id, patient_id, attendance_status, absence_reason, attendance_note
+            FROM group_session_attendance
+            WHERE session_id IN ({','.join(['?'] * len(session_ids))})
+        ''', session_ids).fetchall()
+        for row in marks:
+            session_key = int(row['session_id'])
+            attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
+                'attendance_status': row['attendance_status'] or 'pending',
+                'absence_reason': row['absence_reason'] or '',
+                'attendance_note': row['attendance_note'] or ''
+            }
 
     patients = db.execute('''
         SELECT id, name
@@ -3212,8 +3400,16 @@ def groups_dashboard():
         ORDER BY name ASC
     ''').fetchall()
 
-    return render_template('groups.html', groups=groups, group_members=group_members,
-                           group_sessions=group_sessions, patients=patients)
+    return render_template(
+        'groups.html',
+        groups=groups,
+        group_members=group_members,
+        group_sessions=group_sessions,
+        patients=patients,
+        member_history_rows=member_history_rows,
+        session_member_map=session_member_map,
+        attendance_by_session=attendance_by_session
+    )
 
 
 @app.route('/groups/<int:group_id>/members', methods=['POST'])
@@ -3228,10 +3424,37 @@ def add_group_member(group_id):
         return redirect(url_for('groups_dashboard'))
 
     db = get_db()
+    patient_id = int(patient_id_raw)
+    existing_active = db.execute('''
+        SELECT 1
+        FROM group_members
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
+        LIMIT 1
+    ''', (group_id, patient_id)).fetchone()
+    if existing_active:
+        flash('Patient is already an active member in this group.')
+        return redirect(url_for('groups_dashboard'))
+
     db.execute('''
-        INSERT OR REPLACE INTO group_members (group_id, patient_id, joined_at, left_at, role)
+        INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
         VALUES (?, ?, CURRENT_TIMESTAMP, NULL, 'member')
-    ''', (group_id, int(patient_id_raw)))
+        ON CONFLICT(group_id, patient_id)
+        DO UPDATE SET joined_at = CURRENT_TIMESTAMP, left_at = NULL, role = 'member'
+    ''', (group_id, patient_id))
+
+    existing_open_history = db.execute('''
+        SELECT id
+        FROM group_member_history
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
+        ORDER BY joined_at DESC
+        LIMIT 1
+    ''', (group_id, patient_id)).fetchone()
+    if not existing_open_history:
+        db.execute('''
+            INSERT INTO group_member_history (group_id, patient_id, joined_at, role)
+            VALUES (?, ?, CURRENT_TIMESTAMP, 'member')
+        ''', (group_id, patient_id))
+
     db.commit()
     flash('Patient added to group.')
     return redirect(url_for('groups_dashboard'))
@@ -3247,8 +3470,19 @@ def remove_group_member(group_id, patient_id):
     db.execute('''
         UPDATE group_members
         SET left_at = CURRENT_TIMESTAMP
-        WHERE group_id = ? AND patient_id = ?
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
     ''', (group_id, patient_id))
+
+    open_history = db.execute('''
+        SELECT id
+        FROM group_member_history
+        WHERE group_id = ? AND patient_id = ? AND left_at IS NULL
+        ORDER BY joined_at DESC
+        LIMIT 1
+    ''', (group_id, patient_id)).fetchone()
+    if open_history:
+        db.execute('UPDATE group_member_history SET left_at = CURRENT_TIMESTAMP WHERE id = ?', (open_history['id'],))
+
     db.commit()
     flash('Patient removed from group.')
     return redirect(url_for('groups_dashboard'))
@@ -3267,6 +3501,10 @@ def add_group_session(group_id):
     facilitator = (request.form.get('facilitator') or '').strip()
     meeting_type = (request.form.get('meeting_type') or 'in-person').strip()
     meeting_link = (request.form.get('meeting_link') or '').strip()
+    recurrence_mode = (request.form.get('recurrence_mode') or 'one-time').strip().lower()
+    recurrence_interval_raw = (request.form.get('recurrence_interval_weeks') or '1').strip()
+    recurrence_end_raw = (request.form.get('recurrence_end_date') or '').strip()
+    recurrence_count_raw = (request.form.get('recurrence_count') or '').strip()
 
     parsed_date = parse_date_safe(session_date)
     parsed_time = parse_time_safe(session_time)
@@ -3286,19 +3524,141 @@ def add_group_session(group_id):
     session_end = session_start + timedelta(minutes=duration)
 
     db = get_db()
-    conflict_message = has_time_conflict(db, parsed_date, session_start, session_end)
-    if conflict_message:
-        flash(conflict_message)
+    recurrence_interval_weeks = 1
+    try:
+        recurrence_interval_weeks = max(1, int(recurrence_interval_raw or '1'))
+    except ValueError:
+        recurrence_interval_weeks = 1
+
+    recurrence_end_date = parse_date_safe(recurrence_end_raw) if recurrence_end_raw else None
+    recurrence_count = None
+    if recurrence_count_raw:
+        try:
+            recurrence_count = max(1, min(104, int(recurrence_count_raw)))
+        except ValueError:
+            recurrence_count = None
+
+    recurrence_dates = [parsed_date]
+    if recurrence_mode == 'weekly':
+        recurrence_dates = build_group_recurrence_dates(
+            parsed_date,
+            recurrence_interval_weeks=recurrence_interval_weeks,
+            recurrence_end_date=recurrence_end_date,
+            recurrence_count=recurrence_count
+        )
+
+    for date_item in recurrence_dates:
+        start_at = datetime.combine(date_item, parsed_time)
+        end_at = start_at + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(db, date_item, start_at, end_at)
+        if conflict_message:
+            flash(f'{conflict_message} ({date_item.isoformat()})')
+            return redirect(url_for('groups_dashboard'))
+
+    series_id = None
+    if recurrence_mode == 'weekly' and len(recurrence_dates) > 1:
+        cur = db.execute('''
+            INSERT INTO group_session_series (
+                group_id, start_date, start_time, duration_minutes,
+                recurrence_interval_weeks, recurrence_end_date, recurrence_count,
+                title, facilitator, meeting_type, meeting_link, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ''', (
+            group_id,
+            parsed_date.isoformat(),
+            parsed_time.strftime('%H:%M'),
+            duration,
+            recurrence_interval_weeks,
+            recurrence_end_date.isoformat() if recurrence_end_date else None,
+            recurrence_count,
+            title or None,
+            facilitator or None,
+            meeting_type or 'in-person',
+            meeting_link or None
+        ))
+        series_id = cur.lastrowid
+
+    for idx, date_item in enumerate(recurrence_dates, start=1):
+        db.execute('''
+            INSERT INTO group_sessions
+                (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, meeting_link, series_id, occurrence_index, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
+        ''', (
+            group_id,
+            date_item.isoformat(),
+            parsed_time.strftime('%H:%M'),
+            duration,
+            title or None,
+            facilitator or None,
+            meeting_type or 'in-person',
+            meeting_link or None,
+            series_id,
+            idx if series_id else None
+        ))
+
+    db.commit()
+    if series_id:
+        flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
+    else:
+        flash('Group session added.')
+    return redirect(url_for('groups_dashboard'))
+
+
+@app.route('/groups/sessions/<int:session_id>/record', methods=['POST'])
+@login_required
+def record_group_session(session_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    session_row = db.execute('SELECT * FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    if not session_row:
+        flash('Group session not found.')
         return redirect(url_for('groups_dashboard'))
 
+    session_summary = (request.form.get('session_summary') or '').strip()
+    session_status = (request.form.get('session_status') or 'completed').strip().lower()
+    if session_status not in ('scheduled', 'completed', 'cancelled'):
+        session_status = 'completed'
+
     db.execute('''
-        INSERT INTO group_sessions
-            (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, meeting_link, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
-    ''', (group_id, session_date, parsed_time.strftime('%H:%M'), duration,
-          title or None, facilitator or None, meeting_type or 'in-person', meeting_link or None))
+        UPDATE group_sessions
+        SET session_summary = ?, status = ?
+        WHERE id = ?
+    ''', (session_summary or None, session_status, session_id))
+
+    members = get_group_members_for_session(db, int(session_row['group_id']), session_row['session_date'])
+    for member in members:
+        pid = int(member['patient_id'])
+        status_value = (request.form.get(f'attendance_{pid}') or 'pending').strip().lower()
+        if status_value not in ('present', 'missed', 'pending'):
+            status_value = 'pending'
+        absence_reason = (request.form.get(f'absence_reason_{pid}') or '').strip()
+        attendance_note = (request.form.get(f'attendance_note_{pid}') or '').strip()
+        if status_value != 'missed':
+            absence_reason = ''
+
+        db.execute('''
+            INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, attendance_note, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(session_id, patient_id)
+            DO UPDATE SET attendance_status = excluded.attendance_status,
+                          absence_reason = excluded.absence_reason,
+                          attendance_note = excluded.attendance_note,
+                          updated_at = CURRENT_TIMESTAMP
+        ''', (session_id, pid, status_value, absence_reason or None, attendance_note or None))
+
+        if status_value == 'missed':
+            note_content = f"Missed group session on {session_row['session_date']} ({session_row['session_time']})."
+            if absence_reason:
+                note_content = f"{note_content} Reason: {absence_reason}"
+            db.execute('''
+                INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
+                VALUES (?, ?, ?, 1, ?)
+            ''', (pid, session_row['session_date'], note_content, absence_reason or None))
+
     db.commit()
-    flash('Group session added.')
+    flash('Session record saved.')
     return redirect(url_for('groups_dashboard'))
 
 
@@ -4114,8 +4474,12 @@ def add_note(patient_id):
     behavior_flags = ','.join(request.form.getlist('behavior_flags'))
     mood_summary = request.form.get('mood_summary', '').strip()
     behavior_notes = request.form.get('behavior_notes', '').strip()
+    is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
+    missed_reason = request.form.get('missed_reason', '').strip()
+    if not is_missed_meeting:
+        missed_reason = ''
 
-    if content:
+    if content or is_missed_meeting:
         db = get_db()
         appointment_id = None
         if note_date:
@@ -4128,18 +4492,21 @@ def add_note(patient_id):
 
         cur = db.execute(
             '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
-                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes,
+                                  is_missed_meeting, missed_reason)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 patient_id,
                 appointment_id,
                 session_number or None,
                 note_date or None,
-                content,
+                content or 'Missed meeting documented.',
                 patient_appearance or None,
                 behavior_flags or None,
                 mood_summary or None,
-                behavior_notes or None
+                behavior_notes or None,
+                is_missed_meeting,
+                missed_reason or None
             )
         )
         note_id = cur.lastrowid
@@ -4161,7 +4528,7 @@ def add_note(patient_id):
                 db.commit()
 
     else:
-        flash('Content is required for treatment log entries.')
+        flash('Content is required unless this is marked as a missed meeting.')
 
     return redirect_to_patient_tab(patient_id, 'notes')
 
@@ -4178,6 +4545,10 @@ def edit_note(note_id):
     behavior_flags = ','.join(request.form.getlist('behavior_flags'))
     mood_summary = request.form.get('mood_summary', '').strip()
     behavior_notes = request.form.get('behavior_notes', '').strip()
+    is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
+    missed_reason = request.form.get('missed_reason', '').strip()
+    if not is_missed_meeting:
+        missed_reason = ''
 
     db = get_db()
     note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
@@ -4185,16 +4556,19 @@ def edit_note(note_id):
         db.execute(
             '''UPDATE notes
                SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?,
-                   behavior_checklist = ?, mood_summary = ?, behavior_notes = ?, updated_at = CURRENT_TIMESTAMP
+                   behavior_checklist = ?, mood_summary = ?, behavior_notes = ?,
+                   is_missed_meeting = ?, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
                WHERE id = ?''',
             (
-                content,
+                content or 'Missed meeting documented.',
                 session_number or None,
                 note_date or None,
                 patient_appearance or None,
                 behavior_flags or None,
                 mood_summary or None,
                 behavior_notes or None,
+                is_missed_meeting,
+                missed_reason or None,
                 note_id
             )
         )
@@ -5108,6 +5482,7 @@ def delete_group_session(session_id):
         return "Unauthorized", 403
 
     db = get_db()
+    db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
     db.commit()
     flash('Group session deleted.')
@@ -5125,6 +5500,7 @@ def api_delete_group_session(session_id):
     if not existing:
         return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
 
+    db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
     db.commit()
     return jsonify({'status': 'success'})
@@ -5397,6 +5773,7 @@ def api_update_group_session(session_id):
     facilitator = (request.form.get('facilitator') or '').strip()
     meeting_type = (request.form.get('meeting_type') or 'in-person').strip() or 'in-person'
     meeting_link = (request.form.get('meeting_link') or '').strip()
+    apply_scope = (request.form.get('apply_scope') or 'single').strip().lower()
 
     parsed_date = parse_date_safe(session_date)
     parsed_time = parse_time_safe(session_time)
@@ -5411,19 +5788,74 @@ def api_update_group_session(session_id):
         if end_minutes > start_minutes:
             duration = end_minutes - start_minutes
 
-    start_dt = datetime.combine(parsed_date, parsed_time)
-    end_dt = start_dt + timedelta(minutes=duration)
-    conflict_message = has_time_conflict(db, parsed_date, start_dt, end_dt, exclude_group_session_id=session_id)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': conflict_message}), 409
+    existing_date = parse_date_safe(existing['session_date'])
+    if not existing_date:
+        return jsonify({'status': 'error', 'message': 'Stored session date is invalid.'}), 500
 
-    db.execute('''
-        UPDATE group_sessions
-        SET session_date = ?, session_time = ?, duration_minutes = ?,
-            title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
-        WHERE id = ?
-    ''', (session_date, parsed_time.strftime('%H:%M'), duration,
-          title or None, facilitator or None, meeting_type, meeting_link or None, session_id))
+    apply_future = apply_scope == 'future' and existing['series_id']
+    target_rows = [existing]
+    if apply_future:
+        target_rows = db.execute('''
+            SELECT *
+            FROM group_sessions
+            WHERE series_id = ? AND session_date >= ?
+            ORDER BY session_date ASC, session_time ASC
+        ''', (existing['series_id'], existing['session_date'])).fetchall()
+
+    day_delta = (parsed_date - existing_date).days
+    for row in target_rows:
+        row_date = parse_date_safe(row['session_date'])
+        if not row_date:
+            return jsonify({'status': 'error', 'message': 'Existing recurrence row has invalid date.'}), 500
+        updated_date = row_date + timedelta(days=day_delta) if apply_future else parsed_date
+        start_dt = datetime.combine(updated_date, parsed_time)
+        end_dt = start_dt + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(
+            db,
+            updated_date,
+            start_dt,
+            end_dt,
+            exclude_group_session_id=int(row['id'])
+        )
+        if conflict_message:
+            return jsonify({'status': 'error', 'message': f"{conflict_message} ({updated_date.isoformat()})"}), 409
+
+    for row in target_rows:
+        row_date = parse_date_safe(row['session_date'])
+        updated_date = row_date + timedelta(days=day_delta) if apply_future else parsed_date
+        db.execute('''
+            UPDATE group_sessions
+            SET session_date = ?, session_time = ?, duration_minutes = ?,
+                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
+            WHERE id = ?
+        ''', (
+            updated_date.isoformat(),
+            parsed_time.strftime('%H:%M'),
+            duration,
+            title or None,
+            facilitator or None,
+            meeting_type,
+            meeting_link or None,
+            row['id']
+        ))
+
+    if apply_future and existing['series_id']:
+        db.execute('''
+            UPDATE group_session_series
+            SET start_date = ?, start_time = ?, duration_minutes = ?,
+                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
+            WHERE id = ?
+        ''', (
+            parsed_date.isoformat(),
+            parsed_time.strftime('%H:%M'),
+            duration,
+            title or None,
+            facilitator or None,
+            meeting_type,
+            meeting_link or None,
+            existing['series_id']
+        ))
+
     db.commit()
     return jsonify({'status': 'success'})
 
