@@ -8,6 +8,15 @@
 {{ he if is_he else en }}
 {%- endmacro %}
 
+{% macro group_type_label(group_type) -%}
+{%- if group_type == 'support' -%}{{ txt('Support', 'תמיכה') }}
+{%- elif group_type == 'skills' -%}{{ txt('Skills', 'מיומנויות') }}
+{%- elif group_type == 'psychoeducation' -%}{{ txt('Psychoeducation', 'פסיכו-חינוך') }}
+{%- elif group_type == 'therapy' -%}{{ txt('Therapy', 'טיפול') }}
+{%- else -%}{{ group_type or txt('Unknown', 'לא ידוע') }}
+{%- endif -%}
+{%- endmacro %}
+
 {% macro render_session_card(session, is_past, session_member_map, attendance_by_session) %}
 {% set session_members = session_member_map.get(session['id'], []) %}
 {% set marks = attendance_by_session.get(session['id'], {}) %}
@@ -237,10 +246,10 @@
                             <div class="col-12">
                                 <label class="form-label small">{{ txt('Type', 'סוג') }}</label>
                                 <select name="group_type" class="form-select form-select-sm">
-                                    <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>Support</option>
-                                    <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>Skills</option>
-                                    <option value="psychoeducation" {% if group['group_type'] == 'psychoeducation' %}selected{% endif %}>Psychoeducation</option>
-                                    <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>Therapy</option>
+                                    <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>{{ group_type_label('support') }}</option>
+                                    <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>{{ group_type_label('skills') }}</option>
+                                    <option value="psychoeducation" {% if group['group_type'] == 'psychoeducation' %}selected{% endif %}>{{ group_type_label('psychoeducation') }}</option>
+                                    <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>{{ group_type_label('therapy') }}</option>
                                 </select>
                             </div>
                             <div class="col-12">
