@@ -11,6 +11,21 @@
     --muted-color: #5b6472;
     --border-color: #d8e1df;
     --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.08);
+    --textbox-min-height: 7.5rem;
+    --textbox-min-height-sm: 6rem;
+    --input-min-height: 2.55rem;
+}
+
+html[data-density="compact"] {
+    --textbox-min-height: 6rem;
+    --textbox-min-height-sm: 5rem;
+    --input-min-height: 2.3rem;
+}
+
+html[data-density="large"] {
+    --textbox-min-height: 9.5rem;
+    --textbox-min-height-sm: 7.5rem;
+    --input-min-height: 2.85rem;
 }
 
 body {
@@ -117,6 +132,45 @@ h1, h2, h3, h4, h5 {
     padding: 0.6rem 0.8rem;
     font-size: 0.95rem;
     background: rgba(255, 255, 255, 0.92);
+}
+
+/* Site-wide textbox comfort: better readability for editing long and short text. */
+textarea.form-control {
+    min-height: var(--textbox-min-height);
+    line-height: 1.55;
+    padding: 0.72rem 0.86rem;
+    resize: vertical;
+}
+
+textarea.form-control.form-control-sm {
+    min-height: var(--textbox-min-height-sm);
+}
+
+input.form-control[type="text"],
+input.form-control[type="email"],
+input.form-control[type="url"],
+input.form-control[type="tel"],
+input.form-control[type="search"],
+input.form-control[type="password"] {
+    min-height: var(--input-min-height);
+    line-height: 1.4;
+    padding: 0.58rem 0.84rem;
+}
+
+.form-control::placeholder,
+.form-select::placeholder {
+    color: #7a8798;
+    opacity: 1;
+}
+
+[dir="rtl"] textarea.form-control,
+[dir="rtl"] input.form-control[type="text"],
+[dir="rtl"] input.form-control[type="email"],
+[dir="rtl"] input.form-control[type="url"],
+[dir="rtl"] input.form-control[type="tel"],
+[dir="rtl"] input.form-control[type="search"],
+[dir="rtl"] input.form-control[type="password"] {
+    text-align: right;
 }
 
 .form-control:focus,
@@ -663,6 +717,12 @@ footer {
 }
 
 @media (max-width: 575.98px) {
+    :root {
+        --textbox-min-height: 6.5rem;
+        --textbox-min-height-sm: 5.4rem;
+        --input-min-height: 2.4rem;
+    }
+
     .section-hero {
         padding: 1.2rem;
         border-radius: 22px;

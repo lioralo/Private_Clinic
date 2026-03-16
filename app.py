@@ -290,7 +290,10 @@ def inject_translations():
         if session.get('lang') == 'he':
             return HEBREW_TRANSLATIONS.get(text, text)
         return text
-    return dict(t=t, lang=session.get('lang', 'en'))
+    ui_density = (session.get('ui_density') or 'balanced').strip().lower()
+    if ui_density not in {'compact', 'balanced', 'large'}:
+        ui_density = 'balanced'
+    return dict(t=t, lang=session.get('lang', 'en'), ui_density=ui_density)
 
 @app.context_processor
 def inject_global_vars():
@@ -307,6 +310,14 @@ def inject_global_vars():
 def set_lang(lang):
     if lang in ['en', 'he']:
         session['lang'] = lang
+    return redirect(request.referrer or url_for('index'))
+
+
+@app.route('/set_density/<density>')
+def set_density(density):
+    normalized = (density or '').strip().lower()
+    if normalized in {'compact', 'balanced', 'large'}:
+        session['ui_density'] = normalized
     return redirect(request.referrer or url_for('index'))
 
 

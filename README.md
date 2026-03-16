@@ -9,8 +9,35 @@ A web application to manage patients, treatment notes, files, and receipts for a
 - Add treatment notes.
 - Upload files (documents, images).
 - Add receipts.
+- Manage therapy groups from a dedicated overview page.
+- Schedule one-time or recurring group sessions.
+- Record group session summaries and per-member attendance notes.
+- Open group sessions directly from the weekly calendar.
 - Secure file storage and downloads.
 - CSRF protection.
+
+## Group Management
+- The Groups overview page supports creating groups, editing core group metadata, and archiving or permanently deleting groups.
+- Each group has a dedicated workspace for:
+   - group info,
+   - session scheduling,
+   - member management,
+   - membership history,
+   - session record documentation.
+- Removing a patient from a group supports three outcomes:
+   - remove from the group only,
+   - move the patient to archived records,
+   - permanently delete the patient and related data.
+- Recurring group sessions can end either by number of meetings or by a specific date.
+- Clicking a group session in the calendar opens the matching group-session record directly.
+
+## Recent Verification
+- Latest full regression run: `python test_app.py`
+- Latest reviewed result: `50` tests passed.
+- Targeted review also confirmed:
+   - group archive and full-delete flows,
+   - member archive and patient-data delete flows,
+   - direct calendar linking to group session records.
 
 ## Setup
 1. Install dependencies:

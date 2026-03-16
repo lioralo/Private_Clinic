@@ -2,6 +2,43 @@
 
 ---
 
+## Session 27
+
+**Date:** March 16, 2026
+
+**Objective:** Finalize the latest group-management release with a focused regression review and a concise release summary.
+
+**Release Summary:**
+
+1. **Group Lifecycle Controls Expanded**
+- Added archive-vs-delete handling for groups.
+- Added remove-vs-archive-vs-delete handling when removing a member from a group.
+
+2. **Group Session Workspace Reworked**
+- Reorganized the group detail page into collapsible management sections.
+- Kept session records visible in presentation mode until the user explicitly presses edit.
+- Expanded writing space for session summaries and member comments.
+- Limited the default session list to the nearest upcoming and previous records, with show-all controls.
+
+3. **Scheduling and Navigation Improved**
+- Added recurring-series end selection by count or end date.
+- Redirected newly created group sessions to the newest session record.
+- Added direct calendar click-through from group sessions to the matching group-session record.
+
+**Regression Review:**
+
+1. **Automated Validation**
+- Full suite: `python test_app.py` passed (`50` tests).
+- Targeted group regression checks passed for:
+  - group archive vs full delete,
+  - member archive flow,
+  - member full-delete flow,
+  - calendar snapshot `detail_url` linking.
+
+2. **Review Outcome**
+- No regressions were found in the reviewed group-management and calendar handoff flows.
+- The push on `main` reflects the reviewed state.
+
 ## Session 26
 
 **Date:** March 16, 2026
