@@ -1,75 +1,125 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-{# Hidden CSRF token used by inline JS fetch calls #}
 <input type="hidden" id="groups_csrf_token" value="{{ csrf_token() }}">
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
-        <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-people-fill me-2"></i>Group Meetings</h2>
-        <p class="text-muted small mb-0">Manage groups, members, and scheduled group sessions.</p>
+        <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-people-fill me-2"></i>{{ group['name'] }}</h2>
+        <p class="text-muted small mb-0">Group sessions workspace. Record each session, attendance, and meeting notes.</p>
     </div>
-    <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to Calendar</a>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('groups_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">All Groups</a>
+        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary btn-sm rounded-pill">Back to Calendar</a>
+    </div>
 </div>
 
 <div class="row g-4">
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Create Group</h6>
+                <h6 class="fw-bold mb-0 text-primary">Group Info</h6>
             </div>
             <div class="card-body">
-                <form method="post" action="{{ url_for('groups_dashboard') }}" class="row g-2">
+                <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="col-12">
-                        <label class="form-label small">Group Name</label>
-                        <input type="text" name="name" class="form-control form-control-sm" required>
+                        <label class="form-label small">Name</label>
+                        <input type="text" name="name" class="form-control form-control-sm" value="{{ group['name'] }}" required>
                     </div>
                     <div class="col-12">
-                        <label class="form-label small">Group Type</label>
+                        <label class="form-label small">Type</label>
                         <select name="group_type" class="form-select form-select-sm">
-                            <option value="support">Support</option>
-                            <option value="skills">Skills</option>
-                            <option value="psychoeducation">Psychoeducation</option>
-                            <option value="therapy">Therapy</option>
+                            <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>Support</option>
+                            <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>Skills</option>
+                            <option value="psychoeducation" {% if group['group_type'] == 'psychoeducation' %}selected{% endif %}>Psychoeducation</option>
+                            <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>Therapy</option>
                         </select>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">Description</label>
-                        <textarea name="description" rows="3" class="form-control form-control-sm"></textarea>
+                        <textarea name="description" rows="3" class="form-control form-control-sm">{{ group['description'] or '' }}</textarea>
                     </div>
                     <div class="col-12">
-                        <button type="submit" class="btn btn-primary btn-sm rounded-pill">Create Group</button>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isActive" name="is_active" {% if group['is_active'] %}checked{% endif %}>
+                            <label class="form-check-label small" for="isActive">Active group</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">Save Group Info</button>
                     </div>
                 </form>
             </div>
         </div>
 
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Members</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush border rounded-3 mb-2">
+                    {% for member in group_members %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="small">
+                            {{ member['patient_name'] }}
+                            {% if member['joined_at'] %}
+                            <span class="text-muted">· since {{ member['joined_at'][:10] }}</span>
+                            {% endif %}
+                            <span class="badge bg-light text-dark border ms-1">Arrived {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
+                        </span>
+                        <form method="post" action="{{ url_for('remove_group_member', group_id=group['id'], patient_id=member['patient_id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="btn btn-outline-danger btn-sm rounded-pill" type="submit">Remove</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="list-group-item small text-muted">No members added yet.</div>
+                    {% endfor %}
+                </div>
+                <form method="post" action="{{ url_for('add_group_member', group_id=group['id']) }}" class="d-flex gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="patient_id" class="form-select form-select-sm" required>
+                        <option value="">Add group patient...</option>
+                        {% for patient in patients %}
+                        <option value="{{ patient['id'] }}">{{ patient['name'] }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">Add</button>
+                </form>
+                <div class="small text-muted mt-1">Suggestions include only patients with type "group".</div>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">Upcoming Group Sessions</h6>
+                <h6 class="fw-bold mb-0 text-primary">Member History</h6>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0" style="max-height: 320px; overflow-y: auto;">
                 <div class="list-group list-group-flush">
-                    {% for session in group_sessions %}
-                    {% if (session['status'] or 'scheduled') == 'scheduled' %}
-                    <div class="list-group-item" id="sidebar-session-{{ session['id'] }}">
-                        <div class="fw-semibold">{{ session['group_name'] }}</div>
-                        <div class="small text-muted">{{ session['session_date'] }} {{ session['session_time'] }} · {{ session['duration_minutes'] }} min</div>
-                        {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
-                        <div class="mt-2 d-flex gap-2">
-                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill"
-                                onclick="openEditModal({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">
-                                <i class="bi bi-pencil me-1"></i>Edit
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
-                                <i class="bi bi-trash me-1"></i>Delete
-                            </button>
+                    {% for row in member_history_rows %}
+                    <div class="list-group-item py-2 px-3">
+                        <div class="small fw-semibold">{{ row['patient_name'] }}</div>
+                        <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-1 mt-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="return_group_id" value="{{ group['id'] }}">
+                            <div class="col-5">
+                                <input type="date" class="form-control form-control-sm" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" required>
+                            </div>
+                            <div class="col-5">
+                                <input type="date" class="form-control form-control-sm" name="left_date" value="{{ (row['left_at'] or '')[:10] }}">
+                            </div>
+                            <div class="col-2">
+                                <button class="btn btn-outline-secondary btn-sm w-100" type="submit">Save</button>
+                            </div>
+                        </form>
+                        <div class="small text-muted mt-1">
+                            {% if row['left_at'] %}Closed period{% else %}Active period{% endif %}
+                            {% if row['membership_days'] is not none %} · {{ row['membership_days'] }} days{% endif %}
                         </div>
                     </div>
-                    {% endif %}
                     {% else %}
-                    <div class="list-group-item text-muted small">No sessions yet.</div>
+                    <div class="list-group-item small text-muted">No member history yet.</div>
                     {% endfor %}
                 </div>
             </div>
@@ -77,367 +127,226 @@
     </div>
 
     <div class="col-lg-8">
-        {% for group in groups %}
         <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="fw-bold mb-0 text-primary">{{ group['name'] }}</h6>
-                    <div class="small text-muted">{{ group['group_type'] }} · {{ group['member_count'] }} members</div>
-                </div>
+            <div class="card-header bg-white border-0">
+                <h6 class="fw-bold mb-0 text-primary">Schedule Session</h6>
             </div>
             <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <h6 class="small text-uppercase text-muted">Members</h6>
-                        <div class="list-group list-group-flush border rounded-3 mb-2">
-                            {% set members = group_members | selectattr('group_id', 'equalto', group['id']) | list %}
-                            {% for member in members %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center">
-                                <span class="small">
-                                    {{ member['patient_name'] }}
-                                    {% if member['joined_at'] %}
-                                    <span class="text-muted">· since {{ member['joined_at'][:10] }}</span>
-                                    {% endif %}
-                                    <span class="badge bg-light text-dark border ms-1">Arrived {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
-                                </span>
-                                <form method="post" action="{{ url_for('remove_group_member', group_id=group['id'], patient_id=member['patient_id']) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button class="btn btn-outline-danger btn-sm rounded-pill" type="submit">Remove</button>
-                                </form>
-                            </div>
-                            {% else %}
-                            <div class="list-group-item small text-muted">No members added yet.</div>
-                            {% endfor %}
-                        </div>
-                        <form method="post" action="{{ url_for('add_group_member', group_id=group['id']) }}" class="d-flex gap-2">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <select name="patient_id" class="form-select form-select-sm" required>
-                                <option value="">Add group patient...</option>
-                                {% for patient in patients %}
-                                <option value="{{ patient['id'] }}">{{ patient['name'] }}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">Add</button>
-                        </form>
-                        <div class="small text-muted mt-1">Suggestions include only patients with type "group".</div>
-
-                        {% set history = member_history_rows | selectattr('group_id', 'equalto', group['id']) | list %}
-                        <div class="mt-3">
-                            <h6 class="small text-uppercase text-muted">Member History</h6>
-                            <div class="list-group list-group-flush border rounded-3" style="max-height: 180px; overflow-y: auto;">
-                                {% for row in history %}
-                                <div class="list-group-item py-2">
-                                    <div class="small fw-semibold">{{ row['patient_name'] }}</div>
-                                    <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-1 mt-1">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <div class="col-5">
-                                            <input type="date" class="form-control form-control-sm" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" required>
-                                        </div>
-                                        <div class="col-5">
-                                            <input type="date" class="form-control form-control-sm" name="left_date" value="{{ (row['left_at'] or '')[:10] }}">
-                                        </div>
-                                        <div class="col-2">
-                                            <button class="btn btn-outline-secondary btn-sm w-100" type="submit">Save</button>
-                                        </div>
-                                    </form>
-                                    <div class="small text-muted mt-1">
-                                        {% if row['left_at'] %}
-                                            Closed period
-                                        {% else %}
-                                            Active period
-                                        {% endif %}
-                                        {% if row['membership_days'] is not none %}
-                                            · {{ row['membership_days'] }} days
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                {% else %}
-                                <div class="list-group-item small text-muted">No member history yet.</div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="small text-uppercase text-muted">Schedule Session</h6>
-                        <form method="post" action="{{ url_for('add_group_session', group_id=group['id']) }}" class="row g-2">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-12">
-                                <label class="form-label small">Date</label>
-                                <input type="date" name="session_date" class="form-control form-control-sm" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small">Start</label>
-                                <input type="time" name="session_time" class="form-control form-control-sm" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small">End</label>
-                                <input type="time" name="end_time" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">Title</label>
-                                <input type="text" name="title" class="form-control form-control-sm" placeholder="Optional">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">Facilitator</label>
-                                <input type="text" name="facilitator" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">Meeting Type</label>
-                                <select name="meeting_type" class="form-select form-select-sm">
-                                    <option value="in-person">In-person</option>
-                                    <option value="zoom">Zoom</option>
-                                    <option value="google-meet">Google Meet</option>
-                                </select>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">Meeting Link</label>
-                                <input type="url" name="meeting_link" class="form-control form-control-sm" placeholder="https://...">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">Recurrence</label>
-                                <select name="recurrence_mode" class="form-select form-select-sm">
-                                    <option value="one-time" selected>One-time</option>
-                                    <option value="weekly">Weekly recurring</option>
-                                </select>
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small">Every N weeks</label>
-                                <input type="number" name="recurrence_interval_weeks" class="form-control form-control-sm" min="1" value="1">
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small">Occurrences</label>
-                                <input type="number" name="recurrence_count" class="form-control form-control-sm" min="1" max="104" placeholder="8">
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small">End date</label>
-                                <input type="date" name="recurrence_end_date" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-success btn-sm rounded-pill">Add Session</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                {# ---- Existing sessions for this group ---- #}
-                {% set gsessions = group_sessions | selectattr('group_id', 'equalto', group['id']) | list %}
-                {% if gsessions %}
-                <hr class="my-3">
-                <h6 class="small text-uppercase text-muted mb-2">Scheduled Sessions</h6>
-                <div class="list-group list-group-flush">
-                    {% for session in gsessions %}
-                    <div class="list-group-item px-0" id="group-session-row-{{ session['id'] }}">
-                        {# ---- View row ---- #}
-                        <div class="d-flex justify-content-between align-items-start" id="session-view-{{ session['id'] }}">
-                            <div>
-                                <div class="fw-semibold small">{{ session['session_date'] }} &bull; {{ session['session_time'] }}
-                                    {% set end_h = ((session['session_time'][:2]|int)*60 + (session['session_time'][3:5]|int) + session['duration_minutes']) // 60 %}
-                                    {% set end_m = ((session['session_time'][:2]|int)*60 + (session['session_time'][3:5]|int) + session['duration_minutes']) % 60 %}
-                                    – {{ '%02d'|format(end_h % 24) }}:{{ '%02d'|format(end_m) }}
-                                </div>
-                                {% if session['title'] %}<div class="small text-muted">{{ session['title'] }}</div>{% endif %}
-                                <div class="d-flex gap-2 mt-1 flex-wrap">
-                                    <span class="badge bg-secondary-subtle text-secondary border small">{{ session['meeting_type'] or 'in-person' }}</span>
-                                    <span class="badge {% if (session['status'] or 'scheduled') == 'completed' %}bg-success-subtle text-success{% elif (session['status'] or 'scheduled') == 'cancelled' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %} border small">{{ session['status'] or 'scheduled' }}</span>
-                                    {% if session['series_id'] %}<span class="badge bg-info-subtle text-info border small">Recurring</span>{% endif %}
-                                    {% if session['facilitator'] %}<span class="badge bg-light text-dark border small"><i class="bi bi-person me-1"></i>{{ session['facilitator'] }}</span>{% endif %}
-                                    {% if session['meeting_link'] %}<a href="{{ session['meeting_link'] }}" target="_blank" rel="noopener noreferrer" class="badge bg-primary-subtle text-primary border small text-decoration-none"><i class="bi bi-box-arrow-up-right me-1"></i>Link</a>{% endif %}
-                                </div>
-                                {% if session['session_summary'] %}
-                                <div class="small mt-2 text-muted">Summary: {{ session['session_summary'] }}</div>
-                                {% endif %}
-                            </div>
-                            <div class="d-flex gap-1 ms-2 flex-shrink-0">
-                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill"
-                                    onclick="toggleEditRow({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                        {# ---- Inline edit form (hidden by default) ---- #}
-                        <div class="mt-2 d-none border rounded-3 p-3 bg-light" id="session-edit-{{ session['id'] }}">
-                            <div class="row g-2">
-                                <div class="col-12 col-sm-4">
-                                    <label class="form-label small mb-1">Date</label>
-                                    <input type="date" class="form-control form-control-sm" id="edit-date-{{ session['id'] }}">
-                                </div>
-                                <div class="col-6 col-sm-4">
-                                    <label class="form-label small mb-1">Start</label>
-                                    <input type="time" class="form-control form-control-sm" id="edit-start-{{ session['id'] }}">
-                                </div>
-                                <div class="col-6 col-sm-4">
-                                    <label class="form-label small mb-1">End</label>
-                                    <input type="time" class="form-control form-control-sm" id="edit-end-{{ session['id'] }}">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small mb-1">Title</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-title-{{ session['id'] }}" placeholder="Optional">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small mb-1">Facilitator</label>
-                                    <input type="text" class="form-control form-control-sm" id="edit-facilitator-{{ session['id'] }}">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small mb-1">Meeting Type</label>
-                                    <select class="form-select form-select-sm" id="edit-type-{{ session['id'] }}">
-                                        <option value="in-person">In-person</option>
-                                        <option value="zoom">Zoom</option>
-                                        <option value="google-meet">Google Meet</option>
-                                    </select>
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small mb-1">Meeting Link</label>
-                                    <input type="url" class="form-control form-control-sm" id="edit-link-{{ session['id'] }}" placeholder="https://...">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small mb-1">Update Scope</label>
-                                    <select class="form-select form-select-sm" id="edit-scope-{{ session['id'] }}" {% if not session['series_id'] %}disabled{% endif %}>
-                                        <option value="single" selected>Only this session</option>
-                                        {% if session['series_id'] %}<option value="future">This and future recurring sessions</option>{% endif %}
-                                    </select>
-                                </div>
-                                <div class="col-12 d-flex gap-2 justify-content-end">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="cancelEditRow({{ session['id'] }})">Cancel</button>
-                                    <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="saveSession({{ session['id'] }})">Save Changes</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {% set session_members = session_member_map.get(session['id'], []) %}
-                        {% set marks = attendance_by_session.get(session['id'], {}) %}
-                        <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}" class="mt-2 border rounded-3 p-3 bg-light">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-4">
-                                    <label class="form-label small mb-1">Session Status</label>
-                                    {% set status_value = session['status'] or 'scheduled' %}
-                                    <select class="form-select form-select-sm" name="session_status">
-                                        <option value="scheduled" {% if status_value == 'scheduled' %}selected{% endif %}>Scheduled</option>
-                                        <option value="completed" {% if status_value == 'completed' %}selected{% endif %}>Completed</option>
-                                        <option value="cancelled" {% if status_value == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="form-label small mb-1">What happened in this meeting?</label>
-                                    <input type="text" class="form-control form-control-sm" name="session_summary" value="{{ session['session_summary'] or '' }}" placeholder="Summary and interventions">
-                                </div>
-                            </div>
-                            <div class="mt-3 small text-uppercase text-muted">Attendance</div>
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-2">
-                                    <thead>
-                                        <tr>
-                                            <th>Member</th>
-                                            <th style="min-width: 160px;">Status</th>
-                                            <th>Missed reason</th>
-                                            <th>Notified?</th>
-                                            <th>Note</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for member in session_members %}
-                                        {% set mark = marks.get(member['patient_id'], {}) %}
-                                        {% set attendance_status = mark.get('attendance_status', 'pending') %}
-                                        <tr>
-                                            <td>{{ member['patient_name'] }}</td>
-                                            <td>
-                                                <select class="form-select form-select-sm" name="attendance_{{ member['patient_id'] }}">
-                                                    <option value="pending" {% if attendance_status == 'pending' %}selected{% endif %}>Pending</option>
-                                                    <option value="present" {% if attendance_status == 'present' %}selected{% endif %}>Arrived</option>
-                                                    <option value="missed" {% if attendance_status == 'missed' %}selected{% endif %}>Missed</option>
-                                                </select>
-                                            </td>
-                                            <td><input type="text" class="form-control form-control-sm" name="absence_reason_{{ member['patient_id'] }}" value="{{ mark.get('absence_reason', '') }}" placeholder="Reason if missed"></td>
-                                            <td>
-                                                <input type="checkbox" class="form-check-input" name="notified_on_time_{{ member['patient_id'] }}" {% if mark.get('notified_on_time', 0) %}checked{% endif %}>
-                                            </td>
-                                            <td><input type="text" class="form-control form-control-sm" name="attendance_note_{{ member['patient_id'] }}" value="{{ mark.get('attendance_note', '') }}" placeholder="Optional note"></td>
-                                        </tr>
-                                        {% else %}
-                                        <tr><td colspan="5" class="text-muted small">No active members for this date.</td></tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="text-end">
-                                <button type="submit" class="btn btn-outline-success btn-sm rounded-pill">Save Session Record</button>
-                            </div>
-                        </form>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% else %}
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body text-center text-muted py-5">
-                No groups yet. Create your first group on the left.
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-
-{# ---- Edit Session Modal (used from sidebar) ---- #}
-<div class="modal fade" id="editSessionModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title fw-bold">Edit Group Session</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="modalSessionId">
-                <div class="row g-3">
-                    <div class="col-12">
+                <form method="post" action="{{ url_for('add_group_session', group_id=group['id']) }}" class="row g-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
                         <label class="form-label small">Date</label>
-                        <input type="date" class="form-control form-control-sm" id="modalDate">
+                        <input type="date" name="session_date" class="form-control form-control-sm" required>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label small">Start Time</label>
-                        <input type="time" class="form-control form-control-sm" id="modalStart">
+                    <div class="col-md-4">
+                        <label class="form-label small">Start</label>
+                        <input type="time" name="session_time" class="form-control form-control-sm" required>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label small">End Time</label>
-                        <input type="time" class="form-control form-control-sm" id="modalEnd">
+                    <div class="col-md-4">
+                        <label class="form-label small">End</label>
+                        <input type="time" name="end_time" class="form-control form-control-sm">
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
                         <label class="form-label small">Title</label>
-                        <input type="text" class="form-control form-control-sm" id="modalTitle" placeholder="Optional">
+                        <input type="text" name="title" class="form-control form-control-sm" placeholder="Optional">
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
                         <label class="form-label small">Facilitator</label>
-                        <input type="text" class="form-control form-control-sm" id="modalFacilitator">
+                        <input type="text" name="facilitator" class="form-control form-control-sm">
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
                         <label class="form-label small">Meeting Type</label>
-                        <select class="form-select form-select-sm" id="modalMeetingType">
+                        <select name="meeting_type" class="form-select form-select-sm">
                             <option value="in-person">In-person</option>
                             <option value="zoom">Zoom</option>
                             <option value="google-meet">Google Meet</option>
                         </select>
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
                         <label class="form-label small">Meeting Link</label>
-                        <input type="url" class="form-control form-control-sm" id="modalMeetingLink" placeholder="https://...">
+                        <input type="url" name="meeting_link" class="form-control form-control-sm" placeholder="https://...">
                     </div>
-                    <div class="col-12">
-                        <label class="form-label small">Update Scope</label>
-                        <select class="form-select form-select-sm" id="modalApplyScope">
-                            <option value="single" selected>Only this session</option>
-                            <option value="future">This and future recurring sessions</option>
+                    <div class="col-md-4">
+                        <label class="form-label small">Recurrence</label>
+                        <select name="recurrence_mode" class="form-select form-select-sm">
+                            <option value="one-time" selected>One-time</option>
+                            <option value="weekly">Weekly recurring</option>
                         </select>
                     </div>
-                </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Every N weeks</label>
+                        <input type="number" name="recurrence_interval_weeks" class="form-control form-control-sm" min="1" value="1">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">Occurrences</label>
+                        <input type="number" name="recurrence_count" class="form-control form-control-sm" min="1" max="104" placeholder="8">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">End date</label>
+                        <input type="date" name="recurrence_end_date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success btn-sm rounded-pill">Add Session</button>
+                    </div>
+                </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill me-auto" id="modalDeleteBtn">Delete Session</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary btn-sm rounded-pill" id="modalSaveBtn">Save Changes</button>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-primary">Sessions</h6>
+                <span class="badge bg-light text-dark">{{ group_sessions|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if group_sessions %}
+                <div class="accordion" id="groupSessionsAccordion">
+                    {% for session in group_sessions %}
+                    <div class="accordion-item border rounded-3 mb-2" id="group-session-row-{{ session['id'] }}">
+                        <h2 class="accordion-header" id="sessionHeading{{ session['id'] }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sessionCollapse{{ session['id'] }}" aria-expanded="false" aria-controls="sessionCollapse{{ session['id'] }}">
+                                <span class="small fw-semibold">
+                                    {{ session['session_date'] }} · {{ session['session_time'] }}
+                                    {% if session['title'] %}· {{ session['title'] }}{% endif %}
+                                </span>
+                            </button>
+                        </h2>
+                        <div id="sessionCollapse{{ session['id'] }}" class="accordion-collapse collapse" aria-labelledby="sessionHeading{{ session['id'] }}" data-bs-parent="#groupSessionsAccordion">
+                            <div class="accordion-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <span class="badge bg-secondary-subtle text-secondary border small">{{ session['meeting_type'] or 'in-person' }}</span>
+                                        <span class="badge {% if (session['status'] or 'scheduled') == 'completed' %}bg-success-subtle text-success{% elif (session['status'] or 'scheduled') == 'cancelled' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %} border small">{{ session['status'] or 'scheduled' }}</span>
+                                        {% if session['series_id'] %}<span class="badge bg-info-subtle text-info border small">Recurring</span>{% endif %}
+                                        {% if session['facilitator'] %}<span class="badge bg-light text-dark border small"><i class="bi bi-person me-1"></i>{{ session['facilitator'] }}</span>{% endif %}
+                                        {% if session['meeting_link'] %}<a href="{{ session['meeting_link'] }}" target="_blank" rel="noopener noreferrer" class="badge bg-primary-subtle text-primary border small text-decoration-none"><i class="bi bi-box-arrow-up-right me-1"></i>Link</a>{% endif %}
+                                    </div>
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill"
+                                            onclick="toggleEditRow({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2 d-none border rounded-3 p-3 bg-light" id="session-edit-{{ session['id'] }}">
+                                    <div class="row g-2">
+                                        <div class="col-12 col-sm-4">
+                                            <label class="form-label small mb-1">Date</label>
+                                            <input type="date" class="form-control form-control-sm" id="edit-date-{{ session['id'] }}">
+                                        </div>
+                                        <div class="col-6 col-sm-4">
+                                            <label class="form-label small mb-1">Start</label>
+                                            <input type="time" class="form-control form-control-sm" id="edit-start-{{ session['id'] }}">
+                                        </div>
+                                        <div class="col-6 col-sm-4">
+                                            <label class="form-label small mb-1">End</label>
+                                            <input type="time" class="form-control form-control-sm" id="edit-end-{{ session['id'] }}">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label class="form-label small mb-1">Title</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit-title-{{ session['id'] }}" placeholder="Optional">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label class="form-label small mb-1">Facilitator</label>
+                                            <input type="text" class="form-control form-control-sm" id="edit-facilitator-{{ session['id'] }}">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label class="form-label small mb-1">Meeting Type</label>
+                                            <select class="form-select form-select-sm" id="edit-type-{{ session['id'] }}">
+                                                <option value="in-person">In-person</option>
+                                                <option value="zoom">Zoom</option>
+                                                <option value="google-meet">Google Meet</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label class="form-label small mb-1">Meeting Link</label>
+                                            <input type="url" class="form-control form-control-sm" id="edit-link-{{ session['id'] }}" placeholder="https://...">
+                                        </div>
+                                        <div class="col-12 col-sm-6">
+                                            <label class="form-label small mb-1">Update Scope</label>
+                                            <select class="form-select form-select-sm" id="edit-scope-{{ session['id'] }}" {% if not session['series_id'] %}disabled{% endif %}>
+                                                <option value="single" selected>Only this session</option>
+                                                {% if session['series_id'] %}<option value="future">This and future recurring sessions</option>{% endif %}
+                                            </select>
+                                        </div>
+                                        <div class="col-12 d-flex gap-2 justify-content-end">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="cancelEditRow({{ session['id'] }})">Cancel</button>
+                                            <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="saveSession({{ session['id'] }})">Save Changes</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {% set session_members = session_member_map.get(session['id'], []) %}
+                                {% set marks = attendance_by_session.get(session['id'], {}) %}
+                                <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}" class="mt-3 border rounded-3 p-3 bg-light">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="row g-2 align-items-end">
+                                        <div class="col-md-4">
+                                            <label class="form-label small mb-1">Session Status</label>
+                                            {% set status_value = session['status'] or 'scheduled' %}
+                                            <select class="form-select form-select-sm" name="session_status">
+                                                <option value="scheduled" {% if status_value == 'scheduled' %}selected{% endif %}>Scheduled</option>
+                                                <option value="completed" {% if status_value == 'completed' %}selected{% endif %}>Completed</option>
+                                                <option value="cancelled" {% if status_value == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label class="form-label small mb-1">What happened in this meeting?</label>
+                                            <input type="text" class="form-control form-control-sm" name="session_summary" value="{{ session['session_summary'] or '' }}" placeholder="Summary and interventions">
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 small text-uppercase text-muted">Attendance</div>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-2">
+                                            <thead>
+                                                <tr>
+                                                    <th>Member</th>
+                                                    <th style="min-width: 160px;">Status</th>
+                                                    <th>Missed reason</th>
+                                                    <th>Notified?</th>
+                                                    <th>Note</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for member in session_members %}
+                                                {% set mark = marks.get(member['patient_id'], {}) %}
+                                                {% set attendance_status = mark.get('attendance_status', 'pending') %}
+                                                <tr>
+                                                    <td>{{ member['patient_name'] }}</td>
+                                                    <td>
+                                                        <select class="form-select form-select-sm" name="attendance_{{ member['patient_id'] }}">
+                                                            <option value="pending" {% if attendance_status == 'pending' %}selected{% endif %}>Pending</option>
+                                                            <option value="present" {% if attendance_status == 'present' %}selected{% endif %}>Arrived</option>
+                                                            <option value="missed" {% if attendance_status == 'missed' %}selected{% endif %}>Missed</option>
+                                                        </select>
+                                                    </td>
+                                                    <td><input type="text" class="form-control form-control-sm" name="absence_reason_{{ member['patient_id'] }}" value="{{ mark.get('absence_reason', '') }}" placeholder="Reason if missed"></td>
+                                                    <td>
+                                                        <input type="checkbox" class="form-check-input" name="notified_on_time_{{ member['patient_id'] }}" {% if mark.get('notified_on_time', 0) %}checked{% endif %}>
+                                                    </td>
+                                                    <td><input type="text" class="form-control form-control-sm" name="attendance_note_{{ member['patient_id'] }}" value="{{ mark.get('attendance_note', '') }}" placeholder="Optional note"></td>
+                                                </tr>
+                                                {% else %}
+                                                <tr><td colspan="5" class="text-muted small">No active members for this date.</td></tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="text-end">
+                                        <button type="submit" class="btn btn-outline-success btn-sm rounded-pill">Save Session Record</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted small">No sessions yet.</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -445,7 +354,6 @@
 
 <script>
 const csrfToken = document.getElementById('groups_csrf_token').value;
-const editModal = document.getElementById('editSessionModal') ? new bootstrap.Modal(document.getElementById('editSessionModal')) : null;
 
 function minutesToTime(totalMinutes) {
     const h = Math.floor(totalMinutes / 60) % 24;
@@ -459,7 +367,6 @@ function timeToMinutes(hhmm) {
     return h * 60 + m;
 }
 
-/* ---- Inline row editing (right-column sessions list) ---- */
 function toggleEditRow(id, date, start, durationMin, title, facilitator, type, link, seriesId) {
     document.getElementById('edit-date-' + id).value = date;
     document.getElementById('edit-start-' + id).value = start;
@@ -473,12 +380,10 @@ function toggleEditRow(id, date, start, durationMin, title, facilitator, type, l
         scope.disabled = !seriesId;
         scope.value = 'single';
     }
-    document.getElementById('session-view-' + id).classList.add('d-none');
     document.getElementById('session-edit-' + id).classList.remove('d-none');
 }
 
 function cancelEditRow(id) {
-    document.getElementById('session-view-' + id).classList.remove('d-none');
     document.getElementById('session-edit-' + id).classList.add('d-none');
 }
 
@@ -519,63 +424,5 @@ function deleteSession(id) {
         }
     }).catch(() => alert('Could not delete session.'));
 }
-
-/* ---- Modal editing (left sidebar sessions) ---- */
-function openEditModal(id, date, start, durationMin, title, facilitator, type, link, seriesId) {
-    document.getElementById('modalSessionId').value = id;
-    document.getElementById('modalDate').value = date;
-    document.getElementById('modalStart').value = start;
-    document.getElementById('modalEnd').value = minutesToTime(timeToMinutes(start) + durationMin);
-    document.getElementById('modalTitle').value = title;
-    document.getElementById('modalFacilitator').value = facilitator;
-    document.getElementById('modalMeetingType').value = type;
-    document.getElementById('modalMeetingLink').value = link;
-    const modalApplyScope = document.getElementById('modalApplyScope');
-    modalApplyScope.disabled = !seriesId;
-    modalApplyScope.value = 'single';
-    if (editModal) editModal.show();
-}
-
-document.getElementById('modalSaveBtn').addEventListener('click', function() {
-    const id = document.getElementById('modalSessionId').value;
-    const body = new URLSearchParams({
-        session_date: document.getElementById('modalDate').value,
-        session_time: document.getElementById('modalStart').value,
-        end_time: document.getElementById('modalEnd').value,
-        title: document.getElementById('modalTitle').value || '',
-        facilitator: document.getElementById('modalFacilitator').value || '',
-        meeting_type: document.getElementById('modalMeetingType').value || 'in-person',
-        meeting_link: document.getElementById('modalMeetingLink').value || '',
-        apply_scope: document.getElementById('modalApplyScope').value || 'single'
-    });
-    fetch('/api/groups/sessions/' + id + '/update', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'success') {
-            if (editModal) editModal.hide();
-            location.reload();
-        } else {
-            alert(data.message || 'Could not save changes.');
-        }
-    }).catch(() => alert('Could not save changes.'));
-});
-
-document.getElementById('modalDeleteBtn').addEventListener('click', function() {
-    const id = document.getElementById('modalSessionId').value;
-    if (!confirm('Delete this group session?')) return;
-    fetch('/api/groups/sessions/' + id + '/delete', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken }
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'success') {
-            if (editModal) editModal.hide();
-            location.reload();
-        } else {
-            alert(data.message || 'Could not delete session.');
-        }
-    }).catch(() => alert('Could not delete session.'));
-});
 </script>
 {% endblock %}

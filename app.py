@@ -3360,20 +3360,40 @@ def groups_dashboard():
         return redirect(url_for('groups_dashboard'))
 
     groups = db.execute('''
-        SELECT g.*, COUNT(gm.patient_id) AS member_count
+        SELECT g.*, COUNT(gm.patient_id) AS member_count,
+               (
+                 SELECT COUNT(*)
+                 FROM group_sessions gs
+                 WHERE gs.group_id = g.id
+               ) AS session_count,
+               (
+                 SELECT MIN(gs2.session_date)
+                 FROM group_sessions gs2
+                 WHERE gs2.group_id = g.id AND COALESCE(gs2.status, 'scheduled') = 'scheduled'
+               ) AS next_session_date
         FROM groups g
         LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.left_at IS NULL
         GROUP BY g.id
         ORDER BY g.created_at DESC, g.name ASC
     ''').fetchall()
 
+    return render_template('groups_overview.html', groups=groups)
+
+
+def build_group_detail_payload(db, group_id):
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return None
+
     group_members = db.execute('''
         SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, gm.joined_at, gm.left_at
         FROM group_members gm
         JOIN patients p ON p.id = gm.patient_id
-        WHERE gm.left_at IS NULL AND COALESCE(p.is_deleted, 0) = 0
+                WHERE gm.group_id = ?
+                    AND gm.left_at IS NULL
+                    AND COALESCE(p.is_deleted, 0) = 0
         ORDER BY p.name ASC
-    ''').fetchall()
+        ''', (group_id,)).fetchall()
 
     group_sessions = db.execute('''
         SELECT gs.*, g.name AS group_name,
@@ -3383,8 +3403,9 @@ def groups_dashboard():
         FROM group_sessions gs
         JOIN groups g ON g.id = gs.group_id
         LEFT JOIN group_session_series ss ON ss.id = gs.series_id
+        WHERE gs.group_id = ?
         ORDER BY gs.session_date ASC, gs.session_time ASC
-    ''').fetchall()
+    ''', (group_id,)).fetchall()
 
     member_history_rows = db.execute('''
          SELECT h.id,
@@ -3396,9 +3417,10 @@ def groups_dashboard():
                COALESCE(h.role, 'member') AS role
         FROM group_member_history h
         JOIN patients p ON p.id = h.patient_id
-        WHERE COALESCE(p.is_deleted, 0) = 0
+                WHERE h.group_id = ?
+                    AND COALESCE(p.is_deleted, 0) = 0
         ORDER BY h.group_id ASC, h.joined_at DESC
-    ''').fetchall()
+        ''', (group_id,)).fetchall()
 
     member_history_rows = [dict(row) for row in member_history_rows]
     now_date = datetime.now().date()
@@ -3450,17 +3472,56 @@ def groups_dashboard():
         ORDER BY name ASC
     ''').fetchall()
 
-    return render_template(
-        'groups.html',
-        groups=groups,
-        group_members=group_members,
-        group_sessions=group_sessions,
-        patients=patients,
-        member_history_rows=member_history_rows,
-        session_member_map=session_member_map,
-        attendance_by_session=attendance_by_session,
-        arrived_count_map=arrived_count_map
-    )
+    return {
+        'group': group,
+        'group_members': group_members,
+        'group_sessions': group_sessions,
+        'patients': patients,
+        'member_history_rows': member_history_rows,
+        'session_member_map': session_member_map,
+        'attendance_by_session': attendance_by_session,
+        'arrived_count_map': arrived_count_map
+    }
+
+
+@app.route('/groups/<int:group_id>', methods=['GET'])
+@login_required
+def group_detail(group_id):
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    payload = build_group_detail_payload(db, group_id)
+    if payload is None:
+        flash('Group not found.')
+        return redirect(url_for('groups_dashboard'))
+    return render_template('groups.html', **payload)
+
+
+@app.route('/groups/<int:group_id>/update', methods=['POST'])
+@login_required
+def update_group_info(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    name = (request.form.get('name') or '').strip()
+    group_type = (request.form.get('group_type') or 'support').strip() or 'support'
+    description = (request.form.get('description') or '').strip()
+    is_active = 1 if request.form.get('is_active') in ('1', 'true', 'on') else 0
+
+    if not name:
+        flash('Group name is required.')
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    db = get_db()
+    db.execute('''
+        UPDATE groups
+        SET name = ?, group_type = ?, description = ?, is_active = ?
+        WHERE id = ?
+    ''', (name, group_type, description or None, is_active, group_id))
+    db.commit()
+    flash('Group information updated.')
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/<int:group_id>/members', methods=['POST'])
@@ -3472,17 +3533,17 @@ def add_group_member(group_id):
     patient_id_raw = (request.form.get('patient_id') or '').strip()
     if not patient_id_raw.isdigit():
         flash('Valid patient is required.')
-        return redirect(url_for('groups_dashboard'))
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db = get_db()
     patient_id = int(patient_id_raw)
     patient_row = db.execute('SELECT id, patient_type FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if not patient_row:
         flash('Patient not found.')
-        return redirect(url_for('groups_dashboard'))
+        return redirect(url_for('group_detail', group_id=group_id))
     if (patient_row['patient_type'] or 'private') != 'group':
         flash('Only group-type patients can be added to groups.')
-        return redirect(url_for('groups_dashboard'))
+        return redirect(url_for('group_detail', group_id=group_id))
 
     existing_active = db.execute('''
         SELECT 1
@@ -3492,7 +3553,7 @@ def add_group_member(group_id):
     ''', (group_id, patient_id)).fetchone()
     if existing_active:
         flash('Patient is already an active member in this group.')
-        return redirect(url_for('groups_dashboard'))
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db.execute('''
         INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
@@ -3516,7 +3577,7 @@ def add_group_member(group_id):
 
     db.commit()
     flash('Patient added to group.')
-    return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/<int:group_id>/members/<int:patient_id>/remove', methods=['POST'])
@@ -3544,7 +3605,7 @@ def remove_group_member(group_id, patient_id):
 
     db.commit()
     flash('Patient removed from group.')
-    return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 def sync_group_member_current_record(db, group_id, patient_id):
@@ -3591,10 +3652,13 @@ def update_group_member_history_dates(history_id):
     joined_date_raw = (request.form.get('joined_date') or '').strip()
     left_date_raw = (request.form.get('left_date') or '').strip()
     return_patient_id_raw = (request.form.get('return_patient_id') or '').strip()
+    return_group_id_raw = (request.form.get('return_group_id') or '').strip()
 
     def redirect_target():
         if return_patient_id_raw.isdigit():
             return redirect_to_patient_tab(int(return_patient_id_raw), 'info')
+        if return_group_id_raw.isdigit():
+            return redirect(url_for('group_detail', group_id=int(return_group_id_raw)))
         return redirect(url_for('groups_dashboard'))
 
     joined_date = parse_date_safe(joined_date_raw)
@@ -3653,7 +3717,7 @@ def add_group_session(group_id):
     parsed_end = parse_time_safe(end_time_raw)
     if not parsed_date or not parsed_time:
         flash('Valid session date and start time are required.')
-        return redirect(url_for('groups_dashboard'))
+        return redirect(url_for('group_detail', group_id=group_id))
 
     duration = 60
     if parsed_end:
@@ -3695,7 +3759,7 @@ def add_group_session(group_id):
         conflict_message = has_time_conflict(db, date_item, start_at, end_at)
         if conflict_message:
             flash(f'{conflict_message} ({date_item.isoformat()})')
-            return redirect(url_for('groups_dashboard'))
+            return redirect(url_for('group_detail', group_id=group_id))
 
     series_id = None
     if recurrence_mode == 'weekly' and len(recurrence_dates) > 1:
@@ -3743,7 +3807,7 @@ def add_group_session(group_id):
         flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
     else:
         flash('Group session added.')
-    return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/sessions/<int:session_id>/record', methods=['POST'])
@@ -3824,7 +3888,7 @@ def record_group_session(session_id):
 
     db.commit()
     flash('Session record saved.')
-    return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=int(session_row['group_id'])))
 
 
 @app.route('/patient/<int:patient_id>/group_attendance/<int:session_id>/update', methods=['POST'])
@@ -5719,11 +5783,16 @@ def delete_group_session(session_id):
         return "Unauthorized", 403
 
     db = get_db()
+    existing = db.execute('SELECT id, group_id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    if not existing:
+        flash('Group session not found.')
+        return redirect(url_for('groups_dashboard'))
+
     db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
     db.commit()
     flash('Group session deleted.')
-    return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=int(existing['group_id'])))
 
 
 @app.route('/api/groups/sessions/<int:session_id>/delete', methods=['POST'])

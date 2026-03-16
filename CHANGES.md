@@ -2,6 +2,45 @@
 
 ---
 
+## Session 26
+
+**Date:** March 16, 2026
+
+**Objective:** Split group management into overview vs per-group sessions pages, and add collapsed-by-title behavior in booking panel sections.
+
+**Changes Made:**
+
+1. **Groups Overview vs Group Sessions Split**
+- Added a dedicated overview template `groups_overview.html` for:
+  - creating groups,
+  - editing basic group metadata,
+  - opening a specific group sessions workspace.
+- Kept `/groups` focused on group list + metadata management.
+
+2. **Single-Group Sessions Workspace**
+- Reworked `groups.html` into a pure detail view for one group (`/groups/<id>`), including:
+  - group info editing,
+  - member management,
+  - membership history date editing,
+  - session scheduling and recurring setup,
+  - session attendance/status/summary recording.
+
+3. **Collapsible Session Regions**
+- Converted group sessions display to accordion behavior so each session opens/collapses by clicking its title row.
+
+4. **Booking Panel Collapsible Sections**
+- Implemented title-triggered collapses in the Booking tab of `calendar.html`.
+- Booking section card bodies now start hidden and expand/collapse by clicking the section title.
+
+5. **Routing/Redirect Consistency for New Flow**
+- Continued redirect hardening so group actions route back to per-group detail context where appropriate.
+
+6. **Tests Updated and Verified**
+- Updated group suggestion test to validate the new detail-page location for member suggestions.
+- Verification:
+  - `python test_app.py` passed (`46` tests),
+  - `python test_security.py` passed (`3` tests).
+
 ## Session 25
 
 **Date:** March 16, 2026

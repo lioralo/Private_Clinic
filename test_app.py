@@ -1389,7 +1389,7 @@ class ClinicTestCase(unittest.TestCase):
             assert note['missed_reason'] == 'Family emergency'
             assert 'Missed meeting documented' in note['content']
 
-    def test_groups_dashboard_suggests_only_group_patients(self):
+    def test_group_detail_suggests_only_group_patients(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
             name='Private Suggestion Patient',
@@ -1403,7 +1403,7 @@ class ClinicTestCase(unittest.TestCase):
         ), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Suggestion Group', group_type='support', description=''), follow_redirects=True)
 
-        rv = self.client.get('/groups', follow_redirects=True)
+        rv = self.client.get('/groups/1', follow_redirects=True)
         assert rv.status_code == 200
         assert b'Group Suggestion Patient' in rv.data
         assert b'Private Suggestion Patient' not in rv.data

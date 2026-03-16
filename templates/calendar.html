@@ -422,6 +422,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const blockRecurrencePattern = document.getElementById('blockRecurrencePattern');
     const blockRepeatUntilWrap = document.getElementById('blockRepeatUntilWrap');
     const blockRepeatUntilInput = document.getElementById('blockRepeatUntilInput');
+    const bookingPane = document.getElementById('booking-pane');
 
     const modalRoot = document.getElementById('calendarActionModal');
     const modalTitle = document.getElementById('calendarActionModalTitle');
@@ -429,6 +430,49 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalConfirmBtn = document.getElementById('calendarModalConfirmBtn');
     const modalCancelBtn = document.getElementById('calendarModalCancelBtn');
     const actionModal = modalRoot ? new bootstrap.Modal(modalRoot) : null;
+
+    function initBookingSectionToggles() {
+        if (!bookingPane) return;
+        const sectionCards = bookingPane.querySelectorAll(':scope > .card');
+        sectionCards.forEach((card) => {
+            const header = card.querySelector(':scope > .card-header');
+            const body = card.querySelector(':scope > .card-body');
+            const title = header ? header.querySelector('h6') : null;
+            if (!header || !body || !title) return;
+
+            body.classList.add('d-none');
+            title.style.cursor = 'pointer';
+            title.setAttribute('role', 'button');
+            title.setAttribute('tabindex', '0');
+            title.setAttribute('aria-expanded', 'false');
+
+            let icon = title.querySelector('.booking-toggle-icon');
+            if (!icon) {
+                icon = document.createElement('i');
+                icon.className = 'bi bi-chevron-down ms-2 booking-toggle-icon';
+                title.appendChild(icon);
+            }
+
+            const toggle = () => {
+                const isHidden = body.classList.contains('d-none');
+                body.classList.toggle('d-none', !isHidden);
+                title.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+                icon.className = isHidden
+                    ? 'bi bi-chevron-up ms-2 booking-toggle-icon'
+                    : 'bi bi-chevron-down ms-2 booking-toggle-icon';
+            };
+
+            title.addEventListener('click', toggle);
+            title.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+        });
+    }
+
+    initBookingSectionToggles();
     const I18N = {
         notice: {{ t('Notice')|tojson }},
         ok: {{ t('OK')|tojson }},
