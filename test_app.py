@@ -904,7 +904,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_days'] is not None
             assert row['recurrence_end_date'] is not None
 
-    def test_initial_intake_keeps_single_scheduled_meeting(self):
+    def test_initial_intake_allows_multiple_one_time_meetings(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
             name='Intake Patient',
@@ -950,9 +950,11 @@ class ClinicTestCase(unittest.TestCase):
                 WHERE patient_id = 1 AND status = 'scheduled'
                 ORDER BY id ASC
             ''').fetchall()
-            assert len(rows) == 1
-            assert rows[0]['appointment_time'] == second_time
+            assert len(rows) == 2
+            assert rows[0]['appointment_time'] == first_time
+            assert rows[1]['appointment_time'] == second_time
             assert int(rows[0]['is_recurring'] or 0) == 0
+            assert int(rows[1]['is_recurring'] or 0) == 0
 
     def test_intake_form_save_edit_and_export_docx(self):
         self.login('admin', 'admin')

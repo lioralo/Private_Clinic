@@ -2,6 +2,36 @@
 
 ---
 
+## Session 28
+
+**Date:** March 17, 2026
+
+**Objective:** Complete the latest patient-portal workflow pass for intake scheduling, patient-side meeting requests, and translation cleanup.
+
+**Release Summary:**
+
+1. **Intake And Diagnosee Booking Rules Updated**
+- Kept `initial-intake` and `diagnosee` appointments non-recurring by default.
+- Removed the forced deletion of existing scheduled meetings so additional one-time meetings can be booked when clinically needed.
+
+2. **Patient Request Workflow Added**
+- Added patient-side cancellation requests from the portal, including a required explanation.
+- Added patient-side requests for another meeting / self-booking access from available slots.
+- Both request types now create system-style chat messages for admin review and patient acknowledgment, and include audit log entries.
+
+3. **Portal Translation And UX Cleanup**
+- Localized the patient home page strings added in recent releases.
+- Added the new request actions to the patient portal without breaking existing messaging, receipts, or shared-document sections.
+
+**Validation:**
+
+1. **Automated Tests**
+- `python test_app.py` passed (`50` tests).
+- `python test_security.py` passed (`3` tests).
+
+2. **Targeted Smoke Check**
+- Verified patient cancellation and booking-access requests return `200`, create chat messages, and write `patient-cancel-request` / `patient-booking-request` audit actions.
+
 ## Session 27
 
 **Date:** March 16, 2026

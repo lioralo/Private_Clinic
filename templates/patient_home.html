@@ -3,11 +3,11 @@
 {% block content %}
 {% if preview_mode %}
 <div class="alert alert-warning border-0 shadow-sm mb-3">
-    <i class="bi bi-eye me-2"></i>Admin portal preview mode for patient #{{ preview_patient_id }}.
+    <i class="bi bi-eye me-2"></i>{{ t('Admin portal preview mode for patient') }} #{{ preview_patient_id }}.
 </div>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
     <div>
         <h2 class="mb-0 text-primary fw-bold">
             <i class="bi bi-house-heart-fill me-2"></i>{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}
@@ -16,30 +16,28 @@
     </div>
     {% if patient['can_self_schedule'] %}
     <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
-        <i class="bi bi-calendar3 me-1"></i> Weekly Calendar
+        <i class="bi bi-calendar3 me-1"></i>{{ t('Weekly Calendar') }}
     </a>
     {% else %}
-    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" disabled title="Self-booking is disabled">
-        <i class="bi bi-lock me-1"></i> Weekly Calendar Locked
+    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" disabled title="{{ t('Self-booking is disabled') }}">
+        <i class="bi bi-lock me-1"></i>{{ t('Weekly Calendar Locked') }}
     </button>
     {% endif %}
 </div>
 
 {% if upcoming and upcoming|length > 0 %}
-<div class="alert alert-primary border-0 shadow-sm mb-4 d-flex justify-content-between align-items-center">
+<div class="alert alert-primary border-0 shadow-sm mb-4 d-flex justify-content-between align-items-center gap-2 flex-wrap">
     <div>
         <i class="bi bi-alarm me-2"></i>
-        Next meeting: <strong>{{ upcoming[0]['appointment_date'] }}</strong> at <strong>{{ upcoming[0]['appointment_time'] }}</strong>
+        {{ t('Next meeting:') }} <strong>{{ upcoming[0]['appointment_date'] }}</strong> <strong>{{ upcoming[0]['appointment_time'] }}</strong>
     </div>
     {% if upcoming[0]['is_recurring'] %}
-    <span class="badge bg-primary-subtle text-primary border">Recurring</span>
+    <span class="badge bg-primary-subtle text-primary border">{{ t('Recurring') }}</span>
     {% endif %}
 </div>
 {% endif %}
 
 <div class="row g-4">
-
-    <!-- Upcoming Appointments -->
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm rounded-4 h-100">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
@@ -49,131 +47,181 @@
             </div>
             <div class="card-body px-4 pb-4">
                 {% if upcoming %}
-                    <div class="list-group list-group-flush">
+                <div class="list-group list-group-flush">
                     {% for appt in upcoming %}
-                        <div class="list-group-item border-0 px-0 py-3 d-flex align-items-center">
-                            <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3 text-center" style="min-width:64px">
-                                <div class="fw-bold fs-5 lh-1">{{ appt['appointment_date'][8:10] }}</div>
-                                <div class="small text-uppercase" style="font-size:.65rem">
-                                    {% set months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
-                                    {{ months[appt['appointment_date'][5:7]|int] }}
-                                </div>
+                    <div class="list-group-item border-0 px-0 py-3">
+                        <div class="d-flex gap-3 align-items-start">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-3 p-3 text-center" style="min-width:88px;">
+                                <div class="fw-bold small">{{ appt['appointment_date'] }}</div>
+                                <div class="small mt-1">{{ appt['appointment_time'] }}</div>
                             </div>
                             <div class="flex-grow-1">
-                                <div class="fw-semibold">
+                                <div class="fw-semibold mb-1">
                                     {% if appt['meeting_type'] in ['zoom', 'google-meet'] %}
-                                        <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
+                                    <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
                                     {% else %}
-                                        <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}
+                                    <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}
                                     {% endif %}
                                 </div>
-                                <div class="text-muted small">
+                                <div class="text-muted small mb-2">
                                     <i class="bi bi-clock me-1"></i>{{ appt['appointment_time'] }}
-                                    {% if appt['duration_minutes'] %}· {{ appt['duration_minutes'] }} min{% endif %}
+                                    {% if appt['duration_minutes'] %} · {{ appt['duration_minutes'] }} {{ t('minutes') }}{% endif %}
+                                    {% if appt['is_recurring'] %}
+                                    <span class="badge bg-primary-subtle text-primary border ms-2">{{ t('Recurring') }}</span>
+                                    {% endif %}
                                 </div>
-                                {% if appt['meeting_link'] %}
-                                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="small text-info mt-1 d-inline-block">
+                                {% if appt['notes'] %}
+                                <div class="text-muted small mb-2">
+                                    <i class="bi bi-sticky me-1"></i>{{ appt['notes'] }}
+                                </div>
+                                {% endif %}
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% if appt['meeting_link'] %}
+                                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-info">
                                         <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join Link') }}
                                     </a>
+                                    {% endif %}
+                                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_ics', appointment_id=appt['id']) }}">
+                                        <i class="bi bi-download me-1"></i>{{ t('Add to calendar') }}
+                                    </a>
+                                    {% if appt['status'] == 'scheduled' %}
+                                    <button
+                                        class="btn btn-sm btn-outline-danger"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#cancel-request-{{ appt['id'] }}"
+                                        aria-expanded="false"
+                                        aria-controls="cancel-request-{{ appt['id'] }}"
+                                    >
+                                        <i class="bi bi-x-circle me-1"></i>{{ t('Ask to cancel') }}
+                                    </button>
+                                    {% endif %}
+                                </div>
+                                {% if appt['status'] == 'scheduled' %}
+                                <div class="collapse mt-3" id="cancel-request-{{ appt['id'] }}">
+                                    <div class="card card-body bg-light border-0">
+                                        <form method="post" action="{{ url_for('request_cancel_appointment', appointment_id=appt['id']) }}" class="d-grid gap-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <label class="form-label fw-semibold mb-0" for="cancel-reason-{{ appt['id'] }}">{{ t('Why do you need to cancel?') }}</label>
+                                            <textarea class="form-control" id="cancel-reason-{{ appt['id'] }}" name="reason" rows="3" maxlength="800" placeholder="{{ t('Write a short explanation for the clinic team') }}"></textarea>
+                                            <div class="d-flex flex-wrap gap-2">
+                                                <button type="submit" class="btn btn-danger btn-sm">{{ t('Send cancellation request') }}</button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#cancel-request-{{ appt['id'] }}">{{ t('Close') }}</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
                                 {% endif %}
                             </div>
-                            <div>
-                                <a href="{{ url_for('export_ics', appointment_id=appt['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill" title="{{ t('Download .ics') }}">
-                                    <i class="bi bi-calendar-plus"></i>
-                                </a>
-                            </div>
                         </div>
-                        {% if not loop.last %}<hr class="my-0 opacity-25">{% endif %}
+                    </div>
+                    {% if not loop.last %}<hr class="my-0 opacity-25">{% endif %}
                     {% endfor %}
-                    </div>
+                </div>
                 {% else %}
-                    <div class="text-center py-5 text-muted">
-                        <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-50"></i>
-                        <p class="mb-0">{{ t('No upcoming appointments scheduled.') }}</p>
-                    </div>
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-50"></i>
+                    <p class="mb-0">{{ t('No upcoming appointments.') }}</p>
+                </div>
                 {% endif %}
             </div>
         </div>
+
+        <section class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+                        <i class="bi bi-calendar-plus"></i>
+                    </div>
+                    <div>
+                        <h2 class="h5 mb-1">{{ t('Need another meeting?') }}</h2>
+                        <p class="text-muted mb-0">{{ t('Send a request and the clinic team will contact you or open self-booking if needed.') }}</p>
+                    </div>
+                </div>
+                <form method="post" action="{{ url_for('request_booking_access') }}" class="d-grid gap-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div>
+                        <label class="form-label fw-semibold" for="booking-request-notes">{{ t('Request details') }}</label>
+                        <textarea class="form-control" id="booking-request-notes" name="notes" rows="3" maxlength="800" placeholder="{{ t('Share preferred days, urgency, or anything else the team should know') }}"></textarea>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-primary">{{ t('Request another meeting') }}</button>
+                        {% if patient['can_self_schedule'] %}
+                        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-primary">{{ t('Open weekly calendar') }}</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </section>
     </div>
 
-    <!-- Messages & Resources -->
     <div class="col-lg-5">
-
-        <!-- Messages -->
         <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-chat-dots-fill text-primary me-2"></i>{{ t('Messages') }}
                 </h5>
-                {% if unread_messages %}
-                    <span class="badge bg-danger rounded-pill">{{ unread_messages }}</span>
-                {% endif %}
             </div>
-            <div class="card-body px-4 pb-3" style="max-height:260px;overflow-y:auto">
+            <div class="card-body px-4 pb-3" style="max-height:260px; overflow-y:auto;">
                 {% if messages %}
                     {% for msg in messages %}
-                        <div class="mb-2 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
-                            <div class="d-inline-block px-3 py-2 rounded-3 small
-                                {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-light text-dark{% endif %}"
-                                style="max-width:85%">
-                                {{ msg['content'] }}
-                            </div>
-                            <div class="text-muted" style="font-size:.65rem">
-                                {{ msg['timestamp'][:16] if msg['timestamp'] else '' }}
-                            </div>
+                    <div class="mb-2 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
+                        <div class="d-inline-block px-3 py-2 rounded-3 small {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-light text-dark{% endif %}" style="max-width:85%;">
+                            {{ msg['content'] }}
                         </div>
+                        <div class="text-muted" style="font-size:.65rem;">
+                            {{ msg['timestamp'][:16] if msg['timestamp'] else '' }}
+                        </div>
+                    </div>
                     {% endfor %}
                 {% else %}
-                    <p class="text-muted text-center py-3 small mb-0">{{ t('No messages yet.') }}</p>
+                <p class="text-muted text-center py-3 small mb-0">{{ t('No messages yet.') }}</p>
                 {% endif %}
             </div>
             <div class="card-footer bg-white border-0 px-4 pb-4">
                 {% if not preview_mode %}
                 <form method="POST" action="{{ url_for('contact_admin') }}" class="d-flex gap-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="text" name="content" class="form-control form-control-sm rounded-pill"
-                           placeholder="{{ t('Type a message…') }}" required autocomplete="off">
+                    <input type="text" name="content" class="form-control form-control-sm rounded-pill" placeholder="{{ t('Type a message…') }}" required autocomplete="off">
                     <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
                         <i class="bi bi-send-fill"></i>
                     </button>
                 </form>
                 {% else %}
-                <div class="small text-muted">Message composer is disabled in preview mode.</div>
+                <div class="small text-muted">{{ t('Message composer is disabled in preview mode.') }}</div>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Shared Documents -->
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
-                    <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>Shared Documents
+                    <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>{{ t('Shared Documents') }}
                 </h5>
             </div>
             <div class="card-body px-4 pb-4">
                 {% if assigned_resources %}
                 <div class="list-group list-group-flush">
-                {% for res in assigned_resources %}
+                    {% for res in assigned_resources %}
                     <div class="list-group-item border-0 px-0 py-2">
                         <div class="fw-semibold small">{{ res['title'] }}</div>
                         {% if res['description'] %}
-                            <div class="text-muted" style="font-size:.8rem">{{ res['description'] }}</div>
+                        <div class="text-muted" style="font-size:.8rem;">{{ res['description'] }}</div>
                         {% endif %}
                         {% if res['url'] %}
-                            <a href="{{ res['url'] }}" target="_blank" class="text-primary small">
-                                <i class="bi bi-link-45deg me-1"></i>{{ t('Open') }}
-                            </a>
+                        <a href="{{ res['url'] }}" target="_blank" class="text-primary small">
+                            <i class="bi bi-link-45deg me-1"></i>{{ t('Open') }}
+                        </a>
                         {% endif %}
                     </div>
-                {% endfor %}
+                    {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">No shared documents yet.</div>
+                <div class="text-muted small">{{ t('No shared documents yet.') }}</div>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Billing / Receipts -->
         <div class="card border-0 shadow-sm rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
@@ -184,10 +232,10 @@
                 {% if receipts %}
                 <div class="list-group list-group-flush">
                     {% for receipt in receipts %}
-                    <div class="list-group-item border-0 px-0 py-2 d-flex justify-content-between align-items-center">
+                    <div class="list-group-item border-0 px-0 py-2 d-flex justify-content-between align-items-center gap-3">
                         <div>
                             <div class="fw-semibold small">{{ receipt['description'] or t('Service Receipt') }}</div>
-                            <div class="text-muted" style="font-size:.8rem">{{ receipt['created_at'][:10] if receipt['created_at'] else '' }} · {{ receipt['amount'] }}</div>
+                            <div class="text-muted" style="font-size:.8rem;">{{ receipt['created_at'][:10] if receipt['created_at'] else '' }} · {{ receipt['amount'] }}</div>
                         </div>
                         <a href="{{ url_for('download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
                             <i class="bi bi-download me-1"></i>{{ t('Download') }}
@@ -196,11 +244,10 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">No receipts yet.</div>
+                <div class="text-muted small">{{ t('No receipts yet.') }}</div>
                 {% endif %}
             </div>
         </div>
-
     </div>
 </div>
 {% endblock %}

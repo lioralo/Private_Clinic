@@ -262,6 +262,57 @@ HEBREW_TRANSLATIONS = {
     "View mode": "מצב תצוגה",
     "Cards": "כרטיסים",
     "List": "רשימה"
+    ,"Welcome back": "ברוך/ה הבא/ה"
+    ,"Here is your current status": "הנה הסטטוס הנוכחי שלך"
+    ,"Weekly Calendar": "יומן שבועי"
+    ,"Weekly Calendar Locked": "היומן השבועי נעול"
+    ,"Self-booking is disabled": "קביעה עצמית כבויה"
+    ,"Next meeting:": "הפגישה הבאה:"
+    ,"Recurring": "חוזר"
+    ,"Upcoming Appointments": "פגישות קרובות"
+    ,"Online Session": "פגישה מקוונת"
+    ,"In-Person Session": "פגישה פרונטלית"
+    ,"Join Link": "קישור להצטרפות"
+    ,"Download .ics": "הורדת קובץ .ics"
+    ,"No upcoming appointments scheduled.": "אין פגישות קרובות מתוכננות."
+    ,"Shared Documents": "מסמכים משותפים"
+    ,"No shared documents yet.": "אין עדיין מסמכים משותפים."
+    ,"Download": "הורדה"
+    ,"Request Cancellation": "בקשת ביטול"
+    ,"Cancellation Reason": "סיבת הביטול"
+    ,"Send Cancellation Request": "שליחת בקשת ביטול"
+    ,"Send cancellation request": "שליחת בקשת ביטול"
+    ,"Ask to Book Another Meeting": "בקשה לקביעת פגישה נוספת"
+    ,"Request Notes": "הערות לבקשה"
+    ,"Send Booking Request": "שליחת בקשת קביעה"
+    ,"Admin portal preview mode for patient": "מצב תצוגה מקדימה של פורטל המטופל עבור מטופל"
+    ,"minutes": "דקות"
+    ,"Add to calendar": "הוספה ליומן"
+    ,"Ask to cancel": "בקשה לביטול"
+    ,"Why do you need to cancel?": "למה צריך לבטל את הפגישה?"
+    ,"Write a short explanation for the clinic team": "יש לכתוב הסבר קצר לצוות הקליניקה"
+    ,"Close": "סגירה"
+    ,"No upcoming appointments.": "אין פגישות קרובות."
+    ,"Need another meeting?": "צריך/ה פגישה נוספת?"
+    ,"Send a request and the clinic team will contact you or open self-booking if needed.": "שלח/י בקשה וצוות הקליניקה יחזור אליך או יפתח קביעה עצמית במידת הצורך."
+    ,"Request details": "פרטי הבקשה"
+    ,"Share preferred days, urgency, or anything else the team should know": "אפשר לציין ימים מועדפים, דחיפות, או כל פרט נוסף שחשוב לצוות לדעת"
+    ,"Request another meeting": "בקשה לפגישה נוספת"
+    ,"Open weekly calendar": "פתיחת היומן השבועי"
+    ,"Message composer is disabled in preview mode.": "שדה כתיבת ההודעות מושבת במצב תצוגה מקדימה."
+    ,"Your cancellation request was sent.": "בקשת הביטול שלך נשלחה."
+    ,"Your booking request was sent.": "בקשת הקביעה שלך נשלחה."
+    ,"Cancellation request sent.": "בקשת הביטול נשלחה."
+    ,"Booking request sent.": "בקשת הקביעה נשלחה."
+    ,"Please explain why you want to cancel.": "נא להסביר מדוע ברצונך לבטל."
+    ,"Please add a note for your booking request.": "נא להוסיף הערה לבקשת הקביעה."
+    ,"System": "מערכת"
+    ,"Requested": "נשלחה בקשה"
+    ,"Time before meeting": "זמן לפני הפגישה"
+    ,"No reason provided": "לא נמסרה סיבה"
+    ,"Open self-booking for me": "פתיחת קביעה עצמית עבורי"
+    ,"Request another meeting from available slots": "בקשה לפגישה נוספת מתוך הזמנים הפנויים"
+    ,"This request was added to your chat.": "הבקשה נוספה לצ'אט שלך."
 }
 
 TRANSLATION_OVERRIDES_FILE = Path(__file__).resolve().parent / 'translations' / 'he.json'
@@ -1998,6 +2049,107 @@ def patient_home():
                            receipts=receipts)
 
 
+@app.route('/patient/appointment/<int:appointment_id>/request_cancel', methods=['POST'])
+@login_required
+def request_cancel_appointment(appointment_id):
+    if current_user.role != 'patient':
+        return 'Unauthorized', 403
+
+    reason = (request.form.get('reason') or '').strip()
+    if not reason:
+        flash('Please explain why you want to cancel.')
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    appointment = db.execute('''
+        SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.meeting_type, p.name AS patient_name
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE a.id = ? AND a.patient_id = ?
+    ''', (appointment_id, current_user.patient_id)).fetchone()
+    if not appointment:
+        return 'Appointment not found', 404
+
+    appointment_dt = datetime.combine(
+        parse_date_safe(appointment['appointment_date']),
+        parse_time_safe(appointment['appointment_time'])
+    )
+    lead_time = format_lead_time_for_notice(appointment_dt)
+    admin_message = (
+        f"System cancellation request from {appointment['patient_name']}: "
+        f"appointment on {appointment['appointment_date']} at {appointment['appointment_time']}. "
+        f"Time before meeting: {lead_time}. Notes: {reason}"
+    )
+    patient_ack = (
+        f"System: Your cancellation request for {appointment['appointment_date']} at {appointment['appointment_time']} was sent. "
+        f"Time before meeting: {lead_time}. Notes: {reason}"
+    )
+
+    add_patient_chat_request(
+        db,
+        current_user.id,
+        current_user.patient_id,
+        admin_message,
+        patient_ack,
+        audit_action='patient-cancel-request',
+        audit_details=admin_message
+    )
+    db.commit()
+    flash('Cancellation request sent.')
+    return redirect(url_for('patient_home'))
+
+
+@app.route('/patient/request_booking_access', methods=['POST'])
+@login_required
+def request_booking_access():
+    if current_user.role != 'patient':
+        return 'Unauthorized', 403
+
+    notes = (request.form.get('notes') or '').strip()
+    if not notes:
+        flash('Please add a note for your booking request.')
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    patient = db.execute('SELECT id, name, can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
+    if not patient:
+        return 'Patient not found', 404
+
+    next_appointment = db.execute('''
+        SELECT appointment_date, appointment_time
+        FROM appointments
+        WHERE patient_id = ? AND COALESCE(status, 'scheduled') = 'scheduled' AND datetime(appointment_date || ' ' || appointment_time) >= datetime('now')
+        ORDER BY appointment_date ASC, appointment_time ASC
+        LIMIT 1
+    ''', (current_user.patient_id,)).fetchone()
+    next_fragment = ''
+    if next_appointment:
+        next_fragment = f" Current scheduled meeting: {next_appointment['appointment_date']} at {next_appointment['appointment_time']}."
+
+    admin_message = (
+        f"System booking request from {patient['name']}: patient asked to open self-booking for another meeting from available slots."
+        f"{next_fragment} Notes: {notes}"
+    )
+    patient_ack = (
+        'System: Your request for another meeting was sent to the clinic. '
+        'If approved, self-booking can be opened for you from the available slots. '
+        f'Notes: {notes}'
+    )
+
+    add_patient_chat_request(
+        db,
+        current_user.id,
+        current_user.patient_id,
+        admin_message,
+        patient_ack,
+        audit_action='patient-booking-request',
+        audit_details=admin_message
+    )
+    db.commit()
+    flash('Booking request sent.')
+    return redirect(url_for('patient_home'))
+
+
 @app.route('/patient/receipt/<int:receipt_id>/download')
 @login_required
 def download_receipt(receipt_id):
@@ -2367,6 +2519,53 @@ def admin_portal_preview(patient_id):
 def redirect_to_patient_tab(patient_id, default_tab='info'):
     tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
     return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
+def get_primary_admin_user(db):
+    return db.execute(
+        "SELECT id, COALESCE(display_name, username) AS name FROM users WHERE role = 'admin' AND COALESCE(is_active, 1) = 1 ORDER BY id ASC LIMIT 1"
+    ).fetchone()
+
+
+def format_lead_time_for_notice(target_dt, reference_dt=None):
+    reference_dt = reference_dt or datetime.now()
+    delta_seconds = int((target_dt - reference_dt).total_seconds())
+    if delta_seconds <= 0:
+        return 'after the meeting time'
+
+    days, remainder = divmod(delta_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    parts = []
+    if days:
+        parts.append(f'{days} day' + ('s' if days != 1 else ''))
+    if hours:
+        parts.append(f'{hours} hour' + ('s' if hours != 1 else ''))
+    if minutes or not parts:
+        parts.append(f'{minutes} minute' + ('s' if minutes != 1 else ''))
+    return ', '.join(parts)
+
+
+def add_patient_chat_request(db, patient_user_id, patient_id, admin_message, patient_ack_message, audit_action=None, audit_details=None):
+    admin_user = get_primary_admin_user(db)
+    if not admin_user:
+        return False
+
+    db.execute(
+        'INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+        (patient_user_id, admin_user['id'], admin_message)
+    )
+    db.execute(
+        'INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+        (admin_user['id'], patient_user_id, patient_ack_message)
+    )
+    db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (admin_message,))
+    if audit_action:
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (patient_id, audit_action, audit_details or admin_message)
+        )
+    return True
 
 
 # ── Patient supervision ───────────────────────────────────────────────────────
@@ -5079,9 +5278,6 @@ def api_calendar_book():
         db.commit()
         return jsonify({'status': 'success'})
 
-    if patient_type in ('initial-intake', 'diagnosee'):
-        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
-
     # Business rule: ongoing patients are booked as weekly recurring sessions.
     # Candidate/waiting/intake/diagnosee remain one-time bookings.
     is_recurring = 1 if patient_status == 'ongoing' else 0
@@ -5196,9 +5392,6 @@ def quick_book_patient_appointment(patient_id):
 
     patient_type = (patient_row['patient_type'] or 'private').strip().lower()
     patient_status = (patient_row['status'] or '').strip().lower()
-    if patient_type in ('initial-intake', 'diagnosee'):
-        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
-
     default_recurring = 1 if patient_status == 'ongoing' and patient_type not in ('initial-intake', 'diagnosee') else 0
     if recurrence_mode not in ('auto', 'one-time', 'recurring'):
         recurrence_mode = 'auto'
@@ -6968,7 +7161,6 @@ def add_appointment(patient_id):
     patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
     if patient_type in ('initial-intake', 'diagnosee'):
         is_recurring = 0
-        db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
     # Handle recurring appointment fields
     recurrence_interval = None
