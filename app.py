@@ -23,13 +23,25 @@ from datetime import datetime, timedelta
 
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 csrf = CSRFProtect(app)
-DATABASE = 'clinic.db'
-BACKUP_DIR = 'secure_backups'
+DATABASE = os.environ.get('DATABASE', 'clinic.db')
+BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 BACKUP_INTERVAL_HOURS = 12
+
+
+def ensure_runtime_paths():
+    db_path = Path(app.config.get('DATABASE', DATABASE))
+    if db_path.parent != Path('.'):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    upload_path = Path(app.config.get('UPLOAD_FOLDER', 'static/uploads'))
+    upload_path.mkdir(parents=True, exist_ok=True)
+
+    backup_path = Path(BACKUP_DIR)
+    backup_path.mkdir(parents=True, exist_ok=True)
 
 
 def _resolve_backup_artifact_sources():
@@ -7485,6 +7497,7 @@ def find_available_port(start_port=5000, max_tries=100):
     raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_tries - 1}")
 
 if __name__ == '__main__':
+    ensure_runtime_paths()
     init_db()
     try:
         requested_port = int(os.environ.get('PORT', '5000'))

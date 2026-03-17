@@ -1,0 +1,16 @@
+.git
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.venv-1/
+secure_backups/
+clinic.db
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+patients_logs/
+static/uploads/
+app_log.txt

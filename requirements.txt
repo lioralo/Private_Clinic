@@ -7,3 +7,4 @@ pyotp
 python-docx
 psutil
 cryptography
+gunicorn

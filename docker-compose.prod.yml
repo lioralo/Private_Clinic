@@ -1,0 +1,36 @@
+services:
+  app:
+    build: .
+    container_name: private_clinic_app
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      PUBLIC_BASE_URL: https://${DOMAIN}
+      DATABASE: /data/clinic.db
+      UPLOAD_FOLDER: /data/uploads
+      PATIENT_LOGS_FOLDER: /data/patients_logs
+      APP_LOG_FILE: /data/app_log.txt
+      BACKUP_DIR: /data/secure_backups
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY}
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2
+    container_name: private_clinic_caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

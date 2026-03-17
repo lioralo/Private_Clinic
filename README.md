@@ -56,6 +56,9 @@ Run the tests with:
 python test_app.py
 ```
 
+## Deploy Live
+- Use [LIVE_DEPLOYMENT.md](LIVE_DEPLOYMENT.md) for a production deployment with Docker, Gunicorn, HTTPS, and persistent storage.
+
 ## Hebrew Dictionary
 - The app supports an editable Hebrew dictionary file at `translations/he.json`.
 - You can update or correct translations there without changing Python code.
