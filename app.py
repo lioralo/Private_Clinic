@@ -3,9 +3,12 @@ import sqlite3
 import socket
 import json
 import ast
+import hashlib
 from io import BytesIO
 import shutil
 import secrets
+import tempfile
+import zipfile
 from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
@@ -27,6 +30,127 @@ csrf = CSRFProtect(app)
 DATABASE = 'clinic.db'
 BACKUP_DIR = 'secure_backups'
 BACKUP_INTERVAL_HOURS = 12
+
+
+def _resolve_backup_artifact_sources():
+    upload_folder = Path(app.config.get('UPLOAD_FOLDER', 'static/uploads'))
+    patient_logs_folder = Path(app.config.get('PATIENT_LOGS_FOLDER', 'patients_logs'))
+    app_log_file = Path(app.config.get('APP_LOG_FILE', 'app_log.txt'))
+    return {
+        'uploads': upload_folder,
+        'patients_logs': patient_logs_folder,
+        'app_log.txt': app_log_file,
+    }
+
+
+def _snapshot_artifact_tree(path, file_label=None):
+    if not path.exists():
+        return {'exists': False, 'files': []}
+
+    if path.is_file():
+        payload = path.read_bytes()
+        return {
+            'exists': True,
+            'files': [{
+                'path': file_label or path.name,
+                'size': len(payload),
+                'sha256': hashlib.sha256(payload).hexdigest(),
+            }]
+        }
+
+    files = []
+    for child in sorted(path.rglob('*')):
+        if not child.is_file():
+            continue
+        rel_path = child.relative_to(path).as_posix()
+        payload = child.read_bytes()
+        files.append({
+            'path': rel_path,
+            'size': len(payload),
+            'sha256': hashlib.sha256(payload).hexdigest(),
+        })
+    return {'exists': True, 'files': files}
+
+
+def _artifact_backup_fingerprint(base_override=None):
+    base_override = Path(base_override) if base_override else None
+    fingerprint = {}
+    for label, source_path in _resolve_backup_artifact_sources().items():
+        target_path = (base_override / label) if base_override else source_path
+        fingerprint[label] = _snapshot_artifact_tree(target_path, file_label=label)
+    return fingerprint
+
+
+def _write_backup_bundle(bundle_path, db_path):
+    db_source = Path(db_path)
+    manifest = {
+        'version': 2,
+        'created_at': datetime.now().isoformat(),
+        'database_name': db_source.name,
+        'artifacts': sorted(_resolve_backup_artifact_sources().keys()),
+    }
+
+    with zipfile.ZipFile(bundle_path, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr('manifest.json', json.dumps(manifest, ensure_ascii=True, sort_keys=True))
+        bundle.write(db_source, arcname=f'database/{db_source.name}')
+
+        for label, source_path in _resolve_backup_artifact_sources().items():
+            if not source_path.exists():
+                continue
+            if source_path.is_file():
+                bundle.write(source_path, arcname=f'artifacts/{label}')
+                continue
+            for child in sorted(source_path.rglob('*')):
+                if child.is_file():
+                    rel_path = child.relative_to(source_path).as_posix()
+                    bundle.write(child, arcname=f'artifacts/{label}/{rel_path}')
+
+
+def _is_encrypted_zip_backup(payload):
+    return zipfile.is_zipfile(BytesIO(payload))
+
+
+def _restore_artifact_tree(source_root, destination_path):
+    source_root = Path(source_root)
+    destination_path = Path(destination_path)
+
+    if destination_path.exists():
+        if destination_path.is_dir():
+            shutil.rmtree(destination_path)
+        else:
+            destination_path.unlink()
+
+    if not source_root.exists():
+        return
+
+    if source_root.is_file():
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_root, destination_path)
+        return
+
+    destination_path.mkdir(parents=True, exist_ok=True)
+    for child in sorted(source_root.rglob('*')):
+        rel_path = child.relative_to(source_root)
+        target = destination_path / rel_path
+        if child.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(child, target)
+
+
+def _backup_live_artifacts(safety_root):
+    safety_root = Path(safety_root)
+    safety_root.mkdir(parents=True, exist_ok=True)
+    for label, source_path in _resolve_backup_artifact_sources().items():
+        if not source_path.exists():
+            continue
+        target = safety_root / label
+        if source_path.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target)
+        else:
+            shutil.copytree(source_path, target, dirs_exist_ok=True)
 
 @app.template_filter('rjust')
 def rjust_filter(s, width, fillchar=' '):
@@ -495,18 +619,14 @@ def perform_encrypted_backup(db_path):
     backup_root.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    raw_backup_path = backup_root / f'clinic_{timestamp}.db'
+    raw_backup_path = backup_root / f'clinic_{timestamp}.bundle'
     encrypted_path = backup_root / f'clinic_{timestamp}.db.enc'
-    verify_backup_path = backup_root / f'.verify_{timestamp}.db'
+    verify_dir = backup_root / f'.verify_{timestamp}'
 
     source_fingerprint = _database_backup_fingerprint(db_path)
+    source_artifact_fingerprint = _artifact_backup_fingerprint()
 
-    src = sqlite3.connect(db_path)
-    dst = sqlite3.connect(raw_backup_path)
-    with dst:
-        src.backup(dst)
-    src.close()
-    dst.close()
+    _write_backup_bundle(raw_backup_path, db_path)
 
     from cryptography.fernet import Fernet
     cipher = Fernet(_get_or_create_backup_key())
@@ -517,21 +637,32 @@ def perform_encrypted_backup(db_path):
     # Quick sanity check so we do not keep unreadable backups.
     try:
         probe = cipher.decrypt(encrypted_bytes)
-        if not probe.startswith(b'SQLite format 3'):
-            raise RuntimeError('Encrypted backup verification failed: invalid SQLite header')
+        if not _is_encrypted_zip_backup(probe):
+            raise RuntimeError('Encrypted backup verification failed: invalid backup bundle')
 
-        verify_backup_path.write_bytes(probe)
-        backup_fingerprint = _database_backup_fingerprint(verify_backup_path)
+        verify_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(BytesIO(probe), 'r') as bundle:
+            bundle.extractall(verify_dir)
+
+        extracted_dbs = sorted(path for path in (verify_dir / 'database').iterdir() if path.is_file()) if (verify_dir / 'database').exists() else []
+        if not extracted_dbs:
+            raise RuntimeError('Encrypted backup verification failed: database missing from bundle')
+
+        backup_fingerprint = _database_backup_fingerprint(extracted_dbs[0])
         if backup_fingerprint != source_fingerprint:
             raise RuntimeError('Encrypted backup verification failed: data fingerprint mismatch')
+
+        backup_artifact_fingerprint = _artifact_backup_fingerprint(verify_dir / 'artifacts')
+        if backup_artifact_fingerprint != source_artifact_fingerprint:
+            raise RuntimeError('Encrypted backup verification failed: artifact fingerprint mismatch')
     except Exception as exc:
         encrypted_path.unlink(missing_ok=True)
         raw_backup_path.unlink(missing_ok=True)
-        verify_backup_path.unlink(missing_ok=True)
+        shutil.rmtree(verify_dir, ignore_errors=True)
         raise RuntimeError(f'Encrypted backup verification failed: {exc}')
 
     raw_backup_path.unlink(missing_ok=True)
-    verify_backup_path.unlink(missing_ok=True)
+    shutil.rmtree(verify_dir, ignore_errors=True)
     return str(encrypted_path)
 
 
@@ -580,16 +711,27 @@ def perform_encrypted_restore(db_path, backup_filename=None):
     from cryptography.fernet import Fernet
     cipher = Fernet(_get_or_create_backup_key())
     decrypted = cipher.decrypt(target.read_bytes())
-    if not decrypted.startswith(b'SQLite format 3'):
-        raise RuntimeError('Backup decrypt succeeded but SQLite header is invalid.')
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    temp_restore = backup_root / f'.restore_tmp_{timestamp}.db'
-    safety_copy = backup_root / f'clinic_pre_restore_{timestamp}.db'
+    temp_restore = backup_root / f'.restore_tmp_{timestamp}'
+    safety_copy = backup_root / f'clinic_pre_restore_{timestamp}'
 
-    temp_restore.write_bytes(decrypted)
+    temp_restore.mkdir(parents=True, exist_ok=True)
 
-    temp_conn = sqlite3.connect(str(temp_restore))
+    if _is_encrypted_zip_backup(decrypted):
+        with zipfile.ZipFile(BytesIO(decrypted), 'r') as bundle:
+            bundle.extractall(temp_restore)
+        extracted_dbs = sorted(path for path in (temp_restore / 'database').iterdir() if path.is_file()) if (temp_restore / 'database').exists() else []
+        if not extracted_dbs:
+            raise RuntimeError('Backup restore failed: database missing from bundle.')
+        restore_db = extracted_dbs[0]
+    else:
+        restore_db = temp_restore / Path(db_path).name
+        restore_db.write_bytes(decrypted)
+        if not decrypted.startswith(b'SQLite format 3'):
+            raise RuntimeError('Backup decrypt succeeded but SQLite header is invalid.')
+
+    temp_conn = sqlite3.connect(str(restore_db))
     try:
         integrity = temp_conn.execute('PRAGMA integrity_check').fetchone()[0]
         if integrity != 'ok':
@@ -598,8 +740,9 @@ def perform_encrypted_restore(db_path, backup_filename=None):
         temp_conn.close()
 
     live_db = Path(db_path)
+    _backup_live_artifacts(safety_copy)
     if live_db.exists():
-        shutil.copy2(live_db, safety_copy)
+        shutil.copy2(live_db, safety_copy / live_db.name)
 
     # Ensure no request-scoped DB handle stays open while replacing file.
     existing = getattr(g, '_database', None)
@@ -607,8 +750,14 @@ def perform_encrypted_restore(db_path, backup_filename=None):
         existing.close()
         g._database = None
 
-    shutil.copy2(temp_restore, live_db)
-    temp_restore.unlink(missing_ok=True)
+    shutil.copy2(restore_db, live_db)
+
+    artifacts_root = temp_restore / 'artifacts'
+    if artifacts_root.exists():
+        for label, destination in _resolve_backup_artifact_sources().items():
+            _restore_artifact_tree(artifacts_root / label, destination)
+
+    shutil.rmtree(temp_restore, ignore_errors=True)
 
     verify_conn = sqlite3.connect(str(live_db))
     try:

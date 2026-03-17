@@ -1,4 +1,5 @@
 import os
+import shutil
 import unittest
 import tempfile
 import sqlite3
@@ -12,10 +13,15 @@ class ClinicTestCase(unittest.TestCase):
 
     def setUp(self):
         self.db_fd, self.db_path = tempfile.mkstemp()
+        self.upload_dir = tempfile.mkdtemp()
+        self.patient_logs_dir = tempfile.mkdtemp()
+        self.app_log_fd, self.app_log_path = tempfile.mkstemp()
         app.config['DATABASE'] = self.db_path
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
-        app.config['UPLOAD_FOLDER'] = tempfile.mkdtemp()
+        app.config['UPLOAD_FOLDER'] = self.upload_dir
+        app.config['PATIENT_LOGS_FOLDER'] = self.patient_logs_dir
+        app.config['APP_LOG_FILE'] = self.app_log_path
         self.client = app.test_client()
 
         # Initialize the database
@@ -25,6 +31,11 @@ class ClinicTestCase(unittest.TestCase):
     def tearDown(self):
         os.close(self.db_fd)
         os.unlink(self.db_path)
+        os.close(self.app_log_fd)
+        if os.path.exists(self.app_log_path):
+            os.unlink(self.app_log_path)
+        shutil.rmtree(self.upload_dir, ignore_errors=True)
+        shutil.rmtree(self.patient_logs_dir, ignore_errors=True)
 
     def login(self, username, password):
         return self.client.post('/login', data=dict(
@@ -1061,7 +1072,7 @@ class ClinicTestCase(unittest.TestCase):
     def test_encrypted_backup_preserves_meeting_fields(self):
         self.login('admin', 'admin')
         self.client.post('/add_patient', data=dict(
-            name='Backup Meeting Patient',
+            name='Dov',
             status='ongoing'
         ), follow_redirects=True)
 
@@ -1089,7 +1100,27 @@ class ClinicTestCase(unittest.TestCase):
                 'Weekly therapy',
                 'scheduled'
             ))
+            db.execute('''
+                INSERT INTO diagnosis_documents (
+                    patient_id, category, title, original_filename, stored_filename, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                1,
+                'diagnosis',
+                'Dov report',
+                'dov-report.txt',
+                'stored-dov-report.txt',
+                'Backup document note'
+            ))
             db.commit()
+
+        os.makedirs(os.path.join(self.upload_dir, 'diagnosis', '1'), exist_ok=True)
+        with open(os.path.join(self.upload_dir, 'diagnosis', '1', 'stored-dov-report.txt'), 'w', encoding='utf-8') as handle:
+            handle.write('Dov diagnosis document before backup')
+        with open(os.path.join(self.patient_logs_dir, 'Dov_log.json'), 'w', encoding='utf-8') as handle:
+            json.dump({'patient': 'Dov', 'history': ['session 1', 'session 2']}, handle)
+        with open(self.app_log_path, 'w', encoding='utf-8') as handle:
+            handle.write('before backup log entry')
 
         with tempfile.TemporaryDirectory() as tmp_backup_dir:
             original_backup_dir = app_module.BACKUP_DIR
@@ -1097,6 +1128,19 @@ class ClinicTestCase(unittest.TestCase):
             try:
                 with app.app_context():
                     encrypted_path = app_module.perform_encrypted_backup(app.config['DATABASE'])
+
+                    db = get_db()
+                    db.execute("UPDATE appointments SET meeting_title = 'Changed after backup' WHERE patient_id = 1")
+                    db.execute("DELETE FROM diagnosis_documents WHERE patient_id = 1")
+                    db.commit()
+
+                    with open(os.path.join(self.upload_dir, 'diagnosis', '1', 'stored-dov-report.txt'), 'w', encoding='utf-8') as handle:
+                        handle.write('changed document after backup')
+                    with open(os.path.join(self.patient_logs_dir, 'Dov_log.json'), 'w', encoding='utf-8') as handle:
+                        json.dump({'patient': 'Dov', 'history': ['changed after backup']}, handle)
+                    with open(self.app_log_path, 'w', encoding='utf-8') as handle:
+                        handle.write('changed log entry after backup')
+
                     restored_from, _ = app_module.perform_encrypted_restore(app.config['DATABASE'], os.path.basename(encrypted_path))
                     assert restored_from.endswith('.db.enc')
 
@@ -1121,6 +1165,22 @@ class ClinicTestCase(unittest.TestCase):
                     assert row['meeting_link'] == 'https://zoom.us/j/123'
                     assert row['meeting_platform'] == 'zoom'
                     assert row['meeting_title'] == 'Weekly therapy'
+
+                    doc_row = db.execute('SELECT original_filename, stored_filename, title, notes FROM diagnosis_documents WHERE patient_id = 1').fetchone()
+                    assert doc_row is not None
+                    assert doc_row['original_filename'] == 'dov-report.txt'
+                    assert doc_row['stored_filename'] == 'stored-dov-report.txt'
+                    assert doc_row['title'] == 'Dov report'
+                    assert doc_row['notes'] == 'Backup document note'
+
+                    with open(os.path.join(self.upload_dir, 'diagnosis', '1', 'stored-dov-report.txt'), 'r', encoding='utf-8') as handle:
+                        assert handle.read() == 'Dov diagnosis document before backup'
+                    with open(os.path.join(self.patient_logs_dir, 'Dov_log.json'), 'r', encoding='utf-8') as handle:
+                        payload = json.load(handle)
+                        assert payload['patient'] == 'Dov'
+                        assert payload['history'] == ['session 1', 'session 2']
+                    with open(self.app_log_path, 'r', encoding='utf-8') as handle:
+                        assert handle.read() == 'before backup log entry'
             finally:
                 app_module.BACKUP_DIR = original_backup_dir
 
