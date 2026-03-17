@@ -17,12 +17,16 @@
                     <span class="badge bg-warning text-dark rounded-pill px-3 ms-1 border border-warning-subtle">
                         <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
                     </span>
+                    {% elif patient['patient_type'] == 'diagnosee' %}
+                    <span class="badge rounded-pill px-3 ms-1 border" style="background:#0b7285;color:#fff;">
+                        <i class="bi bi-clipboard2-check me-1"></i>{{ 'Diagnosee' if lang == 'en' else 'מאובחן' }}
+                    </span>
                     {% endif %}
                     {% if patient['patient_type'] == 'residency' %}
                     <span class="badge bg-purple rounded-pill px-3 ms-1" style="background:#7c3aed!important;">
                         <i class="bi bi-mortarboard me-1"></i>Residency
                     </span>
-                    {% elif patient['patient_type'] != 'initial-intake' %}
+                    {% elif patient['patient_type'] not in ['initial-intake', 'diagnosee'] %}
                     <span class="badge bg-light text-dark rounded-pill px-3 ms-1 border">
                         <i class="bi bi-person me-1"></i>Private
                     </span>
@@ -39,7 +43,7 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
             </li>
-            {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
+            {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="intake-tab" data-bs-toggle="tab" data-bs-target="#intake" type="button" role="tab" aria-controls="intake" aria-selected="false"><i class="bi bi-clipboard2-pulse me-2"></i>{{ 'Intake Evaluation' if lang == 'en' else 'הערכת אינטייק' }}</button>
             </li>
@@ -52,6 +56,9 @@
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}{% if unread_messages_count %} <span id="messagesUnreadBadge" class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="supervision-tab" data-bs-toggle="tab" data-bs-target="#supervision" type="button" role="tab" aria-controls="supervision" aria-selected="false"><i class="bi bi-shield-check me-2"></i>{{ 'Supervision' if lang == 'en' else 'הדרכה' }}{% if supervisions %} <span class="badge bg-secondary-subtle text-secondary border ms-1">{{ supervisions|length }}</span>{% endif %}</button>
             </li>
         </ul>
 
@@ -216,7 +223,7 @@
                             </div>
                         </div>
 
-                        {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
+                        {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
                         <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeEvaluationFormBlock">
                             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center gap-2 flex-wrap">
                                 <h5 class="fw-bold mb-0 text-primary">
@@ -259,6 +266,9 @@
                                         <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-admin">{{ 'אדמיניסטרטיבי' if lang == 'he' else 'Administrative' }}</button></li>
                                         <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-medical">{{ 'רפואי' if lang == 'he' else 'Medical' }}</button></li>
                                         <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-mental">{{ 'סטטוס מנטלי' if lang == 'he' else 'Mental Status' }}</button></li>
+                                        {% if patient['patient_type'] == 'diagnosee' %}
+                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-diagnostic">{{ 'אבחון פסיכודיאגנוסטי' if lang == 'he' else 'Diagnostic Profile' }}</button></li>
+                                        {% endif %}
                                         <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-plan">{{ 'החלטות טיפול' if lang == 'he' else 'Treatment Plan' }}</button></li>
                                     </ul>
 
@@ -657,6 +667,44 @@
                                             </div>
                                         </div>
 
+                                        <div class="tab-pane fade" id="intake-diagnostic">
+                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרופיל אבחוני' if lang == 'he' else 'Diagnostic Profile' }}</h6>
+                                            <div class="row g-3">
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'שאלת ההפניה האבחונית' if lang == 'he' else 'Diagnostic referral question' }}</label>
+                                                    <textarea class="form-control" rows="3" name="intake_diag_referral_question">{{ intake_form_data.get('diag_referral_question', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'סוללת מבחנים' if lang == 'he' else 'Test battery (tests + dates)' }}</label>
+                                                    <textarea class="form-control" rows="3" name="intake_diag_test_battery">{{ intake_form_data.get('diag_test_battery', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'תצפיות במהלך אבחון' if lang == 'he' else 'Observations during assessment' }}</label>
+                                                    <textarea class="form-control" rows="3" name="intake_diag_observations">{{ intake_form_data.get('diag_observations', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'אבחנה מבדלת' if lang == 'he' else 'Differential diagnosis' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_diag_differential">{{ intake_form_data.get('diag_differential', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'התרשמות קלינית' if lang == 'he' else 'Clinical impression' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_diag_impression">{{ intake_form_data.get('diag_impression', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'המלצות' if lang == 'he' else 'Recommendations' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_diag_recommendations">{{ intake_form_data.get('diag_recommendations', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold small">{{ 'תוכנית המשך' if lang == 'he' else 'Follow-up plan' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_diag_followup_plan">{{ intake_form_data.get('diag_followup_plan', '') }}</textarea>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <label class="form-label fw-bold small">{{ 'סיכום אבחוני סופי' if lang == 'he' else 'Final diagnostic summary' }}</label>
+                                                    <textarea class="form-control" rows="4" name="intake_diag_final_summary">{{ intake_form_data.get('diag_final_summary', '') }}</textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div class="tab-pane fade" id="intake-plan">
                                             <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'תוכנית טיפול והפניה' if lang == 'he' else 'Treatment Plan and Referral' }}</h6>
                                             <div class="row g-3">
@@ -719,6 +767,64 @@
                                         </button>
                                     </div>
                                 </form>
+
+                                {% if patient['patient_type'] == 'diagnosee' %}
+                                <hr class="my-4">
+                                <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'מסמכי אבחון' if lang == 'he' else 'Diagnostic Documents' }}</h6>
+                                <form method="post" action="{{ url_for('add_diagnosis_document', patient_id=patient['id']) }}" enctype="multipart/form-data" class="row g-3 mb-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold small">{{ 'סוג מסמך' if lang == 'he' else 'Document type' }}</label>
+                                        <select class="form-select" name="category">
+                                            <option value="test_document">{{ 'מסמך אבחון' if lang == 'he' else 'Diagnostic document' }}</option>
+                                            <option value="final_result">{{ 'תוצאה סופית' if lang == 'he' else 'Final result' }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold small">{{ 'כותרת' if lang == 'he' else 'Title' }}</label>
+                                        <input class="form-control" name="title" placeholder="{{ 'לדוגמה: WAIS-IV' if lang == 'he' else 'Example: WAIS-IV' }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold small">{{ 'קובץ' if lang == 'he' else 'File' }}</label>
+                                        <input class="form-control" type="file" name="diagnosis_file" required>
+                                    </div>
+                                    <div class="col-md-9">
+                                        <label class="form-label fw-bold small">{{ 'הערות' if lang == 'he' else 'Notes' }}</label>
+                                        <input class="form-control" name="notes" placeholder="{{ 'מידע נוסף על המסמך' if lang == 'he' else 'Optional context for this file' }}">
+                                    </div>
+                                    <div class="col-md-3 d-grid align-items-end">
+                                        <button type="submit" class="btn btn-outline-primary rounded-pill mt-md-4"><i class="bi bi-upload me-1"></i>{{ 'העלאה' if lang == 'he' else 'Upload' }}</button>
+                                    </div>
+                                </form>
+
+                                <div class="list-group list-group-flush border rounded-3">
+                                    {% for doc in diagnosis_documents %}
+                                    <div class="list-group-item py-3 d-flex justify-content-between align-items-start gap-3">
+                                        <div>
+                                            <div class="fw-semibold">{{ doc['title'] or doc['original_filename'] }}</div>
+                                            <div class="small text-muted">
+                                                {% if doc['category'] == 'final_result' %}
+                                                {{ 'תוצאה סופית' if lang == 'he' else 'Final result' }}
+                                                {% else %}
+                                                {{ 'מסמך אבחון' if lang == 'he' else 'Diagnostic document' }}
+                                                {% endif %}
+                                                · {{ doc['created_at'][:16] if doc['created_at'] else '' }}
+                                            </div>
+                                            {% if doc['notes'] %}<div class="small mt-1">{{ doc['notes'] }}</div>{% endif %}
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <a class="btn btn-sm btn-outline-primary rounded-pill" href="{{ url_for('download_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}">{{ 'פתיחה' if lang == 'he' else 'Open' }}</a>
+                                            <form method="post" action="{{ url_for('delete_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}" onsubmit="return confirm('{{ 'למחוק מסמך זה?' if lang == 'he' else 'Delete this document?' }}')">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button class="btn btn-sm btn-outline-danger rounded-pill" type="submit">{{ 'מחיקה' if lang == 'he' else 'Delete' }}</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="list-group-item text-muted small">{{ 'עדיין אין מסמכי אבחון.' if lang == 'he' else 'No diagnostic documents yet.' }}</div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         {% endif %}
@@ -797,7 +903,7 @@
                 </div>
             </div>
 
-            {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
+            {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
             <div class="tab-pane fade" id="intake" role="tabpanel" aria-labelledby="intake-tab">
                 <div id="intakeFormHost"></div>
             </div>
@@ -1073,6 +1179,61 @@
                 </div>
             </div>
 
+            <!-- SUPERVISION TAB -->
+            <div class="tab-pane fade" id="supervision" role="tabpanel" aria-labelledby="supervision-tab">
+                <div class="card mb-4 border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-shield-check me-2 text-primary"></i>{{ 'Supervision' if lang == 'en' else 'הדרכה' }}</h5>
+                        <button class="btn btn-sm btn-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#addPatientSupervisionForm" aria-expanded="false">
+                            <i class="bi bi-plus-circle me-1"></i>{{ 'Add Supervision' if lang == 'en' else 'הוסף הדרכה' }}
+                        </button>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="collapse mb-4" id="addPatientSupervisionForm">
+                            <div class="border rounded-4 p-3 bg-light-subtle">
+                                <form method="post" action="{{ url_for('add_patient_supervision', patient_id=patient['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold">{{ 'Date' if lang == 'en' else 'תאריך' }}</label>
+                                            <input type="date" name="supervision_date" class="form-control" required>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label class="form-label small fw-bold">{{ 'Supervisor' if lang == 'en' else 'מדריך' }}</label>
+                                            <input type="text" name="supervisor_name" class="form-control" placeholder="{{ 'Supervisor name' if lang == 'en' else 'שם המדריך' }}">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label small fw-bold">{{ 'Content' if lang == 'en' else 'תוכן' }}</label>
+                                            <textarea name="content" class="form-control" rows="6" required placeholder="{{ 'Supervision content and insights...' if lang == 'en' else 'תוכן ההדרכה...' }}"></textarea>
+                                        </div>
+                                        <div class="col-12 d-flex justify-content-end gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-toggle="collapse" data-bs-target="#addPatientSupervisionForm">{{ 'Cancel' if lang == 'en' else 'ביטול' }}</button>
+                                            <button type="submit" class="btn btn-primary btn-sm rounded-pill"><i class="bi bi-save me-1"></i>{{ 'Save' if lang == 'en' else 'שמור' }}</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        {% for sup in supervisions %}
+                        <div class="border rounded-4 p-3 mb-3 bg-white shadow-sm">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <div class="flex-grow-1">
+                                    <div class="fw-semibold mb-1">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &nbsp;·&nbsp; {{ sup['supervisor_name'] }}{% endif %}</div>
+                                    <div class="small text-dark" style="white-space:pre-wrap;">{{ sup['content'] }}</div>
+                                </div>
+                                <form method="post" action="{{ url_for('delete_patient_supervision', patient_id=patient['id'], sup_id=sup['id']) }}" onsubmit="return confirm('{{ 'Delete this supervision record?' if lang == 'en' else 'למחוק רשומת הדרכה זו?' }}')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted small text-center py-5">{{ 'No supervision records yet.' if lang == 'en' else 'אין עדיין רשומות הדרכה.' }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
             <!-- MESSAGES TAB -->
             <div class="tab-pane fade" id="messages" role="tabpanel" aria-labelledby="messages-tab">
                 <div class="card mb-4 border-0 shadow-sm rounded-4">
@@ -1137,7 +1298,7 @@
                         {% endif %}
                     </button>
                 </form>
-                {% if patient['patient_type'] == 'initial-intake' or patient['has_intake_tab'] %}
+                {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
                 <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#intake">
                     <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
                 </button>
@@ -1321,7 +1482,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     let initialTab = '{{ active_tab or "info" }}';
-    if (initialTab === 'info' && ('{{ patient["patient_type"] }}' === 'initial-intake' || '{{ 1 if patient["has_intake_tab"] else 0 }}' === '1')) {
+    if (initialTab === 'info' && (['initial-intake', 'diagnosee'].includes('{{ patient["patient_type"] }}') || '{{ 1 if patient["has_intake_tab"] else 0 }}' === '1')) {
         initialTab = 'intake';
     }
     const requestedTabButton = document.querySelector(`#${initialTab}-tab`);

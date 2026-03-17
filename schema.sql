@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS slots_override (
     share_token TEXT,
     booked_by_name TEXT,
     booked_by_phone TEXT,
+    booked_notes TEXT,
     booked_at TIMESTAMP
 );
 
@@ -215,6 +216,7 @@ CREATE TABLE IF NOT EXISTS group_sessions (
     facilitator TEXT,
     meeting_type TEXT DEFAULT 'in-person',
     meeting_link TEXT,
+    supervision_id INTEGER,
     series_id INTEGER,
     occurrence_index INTEGER,
     session_summary TEXT,
@@ -290,5 +292,32 @@ CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_membe
 CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date);
 CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status);
 
+CREATE TABLE IF NOT EXISTS supervisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    group_id INTEGER,
+    supervision_date DATE NOT NULL,
+    supervisor_name TEXT,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (group_id) REFERENCES groups (id)
+);
+
+CREATE TABLE IF NOT EXISTS diagnosis_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT 'test_document',
+    title TEXT,
+    original_filename TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at);
 CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status);
+CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date);
+CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date);
+CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at);

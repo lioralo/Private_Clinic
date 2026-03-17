@@ -178,6 +178,7 @@ HEBREW_TRANSLATIONS = {
     "Actions": "פעולות",
     "Public": "פומבי",
     "Private": "פרטי",
+    "Diagnosee": "מאובחן",
     "No resources found.": "לא נמצאו משאבים.",
     "Edit Patient": "ערוך מטופל",
     "Update patient information": "עדכן פרטי מטופל",
@@ -794,6 +795,10 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
         except sqlite3.OperationalError:
             pass
@@ -916,6 +921,10 @@ def init_db():
             db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
         except sqlite3.OperationalError:
             pass
+        try:
+            db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
 
         try:
             db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
@@ -1000,6 +1009,59 @@ def init_db():
 
         db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS supervisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER,
+                group_id INTEGER,
+                supervision_date DATE NOT NULL,
+                supervisor_name TEXT,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (patient_id) REFERENCES patients (id),
+                FOREIGN KEY (group_id) REFERENCES groups (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date)')
+
+        try:
+            db.execute('''CREATE TABLE IF NOT EXISTS diagnosis_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                category TEXT NOT NULL DEFAULT 'test_document',
+                title TEXT,
+                original_filename TEXT NOT NULL,
+                stored_filename TEXT NOT NULL,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (patient_id) REFERENCES patients (id)
+            )''')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
+        except sqlite3.OperationalError:
+            pass
+        db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
 
         db.commit()
 
@@ -1335,7 +1397,10 @@ def intake_form_fields():
         'perception_normal', 'perception_abnormal', 'reality_testing', 'judgment', 'self_insight',
         'orientation', 'memory',
         'referral_target', 'referral_details', 'patient_consent',
-        'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration'
+        'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration',
+        'diag_referral_question', 'diag_test_battery', 'diag_observations',
+        'diag_differential', 'diag_impression', 'diag_recommendations',
+        'diag_followup_plan', 'diag_final_summary'
     ]
 
 
@@ -1492,6 +1557,14 @@ def build_intake_docx(patient_name, data, language='en'):
             'treatment_approach': 'גישה טיפולית' if is_hebrew else 'Treatment approach',
             'treatment_frequency': 'תדירות מפגשים' if is_hebrew else 'Meeting frequency',
             'treatment_estimated_duration': 'משך טיפול משוער' if is_hebrew else 'Estimated treatment duration',
+            'diag_referral_question': 'שאלת הפניה אבחונית' if is_hebrew else 'Diagnostic referral question',
+            'diag_test_battery': 'סוללת מבחנים' if is_hebrew else 'Test battery',
+            'diag_observations': 'תצפיות בזמן אבחון' if is_hebrew else 'Diagnostic observations',
+            'diag_differential': 'אבחנה מבדלת' if is_hebrew else 'Differential diagnosis',
+            'diag_impression': 'התרשמות קלינית' if is_hebrew else 'Clinical impression',
+            'diag_recommendations': 'המלצות' if is_hebrew else 'Recommendations',
+            'diag_followup_plan': 'תוכנית המשך' if is_hebrew else 'Follow-up plan',
+            'diag_final_summary': 'סיכום אבחוני סופי' if is_hebrew else 'Final diagnostic summary',
         }
     }
 
@@ -1574,6 +1647,14 @@ def build_intake_docx(patient_name, data, language='en'):
     add_intake_line(doc, text['labels']['treatment_approach'], data.get('treatment_approach'))
     add_intake_line(doc, text['labels']['treatment_frequency'], data.get('treatment_frequency'))
     add_intake_line(doc, text['labels']['treatment_estimated_duration'], data.get('treatment_estimated_duration'))
+    add_intake_line(doc, text['labels']['diag_referral_question'], data.get('diag_referral_question'))
+    add_intake_line(doc, text['labels']['diag_test_battery'], data.get('diag_test_battery'))
+    add_intake_line(doc, text['labels']['diag_observations'], data.get('diag_observations'))
+    add_intake_line(doc, text['labels']['diag_differential'], data.get('diag_differential'))
+    add_intake_line(doc, text['labels']['diag_impression'], data.get('diag_impression'))
+    add_intake_line(doc, text['labels']['diag_recommendations'], data.get('diag_recommendations'))
+    add_intake_line(doc, text['labels']['diag_followup_plan'], data.get('diag_followup_plan'))
+    add_intake_line(doc, text['labels']['diag_final_summary'], data.get('diag_final_summary'))
 
     return doc
 
@@ -1796,7 +1877,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
         base_query += ' AND p.status = ?'
         params.append(status)
 
-    if patient_type in ('private', 'residency', 'initial-intake', 'group'):
+    if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
         base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
         params.append(patient_type)
 
@@ -1841,7 +1922,7 @@ def crm_dashboard():
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
-    if patient_type not in {'all', 'private', 'residency', 'initial-intake', 'group'}:
+    if patient_type not in {'all', 'private', 'residency', 'initial-intake', 'diagnosee', 'group'}:
         patient_type = 'all'
     if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest'}:
         sort_by = 'status_priority'
@@ -2047,11 +2128,11 @@ def add_patient():
         birth_date = request.form.get('birth_date') or None
         id_number = (request.form.get('id_number') or '').strip() or None
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency', 'initial-intake', 'group'):
+        if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
-        has_intake_tab = 1 if patient_type == 'initial-intake' else 0
-        intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type == 'initial-intake' else ''
-        intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type == 'initial-intake' else ''
+        has_intake_tab = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
+        intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
+        intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
 
         if not name:
             flash('Name is required!')
@@ -2196,7 +2277,7 @@ def patient_detail(patient_id):
         }
 
     active_tab = request.args.get('tab', 'info')
-    intake_enabled = patient['patient_type'] == 'initial-intake' or int(patient['has_intake_tab'] or 0) == 1
+    intake_enabled = patient['patient_type'] in ('initial-intake', 'diagnosee') or int(patient['has_intake_tab'] or 0) == 1
     if active_tab == 'intake' and not intake_enabled:
         active_tab = 'info'
 
@@ -2218,7 +2299,17 @@ def patient_detail(patient_id):
     suggested_session_number = int(next_session_row['max_session'] or 0) + 1
     suggested_note_date = datetime.now().date().isoformat()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count)
+    supervisions = db.execute(
+        'SELECT * FROM supervisions WHERE patient_id = ? ORDER BY supervision_date DESC, created_at DESC',
+        (patient_id,)
+    ).fetchall()
+
+    diagnosis_documents = db.execute(
+        'SELECT * FROM diagnosis_documents WHERE patient_id = ? ORDER BY created_at DESC, id DESC',
+        (patient_id,)
+    ).fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents)
 
 
 @app.route('/admin/patient/<int:patient_id>/portal_preview')
@@ -2276,6 +2367,133 @@ def admin_portal_preview(patient_id):
 def redirect_to_patient_tab(patient_id, default_tab='info'):
     tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
     return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
+# ── Patient supervision ───────────────────────────────────────────────────────
+
+@app.route('/patient/<int:patient_id>/supervision', methods=['POST'])
+@login_required
+def add_patient_supervision(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    if not db.execute('SELECT id FROM patients WHERE id = ? AND COALESCE(is_deleted,0)=0', (patient_id,)).fetchone():
+        return 'Patient not found', 404
+    sup_date = (request.form.get('supervision_date') or '').strip()
+    supervisor = (request.form.get('supervisor_name') or '').strip()
+    content = (request.form.get('content') or '').strip()
+    if not sup_date or not content:
+        flash('Date and content are required.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='supervision'))
+    db.execute(
+        'INSERT INTO supervisions (patient_id, supervision_date, supervisor_name, content) VALUES (?,?,?,?)',
+        (patient_id, sup_date, supervisor or None, content)
+    )
+    db.commit()
+    flash('Supervision record added.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='supervision'))
+
+
+@app.route('/patient/<int:patient_id>/supervision/<int:sup_id>/delete', methods=['POST'])
+@login_required
+def delete_patient_supervision(patient_id, sup_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    db.execute('DELETE FROM supervisions WHERE id = ? AND patient_id = ?', (sup_id, patient_id))
+    db.commit()
+    flash('Supervision record deleted.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='supervision'))
+
+
+@app.route('/patient/<int:patient_id>/diagnosis_documents/add', methods=['POST'])
+@login_required
+def add_diagnosis_document(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    if 'diagnosis_file' not in request.files:
+        flash('No file selected.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
+
+    uploaded = request.files['diagnosis_file']
+    if uploaded.filename == '':
+        flash('No file selected.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
+
+    category = (request.form.get('category') or 'test_document').strip().lower()
+    if category not in {'test_document', 'final_result'}:
+        category = 'test_document'
+
+    title = (request.form.get('title') or '').strip() or None
+    notes = (request.form.get('notes') or '').strip() or None
+    original_filename = secure_filename(uploaded.filename)
+    ext = os.path.splitext(original_filename)[1].lower()
+    stored_filename = f"diag_{patient_id}_{secrets.token_hex(8)}{ext}"
+
+    diagnosis_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnosis', str(patient_id))
+    os.makedirs(diagnosis_dir, exist_ok=True)
+    uploaded.save(os.path.join(diagnosis_dir, stored_filename))
+
+    db = get_db()
+    patient = db.execute('SELECT id FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if not patient:
+        return 'Patient not found', 404
+
+    db.execute('''
+        INSERT INTO diagnosis_documents (patient_id, category, title, original_filename, stored_filename, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (patient_id, category, title, original_filename, stored_filename, notes))
+    db.commit()
+
+    flash('Diagnostic document uploaded successfully.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
+
+
+@app.route('/patient/<int:patient_id>/diagnosis_documents/<int:doc_id>/download', methods=['GET'])
+@login_required
+def download_diagnosis_document(patient_id, doc_id):
+    db = get_db()
+    doc = db.execute('''
+        SELECT * FROM diagnosis_documents
+        WHERE id = ? AND patient_id = ?
+    ''', (doc_id, patient_id)).fetchone()
+    if not doc:
+        return 'Document not found', 404
+
+    if current_user.role == 'patient' and current_user.patient_id != patient_id:
+        return 'Unauthorized', 403
+
+    diagnosis_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnosis', str(patient_id))
+    return send_from_directory(
+        diagnosis_dir,
+        doc['stored_filename'],
+        as_attachment=True,
+        download_name=doc['original_filename']
+    )
+
+
+@app.route('/patient/<int:patient_id>/diagnosis_documents/<int:doc_id>/delete', methods=['POST'])
+@login_required
+def delete_diagnosis_document(patient_id, doc_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    doc = db.execute('''
+        SELECT * FROM diagnosis_documents
+        WHERE id = ? AND patient_id = ?
+    ''', (doc_id, patient_id)).fetchone()
+    if not doc:
+        return 'Document not found', 404
+
+    diagnosis_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnosis', str(patient_id))
+    os.remove(os.path.join(diagnosis_dir, doc['stored_filename'])) if os.path.exists(os.path.join(diagnosis_dir, doc['stored_filename'])) else None
+    db.execute('DELETE FROM diagnosis_documents WHERE id = ? AND patient_id = ?', (doc_id, patient_id))
+    db.commit()
+
+    flash('Diagnostic document deleted.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
 
 
 def build_external_public_url(endpoint, **values):
@@ -2504,7 +2722,7 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
         WHERE p.status = 'ongoing'
-          AND COALESCE(p.patient_type, 'private') != 'initial-intake'
+          AND COALESCE(p.patient_type, 'private') NOT IN ('initial-intake', 'diagnosee')
           AND COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(a.is_recurring, 0) = 0
           AND a.appointment_date BETWEEN ? AND ?
@@ -3364,10 +3582,16 @@ def open_public_booking_calendar(token):
     ).fetchone()
 
     if not link_row:
-        return render_template('open_booking_calendar.html', token=token, slots=[], link_invalid=True)
+        page_lang = (request.args.get('lang') or session.get('lang') or 'en').strip().lower()
+        if page_lang not in {'en', 'he'}:
+            page_lang = 'en'
+        return render_template('open_booking_calendar.html', token=token, slots=[], link_invalid=True, page_lang=page_lang)
 
     slots = collect_public_available_slots(db, weeks_ahead=10)
-    return render_template('open_booking_calendar.html', token=token, slots=slots, link_invalid=False)
+    page_lang = (request.args.get('lang') or session.get('lang') or 'en').strip().lower()
+    if page_lang not in {'en', 'he'}:
+        page_lang = 'en'
+    return render_template('open_booking_calendar.html', token=token, slots=slots, link_invalid=False, page_lang=page_lang)
 
 
 @app.route('/api/calendar/public/<token>/book', methods=['POST'])
@@ -3385,6 +3609,7 @@ def api_public_calendar_book(token):
     birth_date_raw = (request.form.get('birth_date') or '').strip()
     phone = (request.form.get('phone') or '').strip()
     email = (request.form.get('email') or '').strip()
+    booking_notes = (request.form.get('notes') or '').strip()
     selected_date = (request.form.get('date') or '').strip()
     selected_time = (request.form.get('time') or '').strip()
     selected_duration_raw = (request.form.get('duration_minutes') or '').strip()
@@ -3441,18 +3666,20 @@ def api_public_calendar_book(token):
 
     db.execute('''
         UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
+        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
         WHERE slot_date = ? AND slot_time = ? AND status = 'available'
     ''', (
         name,
         phone or email,
+        booking_notes or None,
         datetime.now().isoformat(),
         booking_date.isoformat(),
         booking_time.strftime('%H:%M')
     ))
 
     contact_text = phone or email
-    message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.'
+    notes_suffix = f' Notes: {booking_notes}.' if booking_notes else ''
+    message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.{notes_suffix}'
     db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
     db.execute(
         'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
@@ -3605,6 +3832,11 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
         show_all_upcoming=show_all_upcoming
     )
 
+    group_supervisions = db.execute(
+        'SELECT * FROM supervisions WHERE group_id = ? ORDER BY supervision_date DESC, created_at DESC',
+        (group_id,)
+    ).fetchall()
+
     return {
         'group': group,
         'group_members': group_members,
@@ -3614,6 +3846,7 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
         'session_member_map': session_member_map,
         'attendance_by_session': attendance_by_session,
         'arrived_count_map': arrived_count_map,
+        'group_supervisions': group_supervisions,
         **session_collections
     }
 
@@ -3704,6 +3937,43 @@ def update_group_info(group_id):
     flash('Group information updated.')
     if return_to == 'dashboard':
         return redirect(url_for('groups_dashboard'))
+    return redirect(url_for('group_detail', group_id=group_id))
+
+
+# ── Group supervision ─────────────────────────────────────────────────────────
+
+@app.route('/groups/<int:group_id>/supervision', methods=['POST'])
+@login_required
+def add_group_supervision(group_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    if not db.execute('SELECT id FROM groups WHERE id = ?', (group_id,)).fetchone():
+        return 'Group not found', 404
+    sup_date = (request.form.get('supervision_date') or '').strip()
+    supervisor = (request.form.get('supervisor_name') or '').strip()
+    content = (request.form.get('content') or '').strip()
+    if not sup_date or not content:
+        flash('Date and content are required.')
+        return redirect(url_for('group_detail', group_id=group_id))
+    db.execute(
+        'INSERT INTO supervisions (group_id, supervision_date, supervisor_name, content) VALUES (?,?,?,?)',
+        (group_id, sup_date, supervisor or None, content)
+    )
+    db.commit()
+    flash('Supervision record added.')
+    return redirect(url_for('group_detail', group_id=group_id))
+
+
+@app.route('/groups/<int:group_id>/supervision/<int:sup_id>/delete', methods=['POST'])
+@login_required
+def delete_group_supervision(group_id, sup_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    db.execute('DELETE FROM supervisions WHERE id = ? AND group_id = ?', (sup_id, group_id))
+    db.commit()
+    flash('Supervision record deleted.')
     return redirect(url_for('group_detail', group_id=group_id))
 
 
@@ -4809,11 +5079,11 @@ def api_calendar_book():
         db.commit()
         return jsonify({'status': 'success'})
 
-    if patient_type == 'initial-intake':
+    if patient_type in ('initial-intake', 'diagnosee'):
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
     # Business rule: ongoing patients are booked as weekly recurring sessions.
-    # Candidate/waiting/initial-intake remain one-time bookings.
+    # Candidate/waiting/intake/diagnosee remain one-time bookings.
     is_recurring = 1 if patient_status == 'ongoing' else 0
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
@@ -4926,17 +5196,17 @@ def quick_book_patient_appointment(patient_id):
 
     patient_type = (patient_row['patient_type'] or 'private').strip().lower()
     patient_status = (patient_row['status'] or '').strip().lower()
-    if patient_type == 'initial-intake':
+    if patient_type in ('initial-intake', 'diagnosee'):
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 
-    default_recurring = 1 if patient_status == 'ongoing' and patient_type != 'initial-intake' else 0
+    default_recurring = 1 if patient_status == 'ongoing' and patient_type not in ('initial-intake', 'diagnosee') else 0
     if recurrence_mode not in ('auto', 'one-time', 'recurring'):
         recurrence_mode = 'auto'
 
     if recurrence_mode == 'one-time':
         is_recurring = 0
     elif recurrence_mode == 'recurring':
-        if patient_type == 'initial-intake':
+        if patient_type in ('initial-intake', 'diagnosee'):
             flash('Initial-intake patients can only be booked as one-time meetings.', 'error')
             return redirect_to_patient_tab(patient_id, 'info')
         is_recurring = 1
@@ -5832,7 +6102,7 @@ def api_get_messages():
             like_query = f"%{search_query}%"
             params.extend([like_query, like_query, like_query])
 
-        if patient_type in ('private', 'residency', 'initial-intake', 'group'):
+        if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
             params.append(patient_type)
 
@@ -6045,6 +6315,40 @@ def api_delete_group_session(session_id):
 
     db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/groups/sessions/<int:session_id>/link_supervision', methods=['POST'])
+@login_required
+def api_link_group_session_supervision(session_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    db = get_db()
+    session_row = db.execute('SELECT id, group_id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+    if not session_row:
+        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
+
+    sup_id_raw = (request.form.get('supervision_id') or '').strip()
+    if not sup_id_raw:
+        db.execute('UPDATE group_sessions SET supervision_id = NULL WHERE id = ?', (session_id,))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    try:
+        sup_id = int(sup_id_raw)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Invalid supervision id.'}), 400
+
+    supervision_row = db.execute(
+        'SELECT id FROM supervisions WHERE id = ? AND group_id = ?',
+        (sup_id, int(session_row['group_id']))
+    ).fetchone()
+    if not supervision_row:
+        return jsonify({'status': 'error', 'message': 'Supervision record not found for this group.'}), 404
+
+    db.execute('UPDATE group_sessions SET supervision_id = ? WHERE id = ?', (sup_id, session_id))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -6512,12 +6816,12 @@ def edit_patient(patient_id):
         id_number = (request.form.get('id_number') or '').strip() or None
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
         patient_type = request.form.get('patient_type', 'private')
-        if patient_type not in ('private', 'residency', 'initial-intake', 'group'):
+        if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
         has_intake_tab = int(patient['has_intake_tab'] or 0)
-        if patient_type == 'initial-intake':
+        if patient_type in ('initial-intake', 'diagnosee'):
             has_intake_tab = 1
-        if patient_type == 'initial-intake':
+        if patient_type in ('initial-intake', 'diagnosee'):
             intake_assessment = request.form.get('intake_assessment')
             intake_questionnaire = request.form.get('intake_questionnaire')
             if intake_assessment is None:
@@ -6662,7 +6966,7 @@ def add_appointment(patient_id):
     db = get_db()
     patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
     patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
-    if patient_type == 'initial-intake':
+    if patient_type in ('initial-intake', 'diagnosee'):
         is_recurring = 0
         db.execute('DELETE FROM appointments WHERE patient_id = ? AND status = ?', (patient_id, 'scheduled'))
 

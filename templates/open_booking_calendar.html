@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ page_lang or 'en' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ t('Self-Booking Calendar') }}</title>
+    {% set is_he = (page_lang == 'he') %}
+    <title>{{ 'יומן קביעות עצמי' if is_he else 'Self-Booking Calendar' }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background: #f5f7fb; }
@@ -14,20 +15,24 @@
 <div class="container">
     <div class="card card-wrap border-0 shadow-sm">
         <div class="card-body p-4 p-md-5">
+            <div class="d-flex justify-content-end gap-2 mb-3">
+                <a href="{{ url_for('open_public_booking_calendar', token=token, lang='en') }}" class="btn btn-sm {% if not is_he %}btn-primary{% else %}btn-outline-primary{% endif %}">English</a>
+                <a href="{{ url_for('open_public_booking_calendar', token=token, lang='he') }}" class="btn btn-sm {% if is_he %}btn-primary{% else %}btn-outline-primary{% endif %}">עברית</a>
+            </div>
             {% if link_invalid %}
-            <h4 class="mb-2">{{ t('Link not active') }}</h4>
-            <p class="text-muted mb-0">{{ t('This self-booking link is invalid or expired.') }}</p>
+            <h4 class="mb-2">{{ 'הקישור לא פעיל' if is_he else 'Link not active' }}</h4>
+            <p class="text-muted mb-0">{{ 'קישור הקביעה העצמית אינו תקף או שפג תוקפו.' if is_he else 'This self-booking link is invalid or expired.' }}</p>
             {% else %}
-            <h3 class="mb-2">{{ t('Book an Available Slot') }}</h3>
-            <p class="text-muted">{{ t('Select a time and fill in your details. Name is required. Date of birth is optional. Phone or email is required.') }}</p>
+            <h3 class="mb-2">{{ 'קביעת תור פנוי' if is_he else 'Book an Available Slot' }}</h3>
+            <p class="text-muted">{{ 'בחר/י שעה ומלא/י פרטים. שם חובה. תאריך לידה אופציונלי. טלפון או מייל חובה.' if is_he else 'Select a time and fill in your details. Name is required. Date of birth is optional. Phone or email is required.' }}</p>
 
             <div id="publicBookingResult" class="alert d-none"></div>
 
             <form id="publicBookingForm" class="row g-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold">{{ t('Available Slot') }} <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">{{ 'שעה פנויה' if is_he else 'Available Slot' }} <span class="text-danger">*</span></label>
                     <select id="slotSelect" class="form-select" required>
-                        <option value="">{{ t('Select a slot...') }}</option>
+                        <option value="">{{ 'בחר/י שעה...' if is_he else 'Select a slot...' }}</option>
                         {% for slot in slots %}
                         <option
                             value="{{ slot.date }}|{{ slot.time }}|{{ slot.duration_minutes }}"
@@ -40,30 +45,35 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">{{ t('Name') }} <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">{{ 'שם' if is_he else 'Name' }} <span class="text-danger">*</span></label>
                     <input type="text" id="bookName" class="form-control" maxlength="120" required>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">{{ t('Date of Birth (optional)') }}</label>
+                    <label class="form-label fw-semibold">{{ 'תאריך לידה (אופציונלי)' if is_he else 'Date of Birth (optional)' }}</label>
                     <input type="date" id="bookBirthDate" class="form-control">
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">{{ t('Phone') }}</label>
+                    <label class="form-label fw-semibold">{{ 'טלפון' if is_he else 'Phone' }}</label>
                     <input type="tel" id="bookPhone" class="form-control" maxlength="40">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label fw-semibold">{{ t('Email') }}</label>
+                    <label class="form-label fw-semibold">{{ 'אימייל' if is_he else 'Email' }}</label>
                     <input type="email" id="bookEmail" class="form-control" maxlength="120">
                 </div>
 
                 <div class="col-12">
-                    <button id="submitPublicBooking" type="submit" class="btn btn-primary w-100 fw-semibold">{{ t('Submit Booking') }}</button>
+                    <label class="form-label fw-semibold">{{ 'הערה לקביעה' if is_he else 'Booking Notes' }}</label>
+                    <textarea id="bookNotes" class="form-control" rows="3" maxlength="500" placeholder="{{ 'אפשר להוסיף מידע חשוב לקראת המפגש' if is_he else 'Optional notes for this booking' }}"></textarea>
+                </div>
+
+                <div class="col-12">
+                    <button id="submitPublicBooking" type="submit" class="btn btn-primary w-100 fw-semibold">{{ 'שליחת קביעה' if is_he else 'Submit Booking' }}</button>
                 </div>
             </form>
 
             {% if not slots %}
-            <div class="alert alert-warning mt-3 mb-0">{{ t('No available slots right now. Please try again later.') }}</div>
+            <div class="alert alert-warning mt-3 mb-0">{{ 'כרגע אין שעות פנויות. נסה/י שוב מאוחר יותר.' if is_he else 'No available slots right now. Please try again later.' }}</div>
             {% endif %}
             {% endif %}
         </div>
@@ -81,6 +91,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const birthDateInput = document.getElementById('bookBirthDate');
     const phoneInput = document.getElementById('bookPhone');
     const emailInput = document.getElementById('bookEmail');
+    const notesInput = document.getElementById('bookNotes');
+    const isHebrew = {{ 'true' if is_he else 'false' }};
+    const ui = {
+        selectSlot: isHebrew ? 'יש לבחור שעה פנויה.' : 'Please select an available slot.',
+        nameRequired: isHebrew ? 'נדרש למלא שם.' : 'Name is required.',
+        contactRequired: isHebrew ? 'נדרש טלפון או אימייל.' : 'Phone or email is required.',
+        submitting: isHebrew ? 'שולח...' : 'Submitting...',
+        submit: isHebrew ? 'שליחת קביעה' : 'Submit Booking',
+        success: isHebrew ? 'הקביעה נשלחה בהצלחה.' : 'Booking submitted successfully.',
+        failure: isHebrew ? 'הקביעה נכשלה.' : 'Booking failed.',
+        network: isHebrew ? 'שגיאת רשת. נסה/י שוב.' : 'Network error. Please try again.'
+    };
 
     function showResult(kind, message) {
         resultBox.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning');
@@ -98,20 +120,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const email = emailInput.value.trim();
 
         if (!selectedOption || !selectedOption.dataset.date) {
-            showResult('error', 'Please select an available slot.');
+            showResult('error', ui.selectSlot);
             return;
         }
         if (!name) {
-            showResult('error', 'Name is required.');
+            showResult('error', ui.nameRequired);
             return;
         }
         if (!phone && !email) {
-            showResult('error', 'Phone or email is required.');
+            showResult('error', ui.contactRequired);
             return;
         }
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting...';
+        submitBtn.textContent = ui.submitting;
 
         const body = new URLSearchParams({
             date: selectedOption.dataset.date,
@@ -120,7 +142,8 @@ document.addEventListener('DOMContentLoaded', function() {
             name,
             birth_date: birthDate,
             phone,
-            email
+            email,
+            notes: (notesInput && notesInput.value ? notesInput.value.trim() : '')
         });
 
         fetch('/api/calendar/public/{{ token }}/book', {
@@ -131,18 +154,18 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(r => r.json().then(payload => ({ ok: r.ok, payload })))
         .then(({ ok, payload }) => {
             if (ok && payload.status === 'success') {
-                showResult('success', payload.message || 'Booking submitted successfully.');
+                showResult('success', payload.message || ui.success);
                 form.reset();
             } else {
-                showResult('error', (payload && payload.message) || 'Booking failed.');
+                showResult('error', (payload && payload.message) || ui.failure);
             }
         })
         .catch(() => {
-            showResult('error', 'Network error. Please try again.');
+            showResult('error', ui.network);
         })
         .finally(() => {
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit Booking';
+            submitBtn.textContent = ui.submit;
         });
     });
 });

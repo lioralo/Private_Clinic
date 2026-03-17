@@ -17,10 +17,11 @@
 {%- endif -%}
 {%- endmacro %}
 
-{% macro render_session_card(session, is_past, session_member_map, attendance_by_session) %}
+{% macro render_session_card(session, is_past, session_member_map, attendance_by_session, group_supervisions) %}
 {% set session_members = session_member_map.get(session['id'], []) %}
 {% set marks = attendance_by_session.get(session['id'], {}) %}
 {% set status_value = session['status'] or 'scheduled' %}
+{% set linked_sup = (group_supervisions | selectattr('id', 'equalto', session['supervision_id']) | list | first) if session['supervision_id'] else None %}
 <div class="session-card p-3 {% if is_past %}archived-session{% endif %}" id="session-record-{{ session['id'] }}">
     <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
         <div>
@@ -35,9 +36,28 @@
             <span class="badge bg-secondary-subtle text-secondary border">{{ session['meeting_type'] or 'in-person' }}</span>
             <span class="badge {% if status_value == 'completed' %}bg-success-subtle text-success{% elif status_value == 'cancelled' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %} border">{% if status_value == 'completed' %}{{ txt('Completed', 'בוצע') }}{% elif status_value == 'cancelled' %}{{ txt('Cancelled', 'בוטל') }}{% else %}{{ txt('Scheduled', 'מתוכנן') }}{% endif %}</span>
             {% if session['series_id'] %}<span class="badge bg-info-subtle text-info border">{{ txt('Recurring', 'חוזר') }}</span>{% endif %}
+            {% if linked_sup %}<a class="badge bg-primary-subtle text-primary border text-decoration-none" href="#supervision-{{ linked_sup['id'] }}">{{ txt('Linked Supervision', 'הדרכה מקושרת') }}</a>{% endif %}
             <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleBookingPanel({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] or 60 }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">{{ txt('Edit Booking', 'עריכת שיבוץ') }}</button>
+            <button type="button" class="btn btn-outline-info btn-sm rounded-pill" onclick="toggleSupervisionPanel({{ session['id'] }})">{{ txt('Link Supervision', 'קישור להדרכה') }}</button>
             <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="toggleRecordEdit({{ session['id'] }}, true)">{{ txt('Edit Record', 'עריכת סיכום') }}</button>
             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
+        </div>
+    </div>
+
+    <div class="supervision-link-panel border rounded-3 bg-light p-3 mb-3" id="supervision-link-panel-{{ session['id'] }}">
+        <div class="row g-2 align-items-end">
+            <div class="col-lg-9">
+                <label class="form-label small mb-1">{{ txt('Supervision record', 'רשומת הדרכה') }}</label>
+                <select class="form-select form-select-sm" id="link-supervision-{{ session['id'] }}">
+                    <option value="">{{ txt('No linked supervision', 'ללא הדרכה מקושרת') }}</option>
+                    {% for sup in group_supervisions %}
+                    <option value="{{ sup['id'] }}" {% if session['supervision_id'] and sup['id'] == session['supervision_id'] %}selected{% endif %}>{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} · {{ sup['supervisor_name'] }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-3 d-grid">
+                <button type="button" class="btn btn-info btn-sm rounded-pill" onclick="linkSessionSupervision({{ session['id'] }})">{{ txt('Save Link', 'שמור קישור') }}</button>
+            </div>
         </div>
     </div>
 
@@ -138,7 +158,7 @@
                                 <input type="checkbox" class="form-check-input" name="notified_on_time_{{ member['patient_id'] }}" {% if mark.get('notified_on_time', 0) %}checked{% endif %}>
                             </td>
                             <td>
-                                <textarea class="form-control form-control-sm member-note-input" name="attendance_note_{{ member['patient_id'] }}" rows="6" placeholder="{{ txt('Member participation, reaction, or follow-up note', 'השתתפות, תגובה או הערת המשך') }}">{{ mark.get('attendance_note', '') }}</textarea>
+                                <textarea class="form-control form-control-sm member-note-input" name="attendance_note_{{ member['patient_id'] }}" rows="8" placeholder="{{ txt('Member participation, reaction, or follow-up note', 'השתתפות, תגובה או הערת המשך') }}">{{ mark.get('attendance_note', '') }}</textarea>
                             </td>
                         </tr>
                         {% else %}
@@ -182,13 +202,15 @@
 
 .member-remove-panel,
 .group-delete-panel,
-.session-booking-panel {
+.session-booking-panel,
+.supervision-link-panel {
     display: none;
 }
 
 .member-remove-panel.is-open,
 .group-delete-panel.is-open,
-.session-booking-panel.is-open {
+.session-booking-panel.is-open,
+.supervision-link-panel.is-open {
     display: block;
 }
 
@@ -210,6 +232,11 @@
 .member-note-input {
     min-width: 100%;
 }
+
+.table-responsive .table {
+    table-layout: fixed;
+    width: 100%;
+}
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
@@ -226,8 +253,8 @@
     </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-xl-4">
+<div class="row g-4 align-items-start">
+    <div class="col-12 col-xxl-3">
         <div class="accordion group-side-accordion" id="groupManagementAccordion">
             <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden mb-3">
                 <h2 class="accordion-header" id="groupInfoHeading">
@@ -455,6 +482,52 @@
                 </div>
             </div>
 
+            <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden mb-3">
+                <h2 class="accordion-header" id="supervisionHeading">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#supervisionCollapse" aria-expanded="false" aria-controls="supervisionCollapse">
+                        {{ txt('Supervision', 'הדרכה') }}
+                        {% if group_supervisions %}<span class="badge bg-primary-subtle text-primary border ms-2">{{ group_supervisions|length }}</span>{% endif %}
+                    </button>
+                </h2>
+                <div id="supervisionCollapse" class="accordion-collapse collapse" aria-labelledby="supervisionHeading" data-bs-parent="#groupManagementAccordion">
+                    <div class="accordion-body bg-white">
+                        <form method="post" action="{{ url_for('add_group_supervision', group_id=group['id']) }}" class="row g-2 mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="col-12">
+                                <label class="form-label small fw-bold">{{ txt('Date', 'תאריך') }}</label>
+                                <input type="date" name="supervision_date" class="form-control form-control-sm" required>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold">{{ txt('Supervisor', 'מדריך') }}</label>
+                                <input type="text" name="supervisor_name" class="form-control form-control-sm" placeholder="{{ txt('Supervisor name', 'שם המדריך') }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold">{{ txt('Content', 'תוכן') }}</label>
+                                <textarea name="content" class="form-control form-control-sm" rows="5" required placeholder="{{ txt('Supervision content...', 'תוכן ההדרכה...') }}"></textarea>
+                            </div>
+                            <div class="col-12 d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary btn-sm rounded-pill"><i class="bi bi-plus-circle me-1"></i>{{ txt('Add Supervision', 'הוסף הדרכה') }}</button>
+                            </div>
+                        </form>
+                        {% if group_supervisions %}
+                        <hr class="my-2">
+                        <div class="small text-muted text-uppercase fw-bold mb-2">{{ txt('Recent', 'אחרון') }}</div>
+                        <div class="d-flex flex-column gap-2" style="max-height:300px;overflow-y:auto;">
+                            {% for sup in group_supervisions[:3] %}
+                            <div class="border rounded-3 p-2 bg-light small">
+                                <div class="fw-semibold">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} · {{ sup['supervisor_name'] }}{% endif %}</div>
+                                <div style="white-space:pre-wrap;">{{ sup['content'][:200] }}{% if sup['content']|length > 200 %}…{% endif %}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% if group_supervisions|length > 3 %}
+                        <div class="small text-muted mt-1">{{ txt('See all in the main panel below.', 'ראה הכל בלוח מטה.') }}</div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden">
                 <h2 class="accordion-header" id="dangerHeading">
                     <button class="accordion-button collapsed text-danger" type="button" data-bs-toggle="collapse" data-bs-target="#dangerCollapse" aria-expanded="false" aria-controls="dangerCollapse">
@@ -491,7 +564,7 @@
         </div>
     </div>
 
-    <div class="col-xl-8">
+    <div class="col-12 col-xxl-9">
         {% set next_session = upcoming_sessions_all[0] if upcoming_sessions_all|length > 0 else none %}
         {% set upcoming_queue = upcoming_sessions_all[1:] if upcoming_sessions_all|length > 1 else [] %}
         <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -512,7 +585,7 @@
                         <div class="collapse show" id="nextMeetingCollapse">
                             <div class="p-3 border-top bg-light-subtle">
                                 {% if next_session %}
-                                {{ render_session_card(next_session, false, session_member_map, attendance_by_session) }}
+                                {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions) }}
                                 {% else %}
                                 <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
                                 {% endif %}
@@ -535,7 +608,7 @@
                                     </button>
                                     <div class="collapse" id="pastSession{{ session['id'] }}">
                                         <div class="p-3 border-top">
-                                            {{ render_session_card(session, true, session_member_map, attendance_by_session) }}
+                                            {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions) }}
                                         </div>
                                     </div>
                                 </div>
@@ -554,7 +627,7 @@
                         <div class="collapse" id="upcomingQueueCollapse">
                             <div class="p-3 border-top bg-light-subtle d-flex flex-column gap-3">
                                 {% for session in upcoming_queue %}
-                                {{ render_session_card(session, false, session_member_map, attendance_by_session) }}
+                                {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions) }}
                                 {% else %}
                                 <div class="small text-muted">{{ txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.') }}</div>
                                 {% endfor %}
@@ -562,6 +635,32 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Supervision History -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-shield-check me-2"></i>{{ txt('Supervision', 'הדרכה') }}</h5>
+                <span class="badge bg-light text-dark border">{{ group_supervisions|length }} {{ txt('total', 'בסך הכל') }}</span>
+            </div>
+            <div class="card-body">
+                {% for sup in group_supervisions %}
+                <div class="border rounded-4 p-3 mb-3 bg-white shadow-sm" id="supervision-{{ sup['id'] }}">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold mb-1">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &nbsp;·&nbsp; {{ sup['supervisor_name'] }}{% endif %}</div>
+                            <div class="small text-dark" style="white-space:pre-wrap;">{{ sup['content'] }}</div>
+                        </div>
+                        <form method="post" action="{{ url_for('delete_group_supervision', group_id=group['id'], sup_id=sup['id']) }}" onsubmit="return confirm(isHebrew ? 'למחוק רשומת הדרכה זו?' : 'Delete this supervision record?')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted small text-center py-4">{{ txt('No supervision records yet.', 'אין עדיין רשומות הדרכה.') }}</div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -578,7 +677,8 @@ const labels = {
     deleteGroup: isHebrew ? 'למחוק את הקבוצה ואת כל הנתונים הקשורים? פעולה זו בלתי הפיכה.' : 'Delete this group and all related group data? This cannot be undone.',
     saveError: isHebrew ? 'לא ניתן לשמור שינויים במפגש.' : 'Could not save session changes.',
     deleteSessionConfirm: isHebrew ? 'למחוק את המפגש הזה?' : 'Delete this group session?',
-    deleteSessionError: isHebrew ? 'לא ניתן למחוק את המפגש.' : 'Could not delete session.'
+    deleteSessionError: isHebrew ? 'לא ניתן למחוק את המפגש.' : 'Could not delete session.',
+    linkSupervisionError: isHebrew ? 'לא ניתן לקשר הדרכה למפגש.' : 'Could not link supervision to this session.'
 };
 
 function minutesToTime(totalMinutes) {
@@ -642,6 +742,29 @@ function toggleBookingPanel(id, date, start, durationMin, title, facilitator, ty
         scope.value = 'single';
     }
     document.getElementById('session-booking-panel-' + id).classList.add('is-open');
+}
+
+function toggleSupervisionPanel(sessionId) {
+    const panel = document.getElementById('supervision-link-panel-' + sessionId);
+    panel.classList.toggle('is-open');
+}
+
+function linkSessionSupervision(sessionId) {
+    const select = document.getElementById('link-supervision-' + sessionId);
+    const body = new URLSearchParams({
+        supervision_id: select ? (select.value || '') : ''
+    });
+    fetch('/api/groups/sessions/' + sessionId + '/link_supervision', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.message || labels.linkSupervisionError);
+        }
+    }).catch(() => alert(labels.linkSupervisionError));
 }
 
 function closeBookingPanel(id) {

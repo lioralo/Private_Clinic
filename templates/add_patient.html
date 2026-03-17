@@ -84,6 +84,12 @@
                                         <i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Initial Intake') }}
                                     </label>
                                 </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="patient_type" id="typeDiagnosee" value="diagnosee">
+                                    <label class="form-check-label" for="typeDiagnosee">
+                                        <i class="bi bi-clipboard2-check me-1"></i>{{ t('Diagnosee') }}
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -106,7 +112,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const typeInputs = document.querySelectorAll('input[name="patient_type"]');
     typeInputs.forEach((input) => input.addEventListener('change', function () {
-        if (input.checked && input.value === 'initial-intake') {
+        if (input.checked && (input.value === 'initial-intake' || input.value === 'diagnosee')) {
             document.getElementById('status').value = 'candidate';
         }
     }));
