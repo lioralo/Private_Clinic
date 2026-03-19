@@ -82,7 +82,7 @@ PY
 ## 5. Start The Live Stack
 
 ```bash
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+bash scripts/deploy_prod.sh
 ```
 
 Check status:
@@ -170,7 +170,7 @@ Use this exact order on a fresh EC2 server:
 7. Start the stack:
 
    ```bash
-   sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+   bash scripts/deploy_prod.sh
    ```
 
 8. Verify:
