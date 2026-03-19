@@ -1282,10 +1282,14 @@ def init_db():
         if not admin:
             print("Creating default admin user...")
             hashed_pw = generate_password_hash('admin')
-            db.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                       ('admin', hashed_pw, 'admin'))
+            db.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ('admin', hashed_pw, 'admin'),
+            )
             db.commit()
-            print("Admin user created (username: admin, password: admin).")
+            admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
+            if admin:
+                print("Admin user created (username: admin, password: admin).")
 
         if admin and not admin['display_name']:
             db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
