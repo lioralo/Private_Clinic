@@ -58,6 +58,7 @@ python test_app.py
 
 ## Deploy Live
 - Use [LIVE_DEPLOYMENT.md](LIVE_DEPLOYMENT.md) for a production deployment with Docker, Gunicorn, HTTPS, and persistent storage.
+- For AWS EC2 in Israel (`il-central-1`), the guide now includes an exact launch checklist and a one-command Ubuntu Docker setup helper.
 
 ## Hebrew Dictionary
 - The app supports an editable Hebrew dictionary file at `translations/he.json`.
