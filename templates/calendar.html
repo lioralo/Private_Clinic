@@ -515,7 +515,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('weeklyCalendar');
     let currentWeekStart = null;
     let activeFilter = 'all';
-    let nowWeekAnchor = getWeekStartString(new Date());
+    let nowWeekAnchor = {{ initial_week_start|tojson if initial_week_start is defined else 'null' }} || getWeekStartString(new Date());
     let activeManagementMode = 'upcoming';
 
     function pad2(v) {

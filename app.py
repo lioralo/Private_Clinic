@@ -3987,6 +3987,104 @@ def collect_public_available_slots(db, weeks_ahead=10):
     return slots
 
 
+def _nearest_calendar_anchor_date(db, user):
+    """Pick the best initial date for calendar view so users land on visible events."""
+    today = datetime.now().date()
+    params = []
+    patient_clause = ''
+    if user.role == 'patient' and user.patient_id:
+        patient_clause = ' AND patient_id = ?'
+        params.append(user.patient_id)
+
+    future_appt = db.execute(
+        f'''
+        SELECT appointment_date
+        FROM appointments
+                WHERE appointment_date >= ?
+          {patient_clause}
+        ORDER BY appointment_date ASC, appointment_time ASC
+        LIMIT 1
+        ''',
+        [today.isoformat(), *params]
+    ).fetchone()
+    if future_appt and parse_date_safe(future_appt['appointment_date']):
+        return parse_date_safe(future_appt['appointment_date'])
+
+    past_appt = db.execute(
+        f'''
+        SELECT appointment_date
+        FROM appointments
+        WHERE appointment_date < ?
+          {patient_clause}
+        ORDER BY appointment_date DESC, appointment_time DESC
+        LIMIT 1
+        ''',
+        [today.isoformat(), *params]
+    ).fetchone()
+    if past_appt and parse_date_safe(past_appt['appointment_date']):
+        return parse_date_safe(past_appt['appointment_date'])
+
+    # For admin, fall back to other calendar entities if no appointments exist.
+    if user.role == 'admin':
+        future_group = db.execute(
+            '''
+            SELECT session_date AS day
+            FROM group_sessions
+            WHERE session_date >= ?
+            ORDER BY session_date ASC, session_time ASC
+            LIMIT 1
+            ''',
+            (today.isoformat(),)
+        ).fetchone()
+        if future_group and parse_date_safe(future_group['day']):
+            return parse_date_safe(future_group['day'])
+
+        past_group = db.execute(
+            '''
+            SELECT session_date AS day
+            FROM group_sessions
+            WHERE session_date < ?
+            ORDER BY session_date DESC, session_time DESC
+            LIMIT 1
+            ''',
+            (today.isoformat(),)
+        ).fetchone()
+        if past_group and parse_date_safe(past_group['day']):
+            return parse_date_safe(past_group['day'])
+
+        future_block = db.execute(
+            '''
+            SELECT blocked_date AS day
+            FROM blocked_slots
+            WHERE blocked_date >= ?
+            ORDER BY blocked_date ASC, blocked_time ASC
+            LIMIT 1
+            ''',
+            (today.isoformat(),)
+        ).fetchone()
+        if future_block and parse_date_safe(future_block['day']):
+            return parse_date_safe(future_block['day'])
+
+        past_block = db.execute(
+            '''
+            SELECT blocked_date AS day
+            FROM blocked_slots
+            WHERE blocked_date < ?
+            ORDER BY blocked_date DESC, blocked_time DESC
+            LIMIT 1
+            ''',
+            (today.isoformat(),)
+        ).fetchone()
+        if past_block and parse_date_safe(past_block['day']):
+            return parse_date_safe(past_block['day'])
+
+    return today
+
+
+def _week_start_for_date(day_obj):
+    return day_obj - timedelta(days=custom_weekday(day_obj))
+
+
 @app.route('/calendar')
 @login_required
 def weekly_calendar():
@@ -4005,8 +4103,13 @@ def weekly_calendar():
         if not can_self_schedule:
             flash('Self-booking is currently disabled by your therapist.')
             return redirect(url_for('patient_home'))
+
+    initial_anchor = _nearest_calendar_anchor_date(db, current_user)
+    initial_week_start = _week_start_for_date(initial_anchor).isoformat()
+
     return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
-                           is_admin=(current_user.role == 'admin'))
+                           is_admin=(current_user.role == 'admin'),
+                           initial_week_start=initial_week_start)
 
 
 @app.route('/api/calendar/public-link', methods=['POST'])
