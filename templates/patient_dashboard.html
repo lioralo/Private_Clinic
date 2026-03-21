@@ -1,0 +1,383 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="section-hero mb-4">
+    <div>
+        <span class="hero-kicker"><i class="bi bi-graph-up"></i> {{ t('Your Progress') }}</span>
+        <h1 class="hero-title mt-3 mb-2">{{ t('Welcome Back') }}, {{ patient['name'] }}!</h1>
+        <p class="hero-subtitle mb-0">{{ t('Track your therapy progress and upcoming sessions.') }}</p>
+    </div>
+    <a href="{{ url_for('patient_home') }}" class="btn btn-outline-secondary bg-white">{{ t('Back to Home') }}</a>
+</div>
+
+<!-- Engagement Metrics -->
+<div class="engagement-metrics-grid mb-4">
+    <div class="metric-card">
+        <div class="metric-icon" style="background: #3b82f6;">
+            <i class="bi bi-calendar-check"></i>
+        </div>
+        <div class="metric-content">
+            <span class="metric-label">{{ t('Total Sessions') }}</span>
+            <span class="metric-value">{{ engagement['total_appointments'] }}</span>
+        </div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-icon" style="background: #10b981;">
+            <i class="bi bi-clock-history"></i>
+        </div>
+        <div class="metric-content">
+            <span class="metric-label">{{ t('Upcoming') }}</span>
+            <span class="metric-value">{{ engagement['upcoming_appointments'] }}</span>
+        </div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-icon" style="background: #f59e0b;">
+            <i class="bi bi-bullseye"></i>
+        </div>
+        <div class="metric-content">
+            <span class="metric-label">{{ t('Active Goals') }}</span>
+            <span class="metric-value">{{ engagement['active_goals'] }}</span>
+        </div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-icon" style="background: #8b5cf6;">
+            <i class="bi bi-camera-video-fill"></i>
+        </div>
+        <div class="metric-content">
+            <span class="metric-label">{{ t('Online Sessions') }}</span>
+            <span class="metric-value">{{ engagement['zoom_meetings'] }}</span>
+        </div>
+    </div>
+</div>
+
+<div class="engagement-content-grid mb-4">
+    <!-- Upcoming Appointments -->
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary">{{ t('Upcoming Sessions') }}</h6>
+            <a href="{{ url_for('patient_home') }}" class="btn btn-sm btn-outline-primary">{{ t('View Calendar') }}</a>
+        </div>
+        <div class="card-body">
+            {% if upcoming_appointments %}
+            <div class="upcoming-list">
+                {% for appt in upcoming_appointments %}
+                <div class="upcoming-item">
+                    <div class="upcoming-time">
+                        <div class="date-badge">
+                            <span class="day">{{ appt['appointment_date']|from_iso_date|strftime('%d') }}</span>
+                            <span class="month">{{ appt['appointment_date']|from_iso_date|strftime('%b') }}</span>
+                        </div>
+                        <div>
+                            <span class="time fw-bold">{{ appt['appointment_time'] }}</span>
+                            <span class="text-muted small">
+                                {% set days_away = (appt['appointment_date']|from_iso_date - now|date).days %}
+                                {% if days_away == 0 %}
+                                    {{ t('Today') }}
+                                {% elif days_away == 1 %}
+                                    {{ t('Tomorrow') }}
+                                {% else %}
+                                    {{ t('in') }} {{ days_away }} {{ t('days') }}
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="upcoming-type">
+                        {% if appt['meeting_type'] == 'zoom' %}
+                        <span class="badge bg-primary">
+                            <i class="bi bi-camera-video-fill me-1"></i>Zoom
+                        </span>
+                        {% elif appt['meeting_type'] == 'google-meet' %}
+                        <span class="badge" style="background: #65b741;">
+                            <i class="bi bi-camera-video-fill me-1"></i>Meet
+                        </span>
+                        {% else %}
+                        <span class="badge bg-success">
+                            <i class="bi bi-person-fill me-1"></i>{{ t('In-person') }}
+                        </span>
+                        {% endif %}
+                        {% if appt['meeting_link'] %}
+                        <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                            <i class="bi bi-box-arrow-up-right"></i> {{ t('Join') }}
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info small mb-0">
+                <i class="bi bi-info-circle me-2"></i>
+                {{ t('No upcoming sessions scheduled. Contact your therapist to book a session.') }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Active Goals -->
+    {% if goals %}
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-0">
+            <h6 class="fw-bold mb-0 text-primary">{{ t('Therapy Goals') }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="goals-list">
+                {% for goal in goals %}
+                <div class="goal-item">
+                    <div class="goal-checkbox">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="goal{{ goal['id'] }}" disabled>
+                            <label class="form-check-label" for="goal{{ goal['id'] }}">
+                                {{ goal['description'] }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Recent Notes -->
+{% if recent_notes %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0">
+        <h6 class="fw-bold mb-0 text-primary">{{ t('Session Notes') }}</h6>
+    </div>
+    <div class="card-body">
+        <div class="notes-timeline">
+            {% for note in recent_notes %}
+            <div class="note-entry">
+                <div class="note-date">
+                    {{ note['created_at']|from_iso_datetime|strftime('%b %d, %Y') }}
+                </div>
+                <div class="note-content">
+                    {% if note['key_topics'] %}
+                    <strong>{{ t('Topics') }}:</strong> {{ note['key_topics'] }}<br>
+                    {% endif %}
+                    {% if note['mood_summary'] %}
+                    <strong>{{ t('Mood') }}:</strong> {{ note['mood_summary'] }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* Engagement Dashboard Styles */
+.engagement-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.metric-card {
+    background: white;
+    border: 1px solid rgba(216, 225, 223, 0.85);
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.metric-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.metric-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.engagement-content-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+    .engagement-content-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Upcoming Appointments List */
+.upcoming-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.upcoming-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: #f9fbf9;
+    border-radius: 12px;
+    border-left: 4px solid #0f766e;
+}
+
+.upcoming-time {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+
+.date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    color: white;
+    border-radius: 8px;
+}
+
+.date-badge .day {
+    font-weight: 800;
+    font-size: 1.2rem;
+}
+
+.date-badge .month {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.upcoming-type {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Goals List */
+.goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.goal-item {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: #f0fdf4;
+    border-left: 3px solid #10b981;
+}
+
+.goal-checkbox label {
+    margin: 0;
+    cursor: pointer;
+    color: #1f2937;
+    font-weight: 500;
+}
+
+/* Notes Timeline */
+.notes-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: relative;
+}
+
+.notes-timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #0f766e, transparent);
+}
+
+.note-entry {
+    margin-left: 1.5rem;
+    position: relative;
+}
+
+.note-entry::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    background: #0f766e;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px #0f766e;
+}
+
+.note-date {
+    font-size: 0.85rem;
+    color: #0f766e;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.note-content {
+    font-size: 0.95rem;
+    color: #4b5563;
+    line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .engagement-metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .upcoming-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .upcoming-type {
+        width: 100%;
+    }
+}
+</style>
+
+{% endblock %}

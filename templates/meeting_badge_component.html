@@ -1,0 +1,211 @@
+<!-- Meeting Type Badge Component - Add to calendar events -->
+<template id="meetingBadgeTemplate">
+    <span class="meeting-badge" title="{{ meeting_type_title }}">
+        <i class="bi" data-type="{{ meeting_type }}"></i>
+        <span class="badge-label">{{ meeting_type_label }}</span>
+    </span>
+</template>
+
+<style>
+/* Meeting Type Indicators */
+.meeting-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-left: 0.5rem;
+    white-space: nowrap;
+}
+
+/* Zoom Badge */
+.meeting-badge[data-type="zoom"] {
+    background: #2563eb;
+    color: white;
+}
+
+.meeting-badge[data-type="zoom"] i::before {
+    content: "\f40f";  /* camera-video-fill */
+}
+
+/* Google Meet Badge */
+.meeting-badge[data-type="google-meet"] {
+    background: #65b741;
+    color: white;
+}
+
+.meeting-badge[data-type="google-meet"] i::before {
+    content: "\f40f";  /* video-icon */
+}
+
+/* In-person Badge */
+.meeting-badge[data-type="in-person"] {
+    background: #10b981;
+    color: white;
+}
+
+.meeting-badge[data-type="in-person"] i::before {
+    content: "\f2a6";  /* person-fill */
+}
+
+/* Event Enhancement for Meeting Type Display */
+.fc-event-title-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.fc-event-title {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* Quick action button in events */
+.event-quick-action {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.event-action-btn {
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    border: none;
+    background: rgba(255,255,255,0.3);
+    color: white;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: background 0.2s ease;
+}
+
+.event-action-btn:hover {
+    background: rgba(255,255,255,0.5);
+}
+
+/* Appointment status indicators */
+.appointment-status-badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 0.3rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.status-ongoing {
+    background: #3b82f6;
+}
+
+.status-candidate {
+    background: #f59e0b;
+}
+
+.status-archived {
+    background: #9ca3af;
+}
+
+/* Meeting link indicator */
+.has-meeting-link::after {
+    content: "🔗";
+    margin-left: 0.25rem;
+    cursor: help;
+    title: "Has meeting link";
+}
+</style>
+
+<script>
+/**
+ * Enhanced Calendar Meeting Display
+ * Shows meeting type badges and quick actions
+ */
+const MeetingTypeConfig = {
+    'zoom': {
+        icon: 'bi-camera-video-fill',
+        label: 'Zoom',
+        color: '#2563eb',
+        bgColor: 'rgba(37, 99, 235, 0.1)',
+        title: 'Zoom Meeting'
+    },
+    'google-meet': {
+        icon: 'bi-camera-video-fill',
+        label: 'Meet',
+        color: '#65b741',
+        bgColor: 'rgba(101, 183, 65, 0.1)',
+        title: 'Google Meet'
+    },
+    'in-person': {
+        icon: 'bi-person-fill',
+        label: 'In-person',
+        color: '#10b981',
+        bgColor: 'rgba(16, 185, 129, 0.1)',
+        title: 'In-person Meeting'
+    }
+};
+
+function createMeetingBadge(meetingType) {
+    if (!meetingType || !MeetingTypeConfig[meetingType]) return '';
+    
+    const config = MeetingTypeConfig[meetingType];
+    const badge = document.createElement('span');
+    badge.className = 'meeting-badge';
+    badge.style.backgroundColor = config.bgColor;
+    badge.style.borderLeft = `3px solid ${config.color}`;
+    badge.title = config.title;
+    
+    const icon = document.createElement('i');
+    icon.className = `bi ${config.icon}`;
+    icon.style.color = config.color;
+    
+    const label = document.createElement('span');
+    label.className = 'badge-label';
+    label.textContent = config.label;
+    label.style.color = config.color;
+    
+    badge.appendChild(icon);
+    badge.appendChild(label);
+    
+    return badge;
+}
+
+function enhanceEventDisplay(eventEl, eventData) {
+    if (!eventData || !eventData.extendedProps || !eventData.extendedProps.meta) return;
+    
+    const meta = eventData.extendedProps.meta;
+    const titleContainer = eventEl.querySelector('.fc-event-title-container');
+    
+    if (!titleContainer) return;
+    
+    // Add meeting type badge
+    if (meta.meeting_type) {
+        const badge = createMeetingBadge(meta.meeting_type);
+        if (badge) {
+            titleContainer.appendChild(badge);
+        }
+    }
+    
+    // Add status indicator for appointments
+    if (meta.type === 'appointment' && meta.patient_status) {
+        const indicator = document.createElement('span');
+        indicator.className = `appointment-status-badge status-${meta.patient_status}`;
+        indicator.title = meta.patient_status;
+        titleContainer.insertBefore(indicator, titleContainer.firstChild);
+    }
+}
+
+// Hook into FullCalendar's eventDidMount event
+function setupEventEnhancements(calendar) {
+    calendar.on('eventDidMount', function(info) {
+        enhanceEventDisplay(info.el, info.event);
+    });
+}
+</script>

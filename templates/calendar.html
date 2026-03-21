@@ -1230,8 +1230,17 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (platform === 'google-meet' || mtype === 'google-meet') {
                 icon = '<i class="bi bi-camera-video me-1" title="Google Meet"></i>';
             }
+            // Add color-coded meeting type badge
+            let meetingBadge = '';
+            if (mtype === 'zoom' || platform === 'zoom') {
+                meetingBadge = '<span class="badge ms-2" style="background: #2563eb; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-camera-video-fill" style="font-size: 0.7em; margin-right: 0.2rem;"></i>Zoom</span>';
+            } else if (mtype === 'google-meet' || platform === 'google-meet') {
+                meetingBadge = '<span class="badge ms-2" style="background: #65b741; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-camera-video" style="font-size: 0.7em; margin-right: 0.2rem;"></i>Meet</span>';
+            } else if (mtype === 'in-person') {
+                meetingBadge = '<span class="badge ms-2" style="background: #10b981; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-person-fill" style="font-size: 0.7em; margin-right: 0.2rem;"></i>In-person</span>';
+            }
             const timeText = arg.timeText ? `<div class="fc-event-time">${arg.timeText}</div>` : '';
-            const titleText = `<div class="fc-event-title">${recurringTag}${icon}${arg.event.title || ''}</div>`;
+            const titleText = `<div class="fc-event-title">${recurringTag}${icon}${arg.event.title || ''}${meetingBadge}</div>`;
             return { html: `<div class="fc-event-main-frame">${timeText}${titleText}</div>` };
         },
         selectMinDistance: 0,
