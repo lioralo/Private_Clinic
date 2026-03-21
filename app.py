@@ -3411,6 +3411,149 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
     return converted
 
 
+def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, horizon_weeks=12):
+    """Guarantee ongoing patients have at least one upcoming scheduled booking."""
+    today = reference_date or datetime.now().date()
+    now_time = datetime.now().time()
+
+    rows = db.execute('''
+        SELECT id, status, patient_type
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+          AND status = 'ongoing'
+    ''').fetchall()
+
+    created = 0
+    for patient in rows:
+        patient_id = int(patient['id'])
+        patient_type = (patient['patient_type'] or 'private').strip().lower()
+        if patient_type in ('initial-intake', 'diagnosee'):
+            continue
+
+        has_future = db.execute('''
+            SELECT 1
+            FROM appointments
+            WHERE patient_id = ?
+              AND COALESCE(status, 'scheduled') = 'scheduled'
+              AND appointment_date >= ?
+            LIMIT 1
+        ''', (patient_id, today.isoformat())).fetchone()
+        if has_future:
+            continue
+
+        latest = db.execute('''
+            SELECT *
+            FROM appointments
+            WHERE patient_id = ?
+            ORDER BY appointment_date DESC, appointment_time DESC, id DESC
+            LIMIT 1
+        ''', (patient_id,)).fetchone()
+        if not latest:
+            continue
+
+        base_date = parse_date_safe(latest['appointment_date'])
+        base_time = parse_time_safe(latest['appointment_time'])
+        if not base_date or not base_time:
+            continue
+
+        day_code = custom_weekday(base_date)
+        today_code = custom_weekday(today)
+        offset_days = (day_code - today_code) % 7
+        candidate_date = today + timedelta(days=offset_days)
+        if candidate_date == today and base_time <= now_time:
+            candidate_date += timedelta(days=7)
+
+        duration = int(latest['duration_minutes'] or 60)
+        if duration <= 0:
+            duration = 60
+
+        meeting_type = latest['meeting_type'] or 'in-person'
+        meeting_link = latest['meeting_link'] or None
+        meeting_title = latest['meeting_title'] or None
+        meeting_platform = latest['meeting_platform'] if 'meeting_platform' in latest.keys() else None
+        if not meeting_platform and meeting_type in ('zoom', 'google-meet'):
+            meeting_platform = meeting_type
+        save_to_google = int(latest['save_to_google'] or 0) if 'save_to_google' in latest.keys() else 0
+
+        booked = False
+        for week_step in range(0, max(1, horizon_weeks)):
+            booking_day = candidate_date + timedelta(days=week_step * 7)
+            start_dt = combine_dt(booking_day, base_time.strftime('%H:%M'))
+            end_dt = start_dt + timedelta(minutes=duration)
+
+            conflict = has_time_conflict(db, booking_day, start_dt, end_dt)
+            if conflict:
+                continue
+
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    meeting_type, meeting_link, meeting_platform, meeting_title,
+                    save_to_google, status, is_recurring, recurrence_interval,
+                    recurrence_days, recurrence_end_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
+            ''', (
+                patient_id,
+                booking_day.isoformat(),
+                base_time.strftime('%H:%M'),
+                duration,
+                meeting_type,
+                meeting_link,
+                meeting_platform,
+                meeting_title,
+                save_to_google,
+                str(day_code),
+                (booking_day + timedelta(days=365)).isoformat()
+            ))
+            created += 1
+            booked = True
+            break
+
+        if not booked:
+            continue
+
+    if created:
+        db.commit()
+    return created
+
+
+def ensure_default_recurring_vacancies(db):
+    """Seed baseline weekly vacancies when none exist so free slots stay visible."""
+    has_future_override = db.execute('''
+        SELECT 1
+        FROM slots_override
+        WHERE status = 'available' AND slot_date >= ?
+        LIMIT 1
+    ''', (datetime.now().date().isoformat(),)).fetchone()
+
+    has_recurring = db.execute('''
+        SELECT 1
+        FROM vacancy_recurring
+        WHERE COALESCE(is_active, 1) = 1
+        LIMIT 1
+    ''').fetchone()
+
+    if has_future_override or has_recurring:
+        return 0
+
+    # Sunday-Thursday baseline availability blocks.
+    default_slots = [
+        (0, '09:00', 60), (0, '15:00', 60),
+        (1, '09:00', 60), (1, '15:00', 60),
+        (2, '09:00', 60), (2, '15:00', 60),
+        (3, '09:00', 60), (3, '15:00', 60),
+        (4, '09:00', 60), (4, '15:00', 60),
+    ]
+    for weekday, slot_time, duration in default_slots:
+        db.execute('''
+            INSERT INTO vacancy_recurring (weekday, slot_time, duration_minutes, is_active)
+            VALUES (?, ?, ?, 1)
+        ''', (weekday, slot_time, duration))
+
+    db.commit()
+    return len(default_slots)
+
+
 def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=600):
     base_date = parse_date_safe(appt['appointment_date'])
     if not base_date:
@@ -4091,6 +4234,8 @@ def weekly_calendar():
     db = get_db()
     if current_user.role == 'admin':
         ensure_ongoing_recurrence_from_previous_week(db)
+        ensure_ongoing_patients_have_upcoming_bookings(db)
+        ensure_default_recurring_vacancies(db)
     patient_options = []
     can_self_schedule = False
     if current_user.role == 'admin':
@@ -5221,6 +5366,8 @@ def api_calendar_snapshot():
     db = get_db()
     if current_user.role == 'admin':
         ensure_ongoing_recurrence_from_previous_week(db, anchor)
+        ensure_ongoing_patients_have_upcoming_bookings(db, anchor)
+        ensure_default_recurring_vacancies(db)
     payload = build_week_calendar_snapshot(db, week_start, current_user)
     return jsonify(payload)
 
