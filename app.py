@@ -6044,13 +6044,10 @@ def seed_data():
     init_db()
     db = get_db()
 
-    # Keep sample data loading safe and repeatable.
-    existing_examples = db.execute(
-        "SELECT COUNT(*) AS count FROM patients WHERE name IN (?, ?, ?, ?)",
-        ('Maya Cohen', 'Daniel Levy', 'Noa Shapiro', 'Eran Mizrahi')
-    ).fetchone()['count']
-    if existing_examples > 0:
-        flash('Example patients are already loaded. No duplicate records were created.', 'info')
+    # Keep sample data loading safe and repeatable — skip if any patients exist.
+    existing_total = db.execute("SELECT COUNT(*) AS count FROM patients").fetchone()['count']
+    if existing_total > 0:
+        flash('Patient records already exist in the database. Seed data was not added.', 'info')
         return redirect(url_for('patients'))
 
     try:
