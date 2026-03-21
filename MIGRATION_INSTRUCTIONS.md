@@ -126,11 +126,12 @@ cd /opt/private_clinic
 Trigger a manual backup via the app's built-in backup endpoint (recommended):
 
 ```bash
-# Obtain a valid session cookie first, then call the backup endpoint
-COOKIE=$(curl -s -c /tmp/jar.txt -b /tmp/jar.txt -X POST \
+# Log in and save the session cookie jar
+curl -s -c /tmp/jar.txt -b /tmp/jar.txt -X POST \
   -d "username=<ADMIN_USER>&password=<ADMIN_PASS>" \
-  https://<BETA_DOMAIN>/login | grep -q "dashboard" && cat /tmp/jar.txt | grep session | awk '{print $NF}')
+  https://<BETA_DOMAIN>/login -o /dev/null
 
+# Trigger the backup using the saved cookie jar
 curl -s -b /tmp/jar.txt -X POST https://<BETA_DOMAIN>/admin/backup_now
 ```
 
@@ -536,10 +537,10 @@ cat data/secure_backups/.last_backup_at 2>/dev/null || echo "(not yet written)"
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml \
   exec app python3 - <<'PY'
-import sqlite3, os
+import sqlite3, os, getpass
 from werkzeug.security import generate_password_hash
 
-NEW_PASSWORD = input("Enter new admin password: ")
+NEW_PASSWORD = getpass.getpass("Enter new admin password: ")
 hashed = generate_password_hash(NEW_PASSWORD)
 db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
 db.execute("UPDATE users SET password_hash=?, force_password_change=0 WHERE role='admin'",
@@ -595,13 +596,20 @@ Recommended checks to set up once the application is live:
 | Disk usage | CloudWatch agent or cron: `df -h /opt/private_clinic/data` |
 | Backup freshness | Daily cron: check `data/secure_backups/.last_backup_at` is within 24 h |
 | Container status | `docker compose ps` scheduled alert via cron |
-| TLS certificate | Caddy renews automatically; verify with `curl -vI https://<LIVE_DOMAIN> 2>&1 \| grep expire` |
+| TLS certificate | Caddy renews automatically; verify with `curl -vI https://<LIVE_DOMAIN> 2>&1 | grep expire` |
 
 Example cron for backup-age alert (`crontab -e` on the live server):
 
 ```cron
-0 * * * * LAST=$(cat /opt/private_clinic/data/secure_backups/.last_backup_at 2>/dev/null); \
-  [ -z "$LAST" ] && echo "No backup timestamp found" | mail -s "Clinic backup alert" admin@example.com
+0 * * * * TIMESTAMP_FILE=/opt/private_clinic/data/secure_backups/.last_backup_at; \
+  if [ ! -f "$TIMESTAMP_FILE" ]; then \
+    echo "No backup timestamp found" | mail -s "Clinic backup alert" admin@example.com; \
+  else \
+    LAST=$(cat "$TIMESTAMP_FILE"); NOW=$(date +%s); \
+    AGE=$(( NOW - LAST )); \
+    [ "$AGE" -gt 86400 ] && echo "Last backup is over 24 h old (${AGE}s ago)" \
+      | mail -s "Clinic backup alert" admin@example.com; \
+  fi
 ```
 
 ---
@@ -657,12 +665,15 @@ sudo chown $USER:$USER data/clinic.db
 **Resolution:**
 
 ```bash
-# Try restoring from an older backup
+# List available backup files with timestamps to choose from
 ls -lh data/secure_backups/clinic_*.db.enc
 
-# Modify the restore script in Phase 4.4 to target a specific backup file:
+# Identify which backup you want to restore (files are named clinic_YYYYMMDD_HHMMSS.db.enc)
+# Then modify the restore script in Phase 4.4 to target that specific file, e.g.:
 files = sorted(f for f in os.listdir(backup_dir) if f.endswith(".db.enc"))
-latest = files[-2]   # use second-latest
+# Choose by index: -1 = latest, -2 = second-latest, etc.
+# Or specify directly:
+latest = "clinic_20260321_120000.db.enc"   # replace with the desired filename
 ```
 
 ---
