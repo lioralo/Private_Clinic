@@ -579,6 +579,9 @@ def _login_redirect_for_user(user_row):
     login_user(user_obj)
 
     if user_row['role'] == 'admin':
+        if not user_row['totp_enabled'] or not user_row['totp_secret']:
+            flash('Set up two-factor authentication from the admin profile before continuing.')
+            return redirect(url_for('admin_profile'))
         if user_row['force_password_change']:
             flash('Admin password must be changed before continuing.')
             return redirect(url_for('admin_profile'))
@@ -2674,8 +2677,7 @@ def login():
             if user['role'] == 'admin' and not app.config.get('TESTING'):
                 # Ensure admin has TOTP configured
                 if not user['totp_enabled'] or not user['totp_secret']:
-                    flash('Two-factor authentication must be configured for admin accounts. Contact system administrator.')
-                    return render_template('login.html')
+                    return _login_redirect_for_user(user)
                 
                 session['pending_2fa_user_id'] = int(user['id'])
                 session['pending_2fa_username'] = user['username']

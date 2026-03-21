@@ -1204,6 +1204,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
         height: 'auto',
@@ -1224,6 +1233,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const platform = meta.meeting_platform || '';
             const mtype = meta.meeting_type || '';
             const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
+            const patientOrTitle = meta.patient_name || arg.event.title || '';
+            const safePrimaryLabel = escapeHtml(patientOrTitle);
             let icon = '';
             if (platform === 'zoom' || mtype === 'zoom') {
                 icon = '<i class="bi bi-camera-video-fill me-1" title="Zoom meeting"></i>';
@@ -1240,8 +1251,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 meetingBadge = '<span class="badge ms-2" style="background: #10b981; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-person-fill" style="font-size: 0.7em; margin-right: 0.2rem;"></i>In-person</span>';
             }
             const timeText = arg.timeText ? `<div class="fc-event-time">${arg.timeText}</div>` : '';
-            const titleText = `<div class="fc-event-title">${recurringTag}${icon}${arg.event.title || ''}${meetingBadge}</div>`;
-            return { html: `<div class="fc-event-main-frame">${timeText}${titleText}</div>` };
+            const titleText = `<div class="fc-event-title fc-event-title-primary" title="${safePrimaryLabel}">${recurringTag}${icon}<span class="fc-event-patient-name">${safePrimaryLabel}</span></div>`;
+            const badgeRow = meetingBadge ? `<div class="fc-event-badge-row">${meetingBadge}</div>` : '';
+            return { html: `<div class="fc-event-main-frame">${timeText}${titleText}${badgeRow}</div>` };
         },
         selectMinDistance: 0,
         selectLongPressDelay: 0,

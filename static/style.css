@@ -721,6 +721,12 @@ footer {
     padding: 0.3rem 0.45rem;
 }
 
+#weeklyCalendar .fc-event-main-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
 #weeklyCalendar .fc-col-header-cell-cushion,
 #weeklyCalendar .fc-timegrid-axis-cushion,
 #weeklyCalendar .fc-timegrid-slot-label-cushion {
@@ -739,6 +745,30 @@ footer {
     font-family: 'Manrope', 'Segoe UI', sans-serif;
     font-weight: 700;
     letter-spacing: 0.1px;
+}
+
+#weeklyCalendar .fc-event-title-primary {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    line-height: 1.2;
+}
+
+#weeklyCalendar .fc-event-patient-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#weeklyCalendar .fc-event-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+}
+
+#weeklyCalendar .fc-event-badge-row .badge {
+    margin-left: 0 !important;
 }
 
 .slot-day-details summary {

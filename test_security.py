@@ -45,7 +45,7 @@ class SecurityTestCase(unittest.TestCase):
             password='admin'
         ), follow_redirects=False)
         self.assertEqual(rv.status_code, 302)
-        self.assertIn('/patients', rv.headers.get('Location', ''))
+        self.assertIn('/admin/profile', rv.headers.get('Location', ''))
 
     def test_login_invalid_credentials(self):
         rv = self.client.post('/login', data=dict(
@@ -62,12 +62,30 @@ class SecurityTestCase(unittest.TestCase):
         self.assertIn(b'Account is disabled. Contact administrator.', rv.data)
 
     def test_admin_totp_login_prompts_second_step(self):
-        rv = self.client.post('/login', data=dict(
-            username='totp_admin',
-            password='admin'
-        ), follow_redirects=True)
+        app.config['TESTING'] = False
+        try:
+            rv = self.client.post('/login', data=dict(
+                username='totp_admin',
+                password='admin'
+            ), follow_redirects=True)
+        finally:
+            app.config['TESTING'] = True
         self.assertEqual(rv.status_code, 200)
-        self.assertIn(b'Two-step verification required', rv.data)
+        self.assertIn(b'name="otp_code"', rv.data)
+        self.assertIn(b'totp_admin', rv.data)
+
+    def test_admin_without_totp_is_redirected_to_profile_setup(self):
+        app.config['TESTING'] = False
+        try:
+            rv = self.client.post('/login', data=dict(
+                username='admin',
+                password='admin'
+            ), follow_redirects=False)
+        finally:
+            app.config['TESTING'] = True
+
+        self.assertEqual(rv.status_code, 302)
+        self.assertIn('/admin/profile', rv.headers.get('Location', ''))
 
     def test_admin_totp_login_with_valid_code_redirects(self):
         with app.app_context():
@@ -76,10 +94,14 @@ class SecurityTestCase(unittest.TestCase):
         self.assertIsNotNone(row)
         code = pyotp.TOTP(row['totp_secret']).now()
 
-        first = self.client.post('/login', data=dict(
-            username='totp_admin',
-            password='admin'
-        ), follow_redirects=False)
+        app.config['TESTING'] = False
+        try:
+            first = self.client.post('/login', data=dict(
+                username='totp_admin',
+                password='admin'
+            ), follow_redirects=False)
+        finally:
+            app.config['TESTING'] = True
         self.assertEqual(first.status_code, 200)
 
         second = self.client.post('/login', data=dict(
