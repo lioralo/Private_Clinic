@@ -18,6 +18,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import re
+import pyotp
 from docx import Document
 from datetime import datetime, timedelta
 
@@ -552,6 +553,40 @@ def close_connection(exception):
         db.close()
 
 
+def _verify_totp_code(secret, candidate_code):
+    if not secret:
+        return False
+    normalized = re.sub(r'\s+', '', str(candidate_code or ''))
+    if not normalized.isdigit():
+        return False
+    return pyotp.TOTP(secret).verify(normalized, valid_window=1)
+
+
+def _admin_totp_uri(user_row, secret):
+    issuer = 'Private Clinic CRM'
+    account = user_row['username']
+    return pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
+
+
+def _login_redirect_for_user(user_row):
+    user_obj = User(
+        user_row['id'],
+        user_row['username'],
+        user_row['role'],
+        user_row['patient_id'],
+        user_row['display_name']
+    )
+    login_user(user_obj)
+
+    if user_row['role'] == 'admin':
+        if user_row['force_password_change']:
+            flash('Admin password must be changed before continuing.')
+            return redirect(url_for('admin_profile'))
+        return redirect(url_for('patients'))
+
+    return redirect(url_for('patient_home'))
+
+
 def _get_or_create_backup_key():
     key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
     if key:
@@ -995,6 +1030,18 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         try:
+            db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
             db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
         except sqlite3.OperationalError:
             pass
@@ -1278,18 +1325,34 @@ def init_db():
         db.commit()
 
         # Check if admin exists
-        admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
+        admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
         if not admin:
             print("Creating default admin user...")
-            hashed_pw = generate_password_hash('admin')
+            hashed_pw = generate_password_hash('12345')
             db.execute(
-                "INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                ('admin', hashed_pw, 'admin'),
+                "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
+                ('lioraloni', hashed_pw, 'admin', 1)
             )
             db.commit()
-            admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
-            if admin:
-                print("Admin user created (username: admin, password: admin).")
+            print("Admin user created (username: lioraloni, password: 12345).")
+            admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
+
+        # One-time migration from legacy default admin credentials.
+        legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
+        if legacy_admin:
+            collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
+            if not collision:
+                db.execute(
+                    '''
+                    UPDATE users
+                    SET username = ?, password_hash = ?, force_password_change = ?
+                    WHERE id = ?
+                    ''',
+                    ('lioraloni', generate_password_hash('12345'), 1, legacy_admin['id'])
+                )
+                db.commit()
+                admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
+                print('Legacy admin account migrated to lioraloni.')
 
         if admin and not admin['display_name']:
             db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
@@ -2394,7 +2457,42 @@ def assign_resource(patient_id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if current_user.is_authenticated:
+        if current_user.role == 'admin':
+            return redirect(url_for('patients'))
+        return redirect(url_for('patient_home'))
+
+    pending_user_id = session.get('pending_2fa_user_id')
+    pending_username = session.get('pending_2fa_username', '')
+
     if request.method == 'POST':
+        otp_code = (request.form.get('otp_code') or '').strip()
+        if pending_user_id and otp_code:
+            db = get_db()
+            pending_user = db.execute('SELECT * FROM users WHERE id = ?', (pending_user_id,)).fetchone()
+            if not pending_user or not pending_user['is_active']:
+                session.pop('pending_2fa_user_id', None)
+                session.pop('pending_2fa_username', None)
+                flash('Login session expired. Please sign in again.')
+                return redirect(url_for('login'))
+
+            if not pending_user['totp_enabled'] or not pending_user['totp_secret']:
+                session.pop('pending_2fa_user_id', None)
+                session.pop('pending_2fa_username', None)
+                flash('Authenticator is not configured for this admin account.')
+                return redirect(url_for('login'))
+
+            if _verify_totp_code(pending_user['totp_secret'], otp_code):
+                session.pop('pending_2fa_user_id', None)
+                session.pop('pending_2fa_username', None)
+                return _login_redirect_for_user(pending_user)
+
+            flash('Invalid authenticator code.')
+            return render_template('login.html', requires_otp=True, pending_username=pending_username)
+
+        session.pop('pending_2fa_user_id', None)
+        session.pop('pending_2fa_username', None)
+
         username = request.form['username']
         password = request.form['password']
         db = get_db()
@@ -2405,14 +2503,18 @@ def login():
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
 
-            user_obj = User(user['id'], user['username'], user['role'], user['patient_id'])
-            login_user(user_obj)
-            if user['role'] == 'admin':
-                return redirect(url_for('patients'))
-            else:
-                return redirect(url_for('patient_home'))
+            if user['role'] == 'admin' and user['totp_enabled'] and user['totp_secret']:
+                session['pending_2fa_user_id'] = int(user['id'])
+                session['pending_2fa_username'] = user['username']
+                flash('Enter your authenticator code to complete login.')
+                return render_template('login.html', requires_otp=True, pending_username=user['username'])
+
+            return _login_redirect_for_user(user)
         else:
             flash('Invalid username or password')
+
+    if pending_user_id:
+        return render_template('login.html', requires_otp=True, pending_username=pending_username)
 
     return render_template('login.html')
 
@@ -6739,7 +6841,105 @@ def admin_profile():
         return redirect(url_for('admin_profile'))
 
     backup_files = list_encrypted_backups()
-    return render_template('admin_profile.html', admin=admin, backup_files=backup_files)
+    pending_secret = session.get('pending_totp_secret')
+    totp_uri = _admin_totp_uri(admin, pending_secret) if pending_secret else None
+    return render_template(
+        'admin_profile.html',
+        admin=admin,
+        backup_files=backup_files,
+        pending_totp_secret=pending_secret,
+        totp_uri=totp_uri,
+        totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
+    )
+
+
+@app.route('/admin/setup_authenticator', methods=['POST'])
+@login_required
+def setup_authenticator():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if not admin:
+        return 'Admin not found', 404
+
+    action = (request.form.get('action') or '').strip().lower()
+    if action == 'start':
+        session['pending_totp_secret'] = pyotp.random_base32()
+        flash('Authenticator setup started. Scan the QR code and verify with a code.')
+        return redirect(url_for('admin_profile'))
+
+    if action == 'disable':
+        db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?', (current_user.id,))
+        db.commit()
+        session.pop('pending_totp_secret', None)
+        flash('Authenticator login has been disabled.')
+        return redirect(url_for('admin_profile'))
+
+    if action == 'verify':
+        pending_secret = session.get('pending_totp_secret')
+        otp_code = (request.form.get('otp_code') or '').strip()
+        if not pending_secret:
+            flash('Start setup first, then verify your code.')
+            return redirect(url_for('admin_profile'))
+        if not _verify_totp_code(pending_secret, otp_code):
+            flash('Invalid authenticator code. Please try again.')
+            return redirect(url_for('admin_profile'))
+
+        db.execute('UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?', (pending_secret, current_user.id))
+        db.commit()
+        session.pop('pending_totp_secret', None)
+        flash('Authenticator has been enabled for admin login.')
+        return redirect(url_for('admin_profile'))
+
+    flash('Invalid authenticator action.')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/change_password', methods=['POST'])
+@login_required
+def admin_change_password():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if not admin:
+        return 'Admin not found', 404
+
+    current_password = (request.form.get('current_password') or '').strip()
+    new_password = (request.form.get('new_password') or '').strip()
+    confirm_password = (request.form.get('confirm_password') or '').strip()
+    otp_code = (request.form.get('otp_code') or '').strip()
+
+    if not check_password_hash(admin['password_hash'], current_password):
+        flash('Current password is incorrect.')
+        return redirect(url_for('admin_profile'))
+
+    if len(new_password) < 5:
+        flash('New password must include at least 5 characters.')
+        return redirect(url_for('admin_profile'))
+
+    if new_password != confirm_password:
+        flash('New password confirmation does not match.')
+        return redirect(url_for('admin_profile'))
+
+    if not admin['totp_enabled'] or not admin['totp_secret']:
+        flash('Enable authenticator first to change the admin password.')
+        return redirect(url_for('admin_profile'))
+
+    if not _verify_totp_code(admin['totp_secret'], otp_code):
+        flash('Invalid authenticator code. Password was not changed.')
+        return redirect(url_for('admin_profile'))
+
+    db.execute(
+        'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
+        (generate_password_hash(new_password), current_user.id)
+    )
+    db.commit()
+    flash('Admin password updated successfully.')
+    return redirect(url_for('admin_profile'))
 
 
 @app.route('/admin/backup_now', methods=['POST'])

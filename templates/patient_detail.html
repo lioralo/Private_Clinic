@@ -1,6 +1,9 @@
 {% extends 'layout.html' %}
 
 {% block content %}
+<div class="alert alert-warning mobile-readonly-banner d-none" role="alert">
+    <i class="bi bi-phone me-1"></i>{{ 'Mobile read mode is active. Editing actions are limited on this screen.' if lang == 'en' else 'מצב קריאה בנייד פעיל. פעולות עריכה מוגבלות במסך זה.' }}
+</div>
 <div class="row patient-page-shell g-4">
     <div class="col-xl-9 order-2 order-xl-1">
         <!-- Patient Summary Card -->
@@ -62,7 +65,7 @@
             </li>
         </ul>
 
-        <div class="tab-content" id="patientTabsContent">
+        <div class="tab-content mobile-edit-lock" id="patientTabsContent">
             <!-- SUMMARY TAB -->
             <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
                 <div class="row">
@@ -1473,6 +1476,16 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const mobileQuery = window.matchMedia('(max-width: 575.98px)');
+    if (mobileQuery.matches) {
+        document.body.classList.add('mobile-read-mode');
+        document.querySelectorAll('#patientTabsContent form[method="post"]').forEach((form) => {
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+            });
+        });
+    }
+
     const tabs = document.querySelectorAll('#patientTabs button[data-bs-toggle="tab"]');
     const messagesUnreadBadge = document.getElementById('messagesUnreadBadge');
     const intakeEvaluationFormBlock = document.getElementById('intakeEvaluationFormBlock');

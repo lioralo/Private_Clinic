@@ -24,7 +24,7 @@
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
-        <div class="container">
+        <div class="container-fluid app-container px-3 px-xl-4">
             <a class="navbar-brand d-flex align-items-center" href="{% if current_user.is_authenticated and current_user.role == 'admin' %}{{ url_for('crm_dashboard') }}{% else %}{{ url_for('index') }}{% endif %}">
                 <i class="bi bi-heart-pulse-fill me-2"></i> CLINIC CRM
             </a>
@@ -133,7 +133,7 @@
         </div>
     </nav>
 
-    <main class="container app-shell mb-5">
+    <main class="container-fluid app-container app-shell mb-5 px-3 px-xl-4">
         {% for message in get_flashed_messages() %}
             <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm" role="alert">
                 <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
@@ -145,7 +145,7 @@
     </main>
 
     <footer class="py-4 mt-auto">
-        <div class="container text-center">
+        <div class="container-fluid app-container text-center px-3 px-xl-4">
              <span class="text-muted small">© 2026 Private Psychotherapy Clinic. Calm operations for modern care.</span>
         </div>
     </footer>

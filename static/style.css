@@ -41,6 +41,11 @@ body {
     flex-direction: column;
 }
 
+.app-container {
+    width: min(1840px, 100%);
+    margin-inline: auto;
+}
+
 [dir="rtl"] body {
     font-family: 'Heebo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-weight: 500;
@@ -750,5 +755,32 @@ footer {
 
     .patient-actions-panel .card-body {
         grid-template-columns: 1fr;
+    }
+
+    .mobile-readonly-banner {
+        display: block !important;
+    }
+
+    .list-group-item .text-truncate {
+        white-space: normal !important;
+        word-break: break-word;
+    }
+
+    .tab-content .card-body {
+        padding: 1rem !important;
+    }
+
+    .tab-content .small,
+    .tab-content .smallest {
+        font-size: 0.9rem !important;
+        line-height: 1.45;
+    }
+
+    .mobile-read-mode .mobile-edit-lock .btn,
+    .mobile-read-mode .mobile-edit-lock input,
+    .mobile-read-mode .mobile-edit-lock select,
+    .mobile-read-mode .mobile-edit-lock textarea {
+        pointer-events: none;
+        opacity: 0.7;
     }
 }

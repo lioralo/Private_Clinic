@@ -2,6 +2,42 @@
 
 ---
 
+## Session 29
+
+**Date:** March 21, 2026
+
+**Objective:** Harden admin security, create a fresh full-data encrypted backup, and improve desktop/mobile usability.
+
+**Release Summary:**
+
+1. **Full Data Backup Confirmed**
+- Created a fresh encrypted backup bundle: `secure_backups/clinic_20260321_100600.db.enc`.
+- Backup bundle flow includes DB + local artifacts (`static/uploads`, `patients_logs`, and `app_log.txt`) for migration-safe restore.
+
+2. **Admin Credentials + Security Upgrades**
+- Default admin bootstrap/migration now targets username `lioraloni` with initial password `12345`.
+- Added admin Google Authenticator flow using TOTP:
+  - setup start,
+  - QR/manual secret display,
+  - verification,
+  - optional disable.
+- Login now supports 2-step verification for admin accounts with authenticator enabled.
+- Added admin password-change endpoint requiring current password + valid authenticator code.
+- Added `users` security fields in schema/migrations: `totp_secret`, `totp_enabled`, `force_password_change`.
+
+3. **UI Improvements (Desktop + Mobile)**
+- Expanded effective site width for desktop via shared app container sizing in layout.
+- Improved mobile readability for patient records/file names.
+- Added mobile read-mode behavior on patient detail screens that limits editing actions while preserving reading/navigation.
+
+4. **Tests Updated And Verified**
+- Updated app tests for new default admin credentials.
+- Added security tests for TOTP second-step login.
+- Test results:
+  - `python test_security.py` passed (`5` tests)
+  - `python test_app.py` passed (`50` tests)
+
+
 ## Session 28
 
 **Date:** March 17, 2026

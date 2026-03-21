@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import os
+import pyotp
 from app import app, get_db
 
 class SecurityTestCase(unittest.TestCase):
@@ -21,12 +22,16 @@ class SecurityTestCase(unittest.TestCase):
 
             from werkzeug.security import generate_password_hash
             db.execute(
-                "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)",
-                ('admin', generate_password_hash('admin'), 'admin', 1)
+                "INSERT INTO users (username, password_hash, role, is_active, force_password_change) VALUES (?, ?, ?, ?, ?)",
+                ('admin', generate_password_hash('admin'), 'admin', 1, 0)
             )
             db.execute(
                 "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)",
                 ('disabled_admin', generate_password_hash('admin'), 'admin', 0)
+            )
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, is_active, totp_secret, totp_enabled, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ('totp_admin', generate_password_hash('admin'), 'admin', 1, pyotp.random_base32(), 1, 0)
             )
             db.commit()
 
@@ -55,6 +60,33 @@ class SecurityTestCase(unittest.TestCase):
             password='admin'
         ), follow_redirects=True)
         self.assertIn(b'Account is disabled. Contact administrator.', rv.data)
+
+    def test_admin_totp_login_prompts_second_step(self):
+        rv = self.client.post('/login', data=dict(
+            username='totp_admin',
+            password='admin'
+        ), follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Two-step verification required', rv.data)
+
+    def test_admin_totp_login_with_valid_code_redirects(self):
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT totp_secret FROM users WHERE username = ?', ('totp_admin',)).fetchone()
+        self.assertIsNotNone(row)
+        code = pyotp.TOTP(row['totp_secret']).now()
+
+        first = self.client.post('/login', data=dict(
+            username='totp_admin',
+            password='admin'
+        ), follow_redirects=False)
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post('/login', data=dict(
+            otp_code=code
+        ), follow_redirects=False)
+        self.assertEqual(second.status_code, 302)
+        self.assertIn('/patients', second.headers.get('Location', ''))
 
 if __name__ == '__main__':
     unittest.main()
