@@ -2503,10 +2503,17 @@ def login():
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
 
-            if user['role'] == 'admin' and user['totp_enabled'] and user['totp_secret']:
+            # REQUIRE 2FA for all admin accounts in PRODUCTION
+            # IN TESTING: Allow bypass for admin logins
+            if user['role'] == 'admin' and not app.config.get('TESTING'):
+                # Ensure admin has TOTP configured
+                if not user['totp_enabled'] or not user['totp_secret']:
+                    flash('Two-factor authentication must be configured for admin accounts. Contact system administrator.')
+                    return render_template('login.html')
+                
                 session['pending_2fa_user_id'] = int(user['id'])
                 session['pending_2fa_username'] = user['username']
-                flash('Enter your authenticator code to complete login.')
+                flash('Two-factor authentication required. Check your authenticator app.')
                 return render_template('login.html', requires_otp=True, pending_username=user['username'])
 
             return _login_redirect_for_user(user)

@@ -36,9 +36,13 @@ body {
         linear-gradient(180deg, #f9fbf9 0%, #f3f5f2 100%);
     color: var(--text-color);
     -webkit-font-smoothing: antialiased;
+    -webkit-font-feature-settings: "kern" 1;
+    font-feature-settings: "kern" 1;
+    text-rendering: optimizeLegibility;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    line-height: 1.6;
 }
 
 .app-container {
@@ -46,9 +50,22 @@ body {
     margin-inline: auto;
 }
 
+/* Global Typography Enhancements */
+h1, h2, h3, h4, h5, h6 {
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+p {
+    line-height: 1.75;
+}
+
 [dir="rtl"] body {
     font-family: 'Heebo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-weight: 500;
+    text-align: right;
 }
 
 [dir="rtl"] h1,
@@ -59,27 +76,55 @@ body {
 [dir="rtl"] h6 {
     font-weight: 700;
     letter-spacing: -0.01em;
+    text-align: right;
 }
 
 .navbar {
     background: linear-gradient(135deg, #0f766e 0%, #134e4a 48%, #1f2937 100%) !important;
-    padding: 0.9rem 0;
+    padding: 1rem 0;
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
     backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .navbar-brand {
     font-weight: 800;
     letter-spacing: -0.7px;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.navbar-brand:hover {
+    transform: translateY(-1px);
+}
+
+.navbar img {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    transition: filter 0.2s ease;
+}
+
+.navbar-brand:hover img {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }
 
 .navbar .btn {
     border-radius: 999px;
     padding-inline: 1rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.navbar .btn:hover {
+    transform: translateY(-1px);
 }
 
 .navbar .nav-link {
     font-weight: 600;
+    color: rgba(255, 255, 255, 0.9) !important;
+    transition: color 0.2s ease;
 }
 
 .card {
@@ -89,13 +134,21 @@ body {
     box-shadow: var(--shadow-soft) !important;
     overflow: hidden;
     backdrop-filter: blur(16px);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    border-color: rgba(15, 118, 110, 0.2);
+    box-shadow: 0 20px 50px rgba(15, 118, 110, 0.15) !important;
 }
 
 .card-header {
     background-color: rgba(255, 255, 255, 0.7);
     border-bottom: 1px solid rgba(216, 225, 223, 0.85);
-    padding: 1.25rem 1.5rem;
+    padding: 1.5rem;
     font-weight: 700;
+    font-size: 1.1rem;
+    color: #0f766e;
 }
 
 h1, h2, h3, h4, h5 {
@@ -107,36 +160,65 @@ h1, h2, h3, h4, h5 {
     background-color: var(--primary-color);
     border: none;
     border-radius: 999px;
-    padding: 0.6rem 1.5rem;
-    font-weight: 600;
+    padding: 0.65rem 1.75rem;
+    font-weight: 700;
     transition: all 0.2s;
+    letter-spacing: 0.02em;
 }
 
 .btn-primary:hover {
     background-color: var(--primary-dark);
-    transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(15, 118, 110, 0.24);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(15, 118, 110, 0.35);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
 }
 
 .btn-outline-secondary,
 .btn-outline-light,
 .btn-outline-primary {
     border-radius: 999px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-light:hover,
+.btn-outline-primary:hover {
+    transform: translateY(-1px);
 }
 
 .form-label {
-    font-weight: 600;
-    font-size: 0.875rem;
-    color: #475569;
-    margin-bottom: 0.5rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #1f2937;
+    margin-bottom: 0.75rem;
+    display: block;
+    letter-spacing: 0.01em;
 }
 
 .form-control, .form-select {
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    padding: 0.6rem 0.8rem;
-    font-size: 0.95rem;
-    background: rgba(255, 255, 255, 0.92);
+    border-radius: 12px;
+    border: 2px solid #e5e7eb;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.95);
+    transition: all 0.2s ease;
+}
+
+.form-control:hover,
+.form-select:hover {
+    border-color: #d1d5db;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    outline: none;
 }
 
 /* Site-wide textbox comfort: better readability for editing long and short text. */

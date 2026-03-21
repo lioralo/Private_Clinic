@@ -1,75 +1,451 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="row justify-content-center py-5">
-    <div class="col-md-5 col-lg-4">
-        <div class="text-center mb-4">
-            <div class="bg-primary d-inline-block p-3 rounded-circle shadow-sm mb-3">
-                <i class="bi bi-shield-lock-fill text-white fs-2"></i>
-            </div>
-            <h3 class="fw-bold">{{ t('Welcome Back') }}</h3>
-            <p class="text-muted small">{{ t('Please sign in to access the clinic CRM') }}</p>
-        </div>
+<div class="login-container">
+    <div class="login-wrapper">
+        <!-- Premium Gradient Background -->
+        <div class="login-background"></div>
         
-        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="card-body p-4 p-lg-5">
-                <form method="post">
+        <!-- Login Card -->
+        <div class="login-card">
+            <!-- Logo & Branding -->
+            <div class="login-header">
+                <div class="logo-wrapper">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Lior Aloni Clinic Logo" class="clinic-logo">
+                </div>
+                <h1 class="clinic-name">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
+                <p class="clinic-tagline">{% if lang == 'he' %}קליניק בריאות וטיפול{% else %}Health & Wellness Clinic{% endif %}</p>
+            </div>
+
+            <!-- Form Container -->
+            <div class="login-form-wrapper">
+                <form method="post" class="login-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
                     {% if requires_otp %}
-                    <div class="alert alert-warning small mb-3">
-                        <i class="bi bi-shield-lock me-1"></i>
-                        {{ t('Two-step verification required') }}{% if pending_username %}: <strong>{{ pending_username }}</strong>{% endif %}
-                    </div>
-                    <div class="mb-4">
-                        <label for="otp_code" class="form-label text-uppercase smallest fw-bold tracking-wider">{{ t('Authenticator Code') }}</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-phone"></i></span>
-                            <input type="text" inputmode="numeric" autocomplete="one-time-code" class="form-control bg-light border-start-0 ps-0" id="otp_code" name="otp_code" placeholder="123456" required autofocus>
+                    <!-- 2FA Verification Form -->
+                    <div class="form-section">
+                        <div class="security-alert">
+                            <div class="security-icon">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <div class="security-text">
+                                <p class="security-title">{{ t('Two-Factor Authentication') }}</p>
+                                <p class="security-subtitle">
+                                    {% if pending_username %}
+                                        {{ t('Signing in as') }} <strong>{{ pending_username }}</strong>
+                                    {% endif %}
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-pill">
-                            {{ t('Verify & Sign In') }} <i class="bi bi-check2-circle ms-2"></i>
+
+                        <div class="form-group">
+                            <label for="otp_code" class="form-label">
+                                <i class="bi bi-phone me-2"></i>{{ t('Authenticator Code') }}
+                            </label>
+                            <input 
+                                type="text" 
+                                inputmode="numeric" 
+                                autocomplete="one-time-code" 
+                                class="form-control form-control-lg authenticator-input" 
+                                id="otp_code" 
+                                name="otp_code" 
+                                placeholder="000 000" 
+                                maxlength="6"
+                                required 
+                                autofocus>
+                            <small class="form-text">Enter the 6-digit code from your authenticator app</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-verify w-100">
+                            <i class="bi bi-check-circle me-2"></i>{{ t('Verify & Sign In') }}
                         </button>
-                        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary rounded-pill">{{ t('Use different credentials') }}</a>
+
+                        <a href="{{ url_for('login') }}" class="btn btn-link btn-sm w-100 mt-2">
+                            <i class="bi bi-arrow-left me-1"></i>{{ t('Use different credentials') }}
+                        </a>
                     </div>
+                    
                     {% else %}
-                    <div class="mb-3">
-                        <label for="username" class="form-label text-uppercase smallest fw-bold tracking-wider">{{ t('Username') }}</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="username" name="username" placeholder="{{ t('Enter username') }}" required autofocus>
+                    <!-- Username & Password Form -->
+                    <div class="form-section">
+                        <p class="welcome-text">{{ t('Welcome Back to Your Clinic Portal') }}</p>
+
+                        <div class="form-group">
+                            <label for="username" class="form-label">
+                                <i class="bi bi-person me-2"></i>{{ t('Username') }}
+                            </label>
+                            <input 
+                                type="text" 
+                                class="form-control form-control-lg" 
+                                id="username" 
+                                name="username" 
+                                placeholder="{{ t('Enter your username') }}" 
+                                required 
+                                autofocus>
                         </div>
-                    </div>
-                    <div class="mb-4">
-                        <div class="d-flex justify-content-between">
-                            <label for="password" class="form-label text-uppercase smallest fw-bold tracking-wider">{{ t('Password') }}</label>
-                            <a href="#" class="smallest text-decoration-none fw-bold">{{ t('Forgot?') }}</a>
+
+                        <div class="form-group">
+                            <label for="password" class="form-label">
+                                <i class="bi bi-key me-2"></i>{{ t('Password') }}
+                            </label>
+                            <input 
+                                type="password" 
+                                class="form-control form-control-lg" 
+                                id="password" 
+                                name="password" 
+                                placeholder="••••••••" 
+                                required>
                         </div>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-key"></i></span>
-                            <input type="password" class="form-control bg-light border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required>
-                        </div>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-pill">
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-signin w-100">
                             {{ t('Sign In') }} <i class="bi bi-arrow-right ms-2"></i>
                         </button>
                     </div>
                     {% endif %}
                 </form>
+
+                <!-- Footer Links -->
+                <div class="login-footer">
+                    {% if not requires_otp %}
+                    <p class="footer-text">
+                        {{ t('New patient?') }} 
+                        <a href="{{ url_for('register') }}" class="footer-link">{{ t('Register here') }}</a>
+                    </p>
+                    {% endif %}
+                    <p class="security-info">
+                        <i class="bi bi-shield-lock me-1"></i>
+                        HIPAA Compliant Secure Portal
+                    </p>
+                </div>
             </div>
         </div>
-        <p class="text-center mt-4 text-muted smallest">
-            {{ t('New patient?') }} <a href="{{ url_for('register') }}">{{ t('Register here') }}</a>.
-        </p>
-        <p class="text-center mt-2 text-muted smallest">
-            Secure HIPAA compliant portal access.
-        </p>
     </div>
 </div>
 
 <style>
+/* Login Page Styles */
+.login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+    background: linear-gradient(135deg, #0f766e 0%, #134e4a 50%, #164e63 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.login-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.login-wrapper {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 480px;
+}
+
+.login-card {
+    background: white;
+    border-radius: 28px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25), 0 0 100px rgba(15, 118, 110, 0.12);
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+}
+
+/* Header Section */
+.login-header {
+    background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%);
+    padding: 3.5rem 2rem 2.5rem;
+    text-align: center;
+    color: white;
+}
+
+.logo-wrapper {
+    margin-bottom: 1.5rem;
+}
+
+.clinic-logo {
+    height: 80px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+}
+
+.clinic-name {
+    font-size: 2rem;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.clinic-tagline {
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin: 0.5rem 0 0;
+    opacity: 0.95;
+    letter-spacing: 0.02em;
+}
+
+/* Form Section */
+.login-form-wrapper {
+    padding: 2.5rem 2rem;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.welcome-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #0f766e;
+    margin: 0;
+    text-align: center;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+}
+
+.form-label i {
+    color: #0f766e;
+    font-size: 1.1rem;
+}
+
+.form-control {
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    background-color: #fafafa;
+}
+
+.form-control:focus {
+    border-color: #0f766e;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+    outline: none;
+}
+
+.form-control::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.form-control-lg {
+    height: 3.125rem;
+    font-size: 1.05rem;
+}
+
+.authenticator-input {
+    font-size: 1.5rem;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+    text-align: center;
+}
+
+.form-text {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
+
+/* Security Alert */
+.security-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    border: 2px solid #d1fae5;
+    border-radius: 16px;
+    margin-bottom: 0.5rem;
+}
+
+.security-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: #10b981;
+    border-radius: 12px;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+    color: white;
+}
+
+.security-text {
+    flex: 1;
+}
+
+.security-title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #047857;
+    margin: 0;
+}
+
+.security-subtitle {
+    font-size: 0.9rem;
+    color: #059669;
+    margin: 0.25rem 0 0;
+}
+
+/* Buttons */
+.btn-signin,
+.btn-verify {
+    background: linear-gradient(135deg, #0f766e 0%, #134e4a 100%);
+    border: none;
+    border-radius: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    transition: all 0.3s ease;
+    padding: 0.875rem 1.5rem;
+    font-size: 1.05rem;
+    color: white;
+}
+
+.btn-signin:hover,
+.btn-verify:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(15, 118, 110, 0.4);
+}
+
+.btn-signin:active,
+.btn-verify:active {
+    transform: translateY(0);
+}
+
+.btn-link {
+    color: #0f766e;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-link:hover {
+    color: #134e4a;
+    transform: translateX(-2px);
+}
+
+/* Footer */
+.login-footer {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1.5rem;
+    text-align: center;
+}
+
+.footer-text {
+    font-size: 0.95rem;
+    color: #4b5563;
+    margin: 0;
+}
+
+.footer-link {
+    color: #0f766e;
+    font-weight: 700;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+    color: #134e4a;
+    text-decoration: underline;
+}
+
+.security-info {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin: 0.75rem 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .login-container {
+        padding: 1rem;
+    }
+
+    .login-card {
+        border-radius: 20px;
+    }
+
+    .login-header {
+        padding: 2.5rem 1.5rem 1.75rem;
+    }
+
+    .clinic-logo {
+        height: 60px;
+    }
+
+    .clinic-name {
+        font-size: 1.75rem;
+    }
+
+    .login-form-wrapper {
+        padding: 1.75rem 1.5rem;
+    }
+
+    .form-label {
+        font-size: 0.9rem;
+    }
+
+    .form-control-lg {
+        height: 2.875rem;
+        font-size: 1rem;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .form-control {
+        background-color: #1f2937;
+        color: white;
+        border-color: #374151;
+    }
+
+    .form-control:focus {
+        background-color: #111827;
+    }
+}
+
 .tracking-wider { letter-spacing: 0.05em; }
 </style>
 {% endblock %}
