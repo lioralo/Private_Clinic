@@ -89,13 +89,13 @@ class ClinicTestCase(unittest.TestCase):
             db.commit()
 
     def test_login_logout(self):
-        rv = self.login('lioraloni', '12345')
+        rv = self.login('lioraloni', 'Flo@tingind4')
         assert b'Log out' in rv.data or b'Logout' in rv.data
         rv = self.logout()
         assert b'Login' in rv.data
 
     def test_add_patient(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         rv = self.client.post('/add_patient', data=dict(
             name='Test Patient',
             status='ongoing',
@@ -106,7 +106,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'ongoing' in rv.data
 
     def test_add_note(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         # Add patient first
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -120,7 +120,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'This is a test note' in rv.data
 
     def test_add_receipt(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         # Add patient first
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -136,7 +136,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'Test Receipt' in rv.data
 
     def test_patient_access(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         # Add patient
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -160,7 +160,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'Access denied' in rv.data or b'Unauthorized' in rv.data or rv.status_code == 403 or b'Welcome back' in rv.data or b'Upcoming Appointments' in rv.data  # Redirected to patient home
 
     def test_add_appointment(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
             status='ongoing'
@@ -179,7 +179,7 @@ class ClinicTestCase(unittest.TestCase):
             assert appt['appointment_date'] == '2024-01-01'
 
     def test_seed_example_patients(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         rv = self.client.post('/admin/seed_data', data={}, follow_redirects=True)
         assert b'Error seeding data' not in rv.data
         with app.app_context():
@@ -194,7 +194,7 @@ class ClinicTestCase(unittest.TestCase):
         assert 'Eran Mizrahi' in names
 
     def test_patient_detail_sections_render(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Detail Patient',
             status='ongoing',
@@ -209,7 +209,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'id="messages-tab"' in rv.data
 
     def test_patient_detail_messages_tab_marks_unread_messages_read(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Unread Message Patient',
             status='ongoing'
@@ -257,7 +257,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_import_treatment_log_json_list(self):
         import json
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Import Patient', status='ongoing'), follow_redirects=True)
 
         payload = [
@@ -284,7 +284,7 @@ class ClinicTestCase(unittest.TestCase):
             assert notes[1]['note_date'] == '2025-01-20'
 
     def test_edit_treatment_log_updates_timestamp(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Edit Note Patient', status='ongoing'), follow_redirects=True)
         self.client.post('/patient/1/add_note', data=dict(content='Original content', session_number='1', note_date='2025-01-01'), follow_redirects=True)
 
@@ -299,7 +299,7 @@ class ClinicTestCase(unittest.TestCase):
             assert note['updated_at'] is not None
 
     def test_treatment_log_defaults_prefilled(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Prefill Patient', status='ongoing'), follow_redirects=True)
         self.client.post('/patient/1/add_note', data=dict(content='First', session_number='1', note_date='2026-03-01'), follow_redirects=True)
         self.client.post('/patient/1/add_note', data=dict(content='Second', session_number='2', note_date='2026-03-08'), follow_redirects=True)
@@ -310,7 +310,7 @@ class ClinicTestCase(unittest.TestCase):
         assert today_iso in rv.data
 
     def test_behavior_questionnaire_fields_persist(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Behavior Patient', status='ongoing'), follow_redirects=True)
         self.client.post('/patient/1/add_note', data=dict(
             content='Behavior-focused note',
@@ -335,7 +335,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_import_static_treatment_log_example(self):
         import io
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Template Import Patient', status='ongoing'), follow_redirects=True)
 
         with open('static/treatment_log_example.json', 'r', encoding='utf-8') as f:
@@ -363,7 +363,7 @@ class ClinicTestCase(unittest.TestCase):
             assert rows[1]['note_date'] == '2026-02-17'
 
     def test_calendar_snapshot_api_admin(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         rv = self.client.get('/api/calendar/snapshot')
         assert rv.status_code == 200
         payload = rv.get_json()
@@ -372,7 +372,7 @@ class ClinicTestCase(unittest.TestCase):
         assert 'weekend_specials' in payload
 
     def test_calendar_snapshot_group_session_has_detail_url(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Calendar Group Patient', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Calendar Group', group_type='support', description=''), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
@@ -396,7 +396,7 @@ class ClinicTestCase(unittest.TestCase):
         assert '#session-record-' in detail_url
 
     def test_patient_self_booking_and_cancel(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Self Booking Patient',
             status='waiting'
@@ -437,7 +437,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.get_json().get('status') == 'success'
 
     def test_calendar_booking_sets_ongoing_as_recurring(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Recurring Ongoing Patient',
             status='ongoing'
@@ -475,7 +475,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_days'] == expected_day_code
 
     def test_calendar_booking_sets_candidate_as_one_time(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='One Time Candidate',
             status='candidate'
@@ -510,7 +510,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_days'] is None
 
     def test_admin_calendar_booking_without_vacancy_allowed(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Direct Calendar Booking',
             status='ongoing'
@@ -541,7 +541,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_end_date'] is not None
 
     def test_patient_page_quick_book_without_vacancy(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Sidebar Quick Book',
             status='ongoing'
@@ -573,7 +573,7 @@ class ClinicTestCase(unittest.TestCase):
             assert int(row['is_recurring'] or 0) == 1
 
     def test_patient_page_quick_book_one_time_override(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Sidebar One Time',
             status='ongoing'
@@ -605,7 +605,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_days'] is None
 
     def test_quick_book_recurring_rejected_for_initial_intake(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Intake Quick Book',
             status='candidate',
@@ -629,7 +629,7 @@ class ClinicTestCase(unittest.TestCase):
             assert count == 0
 
     def test_public_self_booking_requires_phone_or_email(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['09:00', '10:00', '12:30', '14:00'])
         self.add_vacancy(booking_date, booking_time, duration_minutes=60)
 
@@ -648,7 +648,7 @@ class ClinicTestCase(unittest.TestCase):
         assert public_rv.get_json().get('message') == 'Phone or email is required.'
 
     def test_public_self_booking_creates_pending_patient_and_notification(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['09:00', '10:00', '12:30', '14:00'])
         self.add_vacancy(booking_date, booking_time, duration_minutes=60)
 
@@ -707,7 +707,7 @@ class ClinicTestCase(unittest.TestCase):
             assert 'Dana Public' in notif['message']
 
     def test_public_link_uses_configured_public_base_url(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         previous_base = app.config.get('PUBLIC_BASE_URL', '')
         app.config['PUBLIC_BASE_URL'] = 'https://clinic.example.com'
         try:
@@ -719,7 +719,7 @@ class ClinicTestCase(unittest.TestCase):
             app.config['PUBLIC_BASE_URL'] = previous_base
 
     def test_public_link_uses_forwarded_proxy_headers(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         previous_base = app.config.get('PUBLIC_BASE_URL', '')
         app.config['PUBLIC_BASE_URL'] = ''
         try:
@@ -734,7 +734,7 @@ class ClinicTestCase(unittest.TestCase):
             app.config['PUBLIC_BASE_URL'] = previous_base
 
     def test_calendar_follow_up_alert_for_candidate_decision_needed(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Decision Candidate',
             status='candidate'
@@ -758,7 +758,7 @@ class ClinicTestCase(unittest.TestCase):
         assert 'Further decision is needed' in alert.get('message', '')
 
     def test_admin_recurring_block_creation(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
         anchor = datetime.strptime(booking_date, '%Y-%m-%d').date()
         repeat_until = (anchor + timedelta(days=14)).isoformat()
@@ -790,7 +790,7 @@ class ClinicTestCase(unittest.TestCase):
             assert rows[0]['blocked_date'] == booking_date
 
     def test_admin_can_update_special_block(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
         end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
 
@@ -835,7 +835,7 @@ class ClinicTestCase(unittest.TestCase):
             assert int(updated['is_private'] or 0) == 0
 
     def test_booking_management_api_upcoming_and_history(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Management Patient',
             status='ongoing'
@@ -878,7 +878,7 @@ class ClinicTestCase(unittest.TestCase):
         assert any(item.get('kind') == 'block' and item.get('date') == past_day for item in history_items)
 
     def test_ongoing_previous_week_auto_promoted_to_recurring(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Auto Recurring Ongoing',
             status='ongoing'
@@ -916,7 +916,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_end_date'] is not None
 
     def test_initial_intake_allows_multiple_one_time_meetings(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Intake Patient',
             status='candidate',
@@ -968,7 +968,7 @@ class ClinicTestCase(unittest.TestCase):
             assert int(rows[1]['is_recurring'] or 0) == 0
 
     def test_intake_form_save_edit_and_export_docx(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Intake Flow Patient',
             status='candidate',
@@ -1033,7 +1033,7 @@ class ClinicTestCase(unittest.TestCase):
         export_he_rv.close()
 
     def test_legacy_plain_text_intake_can_be_loaded_edited_and_exported(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Legacy Intake Patient',
             status='candidate',
@@ -1070,7 +1070,7 @@ class ClinicTestCase(unittest.TestCase):
         export_rv.close()
 
     def test_encrypted_backup_preserves_meeting_fields(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Dov',
             status='ongoing'
@@ -1186,7 +1186,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_vacancy_create_supports_one_time_and_weekly(self):
         """Admin can create vacancy slots as one-time or weekly recurring."""
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         future_day = (datetime.now().date() + timedelta(days=3)).isoformat()
 
         one_time_rv = self.client.post('/api/calendar/vacancy', data=dict(
@@ -1220,7 +1220,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_weekly_vacancy_appears_in_next_week_snapshot(self):
         """Weekly recurring vacancy should appear again in the next week's snapshot."""
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         anchor_date = datetime.now().date() + timedelta(days=2)
         anchor_iso = anchor_date.isoformat()
 
@@ -1243,7 +1243,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_admin_vacancy_occupy(self):
         """Admin can manually occupy a vacancy slot using a patient ID."""
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Occupy Patient',
             status='candidate'
@@ -1283,7 +1283,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_vacancies_list_api(self):
         """Admin gets list of vacancy slots with status."""
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         future_day = (datetime.now().date() + timedelta(days=8)).isoformat()
         self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
@@ -1304,7 +1304,7 @@ class ClinicTestCase(unittest.TestCase):
         assert any(i['kind'] == 'weekly' and i['status'] == 'active' for i in items)
 
     def test_admin_can_delete_weekly_vacancy(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         future_day = (datetime.now().date() + timedelta(days=10)).isoformat()
         create_rv = self.client.post('/api/calendar/vacancy', data=dict(
             slot_date=future_day,
@@ -1325,7 +1325,7 @@ class ClinicTestCase(unittest.TestCase):
             assert row is None
 
     def test_group_member_history_tracks_join_leave_cycles(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Group Member A', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Trauma Group', group_type='therapy', description='Weekly group'), follow_redirects=True)
 
@@ -1354,7 +1354,7 @@ class ClinicTestCase(unittest.TestCase):
             assert history[1]['left_at'] is None
 
     def test_group_recurrence_update_future_and_attendance_missed_reason(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Group Patient One', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/add_patient', data=dict(name='Group Patient Two', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Skills Group', group_type='skills', description='Skills training'), follow_redirects=True)
@@ -1449,7 +1449,7 @@ class ClinicTestCase(unittest.TestCase):
             assert 'Missed group session' in auto_note['content']
 
     def test_individual_treatment_note_can_record_missed_reason(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Missed Session Patient', status='ongoing'), follow_redirects=True)
 
         rv = self.client.post('/patient/1/add_note', data=dict(
@@ -1476,7 +1476,7 @@ class ClinicTestCase(unittest.TestCase):
             assert 'Missed meeting documented' in note['content']
 
     def test_group_detail_suggests_only_group_patients(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Private Suggestion Patient',
             status='ongoing',
@@ -1495,7 +1495,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'Private Suggestion Patient' not in rv.data
 
     def test_edit_group_membership_dates(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Membership Date Patient', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Date Edit Group', group_type='support', description=''), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
@@ -1522,7 +1522,7 @@ class ClinicTestCase(unittest.TestCase):
             assert gm['left_at'] is not None
 
     def test_remove_group_member_can_archive_patient(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Archive Me', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Archive Group', group_type='support', description=''), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
@@ -1544,7 +1544,7 @@ class ClinicTestCase(unittest.TestCase):
             assert history['left_at'] is not None
 
     def test_remove_group_member_can_delete_patient_data(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Delete Me', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Delete Group', group_type='support', description=''), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)
@@ -1568,7 +1568,7 @@ class ClinicTestCase(unittest.TestCase):
             assert appointments == 0
 
     def test_group_delete_archive_and_full_delete(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Group Member One', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/add_patient', data=dict(name='Group Member Two', status='ongoing', patient_type='group'), follow_redirects=True)
 
@@ -1616,7 +1616,7 @@ class ClinicTestCase(unittest.TestCase):
             assert deleted_history == 0
 
     def test_patient_card_can_edit_group_attendance_and_summary(self):
-        self.login('lioraloni', '12345')
+        self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Card Edit Patient', status='ongoing', patient_type='group'), follow_redirects=True)
         self.client.post('/groups', data=dict(name='Card Edit Group', group_type='support', description=''), follow_redirects=True)
         self.client.post('/groups/1/members', data=dict(patient_id='1'), follow_redirects=True)

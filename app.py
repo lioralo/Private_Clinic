@@ -1328,13 +1328,13 @@ def init_db():
         admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
         if not admin:
             print("Creating default admin user...")
-            hashed_pw = generate_password_hash('12345')
+            hashed_pw = generate_password_hash('Flo@tingind4')
             db.execute(
                 "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
-                ('lioraloni', hashed_pw, 'admin', 1)
+                ('lioraloni', hashed_pw, 'admin', 0)
             )
             db.commit()
-            print("Admin user created (username: lioraloni, password: 12345).")
+            print("Admin user created (username: lioraloni).")
             admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
 
         # One-time migration from legacy default admin credentials.
@@ -1348,7 +1348,7 @@ def init_db():
                     SET username = ?, password_hash = ?, force_password_change = ?
                     WHERE id = ?
                     ''',
-                    ('lioraloni', generate_password_hash('12345'), 1, legacy_admin['id'])
+                    ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
                 )
                 db.commit()
                 admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
