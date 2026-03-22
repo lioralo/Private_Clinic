@@ -102,5 +102,10 @@
   "Booking failed. Please try again.": "הקביעה נכשלה. נסה שוב.",
   "Upcoming Reminders": "תזכורות קרובות",
   "Today": "היום",
-  "Tomorrow": "מחר"
+  "Tomorrow": "מחר",
+  "Recurring": "חוזר",
+  "Weekly Recurring": "חוזר שבועית",
+  "Recurrence Interval (Weeks)": "תדירות חזרה (שבועות)",
+  "Recurrence End Limit": "גבול סיום חזרה",
+  "Missing Recurring Appointment": "חסרה פגישה חוזרת"
 }
