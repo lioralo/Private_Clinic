@@ -2232,8 +2232,10 @@ def crm_dashboard():
         'candidate_waiting': counts_row['candidate_waiting_count'] or 0,
         'archived': counts_row['archived_count'] or 0
     }
+    reminders = send_appointment_reminders(db)
     return render_template('crm.html', patients=patients, status=status, counts=counts,
-                           patient_type=patient_type, search_query=search_query, sort_by=sort_by)
+                           patient_type=patient_type, search_query=search_query, sort_by=sort_by,
+                           reminders=reminders)
 
 @app.route('/patient/home')
 @login_required
@@ -3636,6 +3638,43 @@ def build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=20):
 
     upcoming.sort(key=lambda row: (row['appointment_date'], row['appointment_time']))
     return upcoming[:limit]
+
+
+def send_appointment_reminders(db):
+    """Return appointments scheduled for today or tomorrow for admin reminder display."""
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+
+    rows = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
+               a.meeting_type, a.is_recurring,
+               p.id AS patient_id, p.name AS patient_name
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND a.appointment_date IN (?, ?)
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (today.isoformat(), tomorrow.isoformat())).fetchall()
+
+    reminders = []
+    for row in rows:
+        appt_date = parse_date_safe(row['appointment_date'])
+        if appt_date is None:
+            continue
+        days_away = (appt_date - today).days
+        reminders.append({
+            'appointment_id': row['id'],
+            'patient_id': row['patient_id'],
+            'patient_name': row['patient_name'],
+            'appointment_date': row['appointment_date'],
+            'appointment_time': row['appointment_time'],
+            'duration_minutes': int(row['duration_minutes'] or 60),
+            'meeting_type': row['meeting_type'] or 'in-person',
+            'is_today': days_away == 0,
+            'is_tomorrow': days_away == 1,
+        })
+    return reminders
 
 
 def build_booking_management_payload(db, mode='upcoming', future_days=180, history_days=120):

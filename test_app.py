@@ -1666,5 +1666,66 @@ class ClinicTestCase(unittest.TestCase):
             assert att['attendance_note'] == 'Patient called in advance'
             assert sess['session_summary'] == 'Group discussed coping plans'
 
+    def test_upcoming_reminders_shown_on_admin_dashboard(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Reminder Patient',
+            status='ongoing',
+        ), follow_redirects=True)
+
+        today = datetime.now().date().isoformat()
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '10:00', 60, 'scheduled', 0)
+            ''', (today,))
+            db.commit()
+
+        rv = self.client.get('/crm')
+        assert rv.status_code == 200
+        assert b'upcoming-reminders-section' in rv.data
+        assert b'Reminder Patient' in rv.data
+
+    def test_send_appointment_reminders_returns_today_and_tomorrow(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Today Reminder',
+            status='ongoing',
+        ), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(
+            name='Tomorrow Reminder',
+            status='ongoing',
+        ), follow_redirects=True)
+
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '09:00', 60, 'scheduled', 0)
+            ''', (today.isoformat(),))
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (2, ?, '14:00', 60, 'scheduled', 0)
+            ''', (tomorrow.isoformat(),))
+            db.commit()
+
+        with app.app_context():
+            db = get_db()
+            from app import send_appointment_reminders
+            reminders = send_appointment_reminders(db)
+            names = [r['patient_name'] for r in reminders]
+            assert 'Today Reminder' in names
+            assert 'Tomorrow Reminder' in names
+            today_r = next(r for r in reminders if r['patient_name'] == 'Today Reminder')
+            tomorrow_r = next(r for r in reminders if r['patient_name'] == 'Tomorrow Reminder')
+            assert today_r['is_today'] is True
+            assert today_r['is_tomorrow'] is False
+            assert tomorrow_r['is_today'] is False
+            assert tomorrow_r['is_tomorrow'] is True
+
 if __name__ == '__main__':
     unittest.main()
