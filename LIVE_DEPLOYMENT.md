@@ -179,3 +179,27 @@ Use this exact order on a fresh EC2 server:
    sudo docker compose --env-file .env.prod -f docker-compose.prod.yml ps
    sudo docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f
    ```
+
+## 10. Automated Migration From Local Data To AWS
+
+If your source data already exists locally in this checkout (`clinic.db`,
+`secure_backups/clinic_*.db.enc`, `static/uploads`, `patients_logs`,
+`app_log.txt`), you can automate the AWS migration from the operator
+workstation:
+
+```bash
+python3 backup_db.py
+bash scripts/migrate_to_aws.sh \
+  --ssh-target ubuntu@<server-ip> \
+  --ssh-key /path/to/private-clinic-key.pem \
+  --domain clinic.yourdomain.com
+```
+
+The helper will:
+- upload the encrypted backup and supplementary artifacts
+- clone or update the repo on the AWS host
+- write `.env.prod` with the live `DOMAIN`, a generated `SECRET_KEY`, and the
+  local backup encryption key
+- start the production stack and restore the encrypted backup
+- print post-restore integrity and row-count checks for `patients`,
+  `appointments`, and `users`
