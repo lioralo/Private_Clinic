@@ -38,11 +38,10 @@
                 <span class="badge rounded-pill calendar-chip" style="background:#6b7280;">{{ t('Archived') }}</span>
                 {% if current_user.role == 'admin' %}
                 <span class="badge rounded-pill calendar-chip" style="background:#dc2626;">{{ t('Blocked') }}</span>
-                <span class="badge rounded-pill calendar-chip" style="background:#7c3aed;">{{ t('Special Occasion') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#8b5cf6;">{{ t('Group Session') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#10b981;">{{ t('Vacant Slot') }}</span>
                 {% endif %}
-                <span class="badge rounded-pill calendar-chip bg-secondary"><i class="bi bi-camera-video-fill me-1"></i>{{ t('Zoom') }}</span>
+                <span class="badge rounded-pill calendar-chip bg-secondary"><i class="bi bi-camera-video-fill"></i></span>
             </div>
             <div class="chip-row align-items-center" id="calendarFilters">
                 <span class="small fw-semibold text-muted me-1">{{ t('Filters:') }}</span>
@@ -52,7 +51,6 @@
             <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="archived">{{ t('Archived') }}</button>
             {% if current_user.role == 'admin' %}
             <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="blocked">{{ t('Blocked') }}</button>
-            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="special">{{ t('Special') }}</button>
             {% endif %}
             </div>
         </div>
@@ -98,7 +96,7 @@
         </div>
         <div class="card border-0 shadow-sm rounded-4 mb-3">
             <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">{{ t('Friday Specials') }}</h6>
+                <h6 class="fw-bold mb-0 text-primary">{{ t('Friday Blocked') }}</h6>
             </div>
             <div class="card-body weekend-stack" id="fridaySpecials">
                 <div class="small text-muted">{{ t('No weekend items.') }}</div>
@@ -106,7 +104,7 @@
         </div>
         <div class="card border-0 shadow-sm rounded-4">
             <div class="card-header bg-white border-0">
-                <h6 class="fw-bold mb-0 text-primary">{{ t('Saturday Specials') }}</h6>
+                <h6 class="fw-bold mb-0 text-primary">{{ t('Saturday Blocked') }}</h6>
             </div>
             <div class="card-body weekend-stack" id="saturdaySpecials">
                 <div class="small text-muted">{{ t('No weekend items.') }}</div>
@@ -175,23 +173,7 @@
                     <label class="form-label small">{{ t('Booking Type') }}</label>
                     <select name="booking_type" id="bookingTypeSelect" class="form-select form-select-sm">
                         <option value="appointment">{{ t('Appointment') }}</option>
-                        <option value="special" data-color="#7c3aed">{{ t('Special') }}</option>
                     </select>
-                </div>
-                <div class="mb-2 d-none" id="specialMetaWrap">
-                    <label class="form-label small">{{ t('Special Pattern') }}</label>
-                    <select name="special_pattern" id="specialPatternSelect" class="form-select form-select-sm">
-                        <option value="one-time">{{ t('One-time') }}</option>
-                        <option value="weekly">{{ t('Weekly Recurring') }}</option>
-                    </select>
-                </div>
-                <div class="mb-2 d-none" id="specialRepeatUntilWrap">
-                    <label class="form-label small">{{ t('Repeat Until') }}</label>
-                    <input type="date" name="special_repeat_until" id="specialRepeatUntilInput" class="form-control form-control-sm">
-                </div>
-                <div class="mb-2 d-none" id="specialTitleWrap">
-                    <label class="form-label small">{{ t('Special Title') }}</label>
-                    <input type="text" name="special_title" id="specialTitleInput" class="form-control form-control-sm" placeholder="{{ t('Seminar / Conference / Vacation') }}">
                 </div>
                 {% endif %}
                 <div class="mb-2">
@@ -255,7 +237,6 @@
                     <label class="form-label small">{{ t('Type') }}</label>
                     <select name="block_type" form="addBlockForm" class="form-select form-select-sm">
                         <option value="blocked">{{ t('Blocked') }}</option>
-                        <option value="special">{{ t('Special') }}</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -298,7 +279,7 @@
                         </div>
                     </div>
                     <div class="col-12">
-                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">{{ t('Save Block/Special') }}</button>
+                        <button class="btn btn-primary btn-sm rounded-pill px-3" type="submit">{{ t('Save Block') }}</button>
                     </div>
                 </div>
             </form>
@@ -919,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        modalTitle.textContent = 'Edit Block/Special';
+        modalTitle.textContent = 'Edit Block';
         modalBody.innerHTML = `
             <div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editBlockDate" value="${payload.date || ''}"></div>
             <div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editBlockTime" value="${payload.time || ''}"></div>
@@ -927,7 +908,6 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="mb-2"><label class="form-label small">Type</label>
                 <select class="form-select form-select-sm" id="editBlockType">
                     <option value="blocked">Blocked</option>
-                    <option value="special">Special</option>
                 </select>
             </div>
             <div class="mb-2"><label class="form-label small">Title</label><input type="text" class="form-control form-control-sm" id="editBlockTitle" value="${payload.title || ''}"></div>
@@ -940,7 +920,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const blockTypeSelect = document.getElementById('editBlockType');
         if (blockTypeSelect) {
-            blockTypeSelect.value = payload.block_type || 'blocked';
+            blockTypeSelect.value = 'blocked';
         }
 
         modalConfirmBtn.textContent = 'Save';
@@ -1385,19 +1365,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (platform === 'google-meet' || mtype === 'google-meet') {
                 icon = '<i class="bi bi-camera-video me-1" title="Google Meet"></i>';
             }
-            // Add color-coded meeting type badge
-            let meetingBadge = '';
-            if (mtype === 'zoom' || platform === 'zoom') {
-                meetingBadge = '<span class="badge ms-2" style="background: #2563eb; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-camera-video-fill" style="font-size: 0.7em; margin-right: 0.2rem;"></i>Zoom</span>';
-            } else if (mtype === 'google-meet' || platform === 'google-meet') {
-                meetingBadge = '<span class="badge ms-2" style="background: #65b741; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-camera-video" style="font-size: 0.7em; margin-right: 0.2rem;"></i>Meet</span>';
-            } else if (mtype === 'in-person') {
-                meetingBadge = '<span class="badge ms-2" style="background: #10b981; color: white; font-size: 0.65rem; padding: 0.25rem 0.5rem; border-radius: 4px;"><i class="bi bi-person-fill" style="font-size: 0.7em; margin-right: 0.2rem;"></i>In-person</span>';
-            }
             const timeText = arg.timeText ? `<div class="fc-event-time">${arg.timeText}</div>` : '';
             const titleText = `<div class="fc-event-title fc-event-title-primary" title="${safePrimaryLabel}">${recurringTag}${icon}<span class="fc-event-patient-name">${safePrimaryLabel}</span></div>`;
-            const badgeRow = meetingBadge ? `<div class="fc-event-badge-row">${meetingBadge}</div>` : '';
-            return { html: `<div class="fc-event-main-frame">${timeText}${titleText}${badgeRow}</div>` };
+            return { html: `<div class="fc-event-main-frame">${timeText}${titleText}</div>` };
         },
         selectMinDistance: 0,
         selectLongPressDelay: 0,

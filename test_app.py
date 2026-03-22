@@ -530,7 +530,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             row = db.execute('''
-                SELECT is_recurring, recurrence_end_date
+                SELECT is_recurring, recurrence_end_date, recurrence_group_id
                 FROM appointments
                 WHERE patient_id = 1
                 ORDER BY id DESC
@@ -539,6 +539,89 @@ class ClinicTestCase(unittest.TestCase):
             assert row is not None
             assert int(row['is_recurring'] or 0) == 1
             assert row['recurrence_end_date'] is not None
+            assert row['recurrence_group_id'] is not None
+
+    def test_recurring_delete_all_removes_related_split_series_without_group_id(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Recurring Delete Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1', '2026-01-19')
+            ''')
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, '2026-01-26', '10:00', 60, 'scheduled', 1, 1, '1', '2026-02-23')
+            ''')
+            db.commit()
+
+        rv = self.client.post('/api/calendar/appointment/2/delete', data={'scope': 'all'})
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            remaining = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id = 1').fetchone()['c']
+            assert remaining == 0
+
+    def test_recurring_delete_upcoming_truncates_current_segment_and_deletes_future_segments(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Recurring Upcoming Delete Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, '2026-01-05', '11:00', 60, 'scheduled', 1, 1, '1', '2026-01-19')
+            ''')
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, '2026-01-26', '11:00', 60, 'scheduled', 1, 1, '1', '2026-02-09')
+            ''')
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days
+                ) VALUES (1, '2026-02-16', '11:00', 60, 'scheduled', 1, 1, '1')
+            ''')
+            db.commit()
+
+        rv = self.client.post('/api/calendar/appointment/2/delete', data={
+            'scope': 'upcoming',
+            'occurrence_date': '2026-02-02'
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT id, appointment_date, recurrence_end_date
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id ASC
+            ''').fetchall()
+            assert len(rows) == 2
+            assert rows[0]['appointment_date'] == '2026-01-05'
+            assert rows[0]['recurrence_end_date'] == '2026-01-19'
+            assert rows[1]['appointment_date'] == '2026-01-26'
+            assert rows[1]['recurrence_end_date'] == '2026-02-01'
 
     def test_patient_page_quick_book_without_vacancy(self):
         self.login('lioraloni', 'Flo@tingind4')

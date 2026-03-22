@@ -105,30 +105,6 @@
                             {% if lang == 'en' %}עברית{% else %}English{% endif %}
                         </a>
                     </li>
-                    <li class="nav-item ms-2">
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                {% if lang == 'he' %}צפיפות טפסים{% else %}Form Density{% endif %}
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li>
-                                    <a class="dropdown-item {% if ui_density == 'compact' %}active{% endif %}" href="{{ url_for('set_density', density='compact') }}">
-                                        {% if lang == 'he' %}קומפקטי{% else %}Compact{% endif %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item {% if ui_density == 'balanced' %}active{% endif %}" href="{{ url_for('set_density', density='balanced') }}">
-                                        {% if lang == 'he' %}מאוזן{% else %}Balanced{% endif %}
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item {% if ui_density == 'large' %}active{% endif %}" href="{{ url_for('set_density', density='large') }}">
-                                        {% if lang == 'he' %}מרווח{% else %}Large{% endif %}
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
                 </ul>
             </div>
         </div>

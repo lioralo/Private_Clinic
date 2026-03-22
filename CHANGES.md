@@ -2,6 +2,60 @@
 
 ---
 
+## Session 30
+
+**Date:** March 22, 2026
+
+**Objective:** Fix recurring deletion behavior, finish profile localization, redesign groups manager flow, simplify calendar block handling, and normalize meeting data.
+
+**Release Summary:**
+
+1. **Recurring Delete Reliability Fixed**
+- Added `appointments.recurrence_group_id` with migration/index support.
+- Added grouping helpers to attach legacy recurring rows to stable logical series.
+- Updated recurring create/split/update paths to preserve group identity.
+- Fixed delete scope behavior so:
+  - `all` removes the whole logical recurring series,
+  - `upcoming` truncates and/or removes the correct related recurring rows.
+
+2. **Regression Coverage Added**
+- Extended tests for recurring series deletion edge-cases:
+  - split recurring anchors without preexisting group ids,
+  - upcoming-scope truncation across related anchors.
+- Full suite verification passed: `python test_app.py`.
+
+3. **Profile Hebrew Localization Completed**
+- Added missing Hebrew keys for admin profile authenticator/password UI.
+- Added missing Hebrew keys for patient home/profile portal text.
+
+4. **Groups Manager UX Updated**
+- Moved group-management controls from side-column layout into a top banner flow.
+- Increased group description editing space.
+- Session record section now presents status as a titled box above meeting content.
+- Reordered member attendance row so `Notified` is adjacent to patient name.
+- Missed-reason entry now uses a short prompt flow and appears only for missed status.
+- Past/upcoming/next sections now appear as same-line tabs that replace each other.
+
+5. **Calendar Simplification (Special -> Blocked)**
+- Normalized backend block handling to treat `special` as `blocked`.
+- Removed special-category controls from primary calendar UI.
+- Updated block editor and save labels to blocked-only language.
+- Simplified Zoom visual treatment to camera-icon presentation without separate color badge.
+
+6. **Live Data Normalization Per Request**
+- Created safety backup before cleanup:
+  - `clinic.db.pre_user_cleanup_20260322_192614.bak`
+- Applied cleanup in `clinic.db`:
+  - converted special blocks to blocked,
+  - removed all patient appointments,
+  - left vacancy structures intact.
+- Post-cleanup counts:
+  - appointments: `0`
+  - blocked_slots_special: `0`
+  - blocked_slots_blocked: `111`
+  - slots_override: `2`
+  - vacancy_recurring: `6`
+
 ## Session 29
 
 **Date:** March 21, 2026

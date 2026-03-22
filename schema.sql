@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     meeting_link TEXT,
     meeting_platform TEXT,
     meeting_title TEXT,
+    recurrence_group_id TEXT,
     missed_reason TEXT,
     save_to_google BOOLEAN DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

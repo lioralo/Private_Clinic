@@ -112,18 +112,20 @@
     <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <fieldset class="record-fieldset" id="record-fieldset-{{ session['id'] }}" disabled>
-            <div class="row g-3 mb-3">
-                <div class="col-md-4">
-                    <label class="form-label small mb-1">{{ txt('Session Status', 'סטטוס מפגש') }}</label>
-                    <select class="form-select form-select-sm" name="session_status">
-                        <option value="scheduled" {% if status_value == 'scheduled' %}selected{% endif %}>{{ txt('Scheduled', 'מתוכנן') }}</option>
-                        <option value="completed" {% if status_value == 'completed' %}selected{% endif %}>{{ txt('Completed', 'בוצע') }}</option>
-                        <option value="cancelled" {% if status_value == 'cancelled' %}selected{% endif %}>{{ txt('Cancelled', 'בוטל') }}</option>
-                    </select>
-                </div>
-                <div class="col-md-8">
-                    <label class="form-label small mb-1">{{ txt('What happened in this meeting?', 'מה קרה במפגש הזה?') }}</label>
-                    <textarea class="form-control form-control-sm session-summary-input" name="session_summary" rows="10" placeholder="{{ txt('Process, interventions, themes, and follow-up', 'תהליך, התערבויות, נושאים והמשך') }}">{{ session['session_summary'] or '' }}</textarea>
+            <div class="border rounded-3 p-3 mb-3 bg-light-subtle">
+                <div class="small text-uppercase fw-semibold text-muted mb-2">{{ txt('Session Status', 'סטטוס מפגש') }}</div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <select class="form-select form-select-sm" name="session_status">
+                            <option value="scheduled" {% if status_value == 'scheduled' %}selected{% endif %}>{{ txt('Scheduled', 'מתוכנן') }}</option>
+                            <option value="completed" {% if status_value == 'completed' %}selected{% endif %}>{{ txt('Completed', 'בוצע') }}</option>
+                            <option value="cancelled" {% if status_value == 'cancelled' %}selected{% endif %}>{{ txt('Cancelled', 'בוטל') }}</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small mb-1">{{ txt('What happened in this meeting?', 'מה קרה במפגש הזה?') }}</label>
+                        <textarea class="form-control form-control-sm session-summary-input" name="session_summary" rows="10" placeholder="{{ txt('Process, interventions, themes, and follow-up', 'תהליך, התערבויות, נושאים והמשך') }}">{{ session['session_summary'] or '' }}</textarea>
+                    </div>
                 </div>
             </div>
             <div class="small text-uppercase text-muted mb-2">{{ txt('Members', 'משתתפים') }}</div>
@@ -131,11 +133,10 @@
                 <table class="table table-sm align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>{{ txt('Member', 'משתתף') }}</th>
+                            <th style="min-width: 240px;">{{ txt('Member', 'משתתף') }}</th>
                             <th style="min-width: 170px;">{{ txt('Status', 'סטטוס') }}</th>
                             <th style="min-width: 280px;">{{ txt('Missed reason', 'סיבת היעדרות') }}</th>
-                            <th style="width: 70px; min-width: 70px;">{{ txt('Notified?', 'הודיע?') }}</th>
-                            <th style="min-width: 560px;">{{ txt('Member comments', 'הערות על המטופל') }}</th>
+                            <th style="min-width: 460px;">{{ txt('Member comments', 'הערות על המטופל') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -143,26 +144,32 @@
                         {% set mark = marks.get(member['patient_id'], {}) %}
                         {% set attendance_status = mark.get('attendance_status', 'pending') %}
                         <tr>
-                            <td>{{ member['patient_name'] }}</td>
                             <td>
-                                <select class="form-select form-select-sm" name="attendance_{{ member['patient_id'] }}">
+                                <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                                    <span>{{ member['patient_name'] }}</span>
+                                    <label class="form-check-label small d-flex align-items-center gap-2 mb-0">
+                                        <input type="checkbox" class="form-check-input" name="notified_on_time_{{ member['patient_id'] }}" {% if mark.get('notified_on_time', 0) %}checked{% endif %}>
+                                        {{ txt('Notified', 'הודיע') }}
+                                    </label>
+                                </div>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm attendance-status" name="attendance_{{ member['patient_id'] }}" data-patient-id="{{ member['patient_id'] }}">
                                     <option value="pending" {% if attendance_status == 'pending' %}selected{% endif %}>{{ txt('Pending', 'ממתין') }}</option>
                                     <option value="present" {% if attendance_status == 'present' %}selected{% endif %}>{{ txt('Arrived', 'הגיע') }}</option>
                                     <option value="missed" {% if attendance_status == 'missed' %}selected{% endif %}>{{ txt('Missed', 'נעדר') }}</option>
                                 </select>
                             </td>
                             <td>
-                                <textarea class="form-control form-control-sm member-reason-input" name="absence_reason_{{ member['patient_id'] }}" rows="4" placeholder="{{ txt('Reason if missed', 'סיבה במקרה של היעדרות') }}">{{ mark.get('absence_reason', '') }}</textarea>
+                                <input type="hidden" id="absence-reason-{{ member['patient_id'] }}" name="absence_reason_{{ member['patient_id'] }}" value="{{ mark.get('absence_reason', '') }}">
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill missed-reason-btn {% if attendance_status != 'missed' %}d-none{% endif %}" data-patient-id="{{ member['patient_id'] }}">{{ txt('Missed reason', 'סיבת היעדרות') }}</button>
                             </td>
                             <td>
-                                <input type="checkbox" class="form-check-input" name="notified_on_time_{{ member['patient_id'] }}" {% if mark.get('notified_on_time', 0) %}checked{% endif %}>
-                            </td>
-                            <td>
-                                <textarea class="form-control form-control-sm member-note-input" name="attendance_note_{{ member['patient_id'] }}" rows="8" placeholder="{{ txt('Member participation, reaction, or follow-up note', 'השתתפות, תגובה או הערת המשך') }}">{{ mark.get('attendance_note', '') }}</textarea>
+                                <textarea class="form-control form-control-sm member-note-input" name="attendance_note_{{ member['patient_id'] }}" rows="4" placeholder="{{ txt('Member participation, reaction, or follow-up note', 'השתתפות, תגובה או הערת המשך') }}">{{ mark.get('attendance_note', '') }}</textarea>
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="5" class="text-muted small">{{ txt('No active members for this date.', 'אין משתתפים פעילים לתאריך הזה.') }}</td></tr>
+                        <tr><td colspan="4" class="text-muted small">{{ txt('No active members for this date.', 'אין משתתפים פעילים לתאריך הזה.') }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -179,6 +186,16 @@
 <style>
 .group-side-accordion .accordion-button {
     font-weight: 700;
+}
+
+.group-side-accordion {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.85rem;
+}
+
+.group-side-accordion .accordion-item {
+    margin-bottom: 0 !important;
 }
 
 .session-card {
@@ -254,7 +271,8 @@
 </div>
 
 <div class="row g-4 align-items-start">
-    <div class="col-12 col-xxl-3">
+    <div class="col-12">
+        <div class="small text-muted mb-2">{{ txt('Group manager tools are now in the top banner. Press a section to edit it here.', 'כלי ניהול הקבוצה נמצאים כעת בבאנר העליון. לחצו על מקטע כדי לערוך כאן.') }}</div>
         <div class="accordion group-side-accordion" id="groupManagementAccordion">
             <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden mb-3">
                 <h2 class="accordion-header" id="groupInfoHeading">
@@ -281,7 +299,7 @@
                             </div>
                             <div class="col-12">
                                 <label class="form-label small">{{ txt('Description', 'תיאור') }}</label>
-                                <textarea name="description" rows="4" class="form-control form-control-sm">{{ group['description'] or '' }}</textarea>
+                                <textarea name="description" rows="7" class="form-control form-control-sm">{{ group['description'] or '' }}</textarea>
                             </div>
                             <div class="col-12">
                                 <div class="form-check">
@@ -564,7 +582,7 @@
         </div>
     </div>
 
-    <div class="col-12 col-xxl-9">
+    <div class="col-12">
         {% set next_session = upcoming_sessions_all[0] if upcoming_sessions_all|length > 0 else none %}
         {% set upcoming_queue = upcoming_sessions_all[1:] if upcoming_sessions_all|length > 1 else [] %}
         <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -576,62 +594,51 @@
                 <span class="badge bg-light text-dark border">{{ group_sessions|length }} {{ txt('total', 'בסך הכל') }}</span>
             </div>
             <div class="card-body">
-                <div class="d-flex flex-column gap-3">
-                    <div class="border rounded-4 overflow-hidden">
-                        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-3 py-3 {% if is_he %}text-end{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#nextMeetingCollapse" aria-expanded="true" aria-controls="nextMeetingCollapse">
-                            <span class="fw-bold text-primary">{{ txt('Next Meeting', 'המפגש הקרוב') }}</span>
-                            <span class="badge bg-primary-subtle text-primary border">{{ txt('Open', 'פתוח') }}</span>
-                        </button>
-                        <div class="collapse show" id="nextMeetingCollapse">
-                            <div class="p-3 border-top bg-light-subtle">
-                                {% if next_session %}
-                                {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions) }}
-                                {% else %}
-                                <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
-                                {% endif %}
-                            </div>
-                        </div>
+                <ul class="nav nav-pills gap-2 mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#nextMeetingPane" type="button" role="tab">{{ txt('Next Meeting', 'המפגש הקרוב') }}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pastMeetingsPane" type="button" role="tab">{{ txt('Past Meetings', 'מפגשי עבר') }}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#upcomingQueuePane" type="button" role="tab">{{ txt('Upcoming Queue', 'מפגשים קרובים נוספים') }}</button>
+                    </li>
+                </ul>
+                <div class="tab-content border rounded-4 bg-light-subtle p-3">
+                    <div class="tab-pane fade show active" id="nextMeetingPane" role="tabpanel">
+                        {% if next_session %}
+                        {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions) }}
+                        {% else %}
+                        <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
+                        {% endif %}
                     </div>
-
-                    <div class="border rounded-4 overflow-hidden">
-                        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-3 py-3 {% if is_he %}text-end{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#pastMeetingsCollapse" aria-expanded="false" aria-controls="pastMeetingsCollapse">
-                            <span class="fw-bold text-primary">{{ txt('Past Meetings', 'מפגשי עבר') }}</span>
-                            <span class="badge bg-secondary-subtle text-secondary border">{{ txt('Closed', 'סגור') }}</span>
-                        </button>
-                        <div class="collapse" id="pastMeetingsCollapse">
-                            <div class="p-3 border-top bg-light-subtle d-flex flex-column gap-2">
-                                {% for session in past_sessions_all %}
-                                <div class="border rounded-3 overflow-hidden bg-white">
-                                    <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#pastSession{{ session['id'] }}" aria-expanded="false" aria-controls="pastSession{{ session['id'] }}">
-                                        <span class="fw-semibold">{{ session['session_date'] }} · {{ session['session_time'] }}{% if session['title'] %} · {{ session['title'] }}{% endif %}</span>
-                                        <i class="bi bi-chevron-down"></i>
-                                    </button>
-                                    <div class="collapse" id="pastSession{{ session['id'] }}">
-                                        <div class="p-3 border-top">
-                                            {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions) }}
-                                        </div>
+                    <div class="tab-pane fade" id="pastMeetingsPane" role="tabpanel">
+                        <div class="d-flex flex-column gap-2">
+                            {% for session in past_sessions_all %}
+                            <div class="border rounded-3 overflow-hidden bg-white">
+                                <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#pastSession{{ session['id'] }}" aria-expanded="false" aria-controls="pastSession{{ session['id'] }}">
+                                    <span class="fw-semibold">{{ session['session_date'] }} · {{ session['session_time'] }}{% if session['title'] %} · {{ session['title'] }}{% endif %}</span>
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <div class="collapse" id="pastSession{{ session['id'] }}">
+                                    <div class="p-3 border-top">
+                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions) }}
                                     </div>
                                 </div>
-                                {% else %}
-                                <div class="small text-muted">{{ txt('No past meetings yet.', 'עדיין אין מפגשי עבר.') }}</div>
-                                {% endfor %}
                             </div>
+                            {% else %}
+                            <div class="small text-muted">{{ txt('No past meetings yet.', 'עדיין אין מפגשי עבר.') }}</div>
+                            {% endfor %}
                         </div>
                     </div>
-
-                    <div class="border rounded-4 overflow-hidden">
-                        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-3 py-3 {% if is_he %}text-end{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#upcomingQueueCollapse" aria-expanded="false" aria-controls="upcomingQueueCollapse">
-                            <span class="fw-bold text-primary">{{ txt('Upcoming Queue', 'מפגשים קרובים נוספים') }}</span>
-                            <span class="badge bg-secondary-subtle text-secondary border">{{ upcoming_queue|length }}</span>
-                        </button>
-                        <div class="collapse" id="upcomingQueueCollapse">
-                            <div class="p-3 border-top bg-light-subtle d-flex flex-column gap-3">
-                                {% for session in upcoming_queue %}
-                                {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions) }}
-                                {% else %}
-                                <div class="small text-muted">{{ txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.') }}</div>
-                                {% endfor %}
-                            </div>
+                    <div class="tab-pane fade" id="upcomingQueuePane" role="tabpanel">
+                        <div class="d-flex flex-column gap-3">
+                            {% for session in upcoming_queue %}
+                            {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions) }}
+                            {% else %}
+                            <div class="small text-muted">{{ txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.') }}</div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
@@ -831,6 +838,43 @@ document.querySelectorAll('input[name="recurrence_end_mode"]').forEach(input => 
     input.addEventListener('change', syncRecurrenceUi);
 });
 syncRecurrenceUi();
+
+document.querySelectorAll('.attendance-status').forEach((selectNode) => {
+    selectNode.addEventListener('change', function() {
+        const patientId = this.dataset.patientId;
+        const reasonBtn = document.querySelector('.missed-reason-btn[data-patient-id="' + patientId + '"]');
+        const reasonInput = document.getElementById('absence-reason-' + patientId);
+        const isMissed = this.value === 'missed';
+
+        if (reasonBtn) {
+            reasonBtn.classList.toggle('d-none', !isMissed);
+        }
+
+        if (!isMissed && reasonInput) {
+            reasonInput.value = '';
+            return;
+        }
+
+        if (isMissed && reasonInput && !reasonInput.value.trim()) {
+            const value = window.prompt(isHebrew ? 'סיבת היעדרות קצרה' : 'Short missed reason', '');
+            if (value !== null) {
+                reasonInput.value = value.trim();
+            }
+        }
+    });
+});
+
+document.querySelectorAll('.missed-reason-btn').forEach((buttonNode) => {
+    buttonNode.addEventListener('click', function() {
+        const patientId = this.dataset.patientId;
+        const reasonInput = document.getElementById('absence-reason-' + patientId);
+        if (!reasonInput) return;
+        const value = window.prompt(isHebrew ? 'סיבת היעדרות קצרה' : 'Short missed reason', reasonInput.value || '');
+        if (value !== null) {
+            reasonInput.value = value.trim();
+        }
+    });
+});
 
 if (window.location.hash) {
     const target = document.querySelector(window.location.hash);
