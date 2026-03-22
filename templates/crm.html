@@ -16,6 +16,40 @@
     </div>
 </div>
 
+{% if reminders %}
+<div class="card border-0 shadow-sm mb-3" id="upcoming-reminders-section">
+    <div class="card-header bg-warning-subtle border-0 py-2 px-3">
+        <h6 class="mb-0 fw-bold text-warning-emphasis">
+            <i class="bi bi-bell-fill me-2"></i>{{ t('Upcoming Reminders') }}
+            <span class="badge bg-warning text-dark ms-2">{{ reminders|length }}</span>
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+            {% for r in reminders %}
+            <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                <div>
+                    <a href="{{ url_for('patient_detail', patient_id=r.patient_id) }}" class="fw-semibold text-decoration-none">{{ r.patient_name }}</a>
+                    <span class="text-muted small ms-2">
+                        {% if r.is_today %}
+                            <span class="badge bg-danger rounded-pill">{{ t('Today') }}</span>
+                        {% elif r.is_tomorrow %}
+                            <span class="badge bg-warning text-dark rounded-pill">{{ t('Tomorrow') }}</span>
+                        {% endif %}
+                        {{ r.appointment_time[:5] }}
+                        {% if r.meeting_type and r.meeting_type != 'in-person' %}
+                            &mdash; {{ r.meeting_type }}
+                        {% endif %}
+                    </span>
+                </div>
+                <span class="text-muted small">{{ r.appointment_date }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
 <div class="crm-summary-strip mb-3">
     <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', patient_type=patient_type, q=search_query, sort=sort_by) }}">
         <div class="crm-summary-mini {% if status == 'all' %}active{% endif %}">
