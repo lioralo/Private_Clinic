@@ -107,5 +107,13 @@
   "Weekly Recurring": "חוזר שבועית",
   "Recurrence Interval (Weeks)": "תדירות חזרה (שבועות)",
   "Recurrence End Limit": "גבול סיום חזרה",
-  "Missing Recurring Appointment": "חסרה פגישה חוזרת"
+  "Missing Recurring Appointment": "חסרה פגישה חוזרת",
+  "Edit Meeting": "ערוך פגישה",
+  "Delete Meeting": "מחק פגישה",
+  "Delete Recurring Meeting": "מחיקת פגישה חוזרת",
+  "How would you like to delete this recurring meeting?": "כיצד ברצונך למחוק את הפגישה החוזרת?",
+  "Delete this occurrence only": "מחק מופע זה בלבד",
+  "Delete this and all upcoming meetings": "מחק פגישה זו וכל הפגישות הבאות",
+  "Delete all meetings in this series": "מחק את כל הפגישות בסדרה",
+  "Delete": "מחק"
 }

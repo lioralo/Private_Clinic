@@ -509,7 +509,19 @@ document.addEventListener('DOMContentLoaded', function() {
         couldNotSaveMeetingChanges: {{ t('Could not save meeting changes.')|tojson }},
         privateMeeting: {{ t('Private meeting')|tojson }},
         noWeekendItems: {{ t('No weekend items.')|tojson }},
-        noPendingFollowUps: {{ t('No pending follow-up indicators.')|tojson }}
+        noPendingFollowUps: {{ t('No pending follow-up indicators.')|tojson }},
+        editMeetingTitle: {{ t('Edit Meeting')|tojson }},
+        deleteRecurringTitle: {{ t('Delete Recurring Meeting')|tojson }},
+        deleteRecurringQuestion: {{ t('How would you like to delete this recurring meeting?')|tojson }},
+        deleteOneOccurrence: {{ t('Delete this occurrence only')|tojson }},
+        deleteThisAndUpcoming: {{ t('Delete this and all upcoming meetings')|tojson }},
+        deleteAllOccurrences: {{ t('Delete all meetings in this series')|tojson }},
+        deleteLabel: {{ t('Delete')|tojson }},
+        editRecurringTitle: {{ t('Edit Recurring Meeting')|tojson }},
+        editRecurringApplyScope: {{ t('How would you like to apply this change?')|tojson }},
+        editOneOccurrence: {{ t('This occurrence only')|tojson }},
+        editThisAndUpcoming: {{ t('This and all upcoming')|tojson }},
+        editAllOccurrences: {{ t('All occurrences in this series')|tojson }}
     };
 
     const calendarEl = document.getElementById('weeklyCalendar');
@@ -617,27 +629,79 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function showScopeModal(config) {
+        if (!actionModal) return Promise.resolve(null);
+        return new Promise((resolve) => {
+            modalTitle.textContent = config.title || I18N.notice;
+            const optionsHtml = (config.options || []).map((opt, i) =>
+                `<div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="calScopeChoice" id="calScope_${i}" value="${escapeHtml(opt.value)}" ${i === 0 ? 'checked' : ''}>
+                    <label class="form-check-label" for="calScope_${i}">${escapeHtml(opt.label)}</label>
+                </div>`
+            ).join('');
+            modalBody.innerHTML = (config.message ? `<p class="small text-muted mb-3">${escapeHtml(config.message)}</p>` : '') + optionsHtml;
+            modalConfirmBtn.textContent = config.confirmText || I18N.ok;
+            modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
+            modalCancelBtn.classList.remove('d-none');
+            modalCancelBtn.textContent = config.cancelText || I18N.cancel;
+            actionModal.show();
+            let resolved = false;
+            const confirmHandler = () => {
+                if (resolved) return;
+                resolved = true;
+                const sel = modalBody.querySelector('input[name="calScopeChoice"]:checked');
+                actionModal.hide();
+                resolve(sel ? sel.value : null);
+            };
+            const hiddenHandler = () => {
+                modalConfirmBtn.removeEventListener('click', confirmHandler);
+                modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
+                if (!resolved) { resolved = true; resolve(null); }
+            };
+            modalConfirmBtn.addEventListener('click', confirmHandler);
+            modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
+        });
+    }
+
     function openAppointmentEditor(payload) {
         if (!payload || !payload.source_id) {
             showActionModal({ title: I18N.editFailed, message: I18N.missingAppointmentId });
             return;
         }
 
+        const occurrenceDate = payload.occurrence_date || payload.date || '';
         const recurringInfo = payload.is_recurring
             ? `<div class="alert alert-info py-1 px-2 small mb-2">${I18N.recurringMeeting}</div>`
             : '';
+        const scopeHtml = payload.is_recurring ? `
+            <div class="mb-3 p-2 border rounded-3 bg-light">
+                <div class="small fw-semibold mb-2">${escapeHtml(I18N.editRecurringApplyScope)}</div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="radio" name="editScope" id="editScopeOne" value="one" checked>
+                    <label class="form-check-label small" for="editScopeOne">${escapeHtml(I18N.editOneOccurrence)}</label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="radio" name="editScope" id="editScopeUpcoming" value="upcoming">
+                    <label class="form-check-label small" for="editScopeUpcoming">${escapeHtml(I18N.editThisAndUpcoming)}</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="editScope" id="editScopeAll" value="all">
+                    <label class="form-check-label small" for="editScopeAll">${escapeHtml(I18N.editAllOccurrences)}</label>
+                </div>
+            </div>` : '';
         const patientLinkHtml = (isAdmin && payload.patient_id)
             ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">${I18N.openPatientProfile}</a></div>`
             : '';
 
-        modalTitle.textContent = {{ t('Edit Meeting')|tojson }};
+        modalTitle.textContent = payload.is_recurring ? I18N.editRecurringTitle : {{ t('Edit Meeting')|tojson }};
         modalBody.innerHTML = `
             ${patientLinkHtml}
             ${recurringInfo}
+            ${scopeHtml}
             <div class="mb-2"><label class="form-label small">${I18N.date}</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
             <div class="mb-2"><label class="form-label small">${I18N.startTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
             <div class="mb-2"><label class="form-label small">${I18N.endTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
-            <div class="mb-2"><label class="form-label small">${I18N.meetingTitle}</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${payload.meeting_title || ''}"></div>
+            <div class="mb-2"><label class="form-label small">${I18N.meetingTitle}</label><input type="text" class="form-control form-control-sm" id="editMeetingTitle" value="${escapeHtml(payload.meeting_title || '')}"></div>
             <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="editSaveToGoogleBtn"><i class="bi bi-calendar-plus me-1"></i>${I18N.addToGoogleCalendar}</button>
             <div class="mb-2"><label class="form-label small">${I18N.meetingType}</label>
                 <select class="form-select form-select-sm" id="editMeetingType">
@@ -646,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <option value="google-meet">Google Meet</option>
                 </select>
             </div>
-            <div class="mb-2"><label class="form-label small">${I18N.meetingLink}</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${payload.meeting_link || ''}"></div>
+            <div class="mb-2"><label class="form-label small">${I18N.meetingLink}</label><input type="url" class="form-control form-control-sm" id="editMeetingLink" value="${escapeHtml(payload.meeting_link || '')}"></div>
             <button type="button" class="btn btn-sm btn-outline-danger mt-2" id="deleteMeetingInsideEdit">${I18N.deleteMeeting}</button>
         `;
 
@@ -676,25 +740,61 @@ document.addEventListener('DOMContentLoaded', function() {
         const deleteBtn = document.getElementById('deleteMeetingInsideEdit');
         if (deleteBtn) {
             deleteBtn.onclick = function() {
-                fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken }
-                }).then(r => r.json()).then(data => {
-                    if (data.status === 'success') {
-                        actionModal.hide();
-                        loadSnapshot();
-                        loadBookingManagement();
-                    } else {
-                        showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
-                    }
-                }).catch(() => {
-                    showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
-                });
+                if (payload.is_recurring) {
+                    actionModal.hide();
+                    showScopeModal({
+                        title: I18N.deleteRecurringTitle,
+                        message: I18N.deleteRecurringQuestion,
+                        options: [
+                            { value: 'one', label: I18N.deleteOneOccurrence },
+                            { value: 'upcoming', label: I18N.deleteThisAndUpcoming },
+                            { value: 'all', label: I18N.deleteAllOccurrences }
+                        ],
+                        confirmText: I18N.deleteLabel,
+                        confirmClass: 'btn-danger'
+                    }).then(scope => {
+                        if (!scope) return;
+                        const formBody = new URLSearchParams({ scope });
+                        if (scope === 'one' || scope === 'upcoming') formBody.set('occurrence_date', occurrenceDate);
+                        fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: formBody
+                        }).then(r => r.json()).then(data => {
+                            if (data.status === 'success') {
+                                actionModal.hide();
+                                loadSnapshot();
+                                loadBookingManagement();
+                            } else {
+                                showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
+                            }
+                        }).catch(() => {
+                            showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
+                        });
+                    });
+                } else {
+                    fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken }
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            actionModal.hide();
+                            loadSnapshot();
+                            loadBookingManagement();
+                        } else {
+                            showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
+                        }
+                    }).catch(() => {
+                        showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
+                    });
+                }
             };
         }
 
         modalConfirmBtn.onclick = function() {
             const selectedType = document.getElementById('editMeetingType').value;
+            const scopeEl = modalBody.querySelector('input[name="editScope"]:checked');
+            const scope = scopeEl ? scopeEl.value : 'all';
             const body = new URLSearchParams({
                 date: document.getElementById('editMeetingDate').value,
                 time: document.getElementById('editMeetingTime').value,
@@ -703,7 +803,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 meeting_link: document.getElementById('editMeetingLink').value || '',
                 meeting_title: document.getElementById('editMeetingTitle').value || '',
                 save_to_google: '0',
-                meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : '')
+                meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : ''),
+                scope: scope,
+                occurrence_date: occurrenceDate
             });
             fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
                 method: 'POST',
@@ -928,6 +1030,41 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // For recurring appointments, ask which occurrences to delete
+        if (payload.kind === 'appointment' && payload.is_recurring) {
+            const occDate = payload.occurrence_date || payload.date || '';
+            showScopeModal({
+                title: I18N.deleteRecurringTitle,
+                message: I18N.deleteRecurringQuestion,
+                options: [
+                    { value: 'one', label: I18N.deleteOneOccurrence },
+                    { value: 'upcoming', label: I18N.deleteThisAndUpcoming },
+                    { value: 'all', label: I18N.deleteAllOccurrences }
+                ],
+                confirmText: I18N.deleteLabel,
+                confirmClass: 'btn-danger'
+            }).then(scope => {
+                if (!scope) return;
+                const formBody = new URLSearchParams({ scope });
+                if (scope === 'one' || scope === 'upcoming') formBody.set('occurrence_date', occDate);
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formBody
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        loadSnapshot();
+                        loadBookingManagement();
+                    } else {
+                        showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
+                    }
+                }).catch(() => {
+                    showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
+                });
+            });
+            return;
+        }
+
         showActionModal({
             title: 'Delete Booking',
             message: 'Delete this item?',
@@ -974,7 +1111,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (item.is_recurring) {
                 details.push('REC');
             }
-            const escaped = encodeURIComponent(JSON.stringify(item));
+            const escaped = encodeURIComponent(JSON.stringify({
+                ...item,
+                occurrence_date: item.date || '',
+                source_id: item.source_id || item.id
+            }));
             return `<tr>
                 <td>${item.date}</td>
                 <td>${item.time} - ${item.end_time}</td>
@@ -1233,8 +1374,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const platform = meta.meeting_platform || '';
             const mtype = meta.meeting_type || '';
             const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
-            const patientOrTitle = meta.patient_name || arg.event.title || '';
-            const safePrimaryLabel = escapeHtml(patientOrTitle);
+            // Hide patient names; show meeting_title if set, otherwise show nothing
+            const displayLabel = (meta.type === 'appointment')
+                ? (meta.meeting_title || '')
+                : (meta.patient_name || arg.event.title || '');
+            const safePrimaryLabel = escapeHtml(displayLabel);
             let icon = '';
             if (platform === 'zoom' || mtype === 'zoom') {
                 icon = '<i class="bi bi-camera-video-fill me-1" title="Zoom meeting"></i>';
@@ -1313,6 +1457,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     source_id: props.appointment_id || meta.appointment_id,
                     patient_id: meta.patient_id,
                     date: info.event.start ? info.event.start.toISOString().slice(0, 10) : '',
+                    occurrence_date: info.event.start ? info.event.start.toISOString().slice(0, 10) : '',
                     time: info.event.start ? info.event.start.toTimeString().slice(0, 5) : '',
                     end_time: info.event.end ? info.event.end.toTimeString().slice(0, 5) : '',
                     meeting_type: meta.meeting_type || 'in-person',
@@ -1683,7 +1828,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .map(evt => evt.title)
             .filter(name => name && name !== 'Unavailable');
         const uniqueNames = Array.from(new Set(names));
-        ongoingThisWeek.textContent = uniqueNames.length ? uniqueNames.join(', ') : I18N.none;
+        ongoingThisWeek.textContent = uniqueNames.length ? String(uniqueNames.length) : I18N.none;
     }
 
     function renderAvailableSlots(slots) {

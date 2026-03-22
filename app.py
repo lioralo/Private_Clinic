@@ -450,6 +450,19 @@ HEBREW_TRANSLATIONS = {
     ,"Open self-booking for me": "פתיחת קביעה עצמית עבורי"
     ,"Request another meeting from available slots": "בקשה לפגישה נוספת מתוך הזמנים הפנויים"
     ,"This request was added to your chat.": "הבקשה נוספה לצ'אט שלך."
+    ,"Edit Meeting": "ערוך פגישה"
+    ,"Delete Meeting": "מחק פגישה"
+    ,"Delete Recurring Meeting": "מחיקת פגישה חוזרת"
+    ,"How would you like to delete this recurring meeting?": "כיצד ברצונך למחוק את הפגישה החוזרת?"
+    ,"Delete this occurrence only": "מחק מופע זה בלבד"
+    ,"Delete this and all upcoming meetings": "מחק פגישה זו וכל הפגישות הבאות"
+    ,"Delete all meetings in this series": "מחק את כל הפגישות בסדרה"
+    ,"Delete": "מחק"
+    ,"Edit Recurring Meeting": "עריכת פגישה חוזרת"
+    ,"How would you like to apply this change?": "כיצד ברצונך להחיל שינוי זה?"
+    ,"This occurrence only": "מופע זה בלבד"
+    ,"This and all upcoming": "פגישה זו וכל הבאות"
+    ,"All occurrences in this series": "כל המופעים בסדרה"
 }
 
 TRANSLATION_OVERRIDES_FILE = Path(__file__).resolve().parent / 'translations' / 'he.json'
@@ -1010,6 +1023,10 @@ def init_db():
             pass
         try:
             db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
         except sqlite3.OperationalError:
             pass
         try:
@@ -3274,6 +3291,12 @@ def recurring_occurrences_for_week(appt, week_start, week_end):
     recurrence_count = int(appt['recurrence_count'] or 0)
     days = parse_recurrence_days(appt)
 
+    try:
+        excluded_raw = appt['excluded_dates'] or ''
+    except (KeyError, IndexError):
+        excluded_raw = ''
+    excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
+
     anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
     result = []
     produced = 0
@@ -3289,6 +3312,11 @@ def recurring_occurrences_for_week(appt, week_start, week_end):
             if occ_date < base_date:
                 continue
             if recurrence_end and occ_date > recurrence_end:
+                continue
+            if occ_date.isoformat() in excluded:
+                produced += 1
+                if recurrence_count and produced > recurrence_count:
+                    return result
                 continue
 
             produced += 1
@@ -3571,6 +3599,12 @@ def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=
     recurrence_count = int(appt['recurrence_count'] or 0)
     days = parse_recurrence_days(appt)
 
+    try:
+        excluded_raw = appt['excluded_dates'] or ''
+    except (KeyError, IndexError):
+        excluded_raw = ''
+    excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
+
     anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
     occurrences = []
     produced = 0
@@ -3586,6 +3620,11 @@ def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=
             if occ_date < base_date:
                 continue
             if recurrence_end and occ_date > recurrence_end:
+                continue
+            if occ_date.isoformat() in excluded:
+                produced += 1
+                if recurrence_count and produced > recurrence_count:
+                    return occurrences
                 continue
 
             produced += 1
@@ -3935,7 +3974,8 @@ def build_week_calendar_snapshot(db, week_start, user):
                     'meeting_platform': platform,
                     'meeting_title': meeting_title,
                     'save_to_google': save_to_google,
-                    'can_delete': can_delete
+                    'can_delete': can_delete,
+                    'can_edit': can_delete
                 }
             })
             occupied.append((start_dt, end_dt))
@@ -6189,6 +6229,48 @@ def api_calendar_appointment_delete(appointment_id):
         if not patient or int(patient['can_self_schedule'] or 0) != 1:
             return jsonify({'status': 'error', 'message': 'Self-management is disabled.'}), 403
 
+    is_recurring = int(appt['is_recurring'] or 0) == 1
+    scope = request.form.get('scope', 'all').strip()
+    occurrence_date_raw = request.form.get('occurrence_date', '').strip()
+
+    if not is_recurring or scope == 'all':
+        db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    if scope == 'one':
+        occ_date = parse_date_safe(occurrence_date_raw)
+        if not occ_date:
+            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+        try:
+            existing_excluded = appt['excluded_dates'] or ''
+        except (KeyError, IndexError):
+            existing_excluded = ''
+        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
+        if occ_date.isoformat() not in excluded_list:
+            excluded_list.append(occ_date.isoformat())
+        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
+                   (','.join(excluded_list), appointment_id))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    if scope == 'upcoming':
+        occ_date = parse_date_safe(occurrence_date_raw)
+        if not occ_date:
+            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+            db.commit()
+            return jsonify({'status': 'success'})
+        base_date = parse_date_safe(appt['appointment_date'])
+        if base_date and occ_date <= base_date:
+            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+        else:
+            new_end = (occ_date - timedelta(days=1)).isoformat()
+            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
+                       (new_end, appointment_id))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    # Fallback
     db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
     db.commit()
     return jsonify({'status': 'success'})
@@ -7580,6 +7662,8 @@ def api_calendar_appointment_update(appointment_id):
     if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
+    scope = request.form.get('scope', 'all').strip()
+    occurrence_date_raw = request.form.get('occurrence_date', '').strip()
     booking_date = request.form.get('date', '').strip()
     booking_time = request.form.get('time', '').strip()
     end_time_raw = request.form.get('end_time', '').strip()
@@ -7602,6 +7686,74 @@ def api_calendar_appointment_update(appointment_id):
         if computed > 0:
             duration = computed
 
+    is_recurring = int(appt['is_recurring'] or 0) == 1
+
+    # --- Scope: this occurrence only ---
+    if is_recurring and scope == 'one':
+        occ_date = parse_date_safe(occurrence_date_raw)
+        if not occ_date:
+            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+        new_day = parse_date_safe(booking_date)
+        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+        new_end_dt = new_start_dt + timedelta(minutes=duration)
+        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
+        if conflict:
+            return jsonify({'status': 'error', 'message': conflict}), 409
+        existing_excluded = appt['excluded_dates'] or ''
+        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
+        if occ_date.isoformat() not in excluded_list:
+            excluded_list.append(occ_date.isoformat())
+        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
+                   (','.join(excluded_list), appointment_id))
+        db.execute('''
+            INSERT INTO appointments
+            (patient_id, appointment_date, appointment_time, duration_minutes,
+             is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
+            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+        ''', (appt['patient_id'], new_day.isoformat(),
+              parse_time_safe(booking_time).strftime('%H:%M'), duration,
+              meeting_type, meeting_link or None, meeting_platform or None,
+              meeting_title or None, save_to_google))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    # --- Scope: this and all upcoming ---
+    if is_recurring and scope == 'upcoming':
+        occ_date = parse_date_safe(occurrence_date_raw)
+        if not occ_date:
+            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+        base_date = parse_date_safe(appt['appointment_date'])
+        if base_date and occ_date <= base_date:
+            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+        else:
+            new_end = (occ_date - timedelta(days=1)).isoformat()
+            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
+                       (new_end, appointment_id))
+        new_day = parse_date_safe(booking_date)
+        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+        new_end_dt = new_start_dt + timedelta(minutes=duration)
+        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
+        if conflict:
+            db.rollback()
+            return jsonify({'status': 'error', 'message': conflict}), 409
+        rec_days = appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+        rec_interval = appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else None
+        rec_end = appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else None
+        db.execute('''
+            INSERT INTO appointments
+            (patient_id, appointment_date, appointment_time, duration_minutes,
+             is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+             meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (appt['patient_id'], new_day.isoformat(),
+              parse_time_safe(booking_time).strftime('%H:%M'), duration,
+              rec_days, rec_interval, rec_end,
+              meeting_type, meeting_link or None, meeting_platform or None,
+              meeting_title or None, save_to_google))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    # --- Default / scope='all': update the record directly ---
     day_obj = parse_date_safe(booking_date)
     start_dt = combine_dt(day_obj, parse_time_safe(booking_time).strftime('%H:%M'))
     end_dt = start_dt + timedelta(minutes=duration)
