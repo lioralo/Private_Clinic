@@ -1374,9 +1374,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const platform = meta.meeting_platform || '';
             const mtype = meta.meeting_type || '';
             const recurringTag = meta.is_recurring ? '<span class="badge bg-light text-dark border me-1">REC</span>' : '';
-            // Hide patient names; show meeting_title if set, otherwise show nothing
+            // Show patient names for appointments; show meeting_title if set, or patient_name as fallback
             const displayLabel = (meta.type === 'appointment')
-                ? (meta.meeting_title || '')
+                ? (meta.patient_name || meta.meeting_title || '')
                 : (meta.patient_name || arg.event.title || '');
             const safePrimaryLabel = escapeHtml(displayLabel);
             let icon = '';
