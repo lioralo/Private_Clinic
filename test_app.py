@@ -5,7 +5,7 @@ import tempfile
 import sqlite3
 import json
 import app as app_module
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import g
 from app import app, init_db, get_db
 
@@ -92,6 +92,37 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.login('lioraloni', 'Flo@tingind4')
         assert b'Log out' in rv.data or b'Logout' in rv.data
         rv = self.logout()
+        assert b'Login' in rv.data
+
+    def test_admin_is_logged_out_after_30_minutes_inactive(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=31)).timestamp())
+        with self.client.session_transaction() as sess:
+            sess['last_activity_at'] = stale_ts
+
+        rv = self.client.get('/patients', follow_redirects=True)
+        assert b'Session expired due to inactivity' in rv.data
+        assert b'Login' in rv.data
+
+    def test_patient_is_logged_out_after_30_minutes_inactive(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Timeout Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='timeout_patient',
+            password='password123'
+        ), follow_redirects=True)
+
+        self.logout()
+        self.login('timeout_patient', 'password123')
+        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=31)).timestamp())
+        with self.client.session_transaction() as sess:
+            sess['last_activity_at'] = stale_ts
+
+        rv = self.client.get('/patient_home', follow_redirects=True)
+        assert b'Session expired due to inactivity' in rv.data
         assert b'Login' in rv.data
 
     def test_add_patient(self):

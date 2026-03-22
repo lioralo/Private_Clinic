@@ -20,13 +20,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import re
 import pyotp
 from docx import Document
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
+app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '30') or 30)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
@@ -521,6 +522,35 @@ def set_density(density):
     if normalized in {'compact', 'balanced', 'large'}:
         session['ui_density'] = normalized
     return redirect(request.referrer or url_for('index'))
+
+
+@app.before_request
+def enforce_inactivity_timeout():
+    if request.path.startswith('/static/'):
+        return
+
+    if not current_user.is_authenticated:
+        session.pop('last_activity_at', None)
+        return
+
+    timeout_minutes = int(app.config.get('INACTIVITY_TIMEOUT_MINUTES', 30) or 30)
+    timeout_seconds = max(timeout_minutes, 1) * 60
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    last_activity_at = session.get('last_activity_at')
+
+    if last_activity_at is not None:
+        try:
+            idle_seconds = now_ts - int(last_activity_at)
+        except (TypeError, ValueError):
+            idle_seconds = 0
+
+        if idle_seconds >= timeout_seconds:
+            logout_user()
+            session.pop('last_activity_at', None)
+            flash('Session expired due to inactivity. Please log in again.')
+            return redirect(url_for('login'))
+
+    session['last_activity_at'] = now_ts
 
 
 @app.before_request
