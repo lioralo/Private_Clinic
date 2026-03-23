@@ -1,610 +1,770 @@
-# Private Clinic — Beta → Live Migration Guide
+# Private Clinic – Beta → Production Migration Guide
 
-This document provides a step-by-step guide to migrate the Private Clinic
-application from a **beta server** to a **live production server**.
-Follow every phase in order and do not skip validation steps.
+This document provides a step-by-step runbook for migrating the Private Clinic application
+from a beta/staging server to a live production environment.
+
+**Estimated total migration window:** 30–60 minutes (plus any DNS propagation time)  
+**Required downtime:** ~5–15 minutes during Phase 4 (live server restoration)
 
 ---
 
 ## Prerequisites
 
-| Item | Requirement |
-|------|-------------|
-| Beta server | SSH access, Docker running, app healthy |
-| Live server | Ubuntu 24.04, Docker installed, ports 22/80/443 open |
-| Operator workstation | `scp`/`ssh` available, Python 3 installed |
-| DNS | `A` record for the live domain already pointing to the live server IP |
-| Downtime window | Allow ≥ 30 minutes of planned downtime |
+| Item | Where to find it |
+|------|-----------------|
+| SSH access to **beta** server | Your DevOps team / AWS console |
+| SSH access to **live** server | Your DevOps team / AWS console |
+| Production `.env.prod` values | See `LIVE_DEPLOYMENT.md` for generation instructions |
+| `BACKUP_ENCRYPTION_KEY` value from beta | Beta server `.env.prod` or `secure_backups/.backup.key` |
+| `scp`/`rsync` available on both hosts | Standard Ubuntu install |
+| Docker + Docker Compose on live server | `scripts/setup_ubuntu_docker.sh` |
 
-> **Security note** – Never transmit encryption keys or `.env` files over
-> unencrypted channels. All transfers in this guide use SSH/SCP.
-
----
-
-## Phase 1 — Pre-Migration Checklist
-
-Run these checks **on the beta server** before you begin.
-
-### 1.1 Verify the backup encryption key is set
-
-```bash
-# On beta server
-grep BACKUP_ENCRYPTION_KEY /opt/Private_Clinic/.env.prod
-```
-
-If the variable is empty, the app will have used a key stored in
-`./data/secure_backups/.backup.key`. Confirm the key file exists:
-
-```bash
-ls -la /opt/Private_Clinic/data/secure_backups/.backup.key
-```
-
-Record which key source is active — you will need it in Phase 3.
-
-### 1.2 Verify admin credentials are known
-
-Log in to the beta app (`https://<beta-domain>/login`) with the admin account
-and confirm access works.  If TOTP is enabled, have the authenticator app
-ready.
-
-### 1.3 Check database integrity
-
-```bash
-# On beta server — inside or outside the container
-sqlite3 /opt/Private_Clinic/data/clinic.db "PRAGMA integrity_check;"
-```
-
-Expected output: `ok`
-
-If the result is anything other than `ok`, **stop** and investigate before
-continuing.
-
-### 1.4 Validate network connectivity to the live server
-
-```bash
-# On operator workstation
-ssh -i /path/to/live-key.pem ubuntu@<live-server-ip> echo "Live server reachable"
-```
+> **Security note:** all commands that handle secrets are shown with placeholder values in
+> angle brackets, e.g. `<BETA_ENCRYPTION_KEY>`.  Replace every placeholder with the real
+> value before running.
 
 ---
 
-## Phase 2 — Beta Server Extraction
+## Phase 1 – Pre-Migration Checklist
 
-### 2.1 Create a fresh encrypted backup via the app
+Complete every item on this checklist **before** beginning the migration.
 
-Log in to the beta app as admin and use the **Admin → Backup** button to
-trigger a new encrypted backup, **or** run the backup script directly:
+### 1.1 Verify the backup encryption key on the beta server
 
 ```bash
-# On beta server
-cd /opt/Private_Clinic
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec app \
-    python backup_db.py
+# SSH into beta server
+ssh ubuntu@<BETA_SERVER_IP>
+
+cd /opt/private_clinic        # or wherever the repo is deployed
+
+# Option A – key stored in .env.prod
+grep BACKUP_ENCRYPTION_KEY .env.prod
+
+# Option B – key stored in the fallback file
+cat data/secure_backups/.backup.key
 ```
 
-The new backup file will appear in `./data/secure_backups/` with a name like
-`clinic_YYYYMMDD_HHMMSS.db.enc`.
+Save the key value in a secure password manager entry labelled **"Beta Backup Encryption Key"**.
+You will need it in Phase 4.
 
-### 2.2 Note the backup filename
-
-```bash
-# On beta server
-ls -lht /opt/Private_Clinic/data/secure_backups/clinic_*.db.enc | head -5
-```
-
-Copy the full filename of the newest `.enc` file — you will reference it in
-Phase 3.
-
-### 2.3 Verify backup integrity (decrypt test)
+### 1.2 Confirm admin credentials
 
 ```bash
-# On beta server — quick smoke-test
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec app \
-    python3 - <<'PY'
-import os
-import sqlite3
-from pathlib import Path
-from cryptography.fernet import Fernet
-
-backup_dir = Path("/data/secure_backups")
-enc_file = sorted(backup_dir.glob("clinic_*.db.enc"))[-1]
-key = os.environ["BACKUP_ENCRYPTION_KEY"].encode()
-decrypted = Fernet(key).decrypt(enc_file.read_bytes())
-assert decrypted[:16] == b"SQLite format 3\x00", "SQLite header missing!"
-print(f"Integrity OK: {enc_file.name}")
+# On the beta server – open a one-off Python shell inside the running container
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+rows = db.execute("SELECT id, username, role, totp_enabled FROM users WHERE role='admin'").fetchall()
+for r in rows:
+    print(r)
 PY
 ```
 
-### 2.4 Collect the encryption key
+Note every admin username and confirm you know the password for at least one account.
 
-**Option A — key is stored in `.env.prod`:**
-
-```bash
-grep BACKUP_ENCRYPTION_KEY /opt/Private_Clinic/.env.prod
-# e.g.  BACKUP_ENCRYPTION_KEY=abc123...==
-```
-
-**Option B — key is stored in the key file:**
+### 1.3 Database integrity check on beta
 
 ```bash
-cat /opt/Private_Clinic/data/secure_backups/.backup.key
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+result = db.execute("PRAGMA integrity_check").fetchone()
+print("Integrity:", result)
+print("Page count:", db.execute("PRAGMA page_count").fetchone())
+PY
 ```
 
-Store the key value in a temporary local file on your **operator workstation**
-(not on any server):
+Expected output: `Integrity: ('ok',)`
+
+If integrity check fails, **stop the migration** and investigate before continuing.
+
+### 1.4 Row-count baseline (record before migrating)
 
 ```bash
-echo "BACKUP_ENCRYPTION_KEY=<paste-key-here>" > /tmp/migration_key.env
-chmod 600 /tmp/migration_key.env
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+tables = db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+for (t,) in sorted(tables):
+    count = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    if count:
+        print(f"  {t}: {count} rows")
+PY
 ```
 
-### 2.5 Document artifact sizes
+Save this output – you will compare it against the live server in Phase 5.
+
+### 1.5 Network connectivity validation
 
 ```bash
-# On beta server
-du -sh \
-    /opt/Private_Clinic/data/clinic.db \
-    /opt/Private_Clinic/data/uploads \
-    /opt/Private_Clinic/data/patients_logs \
-    /opt/Private_Clinic/data/app_log.txt \
-    /opt/Private_Clinic/data/secure_backups
-```
+# From your workstation – confirm you can reach both servers
+ssh -o ConnectTimeout=10 ubuntu@<BETA_SERVER_IP>  "echo beta OK"
+ssh -o ConnectTimeout=10 ubuntu@<LIVE_SERVER_IP>  "echo live OK"
 
-Record the sizes for post-migration verification.
+# Confirm the live server can accept SCP transfers
+ssh ubuntu@<LIVE_SERVER_IP> "df -h /opt"
+```
 
 ---
 
-## Phase 3 — Data Transfer
+## Phase 2 – Beta Server Extraction
 
-All transfers run **from the operator workstation**.
+All commands in this phase run on the **beta server**.
+
+### 2.1 Create a fresh encrypted backup
+
+Log in to the beta server:
+
+```bash
+ssh ubuntu@<BETA_SERVER_IP>
+cd /opt/private_clinic
+```
+
+Trigger a manual backup via the app's built-in backup endpoint (recommended):
+
+```bash
+# Log in and save the session cookie jar
+curl -s -c /tmp/jar.txt -b /tmp/jar.txt -X POST \
+  -d "username=<ADMIN_USER>&password=<ADMIN_PASS>" \
+  https://<BETA_DOMAIN>/login -o /dev/null
+
+# Trigger the backup using the saved cookie jar
+curl -s -b /tmp/jar.txt -X POST https://<BETA_DOMAIN>/admin/backup_now
+```
+
+Alternatively, trigger the backup directly inside the container:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import os, sys
+sys.path.insert(0, '/app')
+from app import perform_encrypted_backup
+db_path = os.environ.get("DATABASE", "/data/clinic.db")
+result = perform_encrypted_backup(db_path)
+print("Backup result:", result)
+PY
+```
+
+### 2.2 Identify and verify the backup file
+
+```bash
+ls -lh data/secure_backups/clinic_*.db.enc | tail -5
+```
+
+Note the filename of the newest `.db.enc` file, e.g. `clinic_20260321_180000.db.enc`.
+
+Verify the backup can be decrypted without errors:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import os, sys, zipfile, io
+sys.path.insert(0, '/app')
+from cryptography.fernet import Fernet
+
+backup_dir = os.environ.get("BACKUP_DIR", "/data/secure_backups")
+key_env    = os.environ.get("BACKUP_ENCRYPTION_KEY")
+key_file   = os.path.join(backup_dir, ".backup.key")
+key = key_env.encode() if key_env else open(key_file, "rb").read()
+fernet = Fernet(key)
+
+files = sorted(f for f in os.listdir(backup_dir) if f.endswith(".db.enc"))
+latest = files[-1]
+data = open(os.path.join(backup_dir, latest), "rb").read()
+raw  = fernet.decrypt(data)
+zf   = zipfile.ZipFile(io.BytesIO(raw))
+print("Backup members:", zf.namelist()[:10])
+print("Verification: OK –", latest)
+PY
+```
+
+### 2.3 Extract the encryption key
+
+```bash
+# Read from environment file
+grep BACKUP_ENCRYPTION_KEY .env.prod > /tmp/beta_key.txt
+
+# Or from the fallback key file
+cp data/secure_backups/.backup.key /tmp/beta_backup.key
+```
+
+> **Store both files securely.**  You must provide the same key on the live server so it can
+> decrypt the backup bundle.
+
+### 2.4 Inventory all artifacts to transfer
+
+```bash
+echo "=== Database backup file ==="
+ls -lh data/secure_backups/clinic_*.db.enc | tail -1
+
+echo "=== Uploads directory ==="
+du -sh data/uploads/ 2>/dev/null || echo "(empty)"
+
+echo "=== Patient logs ==="
+du -sh data/patients_logs/ 2>/dev/null || echo "(empty)"
+
+echo "=== Application log ==="
+ls -lh data/app_log.txt 2>/dev/null || echo "(not present)"
+```
+
+---
+
+## Phase 3 – Data Transfer
+
+All commands in this phase run **from your workstation** (or from the live server pulling
+from beta).
 
 ### 3.1 Create a staging directory on the live server
 
 ```bash
-ssh -i /path/to/live-key.pem ubuntu@<live-server-ip> \
-    "mkdir -p ~/migration_staging"
+ssh ubuntu@<LIVE_SERVER_IP> "mkdir -p /tmp/migration/{backup,uploads,logs}"
 ```
 
-### 3.2 Transfer the encrypted backup file
+### 3.2 Transfer the encrypted backup
 
 ```bash
-BACKUP_FILE="clinic_YYYYMMDD_HHMMSS.db.enc"   # ← replace with actual filename
+# Identify the latest backup filename on beta
+BACKUP_FILE=$(ssh ubuntu@<BETA_SERVER_IP> \
+  "ls /opt/private_clinic/data/secure_backups/clinic_*.db.enc | sort | tail -1")
 
-scp -i /path/to/live-key.pem \
-    ubuntu@<beta-server-ip>:/opt/Private_Clinic/data/secure_backups/${BACKUP_FILE} \
-    ubuntu@<live-server-ip>:~/migration_staging/${BACKUP_FILE}
+echo "Transferring: $BACKUP_FILE"
+
+scp ubuntu@<BETA_SERVER_IP>:"$BACKUP_FILE" \
+    ubuntu@<LIVE_SERVER_IP>:/tmp/migration/backup/
 ```
-
-> If you cannot SCP between servers directly, download to the workstation
-> first and then upload to the live server.
 
 ### 3.3 Transfer the encryption key
 
 ```bash
-# Transfer the key file OR set it via env — never leave it in plain text on disk
-scp -i /path/to/live-key.pem \
-    /tmp/migration_key.env \
-    ubuntu@<live-server-ip>:~/migration_staging/migration_key.env
-
-# Tighten permissions immediately
-ssh -i /path/to/live-key.pem ubuntu@<live-server-ip> \
-    "chmod 600 ~/migration_staging/migration_key.env"
+# Copy the key from beta to live – do this over SSH, not email/Slack
+ssh ubuntu@<BETA_SERVER_IP> "grep BACKUP_ENCRYPTION_KEY /opt/private_clinic/.env.prod" \
+  | ssh ubuntu@<LIVE_SERVER_IP> "cat > /tmp/migration/backup/beta_key.env"
 ```
 
-### 3.4 Transfer supplementary artifacts (uploads, logs)
+### 3.4 Transfer uploads
 
 ```bash
-# Uploads
-rsync -az -e "ssh -i /path/to/beta-key.pem" \
-    ubuntu@<beta-server-ip>:/opt/Private_Clinic/data/uploads/ \
-    /tmp/migration_uploads/
-
-rsync -az -e "ssh -i /path/to/live-key.pem" \
-    /tmp/migration_uploads/ \
-    ubuntu@<live-server-ip>:~/migration_staging/uploads/
-
-# Patient logs
-rsync -az -e "ssh -i /path/to/beta-key.pem" \
-    ubuntu@<beta-server-ip>:/opt/Private_Clinic/data/patients_logs/ \
-    /tmp/migration_patients_logs/
-
-rsync -az -e "ssh -i /path/to/live-key.pem" \
-    /tmp/migration_patients_logs/ \
-    ubuntu@<live-server-ip>:~/migration_staging/patients_logs/
-
-# App log (optional — carry history)
-scp -i /path/to/beta-key.pem \
-    ubuntu@<beta-server-ip>:/opt/Private_Clinic/data/app_log.txt \
-    /tmp/migration_app_log.txt
-
-scp -i /path/to/live-key.pem \
-    /tmp/migration_app_log.txt \
-    ubuntu@<live-server-ip>:~/migration_staging/app_log.txt
+rsync -avz --progress \
+  ubuntu@<BETA_SERVER_IP>:/opt/private_clinic/data/uploads/ \
+  ubuntu@<LIVE_SERVER_IP>:/tmp/migration/uploads/
 ```
 
-### 3.5 Verify transferred files on the live server
+### 3.5 Transfer patient logs
 
 ```bash
-ssh -i /path/to/live-key.pem ubuntu@<live-server-ip> \
-    "ls -lh ~/migration_staging/ && du -sh ~/migration_staging/*"
+rsync -avz --progress \
+  ubuntu@<BETA_SERVER_IP>:/opt/private_clinic/data/patients_logs/ \
+  ubuntu@<LIVE_SERVER_IP>:/tmp/migration/logs/
 ```
 
-Confirm the `.db.enc` file size matches what you recorded in Phase 2.5.
+### 3.6 Transfer application log (optional – for audit continuity)
+
+```bash
+scp ubuntu@<BETA_SERVER_IP>:/opt/private_clinic/data/app_log.txt \
+    ubuntu@<LIVE_SERVER_IP>:/tmp/migration/app_log.txt
+```
+
+### 3.7 Verify transferred files on live server
+
+```bash
+ssh ubuntu@<LIVE_SERVER_IP> <<'EOF'
+echo "=== Backup file ==="
+ls -lh /tmp/migration/backup/*.db.enc
+
+echo "=== Key file ==="
+cat /tmp/migration/backup/beta_key.env
+
+echo "=== Uploads ==="
+find /tmp/migration/uploads -type f | wc -l
+
+echo "=== Patient logs ==="
+find /tmp/migration/logs -type f | wc -l
+EOF
+```
+
+Compare file counts against the inventory recorded in Phase 2.4.
 
 ---
 
-## Phase 4 — Live Server Restoration
+## Phase 4 – Live Server Restoration
 
-All commands in this phase run **on the live server** unless noted.
+All commands in this phase run on the **live server**.
 
-### 4.1 Deploy the application (if not already running)
+> ⚠️ **This phase causes downtime.**  Notify users before proceeding.
 
-```bash
-# On live server
-cd /opt/Private_Clinic    # or wherever the repo lives
-git clone https://github.com/lioralo/Private_Clinic.git .  # skip if already cloned
-
-cp .env.prod.example .env.prod
-```
-
-Set the **same** `BACKUP_ENCRYPTION_KEY` value that was used on the beta
-server (from `~/migration_staging/migration_key.env`):
+### 4.1 Prepare the live server environment
 
 ```bash
-source ~/migration_staging/migration_key.env   # loads BACKUP_ENCRYPTION_KEY
-# Then edit .env.prod manually and set DOMAIN and SECRET_KEY as well
-nano .env.prod
+ssh ubuntu@<LIVE_SERVER_IP>
+cd /opt/private_clinic       # repo must already be deployed per LIVE_DEPLOYMENT.md
 ```
 
-Minimum required values in `.env.prod`:
-
-```
-DOMAIN=clinic.yourdomain.com
-SECRET_KEY=<long-random-value>
-BACKUP_ENCRYPTION_KEY=<same-key-as-beta>
-```
-
-Generate a new `SECRET_KEY` if one does not exist:
+Ensure `.env.prod` exists and contains the **beta** encryption key so that the restore
+function can decrypt the transferred backup:
 
 ```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+# Extract the key value from the transferred key file
+BETA_KEY=$(grep BACKUP_ENCRYPTION_KEY /tmp/migration/backup/beta_key.env \
+           | cut -d= -f2-)
+
+# Update (or set) BACKUP_ENCRYPTION_KEY in the live .env.prod
+if grep -q "^BACKUP_ENCRYPTION_KEY=" .env.prod; then
+    sed -i "s|^BACKUP_ENCRYPTION_KEY=.*|BACKUP_ENCRYPTION_KEY=${BETA_KEY}|" .env.prod
+else
+    echo "BACKUP_ENCRYPTION_KEY=${BETA_KEY}" >> .env.prod
+fi
+
+echo "Key set. Verifying..."
+grep BACKUP_ENCRYPTION_KEY .env.prod
 ```
 
-### 4.2 Stop any running containers
+### 4.2 Copy backup and artifacts into the data volume
 
 ```bash
-# On live server
-cd /opt/Private_Clinic
+# Ensure data directories exist
+mkdir -p data/secure_backups data/uploads data/patients_logs
+
+# Move the encrypted backup into the backup directory
+cp /tmp/migration/backup/*.db.enc data/secure_backups/
+
+# Copy uploads (merge into existing directory if any)
+rsync -a /tmp/migration/uploads/ data/uploads/
+
+# Copy patient logs
+rsync -a /tmp/migration/logs/ data/patients_logs/
+
+# Copy application log (appended for audit continuity)
+if [ -f /tmp/migration/app_log.txt ]; then
+    cat /tmp/migration/app_log.txt >> data/app_log.txt
+fi
+
+echo "Artifacts copied:"
+ls -lh data/secure_backups/*.db.enc
+```
+
+### 4.3 Stop the running Docker stack (begin downtime)
+
+```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml down
 ```
 
-### 4.3 Place the backup file into the data directory
+### 4.4 Restore the database from the encrypted backup
+
+Start a temporary container with the data volume mounted and run the built-in restore:
 
 ```bash
-# On live server
-mkdir -p /opt/Private_Clinic/data/secure_backups
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  run --rm app python3 - <<'PY'
+import os, sys, sqlite3, zipfile, io, shutil, datetime
+sys.path.insert(0, '/app')
+from cryptography.fernet import Fernet
 
-BACKUP_FILE="clinic_YYYYMMDD_HHMMSS.db.enc"   # ← replace with actual filename
+backup_dir  = os.environ.get("BACKUP_DIR",  "/data/secure_backups")
+db_path     = os.environ.get("DATABASE",    "/data/clinic.db")
+key_env     = os.environ.get("BACKUP_ENCRYPTION_KEY")
+key_file    = os.path.join(backup_dir, ".backup.key")
 
-cp ~/migration_staging/${BACKUP_FILE} \
-   /opt/Private_Clinic/data/secure_backups/${BACKUP_FILE}
-```
+key    = key_env.encode() if key_env else open(key_file, "rb").read()
+fernet = Fernet(key)
 
-### 4.4 Restore supplementary artifacts
+files  = sorted(f for f in os.listdir(backup_dir) if f.endswith(".db.enc"))
+if not files:
+    print("ERROR: no backup files found in", backup_dir)
+    sys.exit(1)
 
-```bash
-# On live server
-mkdir -p /opt/Private_Clinic/data/uploads
-mkdir -p /opt/Private_Clinic/data/patients_logs
+latest = files[-1]
+print("Restoring from:", latest)
+data   = open(os.path.join(backup_dir, latest), "rb").read()
+raw    = fernet.decrypt(data)
+zf     = zipfile.ZipFile(io.BytesIO(raw))
 
-rsync -a ~/migration_staging/uploads/    /opt/Private_Clinic/data/uploads/
-rsync -a ~/migration_staging/patients_logs/ /opt/Private_Clinic/data/patients_logs/
+# Safety copy of any existing database
+if os.path.exists(db_path):
+    ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst = os.path.join(backup_dir, f"clinic_pre_restore_{ts}.db")
+    shutil.copy2(db_path, dst)
+    print("Pre-restore safety copy saved to:", dst)
 
-# App log (append if file already exists, copy if it doesn't)
-if [ -f /opt/Private_Clinic/data/app_log.txt ]; then
-    cat ~/migration_staging/app_log.txt >> /opt/Private_Clinic/data/app_log.txt
-else
-    cp ~/migration_staging/app_log.txt /opt/Private_Clinic/data/app_log.txt
-fi
-```
+# Extract database
+zf.extract("clinic.db", "/tmp/restore_staging")
+staging_db = "/tmp/restore_staging/clinic.db"
 
-### 4.5 Start the stack
+# Integrity check on extracted database
+conn = sqlite3.connect(staging_db)
+result = conn.execute("PRAGMA integrity_check").fetchone()
+conn.close()
+if result != ("ok",):
+    print("ERROR: extracted database failed integrity check:", result)
+    sys.exit(1)
 
-```bash
-# On live server
-cd /opt/Private_Clinic
-bash scripts/deploy_prod.sh
-```
+# Replace live database
+shutil.move(staging_db, db_path)
+print("Database restored and verified: PRAGMA integrity_check =", result)
 
-### 4.6 Restore the database from backup via the app
+# Restore uploads if present in bundle
+upload_folder = os.environ.get("UPLOAD_FOLDER", "/data/uploads")
+for member in zf.namelist():
+    if member.startswith("uploads/"):
+        zf.extract(member, "/data")
+        print("Restored upload:", member)
 
-Once the containers are running, trigger a restore through the admin UI:
+# Restore patient logs if present in bundle
+logs_folder = os.environ.get("PATIENT_LOGS_FOLDER", "/data/patients_logs")
+for member in zf.namelist():
+    if member.startswith("patients_logs/"):
+        zf.extract(member, "/data")
+        print("Restored log:", member)
 
-1. Open `https://<live-domain>/admin` and log in.
-2. Navigate to **Admin → Restore Backup**.
-3. Select the backup file `clinic_YYYYMMDD_HHMMSS.db.enc`.
-4. Confirm the restore.
-
-**Alternatively**, restore via the container shell:
-
-```bash
-# On live server
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec app \
-    python3 - <<'PY'
-import os
-from app import app, perform_encrypted_restore
-
-BACKUP_FILE = "clinic_YYYYMMDD_HHMMSS.db.enc"   # ← replace
-
-with app.app_context():
-    target, safety = perform_encrypted_restore("/data/clinic.db", BACKUP_FILE)
-    print(f"Restored from: {target}")
-    print(f"Safety copy at: {safety}")
+print("Restore complete.")
 PY
 ```
 
-### 4.7 Post-restore integrity check
+### 4.5 Bring the live stack back up (end downtime)
 
 ```bash
-# On live server
-sqlite3 /opt/Private_Clinic/data/clinic.db "PRAGMA integrity_check;"
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
-Expected: `ok`
-
-Also check row counts match what you recorded in Phase 2.5:
+Wait ~20 seconds, then confirm the services are healthy:
 
 ```bash
-sqlite3 /opt/Private_Clinic/data/clinic.db \
-    "SELECT 'patients', COUNT(*) FROM patients
-     UNION ALL SELECT 'appointments', COUNT(*) FROM appointments
-     UNION ALL SELECT 'users', COUNT(*) FROM users;"
-```
-
----
-
-## Phase 5 — Post-Migration Validation
-
-### 5.1 Application health check
-
-```bash
-# On operator workstation
-curl -s -o /dev/null -w "%{http_code}" https://<live-domain>/
-# Expected: 200 or 302
-```
-
-### 5.2 Admin login test
-
-Open `https://<live-domain>/login` in a browser and log in with the admin
-account.  If TOTP is enabled see Phase 6.2.
-
-### 5.3 Data completeness verification
-
-In the admin UI verify:
-- Patient list shows the expected number of records.
-- Appointment calendar shows existing appointments.
-- Uploaded files/attachments are accessible.
-
-### 5.4 Log integrity
-
-```bash
-# On live server
-tail -50 /opt/Private_Clinic/data/app_log.txt
-```
-
-Confirm log entries from the beta server are present and there are no
-unexpected error lines following the restore.
-
-### 5.5 Container health
-
-```bash
-# On live server
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
-docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 app
 ```
 
-All services should show state `running` (or `Up`).
+Expected: both `app` and `caddy` services show `Up` or `running` status and the log shows
+`init_db` completing without errors.
+
+### 4.6 Post-restore database integrity check
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+print("Integrity:", db.execute("PRAGMA integrity_check").fetchone())
+tables = db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+for (t,) in sorted(tables):
+    count = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    if count:
+        print(f"  {t}: {count} rows")
+PY
+```
+
+Compare row counts against the baseline recorded in Phase 1.4.
 
 ---
 
-## Phase 6 — Operational Handoff
+## Phase 5 – Post-Migration Validation
 
-### 6.1 Reset admin password on the live server
+### 5.1 Data completeness verification
 
-Immediately change the admin password after migration:
-
-1. Log in to the live app as admin.
-2. Navigate to **Admin → Profile**.
-3. Set a new strong password (the application enforces a minimum of 5 characters; use a strong passphrase of ≥ 16 characters in practice).
-
-### 6.2 TOTP authenticator setup
-
-If the admin account uses TOTP (time-based one-time passwords):
-
-1. In **Admin → Profile**, disable the existing TOTP device.
-2. Re-enroll the authenticator app by scanning the new QR code.
-3. Verify login with the new TOTP code before logging out.
-
-### 6.3 Access control verification
+Using the row-count baseline from Phase 1.4, confirm every table shows the same (or
+greater) count on the live server.
 
 ```bash
-# Confirm non-admin routes redirect unauthenticated users
-curl -s -o /dev/null -w "%{http_code}" https://<live-domain>/admin/
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+tables = db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+print(f"{'Table':<35} {'Rows':>8}")
+print("-" * 45)
+for (t,) in sorted(tables):
+    count = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    print(f"  {t:<33} {count:>8}")
+PY
+```
+
+### 5.2 User authentication test
+
+1. Open `https://<LIVE_DOMAIN>/login` in a browser.
+2. Log in with an admin account.
+3. If TOTP is enabled, confirm the authenticator app produces a valid code.
+4. Confirm you can reach `/admin/dashboard` without errors.
+
+### 5.3 Patient and appointment data checks
+
+In the admin dashboard:
+
+- Navigate to **Patients** and confirm patient records are visible.
+- Navigate to **Appointments** and confirm upcoming appointments are listed.
+- Open one patient record and confirm attachments/uploads are accessible.
+
+### 5.4 Upload accessibility check
+
+```bash
+# List uploaded files visible through the web server
+curl -I https://<LIVE_DOMAIN>/static/uploads/ 2>&1 | head -5
+# Alternatively, check the data volume directly
+ls data/uploads/ | head -20
+```
+
+### 5.5 Log integrity validation
+
+```bash
+# Application log should contain recent entries
+tail -30 data/app_log.txt
+
+# Patient logs directory should be populated
+ls data/patients_logs/ | wc -l
+```
+
+### 5.6 Automatic backup health check
+
+Confirm the routine backup mechanism is working after the first request:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs app 2>&1 \
+  | grep -i backup | tail -10
+
+ls -lh data/secure_backups/
+cat data/secure_backups/.last_backup_at 2>/dev/null || echo "(not yet written)"
+```
+
+---
+
+## Phase 6 – Operational Handoff
+
+### 6.1 Reset the admin password on the live server
+
+> Change the default or beta admin password immediately after migration.
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app python3 - <<'PY'
+import sqlite3, os, getpass
+from werkzeug.security import generate_password_hash
+
+NEW_PASSWORD = getpass.getpass("Enter new admin password: ")
+hashed = generate_password_hash(NEW_PASSWORD)
+db = sqlite3.connect(os.environ.get("DATABASE", "/data/clinic.db"))
+db.execute("UPDATE users SET password_hash=?, force_password_change=0 WHERE role='admin'",
+           (hashed,))
+db.commit()
+print("Admin password updated.")
+PY
+```
+
+### 6.2 Set up TOTP authenticator for admin accounts
+
+1. Log in to `https://<LIVE_DOMAIN>/login` as admin.
+2. Navigate to **Admin → Setup Authenticator** (`/admin/setup_authenticator`).
+3. Scan the QR code with an authenticator app (Google Authenticator, Authy, etc.).
+4. Enter the 6-digit code to confirm and activate 2FA.
+5. Repeat for every admin account.
+
+### 6.3 Rotate the encryption key (recommended)
+
+After a successful migration, generate a fresh encryption key for the live server so it is
+independent of the beta key:
+
+```bash
+# Generate a new key
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Update .env.prod on the live server with the new key
+# Then create a fresh backup (which will use the new key going forward)
+```
+
+> **Important:** existing `.db.enc` files were created with the beta key.  Keep the beta key
+> in a secure store until all old backup files are rotated out.  The new key applies only to
+> backups created *after* the key rotation.
+
+### 6.4 Access control verification
+
+```bash
+# Confirm no patient-facing routes are accessible without login
+curl -s -o /dev/null -w "%{http_code}" https://<LIVE_DOMAIN>/admin/dashboard
 # Expected: 302 (redirect to login)
 
-curl -s -o /dev/null -w "%{http_code}" https://<live-domain>/crm
-# Expected: 302 (redirect to login)
+curl -s -o /dev/null -w "%{http_code}" https://<LIVE_DOMAIN>/
+# Expected: 200 or 302 (depends on login state)
 ```
 
-### 6.4 Scheduled backups & monitoring
+### 6.5 Monitoring and alerts
 
-Ensure automated backups are scheduled on the live server:
+Recommended checks to set up once the application is live:
 
-```bash
-# Add a daily cron job (example — adjust path/time as needed)
-(crontab -l 2>/dev/null; echo "0 2 * * * cd /opt/Private_Clinic && \
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T app \
-python backup_db.py >> /var/log/clinic_backup.log 2>&1") | crontab -
-```
+| Check | How |
+|-------|-----|
+| Uptime / HTTP health | Pingdom, UptimeRobot, or AWS Route 53 health checks against `https://<LIVE_DOMAIN>/` |
+| Disk usage | CloudWatch agent or cron: `df -h /opt/private_clinic/data` |
+| Backup freshness | Daily cron: check `data/secure_backups/.last_backup_at` is within 24 h |
+| Container status | `docker compose ps` scheduled alert via cron |
+| TLS certificate | Caddy renews automatically; verify with `curl -vI https://<LIVE_DOMAIN> 2>&1 | grep expire` |
 
-Verify the cron entry:
+Example cron for backup-age alert (`crontab -e` on the live server):
 
-```bash
-crontab -l
-```
-
-Set up basic uptime monitoring (e.g. UptimeRobot free tier) pointing to
-`https://<live-domain>/` to receive alerts on downtime.
-
-### 6.5 Clean up migration staging files
-
-```bash
-# On live server — remove sensitive key material
-rm -rf ~/migration_staging/
-
-# On operator workstation
-rm -f /tmp/migration_key.env /tmp/migration_app_log.txt
-rm -rf /tmp/migration_uploads/ /tmp/migration_patients_logs/
+```cron
+0 * * * * TIMESTAMP_FILE=/opt/private_clinic/data/secure_backups/.last_backup_at; \
+  if [ ! -f "$TIMESTAMP_FILE" ]; then \
+    echo "No backup timestamp found" | mail -s "Clinic backup alert" admin@example.com; \
+  else \
+    LAST=$(cat "$TIMESTAMP_FILE"); NOW=$(date +%s); \
+    AGE=$(( NOW - LAST )); \
+    [ "$AGE" -gt 86400 ] && echo "Last backup is over 24 h old (${AGE}s ago)" \
+      | mail -s "Clinic backup alert" admin@example.com; \
+  fi
 ```
 
 ---
 
 ## Troubleshooting
 
-### Backup decryption fails (`InvalidToken`)
+### Encrypted backup cannot be decrypted
 
-**Symptom:** `cryptography.fernet.InvalidToken` during restore.
+**Symptom:** `cryptography.fernet.InvalidToken` error during restore.
 
-**Cause:** The `BACKUP_ENCRYPTION_KEY` in `.env.prod` on the live server does
-not match the key used to create the backup on the beta server.
+**Cause:** The `BACKUP_ENCRYPTION_KEY` on the live server does not match the key used to
+create the backup on beta.
 
-**Fix:**
-1. Retrieve the correct key from the beta server (Phase 2.4).
-2. Update `BACKUP_ENCRYPTION_KEY` in `/opt/Private_Clinic/.env.prod`.
-3. Restart the stack: `docker compose ... restart app`.
-4. Retry the restore.
+**Resolution:**
 
-### Database integrity check fails after restore
+```bash
+# Verify the key currently set on the live server
+grep BACKUP_ENCRYPTION_KEY /opt/private_clinic/.env.prod
+
+# Compare to the key extracted from beta (Phase 2.3)
+cat /tmp/migration/backup/beta_key.env
+```
+
+Ensure both values are identical (no trailing whitespace or newline differences).
+
+---
+
+### Docker container fails to start after restore
+
+**Symptom:** `docker compose ps` shows container in `Exit` state.
+
+**Resolution:**
+
+```bash
+# View the last 100 log lines
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 app
+
+# Common causes:
+# 1. Missing environment variable – check .env.prod is complete
+# 2. Database permission issue – check ownership
+ls -la data/clinic.db
+
+# Fix ownership if needed
+sudo chown $USER:$USER data/clinic.db
+```
+
+---
+
+### Database integrity check fails
 
 **Symptom:** `PRAGMA integrity_check` returns something other than `ok`.
 
-**Fix:**
-1. The restore created a safety copy under
-   `./data/secure_backups/clinic_pre_restore_<timestamp>/`.
-2. Identify the most recent safety copy:
-   ```bash
-   ls -lht /opt/Private_Clinic/data/secure_backups/clinic_pre_restore_*/
-   ```
-3. Roll back to it:
-   ```bash
-   cp /opt/Private_Clinic/data/secure_backups/clinic_pre_restore_<timestamp>/clinic.db \
-      /opt/Private_Clinic/data/clinic.db
-   ```
-4. Restart the app container.
+**Resolution:**
 
-### Container fails to start (port conflict)
-
-**Symptom:** `Bind for 0.0.0.0:80 failed: port is already allocated`.
-
-**Fix:**
 ```bash
-# Find the conflicting process
-sudo ss -tlnp | grep ':80'
-sudo ss -tlnp | grep ':443'
+# List available backup files with timestamps to choose from
+ls -lh data/secure_backups/clinic_*.db.enc
 
-# Stop it (example — nginx)
-sudo systemctl stop nginx
-sudo systemctl disable nginx
-
-# Then retry
-bash scripts/deploy_prod.sh
+# Identify which backup you want to restore (files are named clinic_YYYYMMDD_HHMMSS.db.enc)
+# Then modify the restore script in Phase 4.4 to target that specific file, e.g.:
+files = sorted(f for f in os.listdir(backup_dir) if f.endswith(".db.enc"))
+# Choose by index: -1 = latest, -2 = second-latest, etc.
+# Or specify directly:
+latest = "clinic_20260321_120000.db.enc"   # replace with the desired filename
 ```
-
-### HTTPS certificate not issued by Caddy
-
-**Symptom:** Browser shows `NET::ERR_CERT_INVALID` or Caddy logs show
-`no such host` / ACME errors.
-
-**Fix:**
-1. Confirm DNS propagation: `dig +short <live-domain>` must return the
-   live server IP.
-2. Ensure ports 80 and 443 are reachable from the internet (check security
-   group / firewall rules).
-3. Check Caddy logs:
-   ```bash
-   docker compose --env-file .env.prod -f docker-compose.prod.yml logs caddy
-   ```
-4. If using `DOMAIN=localhost` or an internal hostname, TLS will not work.
-   Set the real public domain in `.env.prod`.
-
-### Admin login fails after migration
-
-**Symptom:** Correct credentials rejected on the live server.
-
-**Cause:** The restored database may be from an older backup that does not
-include recent password changes, **or** the session cookie secret changed.
-
-**Fix:**
-1. Verify the database was restored correctly (Phase 4.7 row counts).
-2. Use the most recent backup file.
-3. If locked out, reset the admin password via the container shell:
-   ```bash
-   docker compose --env-file .env.prod -f docker-compose.prod.yml exec app \
-       python3 - <<'PY'
-   from app import app
-   from app import get_db
-   from werkzeug.security import generate_password_hash
-
-   NEW_PASSWORD = "ChangeMe_Immediately_123!"
-
-   with app.app_context():
-       db = get_db()
-       db.execute(
-           "UPDATE users SET password_hash = ? WHERE role = 'admin'",
-           (generate_password_hash(NEW_PASSWORD),)
-       )
-       db.commit()
-       print("Admin password reset.")
-   PY
-   ```
-   Log in with the temporary password and change it immediately in the UI.
 
 ---
 
-## Rollback Procedure
+### Uploads not visible after restore
 
-If migration must be aborted **after** the live restore has run:
+**Symptom:** Uploaded files return 404 in the browser.
 
-1. **Stop live containers:**
+**Cause:** `rsync` in Phase 3.4 may not have completed, or the `UPLOAD_FOLDER` environment
+variable points to a different path.
+
+**Resolution:**
+
+```bash
+# Confirm the upload folder path
+docker compose --env-file .env.prod -f docker-compose.prod.yml \
+  exec app printenv UPLOAD_FOLDER
+
+# Re-sync uploads manually
+rsync -avz /tmp/migration/uploads/ data/uploads/
+
+# Restart the stack to pick up any file system changes
+docker compose --env-file .env.prod -f docker-compose.prod.yml restart app
+```
+
+---
+
+### TOTP codes rejected on live server
+
+**Symptom:** Admin enters a valid code from the authenticator app but login fails.
+
+**Cause:** Server clock is out of sync (TOTP requires clocks within ±30 seconds).
+
+**Resolution:**
+
+```bash
+# Check and sync server time (Ubuntu)
+timedatectl status
+sudo timedatectl set-ntp true
+timedatectl status   # confirm "NTP service: active"
+```
+
+If the TOTP secret was set on beta and needs to be re-enrolled on live:
+
+1. Use the database reset script in Phase 6.1 to clear `totp_secret` and `totp_enabled`.
+2. Re-enroll via `/admin/setup_authenticator`.
+
+---
+
+### Rollback procedure
+
+If the live server migration fails and the application needs to be reverted:
+
+1. **Stop the live stack:**
    ```bash
    docker compose --env-file .env.prod -f docker-compose.prod.yml down
    ```
-2. **Restore the pre-restore safety copy** (created automatically during restore):
+
+2. **Restore from the pre-restore safety copy** created automatically in Phase 4.4:
    ```bash
-   SAFETY="clinic_pre_restore_<timestamp>"
-   cp /opt/Private_Clinic/data/secure_backups/${SAFETY}/clinic.db \
-      /opt/Private_Clinic/data/clinic.db
+   ls data/secure_backups/clinic_pre_restore_*.db
+   cp data/secure_backups/clinic_pre_restore_<TIMESTAMP>.db data/clinic.db
    ```
-3. **Restore artifact safety copies** (in the same `${SAFETY}` directory):
+
+3. **Restart the stack:**
    ```bash
-   rsync -a /opt/Private_Clinic/data/secure_backups/${SAFETY}/uploads/ \
-             /opt/Private_Clinic/data/uploads/
-   rsync -a /opt/Private_Clinic/data/secure_backups/${SAFETY}/patients_logs/ \
-             /opt/Private_Clinic/data/patients_logs/
+   docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
    ```
-4. **Restart:**
+
+4. **Verify the rollback:**
    ```bash
-   bash scripts/deploy_prod.sh
+   docker compose --env-file .env.prod -f docker-compose.prod.yml \
+     exec app python3 -c "
+   import sqlite3, os
+   db = sqlite3.connect(os.environ.get('DATABASE', '/data/clinic.db'))
+   print('Integrity:', db.execute('PRAGMA integrity_check').fetchone())
+   "
    ```
-5. **Verify** using the checks in Phase 5.
+
+5. Keep the beta server running until the root cause is identified and a new migration
+   attempt is planned.
 
 ---
 
-## Support Contact
+## Contact & Support
 
-If you encounter an issue not covered by this guide, contact the system
-administrator with:
-- The exact error message from the logs (`docker compose ... logs --tail=100`)
-- The output of `PRAGMA integrity_check` on the database
-- The backup filename used for the restore
-- The timestamp at which the failure occurred
+| Role | Contact |
+|------|---------|
+| System administrator | *(fill in)* |
+| Application developer | *(fill in)* |
+| Cloud/infrastructure | *(fill in)* |
+
+For urgent issues outside business hours, use the on-call escalation path defined in your
+organisation's runbook.
