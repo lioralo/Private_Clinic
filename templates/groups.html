@@ -184,21 +184,6 @@
 {% endmacro %}
 
 <style>
-.group-side-accordion .accordion-button {
-    font-weight: 700;
-}
-
-.group-side-accordion {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-.group-side-accordion .accordion-item {
-    margin-bottom: 0;
-    border-bottom: 1px solid var(--bs-border-color) !important;
-}
-
 .session-card {
     border: 1px solid rgba(15, 23, 42, 0.08);
     border-radius: 1rem;
@@ -273,16 +258,18 @@
 
 <div class="row g-4 align-items-start">
     <div class="col-12">
-        <div class="small text-muted mb-2">{{ txt('Group manager tools are now in the top banner. Press a section to edit it here.', 'כלי ניהול הקבוצה נמצאים כעת בבאנר העליון. לחצו על מקטע כדי לערוך כאן.') }}</div>
-        <div class="accordion group-side-accordion" id="groupManagementAccordion">
-             <div class="accordion-item border-0 shadow-sm rounded-0 overflow-hidden">
-                <h2 class="accordion-header" id="groupInfoHeading">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#groupInfoCollapse" aria-expanded="false" aria-controls="groupInfoCollapse">
-                        {{ txt('Group Info', 'פרטי קבוצה') }}
-                    </button>
-                </h2>
-                <div id="groupInfoCollapse" class="accordion-collapse collapse" aria-labelledby="groupInfoHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body p-3">
+                <div class="d-flex flex-wrap gap-2" id="groupMgmtTabs">
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneInfo" type="button">{{ txt('Group Info', 'פרטי קבוצה') }}</button>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSchedule" type="button">{{ txt('Schedule Session', 'קביעת מפגש') }}</button>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneMembers" type="button">{{ txt('Members', 'משתתפים') }}{% if group_members %} <span class="badge bg-secondary rounded-pill ms-1">{{ group_members|length }}</span>{% endif %}</button>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneHistory" type="button">{{ txt('Member History', 'היסטוריית משתתפים') }}</button>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSupervision" type="button">{{ txt('Supervision', 'הדרכה') }}{% if group_supervisions %} <span class="badge bg-primary rounded-pill ms-1">{{ group_supervisions|length }}</span>{% endif %}</button>
+                    <button class="btn btn-sm btn-outline-danger rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneDanger" type="button">{{ txt('Delete Group', 'מחיקת קבוצה') }}</button>
+                </div>
+                <div id="groupMgmtCanvas" class="mt-3 pt-3 border-top" style="display:none;">
+                    <div id="groupMgmtPaneInfo" class="group-mgmt-pane">
                         <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="col-12">
@@ -313,17 +300,7 @@
                             </div>
                         </form>
                     </div>
-                </div>
-            </div>
-
-             <div class="accordion-item border-0 shadow-sm rounded-0 overflow-hidden">
-                <h2 class="accordion-header" id="scheduleHeading">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#scheduleCollapse" aria-expanded="false" aria-controls="scheduleCollapse">
-                        {{ txt('Schedule Session', 'קביעת מפגש') }}
-                    </button>
-                </h2>
-                <div id="scheduleCollapse" class="accordion-collapse collapse" aria-labelledby="scheduleHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white">
+                    <div id="groupMgmtPaneSchedule" class="group-mgmt-pane d-none">
                         <form method="post" action="{{ url_for('add_group_session', group_id=group['id']) }}" class="row g-3" id="groupScheduleForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="col-md-6">
@@ -395,17 +372,7 @@
                             </div>
                         </form>
                     </div>
-                </div>
-            </div>
-
-            <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden mb-3">
-                <h2 class="accordion-header" id="membersHeading">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#membersCollapse" aria-expanded="false" aria-controls="membersCollapse">
-                        {{ txt('Members', 'משתתפים') }}
-                    </button>
-                </h2>
-                <div id="membersCollapse" class="accordion-collapse collapse" aria-labelledby="membersHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white">
+                    <div id="groupMgmtPaneMembers" class="group-mgmt-pane d-none">
                         <div class="list-group list-group-flush border rounded-3 mb-3">
                             {% for member in group_members %}
                             <div class="list-group-item py-3">
@@ -458,17 +425,7 @@
                         </form>
                         <div class="small text-muted mt-2">{{ txt('Suggestions include only patients with type "group".', 'ההצעות כוללות רק מטופלים מסוג קבוצה.') }}</div>
                     </div>
-                </div>
-            </div>
-
-             <div class="accordion-item border-0 shadow-sm rounded-0 overflow-hidden">
-                <h2 class="accordion-header" id="historyHeading">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#historyCollapse" aria-expanded="false" aria-controls="historyCollapse">
-                        {{ txt('Member History', 'היסטוריית משתתפים') }}
-                    </button>
-                </h2>
-                <div id="historyCollapse" class="accordion-collapse collapse" aria-labelledby="historyHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white" style="max-height: 420px; overflow-y: auto;">
+                    <div id="groupMgmtPaneHistory" class="group-mgmt-pane d-none" style="max-height: 420px; overflow-y: auto;">
                         <div class="list-group list-group-flush">
                             {% for row in member_history_rows %}
                             <div class="list-group-item py-3">
@@ -498,18 +455,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                </div>
-            </div>
-
-             <div class="accordion-item border-0 shadow-sm rounded-0 overflow-hidden">
-                <h2 class="accordion-header" id="supervisionHeading">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#supervisionCollapse" aria-expanded="false" aria-controls="supervisionCollapse">
-                        {{ txt('Supervision', 'הדרכה') }}
-                        {% if group_supervisions %}<span class="badge bg-primary-subtle text-primary border ms-2">{{ group_supervisions|length }}</span>{% endif %}
-                    </button>
-                </h2>
-                <div id="supervisionCollapse" class="accordion-collapse collapse" aria-labelledby="supervisionHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white">
+                    <div id="groupMgmtPaneSupervision" class="group-mgmt-pane d-none">
                         <form method="post" action="{{ url_for('add_group_supervision', group_id=group['id']) }}" class="row g-2 mb-3">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="col-12">
@@ -544,17 +490,7 @@
                         {% endif %}
                         {% endif %}
                     </div>
-                </div>
-            </div>
-
-            <div class="accordion-item border-0 shadow-sm rounded-4 overflow-hidden">
-                <h2 class="accordion-header" id="dangerHeading">
-                    <button class="accordion-button collapsed text-danger" type="button" data-bs-toggle="collapse" data-bs-target="#dangerCollapse" aria-expanded="false" aria-controls="dangerCollapse">
-                        {{ txt('Delete Group', 'מחיקת קבוצה') }}
-                    </button>
-                </h2>
-                <div id="dangerCollapse" class="accordion-collapse collapse" aria-labelledby="dangerHeading" data-bs-parent="#groupManagementAccordion">
-                    <div class="accordion-body bg-white">
+                    <div id="groupMgmtPaneDanger" class="group-mgmt-pane d-none">
                         <p class="small text-muted mb-3">{{ txt('You can move the group to history or permanently delete the group and all related group data.', 'אפשר להעביר את הקבוצה להיסטוריה או למחוק לצמיתות את הקבוצה ואת כל נתוני הקבוצה.') }}</p>
                         <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="toggleGroupDeletePanel()">{{ txt('Delete Options', 'אפשרויות מחיקה') }}</button>
                         <div class="group-delete-panel mt-3 border rounded-3 p-3 bg-light" id="group-delete-panel">
@@ -676,6 +612,29 @@
 
 <script>
 const csrfToken = document.getElementById('groups_csrf_token').value;
+
+// Group management horizontal tabs
+(function() {
+    var tabs = document.querySelectorAll('.group-mgmt-tab');
+    var canvas = document.getElementById('groupMgmtCanvas');
+    var panes = document.querySelectorAll('.group-mgmt-pane');
+    tabs.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var targetId = this.getAttribute('data-pane');
+            if (this.classList.contains('active')) {
+                this.classList.remove('active');
+                canvas.style.display = 'none';
+                return;
+            }
+            tabs.forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            panes.forEach(function(p) { p.classList.add('d-none'); });
+            var target = document.getElementById(targetId);
+            if (target) { target.classList.remove('d-none'); }
+            canvas.style.display = '';
+        });
+    });
+})();
 const isHebrew = {{ 'true' if is_he else 'false' }};
 const labels = {
     removePatient: isHebrew ? 'להסיר את המטופל מהקבוצה?' : 'Remove this patient from the group?',

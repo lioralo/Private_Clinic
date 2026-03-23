@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 
 
 app = Flask(__name__)
+app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
@@ -2139,7 +2140,7 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
     return False
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True):
     unread_case = '0'
     if admin_user_id is not None:
         unread_case = f'''(
@@ -2214,6 +2215,8 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
     if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
         base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
         params.append(patient_type)
+    elif not include_group:
+        base_query += ' AND COALESCE(p.patient_type, \"private\") != \"group\"'
 
     if search_query:
         base_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, \"\")) LIKE ? OR LOWER(COALESCE(p.phone, \"\")) LIKE ?)'
@@ -2253,6 +2256,8 @@ def crm_dashboard():
     clinic_type = request.args.get('clinic_type', saved_filters.get('clinic_type', 'all')).strip()
     search_query = request.args.get('q', saved_filters.get('q', '')).strip()
     sort_by = request.args.get('sort', saved_filters.get('sort', 'status_priority')).strip()
+    include_group_raw = request.args.get('include_group', saved_filters.get('include_group', 'false'))
+    include_group = include_group_raw == 'true'
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
@@ -2265,12 +2270,13 @@ def crm_dashboard():
         'status': status,
         'clinic_type': clinic_type,
         'q': search_query,
-        'sort': sort_by
+        'sort': sort_by,
+        'include_group': 'true' if include_group else 'false'
     }
     
     patient_type = clinic_type
 
-    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id)
+    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group)
     counts_row = db.execute('''
         SELECT
             COUNT(*) AS all_count,
@@ -2289,7 +2295,7 @@ def crm_dashboard():
     reminders = send_appointment_reminders(db)
     return render_template('crm.html', patients=patients, status=status, counts=counts,
                            clinic_type=clinic_type, search_query=search_query, sort_by=sort_by,
-                           reminders=reminders)
+                           include_group=include_group, reminders=reminders)
 
 @app.route('/patient/home')
 @login_required
