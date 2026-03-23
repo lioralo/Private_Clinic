@@ -91,9 +91,111 @@
   - `python test_security.py` passed (`5` tests)
   - `python test_app.py` passed (`50` tests)
 
-
 ## Session 28
 
+## Session 31
+
+**Date:** March 23, 2026
+
+**Objective:** Implement 11 calendar and CRM improvements for enhanced booking and patient management functionality.
+
+**Release Summary:**
+
+1. **Patient Dropdown Organization**
+  - Updated patient_options query to sort by patient_type then name.
+  - Implemented Jinja2 optgroup grouping in calendar.html for organized dropdown display.
+  - Patients grouped by status types (ongoing, candidate, archived) then clinic types.
+  - Improves UX for selecting from large patient lists.
+
+2. **Editable Booking Date and Time**
+  - Added visible date input field (bookingDateInput) to booking panel.
+  - Added visible time input field (bookingTimeInput) to booking panel.
+  - Implemented JavaScript event listeners to sync visible fields with hidden form fields.
+  - Updated setSelectedSlot() to synchronize both visible and hidden fields bidirectionally.
+  - Allows admins to directly edit or adjust selected booking time without calendar re-selection.
+
+3. **Recurring Event Deletion Fix**
+  - Fixed api_calendar_appointment_delete route "upcoming" scope logic.
+  - Updated to use recurring_occurrences_between() for proper series validation.
+  - Now correctly truncates series to cutoff date vs deleting entire group.
+  - Handles three scopes correctly: one (exclude), upcoming (truncate), all (delete).
+
+4. **Meeting Type Options Update**
+  - Changed meeting type options from [zoom, google-meet, in-person] to [online, in-person, phone].
+  - Added conditional meeting link field visibility (only visible for "online" type).
+  - Updated JavaScript to show/hide meeting link container based on selected type.
+
+5. **Meeting Title → Meeting Remarks**
+  - Renamed "Meeting Title" field to "Meeting Remarks" in calendar.html form.
+  - Changed field name from meeting_title to meeting_remarks.
+  - Set blank default placeholder (no pre-filled text).
+  - Implemented backward compatibility fallback in api_calendar_book route.
+  - Database still uses meeting_title column for existing data compatibility.
+
+6. **Recurring Meeting Checkbox**
+  - Added recurring checkbox (id: recurringCheckbox) to booking form.
+  - Added conditional date picker (recurringDateWrap) that shows when recurring is enabled.
+  - Implemented status-based defaults: ongoing=checked (auto-recurring), candidate/waiting=unchecked.
+  - JavaScript event listener toggles date picker visibility on checkbox change.
+  - Patient change handler updates checkbox state based on patient status.
+
+7. **Backend Support for New Form Fields**
+  - Updated api_calendar_book route to extract meeting_remarks from form.
+  - Updated api_calendar_book to extract is_recurring checkbox value.
+  - Updated api_calendar_book to extract recurrence_end_date from form input.
+  - Implemented logic: form values override auto-detection based on patient status.
+  - Default recurrence_end_date = anchor + 365 days if recurring enabled.
+
+8. **CRM Filter Enhancement - Clinic Type**
+  - Updated crm_dashboard route to accept clinic_type parameter.
+  - Added validation for clinic_type: {all, private, residency, group}.
+  - Stores clinic_type in session['crm_filters'] for persistence.
+  - Updated template to pass clinic_type instead of patient_type.
+  - Fixed all 4 summary strip URLs to use clinic_type parameter.
+  - Allows filtering patients by clinic classification separately from status.
+
+9. **"Other" Booking Type Option**
+  - Added "other" option to bookingTypeSelect dropdown.
+  - Added conditional input field (otherBookingTypeInput) for custom booking type entry.
+  - JavaScript toggles input field visibility when "other" is selected.
+  - Form submission validates custom booking type is not empty before submitting.
+  - Custom type value submitted with form when booking_type="other".
+
+10. **Group Page Dropdown UI Refactor**
+   - Changed .group-side-accordion CSS from grid layout to flex column layout.
+   - Updated to display: flex; flex-direction: column for full-width stacking.
+   - Removed rounded corners (rounded-4 → rounded-0) for seamless accordion appearance.
+   - Removed bottom margins (mb-3) for proper spacing in stacked layout.
+   - Result: only one accordion section can expand at a time, spans full width.
+
+11. **Dummy Patient Cleanup**
+   - Soft-deleted dummy patients using is_deleted flag:
+    - John (patient_id=18)
+    - Dov Lev (patient_id=25)
+    - Dirk Gently (patient_id=26)
+   - Used soft-delete (is_deleted=1) to preserve referential integrity.
+   - Existing queries filter out deleted patients via COALESCE(is_deleted, 0) = 0.
+
+**Testing & Verification:**
+- Python syntax validation: PASSED
+- Flask app imports: PASSED
+- Database schema verification: All required columns present
+- Patient sorting query execution: PASSED (correct type+name ordering)
+- Code review: All 11 features present and correctly implemented
+
+**Files Modified:**
+- app.py: Patient sorting query, api_calendar_book route, api_calendar_appointment_delete fix, crm_dashboard filter
+- templates/calendar.html: Patient dropdown grouping, date/time inputs, meeting remarks, recurring checkbox, "other" type, meeting type options
+- templates/crm.html: Clinic type filter dropdown and URL parameter updates
+- templates/groups.html: Accordion CSS layout refactoring
+- clinic.db: Soft-deletion of dummy patients
+
+**Git Commit:**
+- Hash: a6fd736
+- Message: "Implement 11 calendar and CRM improvements"
+- Status: Successfully pushed to origin/main
+
+---
 **Date:** March 17, 2026
 
 **Objective:** Complete the latest patient-portal workflow pass for intake scheduling, patient-side meeting requests, and translation cleanup.
