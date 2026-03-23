@@ -73,7 +73,7 @@
     </div>
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Booking mode') }}</span>
-        <span class="big">{{ t('Click a slot, then confirm in the panel') }}</span>
+        <span class="big" id="selectedSlotText">{{ t('Click a slot, then confirm in the panel') }}</span>
     </div>
 </div>
 
@@ -150,26 +150,26 @@
                         <option value="">{{ t('Select patient...') }}</option>
                         {%- set grouped = {} -%}
                         {%- for p in patient_options -%}
-                            {%- set ptype = p['patient_type'] or 'private' -%}
-                            {%- if ptype not in grouped -%}
-                                {%- do grouped.update({ptype: []}) -%}
+                            {%- set skey = p['status'] or 'other' -%}
+                            {%- if skey not in grouped -%}
+                                {%- do grouped.update({skey: []}) -%}
                             {%- endif -%}
-                            {%- do grouped[ptype].append(p) -%}
+                            {%- do grouped[skey].append(p) -%}
                         {%- endfor -%}
-                        {%- for ptype in ['ongoing', 'candidate', 'archived', 'group'] -%}
-                            {%- if grouped.get(ptype) -%}
-                            <optgroup label="{{ ptype | title }}">
-                                {%- for p in grouped[ptype] | sort(attribute='name') -%}
-                                <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ ptype }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                        {%- for skey in ['ongoing', 'candidate', 'archived'] -%}
+                            {%- if grouped.get(skey) -%}
+                            <optgroup label="{{ skey | title }}">
+                                {%- for p in grouped[skey] | sort(attribute='name') -%}
+                                <option value="{{ p['id'] }}" data-patient-status="{{ skey }}" data-patient-type="{{ p['patient_type'] or '' }}">{{ p['name'] }}</option>
                                 {%- endfor -%}
                             </optgroup>
                             {%- endif -%}
                         {%- endfor -%}
-                        {%- for ptype in ['private', 'residency', 'initial-intake', 'diagnosee'] -%}
-                            {%- if grouped.get(ptype) -%}
-                            <optgroup label="{{ ptype | title }}">
-                                {%- for p in grouped[ptype] | sort(attribute='name') -%}
-                                <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ ptype }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                        {%- for skey, plist in grouped.items() -%}
+                            {%- if skey not in ['ongoing', 'candidate', 'archived'] and plist -%}
+                            <optgroup label="{{ skey | title }}">
+                                {%- for p in plist | sort(attribute='name') -%}
+                                <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ p['patient_type'] or '' }}">{{ p['name'] }}</option>
                                 {%- endfor -%}
                             </optgroup>
                             {%- endif -%}
@@ -206,6 +206,17 @@
                 <div class="mb-2" id="otherBookingTypeWrap" style="display: none;">
                     <label class="form-label small">{{ t('Specify Booking Type') }}</label>
                     <input type="text" name="other_booking_type" id="otherBookingTypeInput" class="form-control form-control-sm" placeholder="{{ t('Enter custom booking type') }}">
+                </div>
+                <div class="mb-2 full-span" id="bookingRecurrenceWrap">
+                    <label class="form-label small">{{ t('Recurrence') }}</label>
+                    <select name="is_recurring" id="bookingRecurrence" class="form-select form-select-sm">
+                        <option value="0">{{ t('One-time meeting') }}</option>
+                        <option value="1">{{ t('Weekly recurring') }}</option>
+                    </select>
+                </div>
+                <div class="mb-2 full-span d-none" id="recurringDateWrap">
+                    <label class="form-label small">{{ t('Repeat Until') }}</label>
+                    <input type="date" name="recurrence_end_date" id="recurringUntilDate" class="form-control form-control-sm">
                 </div>
                 {% endif %}
                 <div class="mb-2">
@@ -754,37 +765,41 @@ document.addEventListener('DOMContentLoaded', function() {
         if (deleteBtn) {
             deleteBtn.onclick = function() {
                 if (payload.is_recurring) {
-                    actionModal.hide();
-                    showScopeModal({
-                        title: I18N.deleteRecurringTitle,
-                        message: I18N.deleteRecurringQuestion,
-                        options: [
-                            { value: 'one', label: I18N.deleteOneOccurrence },
-                            { value: 'upcoming', label: I18N.deleteThisAndUpcoming },
-                            { value: 'all', label: I18N.deleteAllOccurrences }
-                        ],
-                        confirmText: I18N.deleteLabel,
-                        confirmClass: 'btn-danger'
-                    }).then(scope => {
-                        if (!scope) return;
-                        const formBody = new URLSearchParams({ scope });
-                        if (scope === 'one' || scope === 'upcoming') formBody.set('occurrence_date', occurrenceDate);
-                        fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
-                            method: 'POST',
-                            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: formBody
-                        }).then(r => r.json()).then(data => {
-                            if (data.status === 'success') {
-                                actionModal.hide();
-                                loadSnapshot();
-                                loadBookingManagement();
-                            } else {
-                                showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
-                            }
-                        }).catch(() => {
-                            showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
+                    // Wait for the current modal to fully close before opening scope dialog
+                    // to avoid Bootstrap's transition lock preventing the new show().
+                    modalRoot.addEventListener('hidden.bs.modal', function onModalHidden() {
+                        modalRoot.removeEventListener('hidden.bs.modal', onModalHidden);
+                        showScopeModal({
+                            title: I18N.deleteRecurringTitle,
+                            message: I18N.deleteRecurringQuestion,
+                            options: [
+                                { value: 'one', label: I18N.deleteOneOccurrence },
+                                { value: 'upcoming', label: I18N.deleteThisAndUpcoming },
+                                { value: 'all', label: I18N.deleteAllOccurrences }
+                            ],
+                            confirmText: I18N.deleteLabel,
+                            confirmClass: 'btn-danger'
+                        }).then(scope => {
+                            if (!scope) return;
+                            const formBody = new URLSearchParams({ scope });
+                            if (scope === 'one' || scope === 'upcoming') formBody.set('occurrence_date', occurrenceDate);
+                            fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
+                                method: 'POST',
+                                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: formBody
+                            }).then(r => r.json()).then(data => {
+                                if (data.status === 'success') {
+                                    loadSnapshot();
+                                    loadBookingManagement();
+                                } else {
+                                    showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
+                                }
+                            }).catch(() => {
+                                showActionModal({ title: I18N.deleteFailed, message: I18N.couldNotDeleteMeeting });
+                            });
                         });
                     });
+                    actionModal.hide();
                 } else {
                     fetch(`/api/calendar/appointment/${payload.source_id}/delete`, {
                         method: 'POST',
@@ -1717,14 +1732,14 @@ document.addEventListener('DOMContentLoaded', function() {
         createVacancyBtn.addEventListener('click', createVacancyFromSelectedSlot);
     }
 
-    const recurringCheckbox = document.getElementById('recurringCheckbox');
+    const bookingRecurrence = document.getElementById('bookingRecurrence');
     const recurringDateWrap = document.getElementById('recurringDateWrap');
     const meetingRemarksInput = document.getElementById('meetingRemarksInput');
     
-    if (recurringCheckbox) {
-        recurringCheckbox.addEventListener('change', function() {
+    if (bookingRecurrence) {
+        bookingRecurrence.addEventListener('change', function() {
             if (recurringDateWrap) {
-                recurringDateWrap.classList.toggle('d-none', !this.checked);
+                recurringDateWrap.classList.toggle('d-none', this.value !== '1');
             }
         });
     }
@@ -1735,11 +1750,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const status = selected ? (selected.dataset.patientStatus || '') : '';
             const isOther = this.value === 'other';
             
-            // Set recurring checkbox based on patient status
-            if (recurringCheckbox) {
-                recurringCheckbox.checked = (status === 'ongoing');
+            // Set recurrence based on patient status
+            if (bookingRecurrence) {
+                bookingRecurrence.value = (status === 'ongoing') ? '1' : '0';
                 if (recurringDateWrap) {
-                    recurringDateWrap.classList.toggle('d-none', !recurringCheckbox.checked);
+                    recurringDateWrap.classList.toggle('d-none', bookingRecurrence.value !== '1');
                 }
             }
             

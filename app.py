@@ -3911,6 +3911,7 @@ def build_booking_management_payload(db, mode='upcoming', future_days=180, histo
                 'end_time': end_dt.strftime('%H:%M'),
                 'duration_minutes': duration,
                 'title': appt['patient_name'],
+                'patient_id': appt['patient_id'],
                 'type_label': 'Recurring Appointment' if is_recurring else 'Appointment',
                 'status': appt['patient_status'] or '',
                 'meeting_type': appt['meeting_type'] or 'in-person',
@@ -6087,7 +6088,7 @@ def api_calendar_book():
     meeting_platform = request.form.get('meeting_platform', '').strip()
     meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
     save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-    is_recurring_form = 1 if request.form.get('is_recurring') in ('1', 'true', 'on') else 0
+    is_recurring_explicit = request.form.get('is_recurring')
     recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
     booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
     special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
@@ -6202,11 +6203,12 @@ def api_calendar_book():
         db.commit()
         return jsonify({'status': 'success'})
 
-    # Business rule: use form checkbox value if provided, otherwise default based on patient status
-    # Ongoing patients are booked as weekly recurring sessions by default.
-    # Candidate/waiting/intake/diagnosee remain one-time bookings by default.
-    if is_recurring_form:
+    # Business rule: honour explicit form value first, then default by patient status.
+    # Ongoing patients default to weekly recurring; others default to one-time.
+    if is_recurring_explicit == '1' or is_recurring_explicit == 'on' or is_recurring_explicit == 'true':
         is_recurring = 1
+    elif is_recurring_explicit == '0':
+        is_recurring = 0  # explicit one-time override, even for ongoing patients
     else:
         is_recurring = 1 if patient_status == 'ongoing' else 0
     recurrence_interval = 1 if is_recurring else None
