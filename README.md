@@ -15,6 +15,13 @@ A web application to manage patients, treatment notes, files, and receipts for a
 - Open group sessions directly from the weekly calendar.
 - Secure file storage and downloads.
 - CSRF protection.
+- Organize patient dropdown by type and name for quick selection.
+- Edit appointment date and time directly in the booking panel.
+- Schedule meetings as online, in-person, or phone consultations.
+- Add meeting remarks to appointments.
+- Mark meetings as recurring with weekly scheduling (configurable per patient status).
+- Support custom booking types via "Other" option.
+- Track recurring appointment series with proper deletion handling.
 
 ## Group Management
 - The Groups overview page supports creating groups, editing core group metadata, and archiving or permanently deleting groups.
