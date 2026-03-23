@@ -11,15 +11,21 @@ import argparse
 import signal
 import atexit
 import time
-import psutil
 import socket
 from pathlib import Path
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 
 class AutoRunner:
     def __init__(self, verbose=False):
         self.verbose = verbose
         self.root_dir = Path(__file__).parent
+        self.venv_dir = self.root_dir / ".venv"
+        self.python_cmd = [sys.executable]
         self.app_process = None
         self.shutting_down = False
         
@@ -64,38 +70,34 @@ class AutoRunner:
                 
                 # If that didn't work, kill the process group
                 try:
-                    # Get the process to find child processes
-                    parent = psutil.Process(self.app_process.pid)
-                    children = parent.children(recursive=True)
-                    
-                    # Kill children first
-                    for child in children:
-                        try:
-                            child.terminate()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                    
-                    # Give them time to die
-                    gone, alive = psutil.wait_procs(children, timeout=2)
-                    
-                    # Force kill any remaining
-                    for child in alive:
-                        try:
-                            child.kill()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                    
-                    # Kill parent
+                    if psutil is not None:
+                        parent = psutil.Process(self.app_process.pid)
+                        children = parent.children(recursive=True)
+
+                        for child in children:
+                            try:
+                                child.terminate()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+
+                        _, alive = psutil.wait_procs(children, timeout=2)
+
+                        for child in alive:
+                            try:
+                                child.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+
                     self.app_process.kill()
                     self.app_process.wait(timeout=2)
                     self.log("✓ Application killed forcefully", level="SUCCESS")
-                    
-                except (psutil.NoSuchProcess, Exception) as e:
+
+                except Exception as e:
                     self.log(f"Error killing process: {e}", level="WARNING")
                     try:
                         self.app_process.kill()
                         self.app_process.wait()
-                    except:
+                    except Exception:
                         pass
                 
                 # Give the port time to be released
@@ -116,6 +118,62 @@ class AutoRunner:
         except subprocess.CalledProcessError as e:
             self.log(f"✗ Failed to {description}", level="ERROR")
             return False
+
+    def ensure_python_runtime(self, install=False):
+        """Select the interpreter to use, creating a local venv when installation is requested."""
+        venv_python = self.venv_dir / "bin" / "python"
+
+        if venv_python.exists():
+            self.python_cmd = [str(venv_python)]
+            try:
+                subprocess.run(self.python_cmd + ["-m", "pip", "--version"], check=True, cwd=self.root_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
+            if install and self.ensure_pip(log_failure=False):
+                return True
+            self.log("Falling back to system Python because the virtual environment is incomplete.", level="WARNING")
+            self.python_cmd = [sys.executable]
+            if not install:
+                return True
+
+        if not install:
+            self.python_cmd = [sys.executable]
+            return True
+
+        self.log(f"Creating virtual environment at {self.venv_dir}")
+        try:
+            subprocess.run([sys.executable, "-m", "venv", str(self.venv_dir)], check=True, cwd=self.root_dir)
+        except subprocess.CalledProcessError:
+            self.log("✗ Failed to create virtual environment", level="ERROR")
+            self.python_cmd = [sys.executable]
+            return True
+
+        self.python_cmd = [str(venv_python)]
+        if self.ensure_pip(log_failure=False):
+            return True
+
+        self.log("Falling back to system Python because virtualenv pip bootstrap failed.", level="WARNING")
+        self.python_cmd = [sys.executable]
+        return True
+
+    def ensure_pip(self, log_failure=True):
+        """Bootstrap pip inside the local venv when needed."""
+        try:
+            subprocess.run(self.python_cmd + ["-m", "pip", "--version"], check=True, cwd=self.root_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+        self.log(f"Bootstrapping pip inside {self.venv_dir}")
+        try:
+            subprocess.run(self.python_cmd + ["-m", "ensurepip", "--upgrade"], check=True, cwd=self.root_dir)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            if log_failure:
+                self.log("✗ Failed to bootstrap pip in the virtual environment", level="ERROR")
+            return False
     
     def install_dependencies(self):
         """Install required dependencies from requirements.txt"""
@@ -124,9 +182,17 @@ class AutoRunner:
         if not requirements_path.exists():
             self.log("requirements.txt not found", level="WARNING")
             return False
+
+        venv_python = self.venv_dir / "bin" / "python"
+        install_args = ["-m", "pip", "install", "-q", "-r", str(requirements_path)]
+        if self.python_cmd == [str(venv_python)]:
+            if not self.ensure_pip():
+                return False
+        else:
+            install_args = ["-m", "pip", "install", "--break-system-packages", "-q", "-r", str(requirements_path)]
         
         return self.run_command(
-            [sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)],
+            self.python_cmd + install_args,
             "install dependencies"
         )
     
@@ -139,7 +205,7 @@ class AutoRunner:
             return False
         
         return self.run_command(
-            [sys.executable, str(test_file)],
+            self.python_cmd + [str(test_file)],
             "run tests"
         )
 
@@ -180,7 +246,7 @@ class AutoRunner:
             env = os.environ.copy()
             env["PORT"] = str(port)
             self.app_process = subprocess.Popen(
-                [sys.executable, str(app_file)],
+                self.python_cmd + [str(app_file)],
                 cwd=self.root_dir,
                 env=env
             )
@@ -198,6 +264,9 @@ class AutoRunner:
         self.log("=" * 50)
         self.log("Private Clinic Management System - Auto Runner")
         self.log("=" * 50)
+
+        if not self.ensure_python_runtime(install=install):
+            return False
         
         if install:
             if not self.install_dependencies():

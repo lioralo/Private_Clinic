@@ -6,6 +6,9 @@
 set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_DIR="$SCRIPT_DIR/.venv"
+PYTHON_BIN="python3"
+USE_VENV=false
 VERBOSE=false
 RUN_TESTS=false
 TEST_ONLY=false
@@ -46,6 +49,48 @@ log() {
     echo "[$level] $*"
 }
 
+ensure_python_runtime() {
+    if [ -x "$VENV_DIR/bin/python" ]; then
+        if "$VENV_DIR/bin/python" -m pip --version >/dev/null 2>&1 || "$VENV_DIR/bin/python" -m ensurepip --upgrade >/dev/null 2>&1; then
+            PYTHON_BIN="$VENV_DIR/bin/python"
+            USE_VENV=true
+            return 0
+        fi
+
+        log "WARNING" "Existing virtual environment is incomplete; falling back to system Python"
+    fi
+
+    if [ "$SKIP_INSTALL" = true ]; then
+        PYTHON_BIN="python3"
+        USE_VENV=false
+        return 0
+    fi
+
+    log "INFO" "Creating virtual environment at $VENV_DIR"
+    if python3 -m venv "$VENV_DIR" && "$VENV_DIR/bin/python" -m pip --version >/dev/null 2>&1; then
+        PYTHON_BIN="$VENV_DIR/bin/python"
+        USE_VENV=true
+        return 0
+    fi
+
+    log "WARNING" "Could not create a usable virtual environment; using system Python instead"
+    PYTHON_BIN="python3"
+    USE_VENV=false
+}
+
+ensure_pip() {
+    if [ "$USE_VENV" != true ]; then
+        return 0
+    fi
+
+    if "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    log "INFO" "Bootstrapping pip inside $VENV_DIR"
+    "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1
+}
+
 # Install dependencies
 install_dependencies() {
     if [ "$SKIP_INSTALL" = true ]; then
@@ -58,11 +103,21 @@ install_dependencies() {
         return 1
     fi
     
+    ensure_pip || return 1
+
     log "INFO" "Installing dependencies..."
     if [ "$VERBOSE" = true ]; then
-        python3 -m pip install -r "$SCRIPT_DIR/requirements.txt"
+        if [ "$USE_VENV" = true ]; then
+            "$PYTHON_BIN" -m pip install -r "$SCRIPT_DIR/requirements.txt"
+        else
+            "$PYTHON_BIN" -m pip install --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+        fi
     else
-        python3 -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
+        if [ "$USE_VENV" = true ]; then
+            "$PYTHON_BIN" -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
+        else
+            "$PYTHON_BIN" -m pip install --break-system-packages -q -r "$SCRIPT_DIR/requirements.txt"
+        fi
     fi
     log "SUCCESS" "Dependencies installed"
 }
@@ -75,7 +130,7 @@ run_tests() {
     fi
     
     log "INFO" "Running tests..."
-    python3 "$SCRIPT_DIR/test_app.py"
+    "$PYTHON_BIN" "$SCRIPT_DIR/test_app.py"
     log "SUCCESS" "Tests completed"
 }
 
@@ -87,7 +142,7 @@ run_app() {
     fi
     
     log "INFO" "Starting application on http://127.0.0.1:5000"
-    python3 "$SCRIPT_DIR/app.py"
+    "$PYTHON_BIN" "$SCRIPT_DIR/app.py"
 }
 
 # Main execution
@@ -95,6 +150,8 @@ main() {
     echo "=================================================="
     echo "Private Clinic Management System - Auto Runner"
     echo "=================================================="
+
+    ensure_python_runtime || exit 1
     
     install_dependencies || exit 1
     
