@@ -51,25 +51,25 @@
 {% endif %}
 
 <div class="crm-summary-strip mb-3">
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', patient_type=patient_type, q=search_query, sort=sort_by) }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by) }}">
         <div class="crm-summary-mini {% if status == 'all' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('All') }}</span>
             <span class="crm-summary-value">{{ counts['all'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', patient_type=patient_type, q=search_query, sort=sort_by) }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by) }}">
         <div class="crm-summary-mini {% if status == 'ongoing' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Ongoing') }}</span>
             <span class="crm-summary-value">{{ counts['ongoing'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', patient_type=patient_type, q=search_query, sort=sort_by) }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by) }}">
         <div class="crm-summary-mini {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Waiting') }}</span>
             <span class="crm-summary-value">{{ counts['candidate_waiting'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', patient_type=patient_type, q=search_query, sort=sort_by) }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by) }}">
         <div class="crm-summary-mini {% if status == 'archived' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Archived') }}</span>
             <span class="crm-summary-value">{{ counts['archived'] }}</span>
@@ -168,17 +168,15 @@
                     {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
                     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none" title="Open patient messages">
                         {{ patient['unread_messages'] }} unread
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            <span class="crm-patient-arrow"><i class="bi bi-chevron-right"></i></span>
-        </div>
-    {% else %}
-        <div class="card text-center p-5">
-            <div class="card-body py-4">
-                <i class="bi bi-person-exclamation fs-1 text-muted mb-3 d-block"></i>
-                <h5 class="text-muted">{{ t('No patients found in this category.') }}</h5>
+                    <div>
+                        <label class="form-label small">{{ t('Clinic Type') }}</label>
+                        <select class="form-select form-select-sm" name="clinic_type">
+                            <option value="all" {% if clinic_type == 'all' %}selected{% endif %}>{{ t('All Types') }}</option>
+                            <option value="private" {% if clinic_type == 'private' %}selected{% endif %}>{{ t('Private') }}</option>
+                            <option value="residency" {% if clinic_type == 'residency' %}selected{% endif %}>{{ t('Residency') }}</option>
+                            <option value="group" {% if clinic_type == 'group' %}selected{% endif %}>{{ t('Group') }}</option>
+                        </select>
+                    </div>
             </div>
         </div>
     {% endfor %}

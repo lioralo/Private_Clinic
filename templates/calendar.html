@@ -148,9 +148,32 @@
                     <label class="form-label small">{{ t('Patient') }}</label>
                     <select name="patient_id" id="bookingPatient" class="form-select form-select-sm" required>
                         <option value="">{{ t('Select patient...') }}</option>
-                        {% for p in patient_options %}
-                        <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ p['patient_type'] or 'private' }}">{{ p['name'] }} ({{ p['status'] }})</option>
-                        {% endfor %}
+                        {%- set grouped = {} -%}
+                        {%- for p in patient_options -%}
+                            {%- set ptype = p['patient_type'] or 'private' -%}
+                            {%- if ptype not in grouped -%}
+                                {%- do grouped.update({ptype: []}) -%}
+                            {%- endif -%}
+                            {%- do grouped[ptype].append(p) -%}
+                        {%- endfor -%}
+                        {%- for ptype in ['ongoing', 'candidate', 'archived', 'group'] -%}
+                            {%- if grouped.get(ptype) -%}
+                            <optgroup label="{{ ptype | title }}">
+                                {%- for p in grouped[ptype] | sort(attribute='name') -%}
+                                <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ ptype }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                                {%- endfor -%}
+                            </optgroup>
+                            {%- endif -%}
+                        {%- endfor -%}
+                        {%- for ptype in ['private', 'residency', 'initial-intake', 'diagnosee'] -%}
+                            {%- if grouped.get(ptype) -%}
+                            <optgroup label="{{ ptype | title }}">
+                                {%- for p in grouped[ptype] | sort(attribute='name') -%}
+                                <option value="{{ p['id'] }}" data-patient-status="{{ p['status'] }}" data-patient-type="{{ ptype }}">{{ p['name'] }} ({{ p['status'] }})</option>
+                                {%- endfor -%}
+                            </optgroup>
+                            {%- endif -%}
+                        {%- endfor -%}
                         <option value="other">── {{ t('Other (enter name below)') }} ──</option>
                     </select>
                     <div class="form-text" id="bookingStatusHint">{{ t('Select a patient to see booking mode.') }}</div>
@@ -161,8 +184,12 @@
                 </div>
                 {% endif %}
                 <div class="mb-2">
-                    <label class="form-label small">{{ t('Selected Slot') }}</label>
-                    <div class="small text-muted" id="selectedSlotText">{{ t('No slot selected') }}</div>
+                    <label class="form-label small">{{ t('Date') }}</label>
+                    <input type="date" class="form-control form-control-sm" id="bookingDateInput" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">{{ t('Start Time') }}</label>
+                    <input type="time" class="form-control form-control-sm" id="bookingTimeInput" step="900" required>
                 </div>
                 <div class="mb-2">
                     <label class="form-label small">{{ t('End Time') }}</label>
@@ -173,15 +200,20 @@
                     <label class="form-label small">{{ t('Booking Type') }}</label>
                     <select name="booking_type" id="bookingTypeSelect" class="form-select form-select-sm">
                         <option value="appointment">{{ t('Appointment') }}</option>
+                        <option value="other">{{ t('Other') }}</option>
                     </select>
+                </div>
+                <div class="mb-2" id="otherBookingTypeWrap" style="display: none;">
+                    <label class="form-label small">{{ t('Specify Booking Type') }}</label>
+                    <input type="text" name="other_booking_type" id="otherBookingTypeInput" class="form-control form-control-sm" placeholder="{{ t('Enter custom booking type') }}">
                 </div>
                 {% endif %}
                 <div class="mb-2">
                     <label class="form-label small">{{ t('Meeting Type') }}</label>
                     <select name="meeting_type" id="meetingTypeSelect" class="form-select form-select-sm">
                         <option value="in-person">{{ t('In-person') }}</option>
-                        <option value="zoom">{{ t('Zoom') }}</option>
-                        <option value="google-meet">Google Meet</option>
+                        <option value="online">{{ t('Online') }}</option>
+                        <option value="phone">{{ t('Phone') }}</option>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -1161,10 +1193,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span>${payload.duration_minutes} min</span>
             </div>
             <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
-            <div class="mb-2">
-                <label class="form-label small">Select Patient</label>
-                <select class="form-select form-select-sm" id="vacMgrPatient">
-                    <option value="">— enter name below instead —</option>
+                <div class="mb-2">
+                    <label class="form-label small">{{ t('Meeting Remarks') }}</label>
+                    <input type="text" name="meeting_remarks" id="meetingRemarksInput" class="form-control form-control-sm" placeholder="">
+                </div>
+                <div class="mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="recurringCheckbox" name="is_recurring">
+                        <label class="form-check-label small" for="recurringCheckbox">
+                            {{ t('Recurring Meeting') }}
+                        </label>
+                    </div>
+                    <div class="form-text">{{ t('When enabled, creates a weekly recurring meeting until specified date.') }}</div>
+                </div>
+                <div class="mb-3 d-none" id="recurringDateWrap">
+                    <label class="form-label small">{{ t('Repeat Until') }}</label>
+                    <input type="date" id="recurringUntilDate" name="recurrence_end_date" class="form-control form-control-sm">
+                </div>
                     ${patientOptions}
                 </select>
             </div>
@@ -1506,9 +1551,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const bookingDateInput = document.getElementById('bookingDateInput');
+    const bookingTimeInput = document.getElementById('bookingTimeInput');
+    
     function setSelectedSlot(date, time, durationMinutes) {
         bookingDate.value = date;
         bookingTime.value = time;
+        // Sync visible inputs
+        if (bookingDateInput) bookingDateInput.value = date;
+        if (bookingTimeInput) bookingTimeInput.value = time;
         // Compute end time from start + duration
         const [h, m] = time.split(':').map(Number);
         const endTotalMins = h * 60 + m + (durationMinutes || 60);
@@ -1548,6 +1599,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Sync visible date input to hidden field
+    if (bookingDateInput) {
+        bookingDateInput.addEventListener('change', function() {
+            bookingDate.value = this.value;
+            if (bookingDate.value && bookingTime.value && bookingEndTimeInput.value) {
+                selectedSlotText.textContent = `${bookingDate.value} ${bookingTime.value} → ${bookingEndTimeInput.value}`;
+            }
+        });
+    }
+    
+    // Sync visible time input to hidden field
+    if (bookingTimeInput) {
+        bookingTimeInput.addEventListener('change', function() {
+            bookingTime.value = this.value;
+            if (bookingDate.value && bookingTime.value && bookingEndTimeInput.value) {
+                selectedSlotText.textContent = `${bookingDate.value} ${bookingTime.value} → ${bookingEndTimeInput.value}`;
+            }
+        });
+    }
 
     // Google Meet / Zoom helper buttons
     const openGoogleMeetBtn = document.getElementById('openGoogleMeetBtn');
@@ -1566,13 +1637,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (meetingPlatformHidden) meetingPlatformHidden.value = 'zoom';
         });
     }
-    // Auto-set platform hidden field based on selected meeting type
-    if (meetingTypeSelect) {
+    // Update meeting link visibility based on meeting type
+    if (meetingTypeSelect && meetingLinkInput) {
         meetingTypeSelect.addEventListener('change', function() {
+            const meetingLinkContainer = meetingLinkInput.closest('.mb-3');
+            if (meetingLinkContainer) {
+                meetingLinkContainer.classList.toggle('d-none', this.value !== 'online');
+            }
+            // For backward compatibility with zoom/google-meet
             if (meetingPlatformHidden) {
                 meetingPlatformHidden.value = (this.value === 'zoom' || this.value === 'google-meet') ? this.value : '';
             }
         });
+        // Set initial state
+        const meetingLinkContainer = meetingLinkInput.closest('.mb-3');
+        if (meetingLinkContainer) {
+            meetingLinkContainer.classList.toggle('d-none', meetingTypeSelect.value !== 'online');
+        }
     }
 
     function createVacancyFromSelectedSlot() {
@@ -1636,11 +1717,32 @@ document.addEventListener('DOMContentLoaded', function() {
         createVacancyBtn.addEventListener('click', createVacancyFromSelectedSlot);
     }
 
-    if (bookingPatient && meetingTitleInput) {
+    const recurringCheckbox = document.getElementById('recurringCheckbox');
+    const recurringDateWrap = document.getElementById('recurringDateWrap');
+    const meetingRemarksInput = document.getElementById('meetingRemarksInput');
+    
+    if (recurringCheckbox) {
+        recurringCheckbox.addEventListener('change', function() {
+            if (recurringDateWrap) {
+                recurringDateWrap.classList.toggle('d-none', !this.checked);
+            }
+        });
+    }
+    
+    if (bookingPatient && (meetingRemarksInput || meetingTitleInput)) {
         bookingPatient.addEventListener('change', function() {
             const selected = bookingPatient.options[bookingPatient.selectedIndex];
             const status = selected ? (selected.dataset.patientStatus || '') : '';
             const isOther = this.value === 'other';
+            
+            // Set recurring checkbox based on patient status
+            if (recurringCheckbox) {
+                recurringCheckbox.checked = (status === 'ongoing');
+                if (recurringDateWrap) {
+                    recurringDateWrap.classList.toggle('d-none', !recurringCheckbox.checked);
+                }
+            }
+            
             if (otherNameWrap) {
                 otherNameWrap.classList.toggle('d-none', !isOther);
             }
@@ -1663,9 +1765,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     bookingStatusHint.textContent = I18N.candidateModeHint;
                 }
-            }
-            if (!meetingTitleInput.value && status === 'ongoing') {
-                meetingTitleInput.value = I18N.privateMeeting;
             }
         });
     }
@@ -1706,7 +1805,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (bookingTypeSelect) {
-        bookingTypeSelect.addEventListener('change', refreshSpecialControls);
+        bookingTypeSelect.addEventListener('change', function() {
+            refreshSpecialControls();
+            const otherBookingTypeWrap = document.getElementById('otherBookingTypeWrap');
+            if (otherBookingTypeWrap) {
+                otherBookingTypeWrap.style.display = bookingTypeSelect.value === 'other' ? 'block' : 'none';
+            }
+        });
     }
     if (specialPatternSelect) {
         specialPatternSelect.addEventListener('change', refreshSpecialControls);
@@ -2033,6 +2138,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             formData.set('booking_type', 'special');
             formData.set('special_title', otherVal);
+        }
+
+        // "Other" booking type: require custom type entry
+        if (bookingTypeSelect && bookingTypeSelect.value === 'other') {
+            const otherBookingTypeInput = document.getElementById('otherBookingTypeInput');
+            const otherVal = otherBookingTypeInput ? otherBookingTypeInput.value.trim() : '';
+            if (!otherVal) {
+                showActionModal({ title: 'Type Required', message: 'Please specify the booking type.' });
+                return;
+            }
+            formData.set('booking_type', otherVal);
         }
 
         fetch('/api/calendar/book', {

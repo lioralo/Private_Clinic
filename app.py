@@ -2250,23 +2250,25 @@ def crm_dashboard():
     db = get_db()
     saved_filters = session.get('crm_filters', {})
     status = request.args.get('status', saved_filters.get('status', 'all')).strip()
-    patient_type = request.args.get('patient_type', saved_filters.get('patient_type', 'all')).strip()
+    clinic_type = request.args.get('clinic_type', saved_filters.get('clinic_type', 'all')).strip()
     search_query = request.args.get('q', saved_filters.get('q', '')).strip()
     sort_by = request.args.get('sort', saved_filters.get('sort', 'status_priority')).strip()
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
-    if patient_type not in {'all', 'private', 'residency', 'initial-intake', 'diagnosee', 'group'}:
-        patient_type = 'all'
+    if clinic_type not in {'all', 'private', 'residency', 'group'}:
+        clinic_type = 'all'
     if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest'}:
         sort_by = 'status_priority'
 
     session['crm_filters'] = {
         'status': status,
-        'patient_type': patient_type,
+        'clinic_type': clinic_type,
         'q': search_query,
         'sort': sort_by
     }
+    
+    patient_type = clinic_type
 
     patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id)
     counts_row = db.execute('''
@@ -2286,7 +2288,7 @@ def crm_dashboard():
     }
     reminders = send_appointment_reminders(db)
     return render_template('crm.html', patients=patients, status=status, counts=counts,
-                           patient_type=patient_type, search_query=search_query, sort_by=sort_by,
+                           clinic_type=clinic_type, search_query=search_query, sort_by=sort_by,
                            reminders=reminders)
 
 @app.route('/patient/home')
@@ -4468,7 +4470,7 @@ def weekly_calendar():
     can_self_schedule = False
     if current_user.role == 'admin':
         patient_options = db.execute(
-            'SELECT id, name, status, patient_type FROM patients ORDER BY name ASC'
+            'SELECT id, name, status, patient_type FROM patients WHERE COALESCE(is_deleted, 0) = 0 ORDER BY COALESCE(patient_type, "private") ASC, name ASC'
         ).fetchall()
     else:
         patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
@@ -6077,8 +6079,10 @@ def api_calendar_book():
     meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
     meeting_link = request.form.get('meeting_link', '').strip()
     meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_title = request.form.get('meeting_title', '').strip()
+    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
     save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
+    is_recurring_form = 1 if request.form.get('is_recurring') in ('1', 'true', 'on') else 0
+    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
     booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
     special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
     special_repeat_until = request.form.get('special_repeat_until', '').strip()
@@ -6192,9 +6196,13 @@ def api_calendar_book():
         db.commit()
         return jsonify({'status': 'success'})
 
-    # Business rule: ongoing patients are booked as weekly recurring sessions.
-    # Candidate/waiting/intake/diagnosee remain one-time bookings.
-    is_recurring = 1 if patient_status == 'ongoing' else 0
+    # Business rule: use form checkbox value if provided, otherwise default based on patient status
+    # Ongoing patients are booked as weekly recurring sessions by default.
+    # Candidate/waiting/intake/diagnosee remain one-time bookings by default.
+    if is_recurring_form:
+        is_recurring = 1
+    else:
+        is_recurring = 1 if patient_status == 'ongoing' else 0
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
 
@@ -6222,7 +6230,10 @@ def api_calendar_book():
 
     recurrence_end_date = None
     if is_recurring:
-        recurrence_end_date = (anchor + timedelta(days=365)).isoformat()
+        if recurrence_end_date_form:
+            recurrence_end_date = recurrence_end_date_form
+        else:
+            recurrence_end_date = (anchor + timedelta(days=365)).isoformat()
     recurrence_group_id = build_recurrence_group_id() if is_recurring else None
 
     db.execute('''
@@ -6237,7 +6248,7 @@ def api_calendar_book():
         meeting_type,
         meeting_link or None,
         meeting_platform or None,
-        meeting_title or None,
+        meeting_remarks or None,
         save_to_google,
         is_recurring,
         recurrence_interval,
@@ -6427,18 +6438,23 @@ def api_calendar_appointment_delete(appointment_id):
             db.commit()
             return jsonify({'status': 'success'})
 
-        cutoff = (occ_date - timedelta(days=1)).isoformat()
         for row in related_rows:
             base_date = parse_date_safe(row['appointment_date'])
             if not base_date:
                 continue
-            if occ_date <= base_date:
-                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                continue
-
-            row_end = estimate_recurring_series_end(row)
-            if row_end and row_end >= occ_date:
+            
+            is_occurrence_in_series = False
+            if base_date > occ_date:
+                is_occurrence_in_series = False
+            else:
+                row_occurrences = recurring_occurrences_between(row, occ_date, occ_date)
+                is_occurrence_in_series = len(row_occurrences) > 0
+            
+            if is_occurrence_in_series:
+                cutoff = (occ_date - timedelta(days=1)).isoformat()
                 db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
+            elif base_date >= occ_date:
+                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
         db.commit()
         return jsonify({'status': 'success'})
 
