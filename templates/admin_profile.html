@@ -155,6 +155,101 @@
                 </form>
             </div>
         </div>
+
+        <!-- Google Calendar Integration -->
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-check me-2 text-success"></i>{{ t('Google Calendar Integration') }}</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id="gcalStatus" class="mb-3">
+                    <span class="text-muted small"><i class="bi bi-hourglass me-1"></i>{{ t('Checking Google Calendar connection...') }}</span>
+                </div>
+                <div id="gcalActions" class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
+                        <i class="bi bi-google me-1"></i>{{ t('Connect Google Calendar') }}
+                    </a>
+                    <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="d-none" id="gcalDisconnectForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
+                            <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect') }}
+                        </button>
+                    </form>
+                </div>
+                <div class="d-none mt-3" id="gcalCalendarSelector">
+                    <label class="form-label small fw-semibold">{{ t('Choose calendar to sync to') }}</label>
+                    <div class="d-flex gap-2">
+                        <select id="gcalCalendarSelect" class="form-select form-select-sm"></select>
+                        <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
+                    </div>
+                </div>
+                <p class="text-muted small mt-3 mb-0">
+                    {{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}
+                </p>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+(function() {
+    fetch('/admin/google-calendar/status')
+        .then(r => r.json())
+        .then(data => {
+            const statusDiv = document.getElementById('gcalStatus');
+            const disconnectForm = document.getElementById('gcalDisconnectForm');
+            const connectBtn = document.getElementById('gcalConnectBtn');
+            const calSelector = document.getElementById('gcalCalendarSelector');
+            const calSelect = document.getElementById('gcalCalendarSelect');
+
+            if (!data.google_libs) {
+                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Google libraries not installed</span>';
+                return;
+            }
+            if (!data.client_configured) {
+                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth</span>';
+                connectBtn.style.display = 'none';
+                return;
+            }
+            if (data.connected) {
+                statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Connected</span>' +
+                    (data.calendar_id ? ' <span class="text-muted small ms-1">Calendar: ' + data.calendar_id + '</span>' : '');
+                disconnectForm.classList.remove('d-none');
+                connectBtn.style.display = 'none';
+                if (data.calendars && data.calendars.length) {
+                    calSelector.classList.remove('d-none');
+                    data.calendars.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c.id;
+                        opt.textContent = c.summary;
+                        if (c.id === data.calendar_id) opt.selected = true;
+                        calSelect.appendChild(opt);
+                    });
+                }
+            } else {
+                statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>Not connected</span>';
+            }
+        })
+        .catch(() => {
+            document.getElementById('gcalStatus').innerHTML = '<span class="text-muted small">Could not load Google Calendar status.</span>';
+        });
+
+    const saveBtn = document.getElementById('gcalSaveCalendarBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            const calId = document.getElementById('gcalCalendarSelect').value;
+            const csrfToken = document.querySelector('[name=csrf_token]') ? document.querySelector('[name=csrf_token]').value : '';
+            fetch('/admin/google-calendar/set-calendar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'calendar_id=' + encodeURIComponent(calId) + '&csrf_token=' + encodeURIComponent(csrfToken)
+            }).then(r => r.json()).then(d => {
+                if (d.status === 'success') {
+                    alert('Calendar updated to: ' + d.calendar_id);
+                }
+            });
+        });
+    }
+})();
+</script>
 {% endblock %}

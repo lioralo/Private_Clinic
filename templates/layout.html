@@ -26,7 +26,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
         <div class="container-fluid app-container px-3 px-xl-4">
             <a class="navbar-brand d-flex align-items-center" href="{% if current_user.is_authenticated and current_user.role == 'admin' %}{{ url_for('crm_dashboard') }}{% else %}{{ url_for('index') }}{% endif %}">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="logo" style="height:36px;width:auto;object-fit:contain;" class="me-2 rounded">
+                <img src="{{ url_for('static', filename='Logo.png') }}" alt="logo" style="height:52px;width:auto;object-fit:contain;" class="me-2 rounded">
                 <span>{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni Clinic{% endif %}</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">

@@ -125,5 +125,68 @@ def backup_database():
         print(f"Backup failed: {exc}")
 
 
+def restore_database(encrypted_backup_path: str, target_db_path: str = None):
+    """Decrypt an encrypted backup and restore it to the clinic database."""
+    enc_path = Path(encrypted_backup_path)
+    if not enc_path.exists():
+        print(f"Error: Encrypted backup file '{encrypted_backup_path}' not found.")
+        return False
+
+    target = Path(target_db_path or DB_FILE)
+    temp_restore = target.parent / f'.restore_tmp_{enc_path.stem}.db'
+
+    try:
+        cipher = Fernet(get_or_create_backup_key())
+        encrypted_bytes = enc_path.read_bytes()
+        decrypted_bytes = cipher.decrypt(encrypted_bytes)
+
+        if not decrypted_bytes.startswith(b'SQLite format 3'):
+            print("Error: Decrypted content is not a valid SQLite database.")
+            return False
+
+        temp_restore.write_bytes(decrypted_bytes)
+
+        # Verify decrypted database is readable
+        conn = sqlite3.connect(str(temp_restore))
+        try:
+            result = conn.execute('PRAGMA integrity_check').fetchone()[0]
+            if result != 'ok':
+                print(f"Error: Restored database failed integrity check: {result}")
+                return False
+            fingerprint = database_backup_fingerprint(temp_restore)
+        finally:
+            conn.close()
+
+        # Take a safety snapshot of the current database before overwriting
+        if target.exists():
+            safety_path = target.parent / f'secure_backups/{target.stem}.pre_restore_{datetime.now().strftime("%Y%m%d_%H%M%S")}.bak'
+            safety_path.parent.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(str(target), str(safety_path))
+            print(f"Safety backup of current DB saved to: {safety_path}")
+
+        temp_restore.replace(target)
+        print(f"Restore successful: {target}")
+        print(f"Restored tables: {list(fingerprint['table_counts'].keys())}")
+        for t, c in fingerprint['table_counts'].items():
+            print(f"  {t}: {c} rows")
+        return True
+
+    except Exception as exc:
+        temp_restore.unlink(missing_ok=True)
+        print(f"Restore failed: {exc}")
+        return False
+
+
 if __name__ == '__main__':
-    backup_database()
+    import sys
+    if len(sys.argv) >= 2 and sys.argv[1] == 'restore':
+        if len(sys.argv) < 3:
+            print("Usage: python backup_db.py restore <encrypted_backup.db.enc> [target_db_path]")
+            sys.exit(1)
+        enc_file = sys.argv[2]
+        target_file = sys.argv[3] if len(sys.argv) >= 4 else None
+        success = restore_database(enc_file, target_file)
+        sys.exit(0 if success else 1)
+    else:
+        backup_database()

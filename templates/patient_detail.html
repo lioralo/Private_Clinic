@@ -89,7 +89,11 @@
                                             <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Phone') }}</small>
                                             <div class="fw-medium text-dark mb-2">{{ patient['phone'] or 'Not provided' }}</div>
                                             {% if patient['phone'] %}
-                                                <a href="https://wa.me/{{ patient['phone']|replace('-','')|replace(' ','') }}?text=Hello {{ patient['name'] }}, " target="_blank" class="btn btn-sm btn-success d-block w-100">
+                                                {%- set _ph = patient['phone']|replace('-','')|replace(' ','')|replace('(','')|replace(')','')|replace('+','') -%}
+                                                {%- if _ph.startswith('972') -%}{%- set _wa = _ph -%}
+                                                {%- elif _ph.startswith('0') -%}{%- set _wa = '972' + _ph[1:] -%}
+                                                {%- else -%}{%- set _wa = '972' + _ph -%}{%- endif -%}
+                                                <a href="https://wa.me/{{ _wa }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success d-block w-100">
                                                     <i class="bi bi-whatsapp me-1"></i>{{ t('WhatsApp') }}
                                                 </a>
                                             {% endif %}

@@ -12,6 +12,10 @@ import zipfile
 from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
+try:
+    import google_calendar as gcal
+except ImportError:
+    gcal = None
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -1377,6 +1381,27 @@ def init_db():
         except sqlite3.OperationalError:
             pass
         db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
+
+        # Google Calendar: add google_event_id to appointments and group_sessions
+        try:
+            db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
+        except sqlite3.OperationalError:
+            pass
+        # Ensure google_calendar_tokens table exists
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+                id INTEGER PRIMARY KEY,
+                owner TEXT NOT NULL DEFAULT 'admin',
+                token_json TEXT NOT NULL,
+                calendar_id TEXT NOT NULL DEFAULT 'primary',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
         db.commit()
 
@@ -3826,6 +3851,11 @@ def build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=20):
                 'is_recurring': is_recurring
             })
 
+    now = datetime.now()
+    upcoming = [
+        row for row in upcoming
+        if datetime.fromisoformat(f"{row['appointment_date']}T{row['appointment_time'] or '00:00'}") >= now
+    ]
     upcoming.sort(key=lambda row: (row['appointment_date'], row['appointment_time']))
     return upcoming[:limit]
 
@@ -6276,6 +6306,24 @@ def api_calendar_book():
         WHERE slot_date = ? AND slot_time = ? AND status = 'available'
     ''', (booked_label, datetime.now().isoformat(), booking_date, parsed_booking_time.strftime('%H:%M')))
     db.commit()
+
+    # Sync to Google Calendar if save_to_google flag is set and admin is connected
+    if save_to_google and gcal and patient_id:
+        new_appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
+                              (patient_id, booking_date, parsed_booking_time.strftime('%H:%M'))).fetchone()
+        if new_appt:
+            patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+            gcal.sync_appointment_to_google(
+                db,
+                appointment_id=new_appt['id'],
+                patient_name=(patient_row['name'] if patient_row else booked_label),
+                date_iso=booking_date,
+                time_str=parsed_booking_time.strftime('%H:%M'),
+                duration_minutes=duration,
+                meeting_type=meeting_type,
+                meeting_link=meeting_link or '',
+            )
+
     return jsonify({'status': 'success'})
 
 
@@ -7550,6 +7598,104 @@ def api_link_group_session_supervision(session_id):
     db.execute('UPDATE group_sessions SET supervision_id = ? WHERE id = ?', (sup_id, session_id))
     db.commit()
     return jsonify({'status': 'success'})
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar OAuth routes
+# ---------------------------------------------------------------------------
+
+@app.route('/admin/google-calendar/status')
+@login_required
+def google_calendar_status():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    if not gcal:
+        return jsonify({'connected': False, 'reason': 'Google libraries not installed.'})
+    connected = gcal.is_connected(db)
+    calendars = gcal.list_calendars(db) if connected else []
+    calendar_id = gcal.get_calendar_id(db) if connected else None
+    return jsonify({
+        'connected': connected,
+        'google_libs': gcal.GOOGLE_LIBS_AVAILABLE,
+        'client_configured': gcal._client_secrets_available() if gcal else False,
+        'calendar_id': calendar_id,
+        'calendars': calendars,
+    })
+
+
+@app.route('/admin/google-calendar/connect')
+@login_required
+def google_calendar_connect():
+    if current_user.role != 'admin':
+        flash('Unauthorized.')
+        return redirect(url_for('admin_profile'))
+    if not gcal:
+        flash('Google API libraries are not installed. Run: pip install google-auth-oauthlib google-api-python-client')
+        return redirect(url_for('admin_profile'))
+    if not gcal._client_secrets_available():
+        flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
+        return redirect(url_for('admin_profile'))
+    try:
+        auth_url, state = gcal.get_authorization_url()
+        session['gcal_oauth_state'] = state
+        return redirect(auth_url)
+    except Exception as exc:
+        flash(f'Failed to initiate Google Calendar connection: {exc}')
+        return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/google-calendar/callback')
+@login_required
+def google_calendar_callback():
+    if current_user.role != 'admin':
+        flash('Unauthorized.')
+        return redirect(url_for('admin_profile'))
+    code = request.args.get('code')
+    state = request.args.get('state')
+    stored_state = session.pop('gcal_oauth_state', None)
+    if not code:
+        flash('Google authorisation was cancelled or failed.')
+        return redirect(url_for('admin_profile'))
+    if stored_state and state != stored_state:
+        flash('OAuth state mismatch – please try connecting again.')
+        return redirect(url_for('admin_profile'))
+    try:
+        creds = gcal.exchange_code_for_tokens(code, state)
+        db = get_db()
+        calendar_id = request.args.get('calendar_id', 'primary')
+        gcal.save_credentials(db, creds, calendar_id=calendar_id)
+        flash('Google Calendar connected successfully!')
+    except Exception as exc:
+        flash(f'Failed to complete Google Calendar connection: {exc}')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/google-calendar/disconnect', methods=['POST'])
+@login_required
+def google_calendar_disconnect():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    if gcal:
+        gcal.delete_credentials(db)
+    flash('Google Calendar disconnected.')
+    return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/google-calendar/set-calendar', methods=['POST'])
+@login_required
+def google_calendar_set_calendar():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    calendar_id = (request.form.get('calendar_id') or 'primary').strip()
+    db = get_db()
+    if gcal and gcal.is_connected(db):
+        creds = gcal.load_credentials(db)
+        if creds:
+            gcal.save_credentials(db, creds, calendar_id=calendar_id)
+            return jsonify({'status': 'success', 'calendar_id': calendar_id})
+    return jsonify({'status': 'error', 'message': 'Not connected to Google Calendar'}), 400
 
 
 @app.route('/admin/profile', methods=['GET', 'POST'])
