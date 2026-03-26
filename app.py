@@ -8089,6 +8089,10 @@ def api_calendar_appointment_update(appointment_id):
 
     # --- Scope: this and all upcoming ---
     if is_recurring and scope == 'upcoming':
+        # Ensure all related rows share a group id (like the delete route does)
+        ensure_recurrence_group_id(db, appt)
+        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+
         occ_date = parse_date_safe(occurrence_date_raw)
         if not occ_date:
             return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
@@ -8099,6 +8103,28 @@ def api_calendar_appointment_update(appointment_id):
             new_end = (occ_date - timedelta(days=1)).isoformat()
             db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
                        (new_end, appointment_id))
+
+        # Delete / truncate all OTHER rows in the same recurrence group that generate
+        # occurrences on or after occ_date so they don't remain as orphaned future rows.
+        recurrence_group_id_upd = appt['recurrence_group_id'] if 'recurrence_group_id' in appt.keys() else None
+        if recurrence_group_id_upd:
+            other_rows = db.execute(
+                'SELECT * FROM appointments WHERE recurrence_group_id = ? AND id != ? ORDER BY appointment_date ASC',
+                (recurrence_group_id_upd, appointment_id)
+            ).fetchall()
+            for row in other_rows:
+                row_base = parse_date_safe(row['appointment_date'])
+                if not row_base:
+                    continue
+                if row_base >= occ_date:
+                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+                else:
+                    row_occs = recurring_occurrences_between(row, occ_date, occ_date)
+                    if row_occs:
+                        cutoff = (occ_date - timedelta(days=1)).isoformat()
+                        db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
+                                   (cutoff, row['id']))
+
         new_day = parse_date_safe(booking_date)
         new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
         new_end_dt = new_start_dt + timedelta(minutes=duration)

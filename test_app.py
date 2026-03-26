@@ -654,6 +654,126 @@ class ClinicTestCase(unittest.TestCase):
             assert rows[1]['appointment_date'] == '2026-01-26'
             assert rows[1]['recurrence_end_date'] == '2026-02-01'
 
+    def test_recurring_update_upcoming_cleans_up_future_series_rows(self):
+        """Editing scope=upcoming must also delete/truncate other rows in the same
+        recurrence group that generate occurrences on or after the chosen occurrence."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Update Upcoming Multi-Row Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            # Row A: Jan – Mar (mondays)
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-03-30', 'grp-upd-test')
+            ''')
+            # Row B: Apr – Jun (mondays) – future segment that must be cleaned up
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id
+                ) VALUES (1, '2026-04-06', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-06-29', 'grp-upd-test')
+            ''')
+            db.commit()
+
+        # Edit "this and upcoming" starting from the Feb 2 (within row A)
+        rv = self.client.post('/api/calendar/appointment/1/update', data={
+            'scope': 'upcoming',
+            'occurrence_date': '2026-02-02',
+            'date': '2026-02-02',
+            'time': '11:00',
+            'end_time': '12:00',
+            'meeting_type': 'in-person',
+            'meeting_link': '',
+            'meeting_title': '',
+            'save_to_google': '0',
+            'meeting_platform': ''
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT id, appointment_date, recurrence_end_date, appointment_time
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id ASC
+            ''').fetchall()
+            # Row A should be truncated to before Feb 2
+            assert rows[0]['appointment_date'] == '2026-01-05'
+            assert rows[0]['recurrence_end_date'] == '2026-02-01'
+            # Row B (Apr–Jun) should be DELETED entirely
+            dates = [r['appointment_date'] for r in rows]
+            assert '2026-04-06' not in dates
+            # A new series starting Feb 2 at 11:00 should be created
+            new_row = next((r for r in rows if r['appointment_date'] == '2026-02-02'), None)
+            assert new_row is not None
+            assert new_row['appointment_time'] == '11:00'
+
+    def test_recurring_update_scope_one_creates_standalone_and_excludes_date(self):
+        """scope=one edit must exclude the occurrence from the series and create
+        a standalone one-off appointment with the updated details."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Update One Scope Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-12-28')
+            ''')
+            db.commit()
+
+        rv = self.client.post('/api/calendar/appointment/1/update', data={
+            'scope': 'one',
+            'occurrence_date': '2026-02-02',
+            'date': '2026-02-03',        # moved to Tuesday
+            'time': '14:00',
+            'end_time': '15:00',
+            'meeting_type': 'zoom',
+            'meeting_link': 'https://zoom.us/j/test',
+            'meeting_title': 'Special session',
+            'save_to_google': '0',
+            'meeting_platform': 'zoom'
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT id, appointment_date, appointment_time, is_recurring,
+                       excluded_dates, meeting_type
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY id ASC
+            ''').fetchall()
+            # Original series should have excluded_dates containing 2026-02-02
+            assert '2026-02-02' in (rows[0]['excluded_dates'] or '')
+            # A new standalone appointment on Feb 3 should exist
+            standalone = next((r for r in rows if r['appointment_date'] == '2026-02-03'), None)
+            assert standalone is not None
+            assert int(standalone['is_recurring'] or 0) == 0
+            assert standalone['appointment_time'] == '14:00'
+            assert standalone['meeting_type'] == 'zoom'
+
     def test_patient_page_quick_book_without_vacancy(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(

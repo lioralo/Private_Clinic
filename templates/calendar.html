@@ -631,6 +631,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 modalCancelBtn.classList.add('d-none');
             }
 
+            // Clear any stale onclick set by openAppointmentEditor so it doesn't
+            // fire alongside our new confirmHandler and cause unexpected side-effects.
+            modalConfirmBtn.onclick = null;
+
             let resolved = false;
             const confirmHandler = () => {
                 if (resolved) return;
@@ -668,6 +672,9 @@ document.addEventListener('DOMContentLoaded', function() {
             modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
             modalCancelBtn.classList.remove('d-none');
             modalCancelBtn.textContent = config.cancelText || I18N.cancel;
+            // Clear any stale onclick from openAppointmentEditor before registering
+            // our scope-selection confirmHandler.
+            modalConfirmBtn.onclick = null;
             actionModal.show();
             let resolved = false;
             const confirmHandler = () => {
