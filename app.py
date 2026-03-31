@@ -8138,17 +8138,22 @@ def api_calendar_appointment_update(appointment_id):
         )
         rec_interval = appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else None
         rec_end = appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else None
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, duration_minutes,
-             is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-             meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (appt['patient_id'], new_day.isoformat(),
-              parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              rec_days, rec_interval, rec_end,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, appt['recurrence_group_id'] or build_recurrence_group_id()))
+        # Only create a new recurring row if there is not already a row for the new_day
+        existing_row = db.execute('''
+            SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND is_recurring = 1
+        ''', (appt['patient_id'], new_day.isoformat())).fetchone()
+        if not existing_row:
+            db.execute('''
+                INSERT INTO appointments
+                (patient_id, appointment_date, appointment_time, duration_minutes,
+                 is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+                 meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
+                VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (appt['patient_id'], new_day.isoformat(),
+                  parse_time_safe(booking_time).strftime('%H:%M'), duration,
+                  rec_days, rec_interval, rec_end,
+                  meeting_type, meeting_link or None, meeting_platform or None,
+                  meeting_title or None, save_to_google, appt['recurrence_group_id'] or build_recurrence_group_id()))
         db.commit()
         return jsonify({'status': 'success'})
 
