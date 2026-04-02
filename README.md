@@ -40,11 +40,15 @@ A web application to manage patients, treatment notes, files, and receipts for a
 
 ## Recent Verification
 - Latest full regression run: `python test_app.py`
-- Latest reviewed result: `50` tests passed.
+- Latest reviewed result: `60` tests passed.
 - Targeted review also confirmed:
    - group archive and full-delete flows,
    - member archive and patient-data delete flows,
    - direct calendar linking to group session records.
+
+## Repository Hygiene
+- Historical one-off artifacts were moved from the repository root into [archive/](archive/).
+- The current archive batch is under [archive/2026-04-cleanup/](archive/2026-04-cleanup/), grouped by `reports`, `instructions`, `backups`, `logs`, and `misc`.
 
 ## Setup
 1. Install dependencies:
