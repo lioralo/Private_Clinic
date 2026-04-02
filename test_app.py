@@ -808,6 +808,54 @@ class ClinicTestCase(unittest.TestCase):
             count = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id=1').fetchone()['c']
             assert count == 0   # fully deleted
 
+    def test_auto_scheduler_does_not_recreate_deleted_upcoming_occurrences(self):
+        """After scope=upcoming delete the auto-scheduler (ensure_ongoing_patients_have_upcoming_bookings)
+        must NOT re-create appointments — it should recognise that the recurring row still
+        exists (recurrence_end_date in the present/future) rather than treating the patient
+        as having no future booking."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Auto Scheduler No Recreate Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-12-28')
+            ''')
+            db.commit()
+            sole_id = db.execute('SELECT id FROM appointments WHERE patient_id=1 ORDER BY id DESC LIMIT 1').fetchone()['id']
+
+        # Delete all upcoming from Jun 1 — series truncated to May 31
+        rv = self.client.post(f'/api/calendar/appointment/{sole_id}/delete', data={
+            'scope': 'upcoming',
+            'occurrence_date': '2026-06-01'
+        })
+        assert rv.status_code == 200 and rv.get_json()['status'] == 'success'
+
+        # Now hit the snapshot API for a week beyond the cutoff; the auto-scheduler runs here.
+        # It must NOT create a new appointment because the recurring row's recurrence_end_date
+        # (May 31) is still in the future relative to today-used-in-test (Jan–May period).
+        rv = self.client.get('/api/calendar/snapshot?week_start=2026-06-07')
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute(
+                'SELECT id, appointment_date, recurrence_end_date FROM appointments WHERE patient_id=1 ORDER BY appointment_date ASC'
+            ).fetchall()
+            # Only the original (now truncated) row should exist — no auto-created row.
+            assert len(rows) == 1, (
+                f"Auto-scheduler created extra rows: {[(r['appointment_date'], r['recurrence_end_date']) for r in rows]}"
+            )
+            assert rows[0]['recurrence_end_date'] == '2026-05-31'
+
     def test_recurring_update_upcoming_cleans_up_future_series_rows(self):
         """Editing scope=upcoming must also delete/truncate other rows in the same
         recurrence group that generate occurrences on or after the chosen occurrence."""

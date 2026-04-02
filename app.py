@@ -3682,9 +3682,14 @@ def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, hori
             FROM appointments
             WHERE patient_id = ?
               AND COALESCE(status, 'scheduled') = 'scheduled'
-              AND appointment_date >= ?
+              AND (
+                  (COALESCE(is_recurring, 0) = 0 AND appointment_date >= ?)
+                  OR (COALESCE(is_recurring, 0) = 1
+                      AND (recurrence_end_date IS NULL
+                           OR recurrence_end_date >= DATE(?, ? || ' days')))
+              )
             LIMIT 1
-        ''', (patient_id, today.isoformat())).fetchone()
+        ''', (patient_id, today.isoformat(), today.isoformat(), f'-{horizon_weeks * 7}')).fetchone()
         if has_future:
             continue
 
