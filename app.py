@@ -31,7 +31,7 @@ app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
-app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '30') or 30)
+app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
@@ -537,7 +537,7 @@ def enforce_inactivity_timeout():
         session.pop('last_activity_at', None)
         return
 
-    timeout_minutes = int(app.config.get('INACTIVITY_TIMEOUT_MINUTES', 30) or 30)
+    timeout_minutes = int(app.config.get('INACTIVITY_TIMEOUT_MINUTES', 5) or 5)
     timeout_seconds = max(timeout_minutes, 1) * 60
     now_ts = int(datetime.now(timezone.utc).timestamp())
     last_activity_at = session.get('last_activity_at')
@@ -1642,6 +1642,41 @@ def extract_recent_focus(notes):
     return ''
 
 
+def extract_key_summary_points(notes, limit=3):
+    scored_segments = []
+    keyword_sets = list(BACKGROUND_REASON_TOPICS.values()) + list(BACKGROUND_THEME_TOPICS.values())
+
+    recent_notes = list(notes[-8:])
+    for idx, note in enumerate(reversed(recent_notes)):
+        note_text = ' '.join([
+            normalize_summary_text(note['mood_summary'] or ''),
+            normalize_summary_text(note['content'] or '')
+        ]).strip()
+        if not note_text:
+            continue
+        for segment in split_summary_segments(note_text):
+            score = max(0, 6 - idx)
+            for keywords in keyword_sets:
+                if any(keyword in segment for keyword in keywords):
+                    score += 2
+            if len(segment) > 140:
+                score += 1
+            scored_segments.append((score, segment))
+
+    unique_segments = []
+    seen_prefix = set()
+    for _, segment in sorted(scored_segments, key=lambda pair: pair[0], reverse=True):
+        key = normalize_summary_text(segment)[:64]
+        if not key or key in seen_prefix:
+            continue
+        seen_prefix.add(key)
+        unique_segments.append(trim_summary_segment(segment, 170))
+        if len(unique_segments) >= limit:
+            break
+
+    return unique_segments
+
+
 def normalize_intake_payload(payload):
     if not isinstance(payload, dict):
         return {}
@@ -2051,8 +2086,9 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
 
         if main_problem:
             return (
-                f"{patient_name}: מידע עיקרי מבוסס אינטייק ראשוני (טרם תועדו מפגשים שוטפים). "
-                f"הבעיה המרכזית כיום: {main_problem}."
+                f"סיכום מטופל: {patient_name}. "
+                "סטטוס תיעוד: מידע ראשוני מאינטייק בלבד (ללא מפגשים שוטפים מתועדים). "
+                f"מוקד עיקרי נוכחי: {main_problem}."
             )
         return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
 
@@ -2078,6 +2114,7 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
     theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
     recent_focus = extract_recent_focus(notes)
+    key_points = extract_key_summary_points(notes, limit=3)
 
     intake_questionnaire = parse_intake_questionnaire(
         patient_row['intake_questionnaire'] if patient_row else None,
@@ -2110,23 +2147,26 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     else:
         main_problem = extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
 
-    parts = [f"{patient_name} נמצא/ת במעקב טיפולי מתועד הכולל {len(notes)} מפגשים{timeframe}."]
+    parts = [f"סיכום מטופל: {patient_name}."]
+    parts.append(f"תמונת זמן: {len(notes)} מפגשים מתועדים{timeframe}.")
 
     identity_parts = [age_fact]
     if occupation_fact:
         identity_parts.append(occupation_fact)
     if family_fact:
         identity_parts.append(family_fact)
-    parts.append(f"פרטים מרכזיים שעלו בתיעוד: {'; '.join(identity_parts)}.")
+    parts.append(f"פרופיל רקע: {'; '.join(identity_parts)}.")
 
     if reason_topics:
-        parts.append(f"מוקדי קושי בולטים: {', '.join(reason_topics)}.")
+        parts.append(f"סיבות ופניות מרכזיות: {', '.join(reason_topics)}.")
     if theme_topics:
-        parts.append(f"נושאים חוזרים בטיפול: {', '.join(theme_topics)}.")
+        parts.append(f"דפוסים חוזרים לאורך המפגשים: {', '.join(theme_topics)}.")
+    if key_points:
+        parts.append(f"תובנות מפתח מהתיעוד: {' | '.join(key_points)}.")
     if recent_focus:
-        parts.append(f"מיקוד עדכני: {recent_focus}.")
+        parts.append(f"מיקוד עדכני לטווח הקרוב: {recent_focus}.")
 
-    parts.append(f"הבעיה המרכזית כיום: {main_problem}.")
+    parts.append(f"תמצית קלינית נוכחית: {main_problem}.")
 
     return ' '.join(part.strip() for part in parts if part).strip()
 
@@ -6461,9 +6501,6 @@ def api_calendar_appointment_delete(appointment_id):
             return jsonify({'status': 'error', 'message': 'Self-management is disabled.'}), 403
 
     is_recurring = int(appt['is_recurring'] or 0) == 1
-    if is_recurring:
-        ensure_recurrence_group_id(db, appt)
-        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
     scope = request.form.get('scope', 'all').strip()
     occurrence_date_raw = request.form.get('occurrence_date', '').strip()
     recurrence_group_id = None
@@ -8046,6 +8083,16 @@ def api_calendar_appointment_update(appointment_id):
             duration = computed
 
     is_recurring = int(appt['is_recurring'] or 0) == 1
+    recurrence_group_id = None
+    related_rows = [appt]
+    if is_recurring:
+        recurrence_group_id = ensure_recurrence_group_id(db, appt)
+        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+        if recurrence_group_id:
+            related_rows = db.execute(
+                'SELECT * FROM appointments WHERE recurrence_group_id = ? ORDER BY appointment_date ASC, id ASC',
+                (recurrence_group_id,)
+            ).fetchall()
 
     # --- Scope: this occurrence only ---
     if is_recurring and scope == 'one':
@@ -8089,41 +8136,34 @@ def api_calendar_appointment_update(appointment_id):
 
     # --- Scope: this and all upcoming ---
     if is_recurring and scope == 'upcoming':
-        # Ensure all related rows share a group id (like the delete route does)
-        ensure_recurrence_group_id(db, appt)
-        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-
         occ_date = parse_date_safe(occurrence_date_raw)
         if not occ_date:
             return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        base_date = parse_date_safe(appt['appointment_date'])
-        if base_date and occ_date <= base_date:
-            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-        else:
-            new_end = (occ_date - timedelta(days=1)).isoformat()
-            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
-                       (new_end, appointment_id))
 
-        # Delete / truncate all OTHER rows in the same recurrence group that generate
-        # occurrences on or after occ_date so they don't remain as orphaned future rows.
-        recurrence_group_id_upd = appt['recurrence_group_id'] if 'recurrence_group_id' in appt.keys() else None
-        if recurrence_group_id_upd:
-            other_rows = db.execute(
-                'SELECT * FROM appointments WHERE recurrence_group_id = ? AND id != ? ORDER BY appointment_date ASC',
-                (recurrence_group_id_upd, appointment_id)
-            ).fetchall()
-            for row in other_rows:
-                row_base = parse_date_safe(row['appointment_date'])
-                if not row_base:
-                    continue
-                if row_base >= occ_date:
-                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                else:
-                    row_occs = recurring_occurrences_between(row, occ_date, occ_date)
-                    if row_occs:
-                        cutoff = (occ_date - timedelta(days=1)).isoformat()
-                        db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
-                                   (cutoff, row['id']))
+        affects_series = False
+        inherited_end = None
+        cutoff = (occ_date - timedelta(days=1)).isoformat()
+        for row in related_rows:
+            row_base = parse_date_safe(row['appointment_date'])
+            if not row_base:
+                continue
+
+            row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
+            if row_end and (inherited_end is None or row_end > inherited_end):
+                inherited_end = row_end
+
+            if row_base >= occ_date:
+                affects_series = True
+                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+                continue
+
+            row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
+            if row_occurs_on_cutoff:
+                affects_series = True
+                db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
+
+        if not affects_series:
+            return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
 
         new_day = parse_date_safe(booking_date)
         new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
@@ -8136,8 +8176,8 @@ def api_calendar_appointment_update(appointment_id):
         rec_days = str(custom_weekday(new_day)) if new_day else (
             appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
         )
-        rec_interval = appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else None
-        rec_end = appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else None
+        rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
+        rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
         db.execute('''
             INSERT INTO appointments
             (patient_id, appointment_date, appointment_time, duration_minutes,
@@ -8148,7 +8188,49 @@ def api_calendar_appointment_update(appointment_id):
               parse_time_safe(booking_time).strftime('%H:%M'), duration,
               rec_days, rec_interval, rec_end,
               meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, appt['recurrence_group_id'] or build_recurrence_group_id()))
+              meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
+        db.commit()
+        return jsonify({'status': 'success'})
+
+    if is_recurring and scope == 'all':
+        new_day = parse_date_safe(booking_date)
+        occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
+        delta_days = (new_day - occ_date).days if new_day and occ_date else 0
+        new_rec_days = str(custom_weekday(new_day)) if new_day else (
+            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+        )
+
+        for row in related_rows:
+            row_base = parse_date_safe(row['appointment_date'])
+            if not row_base:
+                continue
+            shifted_day = row_base + timedelta(days=delta_days)
+            shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
+            shifted_end = shifted_start + timedelta(minutes=duration)
+            conflict_message = has_time_conflict(
+                db,
+                shifted_day,
+                shifted_start,
+                shifted_end,
+                exclude_appointment_id=row['id']
+            )
+            if conflict_message:
+                return jsonify({'status': 'error', 'message': conflict_message}), 409
+
+        for row in related_rows:
+            row_base = parse_date_safe(row['appointment_date'])
+            if not row_base:
+                continue
+            shifted_day = row_base + timedelta(days=delta_days)
+            db.execute('''
+                UPDATE appointments
+                SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
+                    meeting_type = ?, meeting_link = ?, meeting_platform = ?,
+                    meeting_title = ?, save_to_google = ?, recurrence_days = ?
+                WHERE id = ?
+            ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
+                  meeting_type, meeting_link or None, meeting_platform or None,
+                  meeting_title or None, save_to_google, new_rec_days, row['id']))
         db.commit()
         return jsonify({'status': 'success'})
 

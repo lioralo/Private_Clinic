@@ -704,22 +704,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const recurringInfo = payload.is_recurring
             ? `<div class="alert alert-info py-1 px-2 small mb-2">${I18N.recurringMeeting}</div>`
             : '';
-        const scopeHtml = payload.is_recurring ? `
-            <div class="mb-3 p-2 border rounded-3 bg-light">
-                <div class="small fw-semibold mb-2">${escapeHtml(I18N.editRecurringApplyScope)}</div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="radio" name="editScope" id="editScopeOne" value="one" checked>
-                    <label class="form-check-label small" for="editScopeOne">${escapeHtml(I18N.editOneOccurrence)}</label>
-                </div>
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="radio" name="editScope" id="editScopeUpcoming" value="upcoming">
-                    <label class="form-check-label small" for="editScopeUpcoming">${escapeHtml(I18N.editThisAndUpcoming)}</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="editScope" id="editScopeAll" value="all">
-                    <label class="form-check-label small" for="editScopeAll">${escapeHtml(I18N.editAllOccurrences)}</label>
-                </div>
-            </div>` : '';
         const patientLinkHtml = (isAdmin && payload.patient_id)
             ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">${I18N.openPatientProfile}</a></div>`
             : '';
@@ -728,7 +712,6 @@ document.addEventListener('DOMContentLoaded', function() {
         modalBody.innerHTML = `
             ${patientLinkHtml}
             ${recurringInfo}
-            ${scopeHtml}
             <div class="mb-2"><label class="form-label small">${I18N.date}</label><input type="date" class="form-control form-control-sm" id="editMeetingDate" value="${payload.date || ''}"></div>
             <div class="mb-2"><label class="form-label small">${I18N.startTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingTime" value="${payload.time || ''}"></div>
             <div class="mb-2"><label class="form-label small">${I18N.endTime}</label><input type="time" class="form-control form-control-sm" id="editMeetingEndTime" value="${payload.end_time || ''}"></div>
@@ -826,10 +809,9 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
 
-        modalConfirmBtn.onclick = function() {
+        function submitAppointmentEdit(scopeChoice) {
             const selectedType = document.getElementById('editMeetingType').value;
-            const scopeEl = modalBody.querySelector('input[name="editScope"]:checked');
-            const scope = scopeEl ? scopeEl.value : 'all';
+            const scope = scopeChoice || 'all';
             const body = new URLSearchParams({
                 date: document.getElementById('editMeetingDate').value,
                 time: document.getElementById('editMeetingTime').value,
@@ -860,6 +842,32 @@ document.addEventListener('DOMContentLoaded', function() {
             }).catch(() => {
                 showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
             });
+        }
+
+        modalConfirmBtn.onclick = function() {
+            if (payload.is_recurring) {
+                modalRoot.addEventListener('hidden.bs.modal', function onModalHidden() {
+                    modalRoot.removeEventListener('hidden.bs.modal', onModalHidden);
+                    showScopeModal({
+                        title: I18N.editRecurringTitle,
+                        message: I18N.editRecurringApplyScope,
+                        options: [
+                            { value: 'one', label: I18N.editOneOccurrence },
+                            { value: 'upcoming', label: I18N.editThisAndUpcoming },
+                            { value: 'all', label: I18N.editAllOccurrences }
+                        ],
+                        confirmText: {{ t('Save')|tojson }},
+                        confirmClass: 'btn-primary'
+                    }).then(scope => {
+                        if (!scope) return;
+                        submitAppointmentEdit(scope);
+                    });
+                });
+                actionModal.hide();
+                return;
+            }
+
+            submitAppointmentEdit('all');
         };
     }
 

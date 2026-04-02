@@ -972,7 +972,7 @@
                                     <button class="btn btn-secondary fw-bold" type="submit">{{ t('Import') }}</button>
                                 </div>
                             </form>
-                            <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-4 border">
+                            <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-4 border treatment-log-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-2">
@@ -983,9 +983,9 @@
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Date') }}</label>
                                         <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_note_date }}">
                                     </div>
-                                    <div class="col-md-6">
+                                    <div class="col-12">
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content') }}</label>
-                                        <textarea name="content" class="form-control border-0 shadow-sm" rows="2" placeholder="{{ t('Note content...') }}" required></textarea>
+                                        <textarea name="content" class="form-control border-0 shadow-sm" rows="5" placeholder="{{ t('Note content...') }}" required></textarea>
                                     </div>
                                     <div class="col-md-12">
                                         <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
@@ -1076,7 +1076,7 @@
                                             </form>
                                         </div>
                                         <div class="collapse mt-3" id="editNote{{ note['id'] }}">
-                                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="p-3 border rounded-3 bg-light">
+                                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="p-3 border rounded-3 bg-light note-edit-form">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <div class="row g-2">
                                                     <div class="col-md-2">
@@ -1126,7 +1126,7 @@
                                                     </div>
                                                     <div class="col-12">
                                                         <label class="form-label smallest">Content</label>
-                                                        <textarea name="content" class="form-control form-control-sm" rows="3" required>{{ note['content'] or '' }}</textarea>
+                                                        <textarea name="content" class="form-control form-control-sm" rows="6" required>{{ note['content'] or '' }}</textarea>
                                                     </div>
                                                 </div>
                                                 <button type="submit" class="btn btn-sm btn-primary mt-2 rounded-pill px-3">Save changes</button>

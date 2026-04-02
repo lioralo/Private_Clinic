@@ -94,9 +94,9 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.logout()
         assert b'Login' in rv.data
 
-    def test_admin_is_logged_out_after_30_minutes_inactive(self):
+    def test_admin_is_logged_out_after_5_minutes_inactive(self):
         self.login('lioraloni', 'Flo@tingind4')
-        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=31)).timestamp())
+        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=6)).timestamp())
         with self.client.session_transaction() as sess:
             sess['last_activity_at'] = stale_ts
 
@@ -104,7 +104,7 @@ class ClinicTestCase(unittest.TestCase):
         assert b'Session expired due to inactivity' in rv.data
         assert b'Login' in rv.data
 
-    def test_patient_is_logged_out_after_30_minutes_inactive(self):
+    def test_patient_is_logged_out_after_5_minutes_inactive(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
             name='Timeout Patient',
@@ -117,7 +117,7 @@ class ClinicTestCase(unittest.TestCase):
 
         self.logout()
         self.login('timeout_patient', 'password123')
-        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=31)).timestamp())
+        stale_ts = int((datetime.now(timezone.utc) - timedelta(minutes=6)).timestamp())
         with self.client.session_transaction() as sess:
             sess['last_activity_at'] = stale_ts
 
@@ -773,6 +773,96 @@ class ClinicTestCase(unittest.TestCase):
             assert int(standalone['is_recurring'] or 0) == 0
             assert standalone['appointment_time'] == '14:00'
             assert standalone['meeting_type'] == 'zoom'
+
+    def test_recurring_update_all_updates_all_rows_in_split_series(self):
+        """scope=all edit must update all rows in the recurrence group, including split segments."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Update All Multi-Row Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id, meeting_type
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-03-30', 'grp-all-test', 'in-person')
+            ''')
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id, meeting_type
+                ) VALUES (1, '2026-04-06', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-06-29', 'grp-all-test', 'in-person')
+            ''')
+            db.commit()
+
+        rv = self.client.post('/api/calendar/appointment/1/update', data={
+            'scope': 'all',
+            'occurrence_date': '2026-02-02',
+            'date': '2026-02-03',
+            'time': '11:30',
+            'end_time': '12:30',
+            'meeting_type': 'zoom',
+            'meeting_link': 'https://zoom.us/j/all-series',
+            'meeting_title': 'All series changed',
+            'save_to_google': '0',
+            'meeting_platform': 'zoom'
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('''
+                SELECT appointment_date, appointment_time, duration_minutes, meeting_type, recurrence_days
+                FROM appointments
+                WHERE patient_id = 1
+                ORDER BY appointment_date ASC
+            ''').fetchall()
+            assert len(rows) == 2
+            # Original Mondays moved by +1 day to Tuesdays across both split rows.
+            assert rows[0]['appointment_date'] == '2026-01-06'
+            assert rows[1]['appointment_date'] == '2026-04-07'
+            assert rows[0]['appointment_time'] == '11:30'
+            assert rows[1]['appointment_time'] == '11:30'
+            assert int(rows[0]['duration_minutes'] or 0) == 60
+            assert int(rows[1]['duration_minutes'] or 0) == 60
+            assert rows[0]['meeting_type'] == 'zoom'
+            assert rows[1]['meeting_type'] == 'zoom'
+            # Tuesday in app custom weekday mapping where Sunday=0.
+            assert rows[0]['recurrence_days'] == '2'
+            assert rows[1]['recurrence_days'] == '2'
+
+    def test_patient_background_summary_uses_documented_note_history(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Summary Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO notes (patient_id, note_date, content, mood_summary)
+                VALUES (1, '2026-01-01', 'המטופלת משתפת על לחץ בעבודה וקונפליקט עם בן הזוג.', 'תחושת עומס וחרדה גבוהה השבוע')
+            ''')
+            db.execute('''
+                INSERT INTO notes (patient_id, note_date, content, mood_summary)
+                VALUES (1, '2026-01-08', 'המשיכה לעסוק בגבולות מול המשפחה ובדידות בערבים.', 'שיפור קל בוויסות לצד מתח מתמשך')
+            ''')
+            db.commit()
+
+            summary = app_module.build_patient_background_from_notes(db, 1, 'Summary Patient')
+            assert 'סיכום מטופל: Summary Patient.' in summary
+            assert 'תמונת זמן:' in summary
+            assert 'דפוסים חוזרים לאורך המפגשים:' in summary
+            assert 'תמצית קלינית נוכחית:' in summary
 
     def test_patient_page_quick_book_without_vacancy(self):
         self.login('lioraloni', 'Flo@tingind4')

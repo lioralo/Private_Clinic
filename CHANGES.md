@@ -2,6 +2,65 @@
 
 ---
 
+## Session 32
+
+**Date:** April 2, 2026
+
+**Objective:** Finalize calendar recurrence correctness, improve treatment-log editing ergonomics, enforce Hebrew textbox alignment, disable non-login autofill, move inactivity timeout to 5 minutes, and strengthen patient background summaries from prior notes.
+
+**Release Summary:**
+
+1. **Calendar Recurrence Reliability (Edit/Delete)**
+- Removed duplicate recurrence scope selection from the recurring edit modal.
+- Kept a single clear scope-choice dialog at action time for recurring edit and recurring delete.
+- Hardened `scope=upcoming` update logic so split recurring rows in the same series are consistently truncated/deleted from the selected occurrence onward.
+- Implemented `scope=all` update behavior over the full recurrence group (not only one anchor row), including conflict checks and consistent time/day updates.
+
+2. **Regression Coverage Expanded**
+- Added test ensuring recurring `scope=all` update correctly updates all split rows in the recurrence group.
+- Existing recurring one/upcoming/delete tests continue passing.
+
+3. **Treatment Log Editing UX**
+- Expanded treatment-log current meeting content input to full width in the add-note form.
+- Increased textarea height for both add-note and edit-note content fields for easier long-form writing.
+
+4. **Hebrew Textbox Alignment Across Site**
+- Added global RTL form-control/textbox alignment rules for `input`, `textarea`, and `select` elements (excluding non-textual control types).
+- Ensures right-aligned editing experience throughout Hebrew UI pages.
+
+5. **Autofill Policy (Login-Only Exception)**
+- Added global frontend guard that disables browser autocomplete/autocorrect/autocapitalize/spellcheck on non-login pages.
+- Login endpoint is explicitly excluded so credential/OTP helper behavior remains available there.
+
+6. **Inactivity Timeout Policy Updated**
+- Changed default inactivity timeout to **5 minutes** (config + enforcement fallback).
+- Updated inactivity-related tests to match the new 5-minute policy.
+
+7. **Patient Background Suggestion Quality**
+- Improved `build_patient_background_from_notes` output into a clearer structured clinical summary style.
+- Added extraction of key summary points from recent/important note segments.
+- Summary now emphasizes timeline, recurring patterns, current focus, and concise clinical takeaway based on historical entries.
+- Added regression test validating structured summary sections are produced from note history.
+
+**Validation & Debugging:**
+
+1. Ran full automated test suite:
+- `python test_app.py`
+- Result: **59 tests passed**.
+
+2. Verified no recurrence regressions in recurring edit/delete flows through existing and newly added tests.
+
+**Files Modified:**
+- `app.py`
+- `templates/calendar.html`
+- `templates/patient_detail.html`
+- `templates/layout.html`
+- `static/style.css`
+- `test_app.py`
+- `CHANGES.md`
+
+---
+
 ## Session 30
 
 **Date:** March 22, 2026

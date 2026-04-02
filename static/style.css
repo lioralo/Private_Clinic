@@ -260,6 +260,22 @@ input.form-control[type="password"] {
     text-align: right;
 }
 
+[dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+[dir="rtl"] textarea,
+[dir="rtl"] select,
+[dir="rtl"] .form-select {
+    text-align: right;
+    direction: rtl;
+}
+
+.treatment-log-form textarea[name="content"] {
+    min-height: 10rem;
+}
+
+.note-edit-form textarea[name="content"] {
+    min-height: 11rem;
+}
+
 .form-control:focus,
 .form-select:focus {
     border-color: var(--primary-color);

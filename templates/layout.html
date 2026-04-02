@@ -22,7 +22,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body data-endpoint="{{ request.endpoint or '' }}">
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
         <div class="container-fluid app-container px-3 px-xl-4">
             <a class="navbar-brand d-flex align-items-center" href="{% if current_user.is_authenticated and current_user.role == 'admin' %}{{ url_for('crm_dashboard') }}{% else %}{{ url_for('index') }}{% endif %}">
@@ -397,6 +397,30 @@
         });
     </script>
     {% endif %}
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const endpoint = (document.body.dataset.endpoint || '').trim();
+        if (endpoint === 'login') {
+            return;
+        }
+
+        document.querySelectorAll('form').forEach((form) => {
+            form.setAttribute('autocomplete', 'off');
+        });
+
+        document.querySelectorAll('input, textarea').forEach((field) => {
+            const fieldType = (field.getAttribute('type') || '').toLowerCase();
+            if (fieldType === 'hidden' || fieldType === 'checkbox' || fieldType === 'radio' || fieldType === 'submit' || fieldType === 'button') {
+                return;
+            }
+            field.setAttribute('autocomplete', 'off');
+            field.setAttribute('autocorrect', 'off');
+            field.setAttribute('autocapitalize', 'none');
+            field.setAttribute('spellcheck', 'false');
+        });
+    });
+    </script>
 
     {% block scripts %}{% endblock %}
 </body>
