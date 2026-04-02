@@ -6561,8 +6561,12 @@ def api_calendar_appointment_delete(appointment_id):
                 is_occurrence_in_series = len(row_occurrences) > 0
             
             if is_occurrence_in_series:
-                cutoff = (occ_date - timedelta(days=1)).isoformat()
-                db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
+                if base_date >= occ_date:
+                    # Truncating to occ_date-1 would make end < start — delete instead.
+                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+                else:
+                    cutoff = (occ_date - timedelta(days=1)).isoformat()
+                    db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
             elif base_date >= occ_date:
                 db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
         db.commit()

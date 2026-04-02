@@ -654,6 +654,160 @@ class ClinicTestCase(unittest.TestCase):
             assert rows[1]['appointment_date'] == '2026-01-26'
             assert rows[1]['recurrence_end_date'] == '2026-02-01'
 
+    def test_recurring_delete_one_excludes_only_that_occurrence(self):
+        """scope=one delete must add the clicked date to excluded_dates on the
+        series row so the series continues for all other occurrences."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Delete One Occurrence Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-12-28')
+            ''')
+            db.commit()
+
+        # Delete only the occurrence on Jan 19 (a Monday within the series).
+        rv = self.client.post('/api/calendar/appointment/1/delete', data={
+            'scope': 'one',
+            'occurrence_date': '2026-01-19'
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute(
+                'SELECT id, is_recurring, excluded_dates, recurrence_end_date FROM appointments WHERE id = 1'
+            ).fetchone()
+            # The series row must still exist
+            assert row is not None
+            assert int(row['is_recurring'] or 0) == 1
+            # Jan 19 must be excluded
+            excluded = (row['excluded_dates'] or '').split(',')
+            assert '2026-01-19' in excluded
+            # Series end date must be unchanged
+            assert row['recurrence_end_date'] == '2026-12-28'
+            # Only 1 row in the DB (no new rows created)
+            count = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id = 1').fetchone()['c']
+            assert count == 1
+
+    def test_recurring_delete_upcoming_from_series_start_deletes_row(self):
+        """scope=upcoming delete when the occurrence_date equals the row's base
+        appointment_date must DELETE the row entirely (not create an orphan row
+        where end_date would be before start_date)."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Delete Upcoming From Start Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            # Row A covers Jan–Mar (Mondays), Row B starts Apr 6 (first of its sub-series).
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-03-30', 'grp-start-del')
+            ''')
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date, recurrence_group_id
+                ) VALUES (1, '2026-04-06', '10:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-06-29', 'grp-start-del')
+            ''')
+            db.commit()
+
+        # Delete "upcoming from Apr 6" – that is Row B's very first occurrence.
+        rv = self.client.post('/api/calendar/appointment/2/delete', data={
+            'scope': 'upcoming',
+            'occurrence_date': '2026-04-06'
+        })
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute(
+                'SELECT id, appointment_date, recurrence_end_date FROM appointments WHERE patient_id = 1 ORDER BY id ASC'
+            ).fetchall()
+            # Row A (Jan–Mar) must be untouched (ends before Apr 6, no occurrence on Apr 6)
+            assert len(rows) == 1
+            assert rows[0]['appointment_date'] == '2026-01-05'
+            assert rows[0]['recurrence_end_date'] == '2026-03-30'
+            # Row B must be fully deleted (not left as an orphan with end_date < start_date)
+            dates = [r['appointment_date'] for r in rows]
+            assert '2026-04-06' not in dates
+
+    def test_recurring_delete_all_three_scopes_on_single_series(self):
+        """Comprehensive test: a single-row recurring series must correctly handle
+        delete scope=one, scope=upcoming, and scope=all, each in isolation."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Three Scopes Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        # ---- scope=one ----
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days,
+                    recurrence_end_date
+                ) VALUES (1, '2026-01-05', '09:00', 60, 'scheduled', 1, 1, '1',
+                          '2026-12-28')
+            ''')
+            db.commit()
+            sole_id = db.execute('SELECT id FROM appointments WHERE patient_id=1 ORDER BY id DESC LIMIT 1').fetchone()['id']
+
+        rv = self.client.post(f'/api/calendar/appointment/{sole_id}/delete', data={
+            'scope': 'one',
+            'occurrence_date': '2026-02-16'
+        })
+        assert rv.status_code == 200 and rv.get_json()['status'] == 'success'
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT excluded_dates, is_recurring FROM appointments WHERE id=?', (sole_id,)).fetchone()
+            assert '2026-02-16' in (row['excluded_dates'] or '')
+            assert int(row['is_recurring'] or 0) == 1   # series still alive
+
+        # ---- scope=upcoming ----
+        rv = self.client.post(f'/api/calendar/appointment/{sole_id}/delete', data={
+            'scope': 'upcoming',
+            'occurrence_date': '2026-06-01'
+        })
+        assert rv.status_code == 200 and rv.get_json()['status'] == 'success'
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT recurrence_end_date FROM appointments WHERE id=?', (sole_id,)).fetchone()
+            # Series must be truncated to the day before Jun 1
+            assert row['recurrence_end_date'] == '2026-05-31'
+
+        # ---- scope=all ----
+        rv = self.client.post(f'/api/calendar/appointment/{sole_id}/delete', data={
+            'scope': 'all'
+        })
+        assert rv.status_code == 200 and rv.get_json()['status'] == 'success'
+        with app.app_context():
+            db = get_db()
+            count = db.execute('SELECT COUNT(*) AS c FROM appointments WHERE patient_id=1').fetchone()['c']
+            assert count == 0   # fully deleted
+
     def test_recurring_update_upcoming_cleans_up_future_series_rows(self):
         """Editing scope=upcoming must also delete/truncate other rows in the same
         recurrence group that generate occurrences on or after the chosen occurrence."""
