@@ -13,3 +13,4 @@ static/uploads/
 *.log
 secure_backups/
 manual_backups/
+.clinic_keys/
