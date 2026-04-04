@@ -667,6 +667,144 @@ input.form-control[type="password"] {
     flex: 0 0 auto;
 }
 
+/* ── CRM filter grid ───────────────────────────────────── */
+.crm-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+}
+
+/* ── CRM view-toggle buttons ───────────────────────────── */
+.crm-view-btn {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+    background: white;
+    color: #64748b;
+    transition: background 0.15s, color 0.15s;
+}
+.crm-view-btn.btn-primary {
+    background: var(--primary-color, #0f766e);
+    border-color: var(--primary-color, #0f766e);
+    color: #fff;
+}
+
+/* ── Status dot ────────────────────────────────────────── */
+.crm-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+.crm-status-ongoing  { background: #22c55e; }
+.crm-status-waiting  { background: #f59e0b; }
+.crm-status-archived { background: #94a3b8; }
+
+/* ── Type badges ───────────────────────────────────────── */
+.crm-type-badge { font-size: 0.7em; }
+.crm-type-private   { background: #0f766e; color: #fff; }
+.crm-type-residency { background: #92400e; color: #fff; }
+.crm-type-group     { background: #7c3aed; color: #fff; }
+.crm-type-intake    { background: #1d4ed8; color: #fff; }
+.crm-type-diagnosee { background: #0b7285; color: #fff; }
+
+/* ── Treatment method badge ────────────────────────────── */
+.crm-method-badge {
+    background: rgba(15, 118, 110, 0.12);
+    color: #0f766e;
+    border: 1px solid rgba(15, 118, 110, 0.25);
+    font-size: 0.72em;
+    font-weight: 600;
+}
+
+/* ── TABLE view ────────────────────────────────────────── */
+.crm-table-wrap {
+    overflow-x: auto;
+    border-radius: 18px;
+    border: 1px solid rgba(216, 225, 223, 0.9);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+.crm-table {
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+.crm-table thead th {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 700;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.65rem 0.85rem;
+    background: rgba(248, 250, 252, 0.8);
+}
+.crm-table-row {
+    transition: background 0.14s;
+    cursor: pointer;
+}
+.crm-table-row:hover {
+    background: rgba(204, 251, 241, 0.35) !important;
+}
+.crm-table-row td {
+    padding: 0.55rem 0.85rem;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+}
+.crm-drag-col { width: 30px; }
+.crm-drag-handle {
+    cursor: grab;
+    padding: 0.55rem 0.5rem !important;
+    color: #94a3b8;
+    user-select: none;
+}
+.crm-drag-handle:active { cursor: grabbing; }
+
+/* ── CARDS view ────────────────────────────────────────── */
+.crm-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.85rem;
+}
+.crm-patient-card {
+    border-radius: 16px;
+    border: 1px solid rgba(216, 225, 223, 0.9);
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.crm-patient-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
+    border-color: rgba(15, 118, 110, 0.3);
+}
+.crm-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.5rem;
+}
+.crm-card-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+.crm-card-appt { font-size: 0.78rem; margin-top: 0.25rem; }
+
 .note-item {
     border-radius: 12px !important;
     border: 1px solid var(--border-color) !important;

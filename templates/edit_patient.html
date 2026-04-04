@@ -113,6 +113,18 @@
                             </div>
                         </div>
 
+                        {% if treatment_method_options %}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small">{{ t('Treatment Method') }}</label>
+                            <select class="form-select form-select-sm" name="treatment_method">
+                                <option value="">— {{ t('Select method') }} —</option>
+                                {% for opt in treatment_method_options %}
+                                <option value="{{ opt }}" {% if patient['treatment_method'] == opt %}selected{% endif %}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+
                         <div class="col-12 mt-4">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
                                 <i class="bi bi-save me-2"></i> Save Patient Record

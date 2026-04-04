@@ -7,6 +7,9 @@
         <p class="text-muted small mb-0">{{ t('Compact roster view for quick patient access.') }}</p>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill">
+            <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
+        </a>
         <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary bg-white btn-sm">
             <i class="bi bi-calendar3 me-1"></i>{{ t('Open Calendar') }}
         </a>
@@ -51,25 +54,25 @@
 {% endif %}
 
 <div class="crm-summary-strip mb-3">
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false') }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
         <div class="crm-summary-mini {% if status == 'all' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('All') }}</span>
             <span class="crm-summary-value">{{ counts['all'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false') }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
         <div class="crm-summary-mini {% if status == 'ongoing' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Ongoing') }}</span>
             <span class="crm-summary-value">{{ counts['ongoing'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false') }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
         <div class="crm-summary-mini {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Waiting') }}</span>
             <span class="crm-summary-value">{{ counts['candidate_waiting'] }}</span>
         </div>
     </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false') }}">
+    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
         <div class="crm-summary-mini {% if status == 'archived' %}active{% endif %}">
             <span class="crm-summary-label">{{ t('Archived') }}</span>
             <span class="crm-summary-value">{{ counts['archived'] }}</span>
@@ -77,20 +80,32 @@
     </a>
 </div>
 
-<div class="d-flex align-items-center gap-2 mb-3">
+{# include-group toggle #}
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
     <form method="get" action="{{ url_for('crm_dashboard') }}" id="includeGroupForm">
         <input type="hidden" name="status" value="{{ status }}">
         <input type="hidden" name="clinic_type" value="{{ clinic_type }}">
         <input type="hidden" name="q" value="{{ search_query or '' }}">
         <input type="hidden" name="sort" value="{{ sort_by }}">
+        <input type="hidden" name="treatment_method" value="{{ treatment_method }}">
         <input type="hidden" name="include_group" value="{{ 'false' if include_group else 'true' }}">
     </form>
     <div class="form-check form-switch mb-0">
         <input class="form-check-input" type="checkbox" id="includeGroupToggle" {% if include_group %}checked{% endif %} onchange="document.getElementById('includeGroupForm').submit()">
         <label class="form-check-label small text-muted" for="includeGroupToggle">{{ t('Include group-type patients') }}</label>
     </div>
+    {# view toggle #}
+    <div class="ms-auto d-flex gap-1" role="group" aria-label="View toggle">
+        <button class="btn btn-sm crm-view-btn" id="btnTableView" title="{{ t('Table view') }}" onclick="setCrmView('table')">
+            <i class="bi bi-table"></i>
+        </button>
+        <button class="btn btn-sm crm-view-btn" id="btnCardsView" title="{{ t('Cards view') }}" onclick="setCrmView('cards')">
+            <i class="bi bi-grid-3x3-gap-fill"></i>
+        </button>
+    </div>
 </div>
 
+{# filter panel #}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3 p-lg-4">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-2">
@@ -98,25 +113,29 @@
                 <h5 class="mb-1 fw-bold text-primary">
                     <i class="bi bi-people-fill me-2"></i>
                     {% if status == 'all' %}
-                        {{ t('All Patients') }}
+                        {{ t('All Patients') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% elif status in ['candidate', 'waiting for scheduling', 'waiting'] %}
-                        {{ t('Candidates & Waiting') }}
+                        {{ t('Candidates & Waiting') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% else %}
-                        {{ t(status|capitalize) }} {{ t('Patients') }}
+                        {{ t(status|capitalize) }} {{ t('Patients') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% endif %}
                 </h5>
                 <p class="text-muted small mb-0">{{ t('Search, narrow the roster, and sort it for the next action.') }}</p>
             </div>
             <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#crmFiltersCollapse" aria-expanded="false" aria-controls="crmFiltersCollapse">
                 <i class="bi bi-funnel-fill"></i>
+                {% if search_query or clinic_type != 'all' or treatment_method != 'all' %}
+                <span class="badge bg-primary rounded-pill ms-1">!</span>
+                {% endif %}
             </button>
         </div>
-        <div class="collapse crm-filter-panel" id="crmFiltersCollapse">
-            <form method="get" action="{{ url_for('crm_dashboard') }}" class="calendar-form-grid mt-3">
+        <div class="collapse crm-filter-panel {% if search_query or clinic_type != 'all' or treatment_method != 'all' %}show{% endif %}" id="crmFiltersCollapse">
+            <form method="get" action="{{ url_for('crm_dashboard') }}" class="crm-filter-grid mt-3">
                 <input type="hidden" name="status" value="{{ status }}">
+                <input type="hidden" name="include_group" value="{{ 'true' if include_group else 'false' }}">
                 <div>
                     <label class="form-label small">{{ t('Search') }}</label>
-                    <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query or '' }}" placeholder="{{ t('Patient name, email, or phone') }}">
+                    <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query or '' }}" placeholder="{{ t('Name, email, or phone') }}">
                 </div>
                 <div>
                     <label class="form-label small">{{ t('Clinic Type') }}</label>
@@ -127,6 +146,17 @@
                         <option value="group" {% if clinic_type == 'group' %}selected{% endif %}>{{ t('Group') }}</option>
                     </select>
                 </div>
+                {% if treatment_method_options %}
+                <div>
+                    <label class="form-label small">{{ t('Treatment Method') }}</label>
+                    <select class="form-select form-select-sm" name="treatment_method">
+                        <option value="all" {% if treatment_method == 'all' %}selected{% endif %}>{{ t('All Methods') }}</option>
+                        {% for opt in treatment_method_options %}
+                        <option value="{{ opt }}" {% if treatment_method == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
                 <div>
                     <label class="form-label small">{{ t('Sort') }}</label>
                     <select class="form-select form-select-sm" name="sort">
@@ -135,71 +165,232 @@
                         <option value="name_desc" {% if sort_by == 'name_desc' %}selected{% endif %}>{{ t('Name Z-A') }}</option>
                         <option value="newest" {% if sort_by == 'newest' %}selected{% endif %}>{{ t('Newest') }}</option>
                         <option value="oldest" {% if sort_by == 'oldest' %}selected{% endif %}>{{ t('Oldest') }}</option>
+                        <option value="manual_order" {% if sort_by == 'manual_order' %}selected{% endif %}>{{ t('Manual Order') }}</option>
                     </select>
                 </div>
-                <div class="d-flex align-items-end">
-                    <button class="btn btn-primary w-100" type="submit">{{ t('Apply Filters') }}</button>
+                <div class="d-flex align-items-end gap-2">
+                    <button class="btn btn-primary flex-grow-1" type="submit">{{ t('Apply') }}</button>
+                    <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary" title="{{ t('Clear filters') }}"><i class="bi bi-x-lg"></i></a>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<div class="crm-patient-list" id="patientsContainer">
-    {% for patient in patients %}
-        <div class="crm-patient-row patient-card-clickable {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}">
-            <div class="crm-patient-main">
-                <div class="crm-patient-name-wrap">
-                    <span class="crm-patient-name">{{ patient['name'] }}</span>
-                    <span class="text-muted small">#{{ patient['id'] }}</span>
-                </div>
-                <div class="crm-patient-meta">
-                    <span class="badge bg-light text-dark border">{{ t(patient['status']|capitalize) }}</span>
-                    {% if patient['can_self_schedule'] %}
-                    <span class="badge bg-success-subtle text-success border">Self-booking ON</span>
-                    {% else %}
-                    <span class="badge bg-secondary-subtle text-secondary border">Self-booking OFF</span>
+{# ─── TABLE VIEW ─── #}
+<div id="crmTableView" class="crm-table-wrap mb-4" style="display:none">
+    <table class="table crm-table">
+        <thead>
+            <tr>
+                {% if sort_by == 'manual_order' %}<th class="crm-drag-col"></th>{% endif %}
+                <th>{{ t('Name') }}</th>
+                <th>{{ t('Status') }}</th>
+                <th>{{ t('Type') }}</th>
+                <th>{{ t('Method') }}</th>
+                <th>{{ t('Next Appt') }}</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="tableBody">
+        {% for patient in patients %}
+            <tr class="crm-table-row patient-card-clickable
+                {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate
+                {% elif patient['status'] == 'ongoing' %}patient-status-ongoing
+                {% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting
+                {% else %}patient-status-archived{% endif %}"
+                data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}"
+                data-patient-id="{{ patient['id'] }}">
+                {% if sort_by == 'manual_order' %}
+                <td class="crm-drag-handle" title="{{ t('Drag to reorder') }}"><i class="bi bi-grip-vertical text-muted"></i></td>
+                {% endif %}
+                <td>
+                    <span class="fw-semibold">{{ patient['name'] }}</span>
+                    {% if patient['can_self_schedule'] %}<i class="bi bi-calendar2-check text-success ms-1" title="{{ t('Self-booking enabled') }}"></i>{% endif %}
+                    {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
+                    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none ms-1" title="{{ t('Unread messages') }}">{{ patient['unread_messages'] }}</a>
                     {% endif %}
+                </td>
+                <td>
+                    {% if patient['status'] == 'ongoing' %}
+                    <span class="crm-status-dot crm-status-ongoing"></span>
+                    {% elif patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] %}
+                    <span class="crm-status-dot crm-status-waiting"></span>
+                    {% elif patient['status'] == 'archived' %}
+                    <span class="crm-status-dot crm-status-archived"></span>
+                    {% endif %}
+                    <span class="small">{{ t(patient['status']|capitalize) }}</span>
+                </td>
+                <td>
                     {% if patient['patient_type'] == 'residency' %}
-                    <span class="badge" style="background:#92400e;font-size:0.72em;"><i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}</span>
+                    <span class="badge crm-type-badge crm-type-residency"><i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}</span>
                     {% elif patient['patient_type'] == 'group' %}
-                    <span class="badge" style="background:#7c3aed;font-size:0.72em;"><i class="bi bi-people-fill me-1"></i>{{ t('Group') }}</span>
+                    <span class="badge crm-type-badge crm-type-group"><i class="bi bi-people-fill me-1"></i>{{ t('Group') }}</span>
                     {% elif patient['patient_type'] == 'initial-intake' %}
-                    <span class="badge" style="background:#1d4ed8;font-size:0.72em;"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Intake') }}</span>
+                    <span class="badge crm-type-badge crm-type-intake"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Intake') }}</span>
                     {% elif patient['patient_type'] == 'diagnosee' %}
-                    <span class="badge" style="background:#0b7285;font-size:0.72em;"><i class="bi bi-clipboard2-check me-1"></i>{{ t('Diagnosee') }}</span>
+                    <span class="badge crm-type-badge crm-type-diagnosee"><i class="bi bi-clipboard2-check me-1"></i>{{ t('Diagnosee') }}</span>
                     {% else %}
-                    <span class="badge" style="background:#0f766e;font-size:0.72em;"><i class="bi bi-person me-1"></i>{{ t('Private') }}</span>
+                    <span class="badge crm-type-badge crm-type-private"><i class="bi bi-person me-1"></i>{{ t('Private') }}</span>
                     {% endif %}
                     {% if patient['group_names'] %}
-                    <span class="text-muted small"><i class="bi bi-diagram-3 me-1"></i>{{ patient['group_names'] }}</span>
+                    <span class="text-muted small d-block">{{ patient['group_names'] }}</span>
                     {% endif %}
+                </td>
+                <td>
+                    {% if patient['treatment_method'] %}
+                    <span class="badge crm-method-badge">{{ patient['treatment_method'] }}</span>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                </td>
+                <td class="small text-muted">
                     {% if patient['next_appointment_date'] %}
-                    <span class="text-muted small"><i class="bi bi-clock-history me-1"></i>Next: {{ patient['next_appointment_date'] }} {{ patient['next_appointment_time'] or '' }}</span>
-                    {% endif %}
-                    {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
-                    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none" title="Open patient messages">
-                        {{ patient['unread_messages'] }} unread</a>
-                    {% endif %}
-                </div>
-            </div>
+                    <i class="bi bi-clock-history me-1"></i>{{ patient['next_appointment_date'] }} {{ patient['next_appointment_time'][:5] if patient['next_appointment_time'] else '' }}
+                    {% else %}—{% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0" onclick="event.stopPropagation()">
+                        <i class="bi bi-arrow-right-short"></i>
+                    </a>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# ─── CARDS VIEW ─── #}
+<div id="crmCardsView" class="crm-cards-grid mb-4" style="display:none" id="cardsBody">
+    {% for patient in patients %}
+    <div class="crm-patient-card patient-card-clickable
+        {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate
+        {% elif patient['status'] == 'ongoing' %}patient-status-ongoing
+        {% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting
+        {% else %}patient-status-archived{% endif %}"
+        data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}"
+        data-patient-id="{{ patient['id'] }}">
+        <div class="crm-card-header">
+            <span class="crm-card-name">{{ patient['name'] }}</span>
+            {% if patient['can_self_schedule'] %}<i class="bi bi-calendar2-check text-success" title="{{ t('Self-booking enabled') }}"></i>{% endif %}
         </div>
+        <div class="crm-card-body">
+            <div class="d-flex flex-wrap gap-1 mb-1">
+                {% if patient['status'] == 'ongoing' %}
+                <span class="crm-status-dot crm-status-ongoing"></span>
+                {% elif patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] %}
+                <span class="crm-status-dot crm-status-waiting"></span>
+                {% elif patient['status'] == 'archived' %}
+                <span class="crm-status-dot crm-status-archived"></span>
+                {% endif %}
+                <span class="small text-muted">{{ t(patient['status']|capitalize) }}</span>
+                {% if patient['patient_type'] == 'residency' %}
+                <span class="badge crm-type-badge crm-type-residency"><i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}</span>
+                {% elif patient['patient_type'] == 'group' %}
+                <span class="badge crm-type-badge crm-type-group"><i class="bi bi-people-fill me-1"></i>{{ t('Group') }}</span>
+                {% elif patient['patient_type'] == 'initial-intake' %}
+                <span class="badge crm-type-badge crm-type-intake"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Intake') }}</span>
+                {% elif patient['patient_type'] == 'diagnosee' %}
+                <span class="badge crm-type-badge crm-type-diagnosee"><i class="bi bi-clipboard2-check me-1"></i>{{ t('Diagnosee') }}</span>
+                {% else %}
+                <span class="badge crm-type-badge crm-type-private"><i class="bi bi-person me-1"></i>{{ t('Private') }}</span>
+                {% endif %}
+            </div>
+            {% if patient['treatment_method'] %}
+            <div class="mb-1"><span class="badge crm-method-badge">{{ patient['treatment_method'] }}</span></div>
+            {% endif %}
+            {% if patient['next_appointment_date'] %}
+            <div class="crm-card-appt small text-muted"><i class="bi bi-clock-history me-1"></i>{{ patient['next_appointment_date'] }} {{ patient['next_appointment_time'][:5] if patient['next_appointment_time'] else '' }}</div>
+            {% endif %}
+            {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
+            <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none mt-1" title="{{ t('Unread messages') }}" onclick="event.stopPropagation()">
+                {{ patient['unread_messages'] }} {{ t('unread') }}</a>
+            {% endif %}
+        </div>
+    </div>
     {% endfor %}
 </div>
 
+{# SortableJS from CDN (loaded only when manual_order sort is active) #}
+{% if sort_by == 'manual_order' %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+{% endif %}
+
 <script>
+// ── View toggle ──────────────────────────────────────────
+function setCrmView(mode) {
+    const tableView = document.getElementById('crmTableView');
+    const cardsView = document.getElementById('crmCardsView');
+    const btnTable  = document.getElementById('btnTableView');
+    const btnCards  = document.getElementById('btnCardsView');
+
+    if (mode === 'table') {
+        tableView.style.display = '';
+        cardsView.style.display = 'none';
+        btnTable.classList.add('btn-primary');
+        btnTable.classList.remove('btn-outline-secondary');
+        btnCards.classList.add('btn-outline-secondary');
+        btnCards.classList.remove('btn-primary');
+    } else {
+        cardsView.style.display = '';
+        tableView.style.display = 'none';
+        btnCards.classList.add('btn-primary');
+        btnCards.classList.remove('btn-outline-secondary');
+        btnTable.classList.add('btn-outline-secondary');
+        btnTable.classList.remove('btn-primary');
+    }
+    try { localStorage.setItem('crmView', mode); } catch(e) {}
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.patient-card-clickable').forEach(function (card) {
-        card.addEventListener('click', function (event) {
-            if (event.target.closest('a, button, input, textarea, select, label, form')) {
-                return;
-            }
-            const href = card.getAttribute('data-href');
-            if (href) {
-                window.location.href = href;
-            }
+    // Restore saved view preference
+    let savedView = 'table';
+    try { savedView = localStorage.getItem('crmView') || 'table'; } catch(e){}
+    setCrmView(savedView);
+
+    // Click-to-navigate on rows/cards
+    document.querySelectorAll('.patient-card-clickable').forEach(function (el) {
+        el.addEventListener('click', function (event) {
+            if (event.target.closest('a, button, input, textarea, select, label, form, .crm-drag-handle')) return;
+            const href = el.getAttribute('data-href');
+            if (href) window.location.href = href;
         });
     });
+
+    {% if sort_by == 'manual_order' %}
+    // ── Drag-to-reorder (table) ──────────────────────────
+    const tbody = document.getElementById('tableBody');
+    if (tbody && typeof Sortable !== 'undefined') {
+        Sortable.create(tbody, {
+            handle: '.crm-drag-handle',
+            animation: 150,
+            onEnd: function () {
+                const ids = Array.from(tbody.querySelectorAll('tr[data-patient-id]'))
+                                 .map(tr => parseInt(tr.dataset.patientId, 10));
+                fetch('/api/patients/reorder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({order: ids})
+                }).catch(console.error);
+            }
+        });
+    }
+    // ── Drag-to-reorder (cards) ──────────────────────────
+    const cardsGrid = document.getElementById('crmCardsView');
+    if (cardsGrid && typeof Sortable !== 'undefined') {
+        Sortable.create(cardsGrid, {
+            animation: 150,
+            onEnd: function () {
+                const ids = Array.from(cardsGrid.querySelectorAll('[data-patient-id]'))
+                                 .map(el => parseInt(el.dataset.patientId, 10));
+                fetch('/api/patients/reorder', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({order: ids})
+                }).catch(console.error);
+            }
+        });
+    }
+    {% endif %}
 });
 </script>
 {% endblock %}

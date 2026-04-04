@@ -2,6 +2,68 @@
 
 ---
 
+## Session 33
+
+**Date:** April 4, 2026
+
+**Objective:** CRM patient list redesign — treatment method tagging, table/cards view toggle, drag-to-reorder, cleaner badges, and treatment method filter.
+
+**Release Summary:**
+
+1. **Treatment Method Tag**
+- Added `treatment_method TEXT` column to `patients` table via DB migration.
+- Added `sort_order INTEGER` column to `patients` table for manual drag order.
+- Added `treatment_method_options` table, seeded with: Psychodynamic, CBT, EFT, Management, 15 sessions, 3 sessions.
+- Treatment method select field added to `add_patient` and `edit_patient` forms.
+
+2. **CRM Filter Enhancement**
+- `fetch_patients_by_status` now accepts a `treatment_method` filter parameter.
+- Added `manual_order` sort option (by `sort_order` column, fallback to `created_at DESC`).
+- Filter panel auto-expands when any active filter is set.
+- Clear-filters button (×) added alongside Apply button.
+- Patient count shown in the section header.
+
+3. **CRM Table View**
+- New `<table>` layout with columns: Name, Status, Type, Method, Next Appt, action button.
+- Color-coded status dot (green/amber/grey) instead of text badge.
+- Drag handle column visible only when `sort=manual_order` is active.
+- Row click navigates to patient detail.
+
+4. **CRM Cards View**
+- Responsive CSS grid of compact patient cards (`crm-cards-grid`).
+- Shows: name, self-booking icon (only when enabled), status dot, type badge, treatment method badge, next appointment, unread message count.
+
+5. **View Toggle (Table ↔ Cards)**
+- Toggle buttons in the toolbar switch between table and cards views.
+- Preference persisted in `localStorage` across page loads.
+
+6. **Drag-to-Reorder**
+- SortableJS loaded from CDN only when `sort=manual_order` is active.
+- Dragging rows (table) or cards saves order via `POST /api/patients/reorder`.
+- Drag handle cursor on table rows; free-drag on cards.
+
+7. **Badge & Display Cleanup**
+- Removed patient `#id` number from all CRM rows.
+- Removed "Self-booking OFF" badge; self-booking shown only as a small calendar ✓ icon when enabled.
+- Add Patient shortcut button added to CRM header.
+
+8. **New API Endpoints**
+- `POST /api/patients/reorder` — saves drag-and-drop sort order.
+- `GET /api/treatment_method_options` — lists current treatment method options.
+- `POST /api/treatment_method_options` — adds a new option.
+- `DELETE /api/treatment_method_options/<id>` — removes an option.
+
+9. **CSS Additions** (`static/style.css`)
+- `.crm-filter-grid`, `.crm-view-btn`, `.crm-status-dot`, `.crm-type-badge`, `.crm-method-badge`
+- `.crm-table-wrap`, `.crm-table`, `.crm-table-row`, `.crm-drag-handle`
+- `.crm-cards-grid`, `.crm-patient-card`, `.crm-card-header`, `.crm-card-name`, `.crm-card-appt`
+
+10. **Test Coverage**
+- All 64 existing tests pass with no regressions.
+- New features verified via targeted integration checks (migration, filter, sort, all API endpoints, CRM page render).
+
+---
+
 ## Session 32
 
 **Date:** April 2, 2026

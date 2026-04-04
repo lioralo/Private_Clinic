@@ -1402,6 +1402,25 @@ def init_db():
             )
         ''')
 
+        # Treatment method tag and manual sort order for patients
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
+        except sqlite3.OperationalError:
+            pass
+        db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL UNIQUE,
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # Seed default options (only inserts if they don't exist yet)
+        for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
+            db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
+
         db.commit()
 
         # Check if admin exists
@@ -2204,7 +2223,7 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
     return False
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
     unread_case = '0'
     if admin_user_id is not None:
         unread_case = f'''(
@@ -2287,11 +2306,16 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
         like_value = f"%{search_query.lower()}%"
         params.extend([like_value, like_value, like_value])
 
+    if treatment_method and treatment_method != 'all':
+        base_query += ' AND COALESCE(p.treatment_method, \"\") = ?'
+        params.append(treatment_method)
+
     order_map = {
         'name_asc': 'p.name ASC',
         'name_desc': 'p.name DESC',
         'newest': 'p.created_at DESC',
         'oldest': 'p.created_at ASC',
+        'manual_order': 'COALESCE(p.sort_order, 999999) ASC, p.created_at DESC',
         'status_priority': '''
             CASE
                 WHEN p.status = 'ongoing' THEN 0
@@ -2322,12 +2346,13 @@ def crm_dashboard():
     sort_by = request.args.get('sort', saved_filters.get('sort', 'status_priority')).strip()
     include_group_raw = request.args.get('include_group', saved_filters.get('include_group', 'false'))
     include_group = include_group_raw == 'true'
+    treatment_method = request.args.get('treatment_method', saved_filters.get('treatment_method', 'all')).strip()
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
     if clinic_type not in {'all', 'private', 'residency', 'group'}:
         clinic_type = 'all'
-    if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest'}:
+    if sort_by not in {'status_priority', 'name_asc', 'name_desc', 'newest', 'oldest', 'manual_order'}:
         sort_by = 'status_priority'
 
     session['crm_filters'] = {
@@ -2335,12 +2360,18 @@ def crm_dashboard():
         'clinic_type': clinic_type,
         'q': search_query,
         'sort': sort_by,
-        'include_group': 'true' if include_group else 'false'
+        'include_group': 'true' if include_group else 'false',
+        'treatment_method': treatment_method
     }
     
     patient_type = clinic_type
 
-    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group)
+    treatment_method_options = db.execute(
+        'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
+    ).fetchall()
+    treatment_method_labels = [row['label'] for row in treatment_method_options]
+
+    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
     counts_row = db.execute('''
         SELECT
             COUNT(*) AS all_count,
@@ -2359,7 +2390,72 @@ def crm_dashboard():
     reminders = send_appointment_reminders(db)
     return render_template('crm.html', patients=patients, status=status, counts=counts,
                            clinic_type=clinic_type, search_query=search_query, sort_by=sort_by,
-                           include_group=include_group, reminders=reminders)
+                           include_group=include_group, reminders=reminders,
+                           treatment_method=treatment_method,
+                           treatment_method_options=treatment_method_labels)
+
+
+@app.route('/api/patients/reorder', methods=['POST'])
+@login_required
+def api_patients_reorder():
+    """Save the manual drag-and-drop sort order for patients."""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json(silent=True)
+    if not data or 'order' not in data:
+        return jsonify({'error': 'Invalid payload'}), 400
+    order = data['order']
+    if not isinstance(order, list):
+        return jsonify({'error': 'order must be a list'}), 400
+    db = get_db()
+    for idx, patient_id in enumerate(order):
+        if not isinstance(patient_id, int):
+            return jsonify({'error': 'Invalid patient id'}), 400
+        db.execute('UPDATE patients SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted,0) = 0', (idx, patient_id))
+    db.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/treatment_method_options', methods=['GET'])
+@login_required
+def api_treatment_method_options_get():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    rows = db.execute('SELECT id, label FROM treatment_method_options ORDER BY display_order ASC, label ASC').fetchall()
+    return jsonify([{'id': r['id'], 'label': r['label']} for r in rows])
+
+
+@app.route('/api/treatment_method_options', methods=['POST'])
+@login_required
+def api_treatment_method_options_add():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json(silent=True)
+    label = (data or {}).get('label', '').strip()
+    if not label:
+        return jsonify({'error': 'Label is required'}), 400
+    if len(label) > 80:
+        return jsonify({'error': 'Label too long'}), 400
+    db = get_db()
+    try:
+        db.execute('INSERT INTO treatment_method_options (label) VALUES (?)', (label,))
+        db.commit()
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Option already exists'}), 409
+    return jsonify({'ok': True, 'label': label}), 201
+
+
+@app.route('/api/treatment_method_options/<int:option_id>', methods=['DELETE'])
+@login_required
+def api_treatment_method_options_delete(option_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    db.execute('DELETE FROM treatment_method_options WHERE id = ?', (option_id,))
+    db.commit()
+    return jsonify({'ok': True})
+
 
 @app.route('/patient/home')
 @login_required
@@ -2853,20 +2949,25 @@ def add_patient():
         has_intake_tab = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
         intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
+        treatment_method = request.form.get('treatment_method', '').strip() or None
 
         if not name:
             flash('Name is required!')
         else:
             db = get_db()
             db.execute('''INSERT INTO patients
-                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, intake_assessment, intake_questionnaire)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, intake_assessment, intake_questionnaire, treatment_method)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                               (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
-                               intake_assessment or None, intake_questionnaire or None))
+                               intake_assessment or None, intake_questionnaire or None, treatment_method))
             db.commit()
             return redirect(url_for('patients', status=status))
 
-    return render_template('add_patient.html')
+    db = get_db()
+    treatment_method_options = [r['label'] for r in db.execute(
+        'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
+    ).fetchall()]
+    return render_template('add_patient.html', treatment_method_options=treatment_method_options)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -8506,17 +8607,23 @@ def edit_patient(patient_id):
         if not name:
             flash('Name is required!')
         else:
+            treatment_method = request.form.get('treatment_method', '').strip() or None
             db.execute('''UPDATE patients
                           SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
-                              patient_type = ?, has_intake_tab = ?, intake_assessment = ?, intake_questionnaire = ?
+                              patient_type = ?, has_intake_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
+                              treatment_method = ?
                           WHERE id = ?''',
                        (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
-                        has_intake_tab, intake_assessment or None, intake_questionnaire or None, patient_id))
+                        has_intake_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
 
-    return render_template('edit_patient.html', patient=patient)
+    db_r = get_db()
+    treatment_method_options = [r['label'] for r in db_r.execute(
+        'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
+    ).fetchall()]
+    return render_template('edit_patient.html', patient=patient, treatment_method_options=treatment_method_options)
 
 @app.route('/patient/<int:patient_id>/access', methods=('POST',))
 @login_required
