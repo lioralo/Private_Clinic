@@ -6,12 +6,16 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY}
       PUBLIC_BASE_URL: https://${DOMAIN}
+      APP_BASE_URL: https://${DOMAIN}
       DATABASE: /data/clinic.db
       UPLOAD_FOLDER: /data/uploads
       PATIENT_LOGS_FOLDER: /data/patients_logs
       APP_LOG_FILE: /data/app_log.txt
       BACKUP_DIR: /data/secure_backups
+      KEY_DIR: /data/.clinic_keys
       BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     volumes:
       - ./data:/data
 
