@@ -55,6 +55,7 @@
             </div>
         </div>
     </a>
+    <a href="{{ url_for('crm_dashboard') }}" class="text-decoration-none">
     <div class="dash-stat-card {% if unread_count > 0 %}dash-stat-card-alert{% endif %}">
         <div class="dash-stat-icon {% if unread_count > 0 %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %}">
             <i class="bi bi-chat-left-dots-fill"></i>
@@ -64,6 +65,7 @@
             <div class="dash-stat-label">{{ t('Unread Messages') }}</div>
         </div>
     </div>
+    </a>
 </div>
 
 {# ── Alert banners ────────────────────────────────────────── #}

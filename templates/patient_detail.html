@@ -145,6 +145,62 @@
 
                         <div class="card border-0 shadow-sm rounded-4 mb-4">
                             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-bullseye me-2"></i>{{ t('Therapy Goals') }}</h5>
+                                <span class="badge bg-primary-subtle text-primary border">{{ goals|length }}</span>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="list-group list-group-flush border rounded-3 mb-3">
+                                    {% for goal in goals %}
+                                    <div class="list-group-item px-3 py-2">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <div class="flex-grow-1">
+                                                <span class="small {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</span>
+                                                {% if goal['status'] == 'achieved' %}
+                                                <span class="badge bg-success-subtle text-success border ms-1 small">{{ t('Achieved') }}</span>
+                                                {% else %}
+                                                <span class="badge bg-primary-subtle text-primary border ms-1 small">{{ t('Active') }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="d-flex gap-1 flex-shrink-0">
+                                                <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-xs btn-outline-secondary py-0 px-2" title="{{ 'Mark Active' if goal['status'] == 'achieved' else 'Mark Achieved' }}" style="font-size:.75rem">
+                                                        <i class="bi {% if goal['status'] == 'achieved' %}bi-arrow-counterclockwise{% else %}bi-check2-circle{% endif %}"></i>
+                                                    </button>
+                                                </form>
+                                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:.75rem" data-bs-toggle="collapse" data-bs-target="#editGoal{{ goal['id'] }}" title="{{ t('Edit') }}">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <form method="post" action="{{ url_for('delete_goal', goal_id=goal['id']) }}" onsubmit="return confirm('Delete this goal?')">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem" title="{{ t('Delete') }}">
+                                                        <i class="bi bi-trash3"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                        <div class="collapse mt-2" id="editGoal{{ goal['id'] }}">
+                                            <form method="post" action="{{ url_for('edit_goal', goal_id=goal['id']) }}" class="d-flex gap-2">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="text" name="description" class="form-control form-control-sm" value="{{ goal['description'] }}" required>
+                                                <button type="submit" class="btn btn-sm btn-primary px-3">{{ t('Save') }}</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <div class="list-group-item small text-muted py-3 text-center">No goals set yet.</div>
+                                    {% endfor %}
+                                </div>
+                                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex gap-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="text" name="description" class="form-control form-control-sm" placeholder="{{ t('New goal...') }}" required>
+                                    <button type="submit" class="btn btn-sm btn-primary px-3 flex-shrink-0"><i class="bi bi-plus-lg me-1"></i>{{ t('Add') }}</button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm rounded-4 mb-4">
+                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
                                 <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-people me-2"></i>Group Participation</h5>
                                 <span class="badge bg-primary-subtle text-primary border">Arrived Counter: {{ group_arrived_count }}</span>
                             </div>
@@ -869,6 +925,46 @@
                                     </div>
                                     <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}{{ t('Update Access') }}{% else %}{{ t('Grant Access') }}{% endif %}</button>
                                 </form>
+                            </div>
+                        </div>
+
+                        <!-- Resources Section -->
+                        <div class="card mb-4 border-0 shadow-sm rounded-4">
+                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>{{ t('Resources') }}</h5>
+                                <span class="badge bg-primary-subtle text-primary border">{{ assigned_resources|length }}</span>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="list-group list-group-flush border rounded-3 mb-3">
+                                    {% for res in assigned_resources %}
+                                    <div class="list-group-item px-3 py-2 d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="small fw-semibold">{{ res['title'] }}</div>
+                                            {% if res['url'] %}
+                                            <a href="{{ res['url'] }}" target="_blank" rel="noopener noreferrer" class="small text-primary text-decoration-none text-truncate d-block" style="max-width:180px">{{ res['url'] }}</a>
+                                            {% endif %}
+                                        </div>
+                                        <form method="post" action="{{ url_for('unassign_resource', patient_id=patient['id'], resource_id=res['id']) }}" onsubmit="return confirm('Unassign this resource?')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem" title="{{ t('Unassign') }}"><i class="bi bi-x-lg"></i></button>
+                                        </form>
+                                    </div>
+                                    {% else %}
+                                    <div class="list-group-item small text-muted py-3 text-center">No resources assigned.</div>
+                                    {% endfor %}
+                                </div>
+                                {% if all_resources %}
+                                <form method="post" action="{{ url_for('assign_resource', patient_id=patient['id']) }}" class="d-flex gap-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <select name="resource_id" class="form-select form-select-sm">
+                                        <option value="">— Assign resource —</option>
+                                        {% for r in all_resources %}
+                                        <option value="{{ r['id'] }}">{{ r['title'] }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-primary px-3 flex-shrink-0"><i class="bi bi-plus-lg"></i></button>
+                                </form>
+                                {% endif %}
                             </div>
                         </div>
 

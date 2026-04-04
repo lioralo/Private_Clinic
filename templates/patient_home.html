@@ -57,7 +57,7 @@
                             </div>
                             <div class="flex-grow-1">
                                 <div class="fw-semibold mb-1">
-                                    {% if appt['meeting_type'] in ['zoom', 'google-meet'] %}
+                                    {% if appt['meeting_type'] in ['zoom', 'google-meet', 'online'] %}
                                     <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
                                     {% else %}
                                     <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}

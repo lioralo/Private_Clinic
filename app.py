@@ -4,11 +4,12 @@ import socket
 import json
 import ast
 import hashlib
+import threading
 from io import BytesIO
 import shutil
 import secrets
 import zipfile
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import quote
 try:
@@ -32,10 +33,40 @@ app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
+KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
 BACKUP_INTERVAL_HOURS = 12
+
+ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
+ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
+
+def _allowed_upload(filename, allowed_set):
+    ext = os.path.splitext(filename)[1].lower()
+    return bool(ext) and ext in allowed_set
+
+# ── Login rate limiting ───────────────────────────────────────────────────────
+_failed_login_attempts = defaultdict(list)  # ip -> [datetime, ...]
+_failed_login_lock = threading.Lock()
+_LOGIN_MAX_ATTEMPTS = 10
+_LOGIN_LOCKOUT_WINDOW = timedelta(minutes=15)
+
+def _is_login_rate_limited(ip):
+    cutoff = datetime.now() - _LOGIN_LOCKOUT_WINDOW
+    with _failed_login_lock:
+        attempts = _failed_login_attempts[ip]
+        attempts[:] = [t for t in attempts if t > cutoff]
+        return len(attempts) >= _LOGIN_MAX_ATTEMPTS
+
+def _record_failed_login(ip):
+    with _failed_login_lock:
+        _failed_login_attempts[ip].append(datetime.now())
+
+def _clear_failed_logins(ip):
+    with _failed_login_lock:
+        _failed_login_attempts.pop(ip, None)
 
 
 def ensure_runtime_paths():
@@ -642,9 +673,21 @@ def _get_or_create_backup_key():
     if key:
         return key.encode('utf-8')
 
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    key_path = backup_root / '.backup.key'
+    key_dir = Path(KEY_DIR)
+    key_dir.mkdir(parents=True, exist_ok=True)
+    key_path = key_dir / '.backup.key'
+
+    # Migrate key from old location inside backup dir if it exists
+    old_key_path = Path(BACKUP_DIR) / '.backup.key'
+    if not key_path.exists() and old_key_path.exists():
+        key_data = old_key_path.read_bytes()
+        key_path.write_bytes(key_data)
+        try:
+            old_key_path.unlink()
+        except Exception:
+            pass
+        return key_data.strip()
+
     if key_path.exists():
         return key_path.read_bytes().strip()
 
@@ -2711,11 +2754,11 @@ def patient_dashboard():
             last_date = datetime.fromisoformat(last_appointment['appointment_date']).date()
             days_since_last_session = (today - last_date).days
     
-    # Get zoom meetings count
+    # Get zoom/online meetings count
     zoom_meetings = db.execute('''
         SELECT COUNT(*) as count FROM appointments
         WHERE patient_id = ?
-        AND meeting_type IN ('zoom', 'google-meet')
+        AND meeting_type IN ('zoom', 'google-meet', 'online')
     ''', (patient_id,)).fetchone()['count']
     
     engagement_data = {
@@ -2800,7 +2843,7 @@ def api_engagement_stats():
     online_appts = db.execute('''
         SELECT COUNT(*) as count FROM appointments
         WHERE patient_id = ?
-        AND meeting_type IN ('zoom', 'google-meet')
+        AND meeting_type IN ('zoom', 'google-meet', 'online')
     ''', (current_user.patient_id,)).fetchone()['count']
     
     return jsonify({
@@ -2972,6 +3015,48 @@ def manage_resources():
     resources = db.execute('SELECT * FROM resources ORDER BY created_at DESC').fetchall()
     return render_template('manage_resources.html', resources=resources)
 
+@app.route('/admin/resources/<int:resource_id>/edit', methods=['POST'])
+@login_required
+def edit_resource(resource_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    title = (request.form.get('title') or '').strip()
+    if not title:
+        flash('Title is required.')
+        return redirect(url_for('manage_resources'))
+    description = request.form.get('description', '')
+    url = request.form.get('url', '')
+    is_public = 1 if request.form.get('is_public') else 0
+    db = get_db()
+    db.execute('UPDATE resources SET title=?, description=?, url=?, is_public=? WHERE id=?',
+               (title, description, url, is_public, resource_id))
+    db.commit()
+    flash('Resource updated.')
+    return redirect(url_for('manage_resources'))
+
+@app.route('/admin/resources/<int:resource_id>/delete', methods=['POST'])
+@login_required
+def delete_resource(resource_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    db.execute('DELETE FROM patient_resources WHERE resource_id = ?', (resource_id,))
+    db.execute('DELETE FROM resources WHERE id = ?', (resource_id,))
+    db.commit()
+    flash('Resource deleted.')
+    return redirect(url_for('manage_resources'))
+
+@app.route('/patient/<int:patient_id>/unassign_resource/<int:resource_id>', methods=['POST'])
+@login_required
+def unassign_resource(patient_id, resource_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    db.execute('DELETE FROM patient_resources WHERE patient_id = ? AND resource_id = ?', (patient_id, resource_id))
+    db.commit()
+    flash('Resource unassigned.')
+    return redirect_to_patient_tab(patient_id, 'info')
+
 @app.route('/patient/<int:patient_id>/assign_resource', methods=['POST'])
 @login_required
 def assign_resource(patient_id):
@@ -3030,6 +3115,12 @@ def login():
 
         username = request.form['username']
         password = request.form['password']
+
+        client_ip = request.remote_addr or ''
+        if not app.config.get('TESTING') and _is_login_rate_limited(client_ip):
+            flash('Too many failed login attempts. Please try again in 15 minutes.')
+            return render_template('login.html')
+
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
@@ -3037,6 +3128,8 @@ def login():
             if not user['is_active']:
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
+
+            _clear_failed_logins(client_ip)
 
             # REQUIRE 2FA for all admin accounts in PRODUCTION
             # IN TESTING: Allow bypass for admin logins
@@ -3052,6 +3145,8 @@ def login():
 
             return _login_redirect_for_user(user)
         else:
+            if not app.config.get('TESTING'):
+                _record_failed_login(client_ip)
             flash('Invalid username or password')
 
     if pending_user_id:
@@ -3274,7 +3369,12 @@ def patient_detail(patient_id):
         (patient_id,)
     ).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents)
+    goals = db.execute(
+        'SELECT * FROM goals WHERE patient_id = ? ORDER BY created_at ASC',
+        (patient_id,)
+    ).fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals)
 
 
 @app.route('/admin/patient/<int:patient_id>/portal_preview')
@@ -3441,6 +3541,9 @@ def add_diagnosis_document(patient_id):
     notes = (request.form.get('notes') or '').strip() or None
     original_filename = secure_filename(uploaded.filename)
     ext = os.path.splitext(original_filename)[1].lower()
+    if not ext or ext not in ALLOWED_DIAGNOSIS_EXTENSIONS:
+        flash('File type not allowed. Accepted: pdf, docx, png, jpg, jpeg, tiff.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
     stored_filename = f"diag_{patient_id}_{secrets.token_hex(8)}{ext}"
 
     diagnosis_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnosis', str(patient_id))
@@ -6987,6 +7090,39 @@ def toggle_goal_status(goal_id):
         return redirect_to_patient_tab(goal['patient_id'], 'info')
     return "Goal not found", 404
 
+@app.route('/goal/<int:goal_id>/delete', methods=('POST',))
+@login_required
+def delete_goal(goal_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
+    if not goal:
+        return "Goal not found", 404
+    patient_id = goal['patient_id']
+    db.execute('DELETE FROM goals WHERE id = ?', (goal_id,))
+    db.commit()
+    return redirect_to_patient_tab(patient_id, 'info')
+
+@app.route('/goal/<int:goal_id>/edit', methods=('POST',))
+@login_required
+def edit_goal(goal_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    description = (request.form.get('description') or '').strip()
+    db = get_db()
+    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
+    if not goal:
+        return "Goal not found", 404
+    if description:
+        db.execute('UPDATE goals SET description = ? WHERE id = ?', (description, goal_id))
+        db.commit()
+    else:
+        flash('Goal description cannot be empty.')
+    return redirect_to_patient_tab(goal['patient_id'], 'info')
+
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
 @login_required
 def add_file(patient_id):
@@ -7002,6 +7138,9 @@ def add_file(patient_id):
         return redirect_to_patient_tab(patient_id, 'notes')
     if file:
         filename = secure_filename(file.filename)
+        if not _allowed_upload(filename, ALLOWED_UPLOAD_EXTENSIONS):
+            flash('File type not allowed. Accepted: docx, pdf, txt, png, jpg, gif, xlsx, csv.')
+            return redirect_to_patient_tab(patient_id, 'notes')
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         db = get_db()
@@ -7613,6 +7752,27 @@ def add_receipt(patient_id):
         db.execute('INSERT INTO receipts (patient_id, amount, description) VALUES (?, ?, ?)', (patient_id, amount, description))
         db.commit()
     return redirect_to_patient_tab(patient_id, 'billing')
+
+@app.route('/appointment/<int:appointment_id>/set_status', methods=['POST'])
+@login_required
+def set_appointment_status(appointment_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    status = (request.form.get('status') or '').strip()
+    allowed_statuses = {'completed', 'no_show', 'scheduled', 'cancelled'}
+    if status not in allowed_statuses:
+        return "Invalid status", 400
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return "Appointment not found", 404
+    db.execute('UPDATE appointments SET status = ? WHERE id = ?', (status, appointment_id))
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (appt['patient_id'], 'appointment-status', f'Appointment {appointment_id} marked {status}')
+    )
+    db.commit()
+    return redirect_to_patient_tab(appt['patient_id'], 'notes')
 
 @app.route('/uploads/<name>')
 @login_required
