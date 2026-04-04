@@ -10,3 +10,4 @@ cryptography
 gunicorn
 google-auth-oauthlib
 google-api-python-client
+python-dotenv

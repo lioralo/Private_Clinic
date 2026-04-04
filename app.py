@@ -3,6 +3,11 @@ import sqlite3
 import socket
 import json
 import ast
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import hashlib
 import threading
 from io import BytesIO

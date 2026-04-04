@@ -14,3 +14,4 @@ static/uploads/
 secure_backups/
 manual_backups/
 .clinic_keys/
+.env
