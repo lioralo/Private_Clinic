@@ -1019,6 +1019,25 @@
                         <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>{{ t('Treatment Log') }}</h5>
                     </div>
                     <div class="card-body p-4">
+
+                        {# ── Google Docs panel ─────────────────────────────────────── #}
+                        {% if patient.gdoc_id %}
+                        <div class="alert alert-success d-flex align-items-center gap-3 py-2 mb-4" role="alert">
+                            <i class="bi bi-file-earmark-text-fill fs-5"></i>
+                            <span class="fw-semibold">Google Doc linked</span>
+                            <a href="{{ url_for('open_gdoc', patient_id=patient.id) }}" target="_blank" class="btn btn-sm btn-outline-success">Open Doc</a>
+                            <button class="btn btn-sm btn-outline-primary" id="gdocSyncBtn" onclick="syncFromGdoc({{ patient.id }})">Sync Now</button>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-light border d-flex align-items-center gap-3 py-2 mb-4" role="alert">
+                            <i class="bi bi-file-earmark-text fs-5 text-muted"></i>
+                            <span class="text-muted small">No Google Doc linked yet.</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="gdocLinkBtn" onclick="linkGdoc({{ patient.id }})">
+                                <i class="bi bi-plus-circle me-1"></i>Create &amp; Link Google Doc
+                            </button>
+                        </div>
+                        {% endif %}
+
                         <div class="mb-4">
                             <h6 class="text-uppercase smallest text-muted mb-3">Last Meeting Record</h6>
                             {% if latest_note %}
@@ -1735,6 +1754,53 @@ document.addEventListener('DOMContentLoaded', function() {
         syncSelfHarmFields();
     }
 });
+
+function linkGdoc(pid) {
+    const btn = document.getElementById('gdocLinkBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+    fetch(`/patient/${pid}/link-gdoc`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token() }}'},
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.doc_url) {
+            alert('Google Doc created! Opening in a new tab…');
+            window.open(d.doc_url, '_blank');
+            location.reload();
+        } else {
+            alert('Error: ' + (d.error || 'Unknown error'));
+            if (btn) { btn.disabled = false; btn.textContent = 'Create & Link Google Doc'; }
+        }
+    })
+    .catch(() => {
+        alert('Request failed.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Create & Link Google Doc'; }
+    });
+}
+
+function syncFromGdoc(pid) {
+    const btn = document.getElementById('gdocSyncBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+    fetch(`/patient/${pid}/sync-from-gdoc`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token() }}'},
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            alert('Error: ' + d.error);
+        } else {
+            alert(`Synced ${d.synced} note(s) from Google Doc.`);
+            if (d.synced > 0) location.reload();
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Sync Now'; }
+    })
+    .catch(() => {
+        alert('Request failed.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Sync Now'; }
+    });
+}
 </script>
 {% endblock %}
 {% endblock %}

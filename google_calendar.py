@@ -28,7 +28,11 @@ try:
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
-SCOPES = ['https://www.googleapis.com/auth/calendar']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/documents',
+]
 
 DB_TOKEN_TABLE = 'google_calendar_tokens'
 DEFAULT_USER_LABEL = 'admin'   # stored as "owner" in the tokens table

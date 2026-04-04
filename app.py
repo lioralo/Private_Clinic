@@ -16,6 +16,10 @@ try:
     import google_calendar as gcal
 except ImportError:
     gcal = None
+try:
+    import google_docs as gdocs
+except ImportError:
+    gdocs = None
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -1463,6 +1467,20 @@ def init_db():
         # Seed default options (only inserts if they don't exist yet)
         for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
             db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
+
+        # Google Docs integration columns
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
+        except sqlite3.OperationalError:
+            pass
 
         db.commit()
 
@@ -8164,6 +8182,176 @@ def google_calendar_set_calendar():
             gcal.save_credentials(db, creds, calendar_id=calendar_id)
             return jsonify({'status': 'success', 'calendar_id': calendar_id})
     return jsonify({'status': 'error', 'message': 'Not connected to Google Calendar'}), 400
+
+
+# ---------------------------------------------------------------------------
+# Google Docs helper
+# ---------------------------------------------------------------------------
+
+def _pull_gdoc_notes(db, patient):
+    """
+    Read the linked Google Doc, parse session blocks, and upsert into the
+    notes table.  Returns (synced_count, error_string_or_None).
+
+    - [note:new] blocks  → INSERT; carry forward mood/appearance/checklist
+      from most recent existing note (or blank); stamp doc with [note:id=N].
+    - [note:id=N] blocks → UPDATE content if it has changed.
+    """
+    if not gdocs:
+        return 0, 'google_docs module not available'
+    creds = gcal.load_credentials(db) if gcal else None
+    if not creds:
+        return 0, 'Not connected to Google'
+    creds = gcal._refresh_and_save(db, creds)
+
+    doc_id = patient['gdoc_id']
+    try:
+        full_text = gdocs.read_doc_text(creds, doc_id)
+    except Exception as exc:
+        return 0, str(exc)
+
+    parsed = gdocs.parse_doc_into_notes(full_text)
+
+    # Carry-forward values from the most recent existing DB note
+    prev = db.execute(
+        'SELECT mood_summary, patient_appearance, behavior_checklist '
+        'FROM notes WHERE patient_id = ? ORDER BY note_date DESC, id DESC LIMIT 1',
+        (patient['id'],)
+    ).fetchone()
+    carry = {
+        'mood_summary':       (prev['mood_summary']       if prev else '') or '',
+        'patient_appearance': (prev['patient_appearance'] if prev else '') or '',
+        'behavior_checklist': (prev['behavior_checklist'] if prev else '') or '',
+    }
+
+    synced = 0
+    for item in parsed:
+        if item['note_tag'] == 'new':
+            row = db.execute(
+                'INSERT INTO notes '
+                '(patient_id, note_date, session_number, content, '
+                ' mood_summary, patient_appearance, behavior_checklist) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (patient['id'], item['note_date'], item['session_number'],
+                 item['content'],
+                 carry['mood_summary'], carry['patient_appearance'],
+                 carry['behavior_checklist'])
+            )
+            new_id = row.lastrowid
+            db.commit()
+            try:
+                gdocs.stamp_note_id_in_doc(creds, doc_id, new_id)
+            except Exception:
+                pass
+            synced += 1
+        elif isinstance(item['note_tag'], int):
+            note_id = item['note_tag']
+            existing = db.execute(
+                'SELECT id, content FROM notes WHERE id = ? AND patient_id = ?',
+                (note_id, patient['id'])
+            ).fetchone()
+            if existing and existing['content'] != item['content']:
+                db.execute('UPDATE notes SET content = ? WHERE id = ?',
+                           (item['content'], note_id))
+                db.commit()
+                synced += 1
+
+    return synced, None
+
+
+# ---------------------------------------------------------------------------
+# Google Docs routes
+# ---------------------------------------------------------------------------
+
+@app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
+@login_required
+def link_gdoc(patient_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not gdocs:
+        return jsonify({'error': 'google_docs module not available'}), 500
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return jsonify({'error': 'Patient not found'}), 404
+    if not gcal:
+        return jsonify({'error': 'Google libraries not installed'}), 500
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
+    creds = gcal._refresh_and_save(db, creds)
+    try:
+        doc_id = gdocs.create_patient_doc(creds, patient['name'])
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+    # Optionally register a Drive Watch webhook
+    webhook_url = (request.form.get('webhook_url') or '').strip()
+    channel_id, expiry = None, None
+    if webhook_url:
+        try:
+            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
+        except Exception:
+            pass  # webhook is optional; manual sync still works
+
+    db.execute(
+        'UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+        (doc_id, channel_id, expiry, patient_id)
+    )
+    db.commit()
+    return jsonify({
+        'status':  'ok',
+        'doc_id':  doc_id,
+        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+    })
+
+
+@app.route('/patient/<int:patient_id>/open-gdoc')
+@login_required
+def open_gdoc(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    patient = db.execute('SELECT gdoc_id FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient or not patient['gdoc_id']:
+        flash('No Google Doc linked for this patient.')
+        return redirect(url_for('patient_detail', patient_id=patient_id))
+    return redirect(f'https://docs.google.com/document/d/{patient["gdoc_id"]}/edit')
+
+
+@app.route('/patient/<int:patient_id>/sync-from-gdoc', methods=['POST'])
+@login_required
+def sync_from_gdoc(patient_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not gdocs:
+        return jsonify({'error': 'google_docs module not available'}), 500
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient or not patient['gdoc_id']:
+        return jsonify({'error': 'No Google Doc linked'}), 400
+    count, err = _pull_gdoc_notes(db, patient)
+    if err:
+        return jsonify({'error': err}), 500
+    return jsonify({'status': 'ok', 'synced': count})
+
+
+@app.route('/api/gdoc/webhook', methods=['POST'])
+@csrf.exempt
+def gdoc_webhook():
+    channel_id = request.headers.get('X-Goog-Channel-ID')
+    if not channel_id:
+        return '', 200
+    db = get_db()
+    patient = db.execute(
+        'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
+    ).fetchone()
+    if patient and patient['gdoc_id'] and gdocs:
+        try:
+            _pull_gdoc_notes(db, patient)
+        except Exception:
+            pass
+    return '', 200
 
 
 @app.route('/admin/profile', methods=['GET', 'POST'])
