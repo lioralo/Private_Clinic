@@ -1,0 +1,368 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+
+{# ── Header ──────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="mb-1 fw-bold text-primary">
+            <i class="bi bi-speedometer2 me-2"></i>{{ t('Clinic Dashboard') }}
+        </h2>
+        <p class="text-muted small mb-0">
+            {{ t('Today is') }} <strong>{{ today.strftime('%A, %B %-d, %Y') }}</strong>
+            &mdash; {{ today_appointments|length }} {{ t('session(s) scheduled today') }}
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill">
+            <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
+        </a>
+        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary bg-white btn-sm rounded-pill">
+            <i class="bi bi-calendar3 me-1"></i>{{ t('Calendar') }}
+        </a>
+        <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary bg-white btn-sm rounded-pill">
+            <i class="bi bi-people-fill me-1"></i>{{ t('Patients') }}
+        </a>
+    </div>
+</div>
+
+{# ── Stats strip ─────────────────────────────────────────── #}
+<div class="dash-stats-strip mb-4">
+    <a href="{{ url_for('weekly_calendar') }}" class="text-decoration-none">
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon bg-primary-subtle text-primary"><i class="bi bi-calendar-check-fill"></i></div>
+            <div>
+                <div class="dash-stat-value">{{ today_appointments|length }}</div>
+                <div class="dash-stat-label">{{ t("Today's Sessions") }}</div>
+            </div>
+        </div>
+    </a>
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="text-decoration-none">
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon bg-success-subtle text-success"><i class="bi bi-person-check-fill"></i></div>
+            <div>
+                <div class="dash-stat-value">{{ counts['ongoing'] }}</div>
+                <div class="dash-stat-label">{{ t('Ongoing') }}</div>
+            </div>
+        </div>
+    </a>
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="text-decoration-none">
+        <div class="dash-stat-card">
+            <div class="dash-stat-icon bg-warning-subtle text-warning"><i class="bi bi-hourglass-split"></i></div>
+            <div>
+                <div class="dash-stat-value">{{ counts['waiting'] }}</div>
+                <div class="dash-stat-label">{{ t('Waiting List') }}</div>
+            </div>
+        </div>
+    </a>
+    <div class="dash-stat-card {% if unread_count > 0 %}dash-stat-card-alert{% endif %}">
+        <div class="dash-stat-icon {% if unread_count > 0 %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %}">
+            <i class="bi bi-chat-left-dots-fill"></i>
+        </div>
+        <div>
+            <div class="dash-stat-value">{{ unread_count }}</div>
+            <div class="dash-stat-label">{{ t('Unread Messages') }}</div>
+        </div>
+    </div>
+</div>
+
+{# ── Alert banners ────────────────────────────────────────── #}
+{% if followup_patients %}
+<div class="alert dash-alert-banner mb-4 d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+    <div>
+        <strong>{{ followup_patients|length }} {{ t('patient(s) need a follow-up decision') }}</strong>
+        &mdash; {{ t('their intake appointment has passed but no next step was taken.') }}
+        <a href="#followupSection" class="alert-link ms-1">{{ t('See below') }} &darr;</a>
+    </div>
+</div>
+{% endif %}
+
+{# ── Main two-column layout ───────────────────────────────── #}
+<div class="row g-4">
+
+    {# Left column: Today's schedule + this week #}
+    <div class="col-lg-7">
+
+        {# Today's schedule #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-clock-fill me-2 text-primary"></i>{{ t("Today's Schedule") }}</h6>
+                <span class="badge bg-primary rounded-pill">{{ today_appointments|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if today_appointments %}
+                <ul class="list-group list-group-flush">
+                    {% for appt in today_appointments %}
+                    <li class="list-group-item dash-schedule-item">
+                        <div class="dash-schedule-time">
+                            <span class="fw-bold text-primary">{{ appt['appointment_time'][:5] }}</span>
+                            <span class="text-muted small d-block">{{ appt['duration_minutes'] or 60 }}min</span>
+                        </div>
+                        <div class="flex-grow-1">
+                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="fw-semibold text-decoration-none">{{ appt['patient_name'] }}</a>
+                            {% if appt['treatment_method'] %}
+                            <span class="badge crm-method-badge ms-1">{{ appt['treatment_method'] }}</span>
+                            {% endif %}
+                            <div class="d-flex gap-2 mt-1 flex-wrap">
+                                {% if appt['meeting_type'] and appt['meeting_type'] != 'in-person' %}
+                                <span class="badge bg-info-subtle text-info border">
+                                    <i class="bi bi-camera-video me-1"></i>{{ appt['meeting_type'] }}
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary border">
+                                    <i class="bi bi-building me-1"></i>{{ t('In-person') }}
+                                </span>
+                                {% endif %}
+                                {% if appt['is_recurring'] %}
+                                <span class="badge bg-success-subtle text-success border"><i class="bi bi-arrow-repeat me-1"></i>{{ t('Recurring') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if appt['meeting_link'] %}
+                        <a href="{{ appt['meeting_link'] }}" target="_blank" rel="noopener noreferrer"
+                           class="btn btn-sm btn-outline-info rounded-pill" onclick="event.stopPropagation()">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join') }}
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-2 d-block mb-2"></i>
+                    <p class="mb-2">{{ t('No sessions scheduled for today.') }}</p>
+                    <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-primary rounded-pill">
+                        <i class="bi bi-plus-lg me-1"></i>{{ t('Open Calendar') }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# This week #}
+        {% if week_appointments %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>{{ t('Coming This Week') }}</h6>
+                <span class="badge bg-secondary rounded-pill">{{ week_appointments|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% set ns = namespace(last_date='') %}
+                    {% for appt in week_appointments %}
+                        {% if appt['appointment_date'] != ns.last_date %}
+                        {% set ns.last_date = appt['appointment_date'] %}
+                        <li class="list-group-item dash-week-date-header text-muted small fw-bold py-1 px-3">
+                            <i class="bi bi-calendar3 me-1"></i>{{ appt['appointment_date'] }}
+                        </li>
+                        {% endif %}
+                        <li class="list-group-item d-flex align-items-center gap-3 py-2 px-3">
+                            <span class="text-muted small" style="min-width:3.5rem">{{ appt['appointment_time'][:5] }}</span>
+                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="text-decoration-none fw-semibold flex-grow-1">{{ appt['patient_name'] }}</a>
+                            {% if appt['meeting_type'] and appt['meeting_type'] != 'in-person' %}
+                            <span class="badge bg-info-subtle text-info border small">{{ appt['meeting_type'] }}</span>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>{# /left column #}
+
+    {# Right column: follow-up, waiting, quick actions #}
+    <div class="col-lg-5">
+
+        {# Follow-up decisions needed #}
+        {% if followup_patients %}
+        <div class="card border-0 shadow-sm mb-4" id="followupSection">
+            <div class="card-header dash-card-header dash-card-header-warning">
+                <h6 class="mb-0 fw-bold text-warning-emphasis">
+                    <i class="bi bi-exclamation-circle-fill me-2"></i>{{ t('Decision Needed') }}
+                </h6>
+                <span class="badge bg-warning text-dark rounded-pill">{{ followup_patients|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for p in followup_patients %}
+                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2 px-3">
+                        <div>
+                            <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="fw-semibold text-decoration-none">{{ p['name'] }}</a>
+                            <span class="text-muted small d-block">{{ t('Last appt:') }} {{ p['last_appt_date'] }}</span>
+                        </div>
+                        <div class="d-flex gap-1 flex-shrink-0">
+                            <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill px-2">
+                                <i class="bi bi-arrow-right-short"></i>
+                            </a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Waiting list — no upcoming appointment #}
+        {% if waiting_patients %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>{{ t('Waiting — No Appointment') }}</h6>
+                <span class="badge bg-warning text-dark rounded-pill">{{ waiting_patients|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for p in waiting_patients %}
+                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2 px-3">
+                        <div>
+                            <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="fw-semibold text-decoration-none">{{ p['name'] }}</a>
+                            <span class="text-muted small d-block">{{ t('Since:') }} {{ p['created_at'][:10] if p['created_at'] else '—' }}</span>
+                        </div>
+                        <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2">
+                            <i class="bi bi-arrow-right-short"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Missing recurring alert #}
+        {% if missing_recurring %}
+        <div class="card border-0 shadow-sm mb-4 border-danger-subtle">
+            <div class="card-header dash-card-header dash-card-header-danger">
+                <h6 class="mb-0 fw-bold text-danger">
+                    <i class="bi bi-arrow-repeat me-2"></i>{{ t('Ongoing — No Recurring Set') }}
+                </h6>
+                <span class="badge bg-danger rounded-pill">{{ missing_recurring|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for p in missing_recurring %}
+                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2 px-3">
+                        <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="fw-semibold text-decoration-none">{{ p['name'] }}</a>
+                        <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="btn btn-sm btn-outline-danger rounded-pill px-2">
+                            <i class="bi bi-arrow-right-short"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {# Quick actions #}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-lightning-fill me-2 text-primary"></i>{{ t('Quick Actions') }}</h6>
+            </div>
+            <div class="card-body d-grid gap-2 p-3">
+                <a href="{{ url_for('add_patient') }}" class="btn btn-outline-primary text-start">
+                    <i class="bi bi-person-plus-fill me-2"></i>{{ t('Add New Patient') }}
+                </a>
+                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-calendar3 me-2"></i>{{ t('Open Calendar') }}
+                </a>
+                <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-people-fill me-2"></i>{{ t('Patient Roster (CRM)') }}
+                </a>
+                <a href="{{ url_for('groups_dashboard') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-diagram-3-fill me-2"></i>{{ t('Groups') }}
+                </a>
+                <a href="{{ url_for('manage_resources') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-journal-bookmark me-2"></i>{{ t('Resources') }}
+                </a>
+                <a href="{{ url_for('admin_profile') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-gear me-2"></i>{{ t('Settings & Profile') }}
+                </a>
+            </div>
+        </div>
+
+    </div>{# /right column #}
+
+</div>{# /row #}
+
+{# ── Bottom row: Recent patients + Recent activity ────────── #}
+<div class="row g-4 mt-1">
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ t('Recently Added Patients') }}</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_patients %}
+                <ul class="list-group list-group-flush">
+                    {% for p in recent_patients %}
+                    <li class="list-group-item d-flex align-items-center justify-content-between gap-2 py-2 px-3">
+                        <div>
+                            <a href="{{ url_for('patient_detail', patient_id=p['id']) }}" class="fw-semibold text-decoration-none">{{ p['name'] }}</a>
+                            <div class="d-flex gap-1 mt-1 flex-wrap">
+                                {% if p['status'] == 'ongoing' %}
+                                <span class="badge bg-success-subtle text-success border" style="font-size:0.68em">{{ t('Ongoing') }}</span>
+                                {% elif p['status'] == 'candidate' %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border" style="font-size:0.68em">{{ t('Candidate') }}</span>
+                                {% elif p['status'] in ['waiting', 'waiting for scheduling'] %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border" style="font-size:0.68em">{{ t('Waiting') }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary border" style="font-size:0.68em">{{ t(p['status']|capitalize) }}</span>
+                                {% endif %}
+                                {% if p['treatment_method'] %}
+                                <span class="badge crm-method-badge">{{ p['treatment_method'] }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <span class="text-muted small">{{ p['created_at'][:10] if p['created_at'] else '' }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-4 text-muted small">{{ t('No patients yet.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-activity me-2 text-primary"></i>{{ t('Recent Activity') }}</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_activity %}
+                <ul class="list-group list-group-flush">
+                    {% for ev in recent_activity %}
+                    <li class="list-group-item py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                {% if ev['patient_name'] %}
+                                <a href="{{ url_for('patient_detail', patient_id=ev['patient_id']) }}" class="fw-semibold text-decoration-none small">{{ ev['patient_name'] }}</a>
+                                <span class="text-muted small"> &mdash; </span>
+                                {% endif %}
+                                <span class="small">
+                                    {% if ev['action'] == 'cancel_request' %}<i class="bi bi-x-circle text-danger me-1"></i>{{ t('Cancellation request') }}
+                                    {% elif ev['action'] == 'delete' %}<i class="bi bi-trash text-danger me-1"></i>{{ t('Appointment deleted') }}
+                                    {% elif ev['action'] == 'booking_access_request' %}<i class="bi bi-calendar-plus text-primary me-1"></i>{{ t('Booking access requested') }}
+                                    {% elif ev['action'] == 'status_converted' %}<i class="bi bi-arrow-up-circle text-success me-1"></i>{{ t('Converted to ongoing') }}
+                                    {% else %}<i class="bi bi-dot me-1"></i>{{ ev['action'] }}
+                                    {% endif %}
+                                </span>
+                                {% if ev['details'] %}
+                                <div class="text-muted" style="font-size:0.72em">{{ ev['details'][:80] }}{% if ev['details']|length > 80 %}…{% endif %}</div>
+                                {% endif %}
+                            </div>
+                            <span class="text-muted" style="font-size:0.7em;white-space:nowrap">{{ ev['created_at'][:16] if ev['created_at'] else '' }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-4 text-muted small">{{ t('No recent activity.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

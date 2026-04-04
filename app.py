@@ -1473,7 +1473,7 @@ def init_db():
 def index():
     if current_user.is_authenticated:
         if current_user.role == 'admin':
-            return redirect(url_for('crm_dashboard'))
+            return redirect(url_for('admin_dashboard'))
         elif current_user.role == 'patient':
             return redirect(url_for('patient_home'))
     return redirect(url_for('login'))
@@ -2393,6 +2393,150 @@ def crm_dashboard():
                            include_group=include_group, reminders=reminders,
                            treatment_method=treatment_method,
                            treatment_method_options=treatment_method_labels)
+
+
+@app.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    """At-a-glance clinic overview for the admin."""
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    today = datetime.now().date()
+    week_end = today + timedelta(days=6)
+
+    # Today's appointments
+    today_appointments = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
+               a.meeting_type, a.meeting_link, a.is_recurring,
+               p.id AS patient_id, p.name AS patient_name,
+               p.status AS patient_status, p.treatment_method
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND a.appointment_date = ?
+        ORDER BY a.appointment_time ASC
+    ''', (today.isoformat(),)).fetchall()
+
+    # Remaining appointments this week (days 1-6 from today)
+    week_appointments = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.meeting_type,
+               p.id AS patient_id, p.name AS patient_name
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND a.appointment_date > ?
+          AND a.appointment_date <= ?
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (today.isoformat(), week_end.isoformat())).fetchall()
+
+    # Patient status counts
+    counts_row = db.execute('''
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN status = 'ongoing' THEN 1 ELSE 0 END) AS ongoing,
+            SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS waiting,
+            SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
+        FROM patients WHERE COALESCE(is_deleted, 0) = 0
+    ''').fetchone()
+    counts = {
+        'total':   counts_row['total']   or 0,
+        'ongoing': counts_row['ongoing'] or 0,
+        'waiting': counts_row['waiting'] or 0,
+        'archived':counts_row['archived']or 0,
+    }
+
+    # Unread messages for admin
+    unread_count = db.execute(
+        'SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND COALESCE(is_read, 0) = 0',
+        (current_user.id,)
+    ).fetchone()[0]
+
+    # Patients needing a follow-up decision (candidates with only past appointments)
+    followup_patients = db.execute('''
+        SELECT p.id, p.name, p.status, MAX(a.appointment_date) AS last_appt_date
+        FROM patients p
+        JOIN appointments a ON a.patient_id = p.id
+        WHERE p.status = 'candidate'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND a.is_recurring = 0
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND a.appointment_date < DATE('now')
+          AND NOT EXISTS (
+              SELECT 1 FROM appointments a2
+              WHERE a2.patient_id = p.id
+                AND COALESCE(a2.status, 'scheduled') = 'scheduled'
+                AND a2.appointment_date >= DATE('now')
+          )
+        GROUP BY p.id
+        ORDER BY last_appt_date ASC
+        LIMIT 8
+    ''').fetchall()
+
+    # Waiting patients (no appointment yet scheduled at all)
+    waiting_patients = db.execute('''
+        SELECT p.id, p.name, p.created_at
+        FROM patients p
+        WHERE p.status IN ('waiting', 'waiting for scheduling')
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM appointments a WHERE a.patient_id = p.id
+                AND COALESCE(a.status, 'scheduled') = 'scheduled'
+                AND a.appointment_date >= DATE('now')
+          )
+        ORDER BY p.created_at ASC
+        LIMIT 6
+    ''').fetchall()
+
+    # Recently added patients
+    recent_patients = db.execute('''
+        SELECT id, name, status, patient_type, treatment_method, created_at
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+        ORDER BY created_at DESC
+        LIMIT 6
+    ''').fetchall()
+
+    # Recent audit log activity
+    recent_activity = db.execute('''
+        SELECT al.action, al.details, al.created_at,
+               p.name AS patient_name, p.id AS patient_id
+        FROM audit_logs al
+        LEFT JOIN patients p ON p.id = al.patient_id
+        ORDER BY al.created_at DESC
+        LIMIT 10
+    ''').fetchall()
+
+    # Ongoing patients missing a recurring appointment (alert)
+    missing_recurring = db.execute('''
+        SELECT id, name
+        FROM patients
+        WHERE status = 'ongoing'
+          AND COALESCE(is_deleted, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM appointments a
+              WHERE a.patient_id = patients.id
+                AND a.is_recurring = 1
+                AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          )
+        ORDER BY name ASC
+        LIMIT 6
+    ''').fetchall()
+
+    return render_template('admin_home.html',
+                           today=today,
+                           today_appointments=today_appointments,
+                           week_appointments=week_appointments,
+                           counts=counts,
+                           unread_count=unread_count,
+                           followup_patients=followup_patients,
+                           waiting_patients=waiting_patients,
+                           recent_patients=recent_patients,
+                           recent_activity=recent_activity,
+                           missing_recurring=missing_recurring)
 
 
 @app.route('/api/patients/reorder', methods=['POST'])
