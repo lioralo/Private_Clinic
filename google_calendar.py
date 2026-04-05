@@ -180,20 +180,25 @@ def create_oauth_flow(state: str = None) -> 'Flow':
 
 
 def get_authorization_url() -> tuple:
-    """Return (auth_url, state)."""
+    """Return (auth_url, state, code_verifier). code_verifier may be None."""
     flow = create_oauth_flow()
     auth_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
         prompt='consent',
     )
-    return auth_url, state
+    # PKCE: code_verifier is set on the flow when a code_challenge was added
+    code_verifier = getattr(flow, 'code_verifier', None)
+    return auth_url, state, code_verifier
 
 
-def exchange_code_for_tokens(code: str, state: str):
+def exchange_code_for_tokens(code: str, state: str, code_verifier: str = None):
     """Exchange the OAuth code for credentials. Returns Credentials."""
     flow = create_oauth_flow(state=state)
-    flow.fetch_token(code=code)
+    fetch_kwargs = {'code': code}
+    if code_verifier:
+        fetch_kwargs['code_verifier'] = code_verifier
+    flow.fetch_token(**fetch_kwargs)
     return flow.credentials
 
 

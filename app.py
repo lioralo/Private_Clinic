@@ -8130,8 +8130,10 @@ def google_calendar_connect():
         flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
         return redirect(url_for('admin_profile'))
     try:
-        auth_url, state = gcal.get_authorization_url()
+        auth_url, state, code_verifier = gcal.get_authorization_url()
         session['gcal_oauth_state'] = state
+        if code_verifier:
+            session['gcal_code_verifier'] = code_verifier
         return redirect(auth_url)
     except Exception as exc:
         flash(f'Failed to initiate Google Calendar connection: {exc}')
@@ -8154,7 +8156,8 @@ def google_calendar_callback():
         flash('OAuth state mismatch – please try connecting again.')
         return redirect(url_for('admin_profile'))
     try:
-        creds = gcal.exchange_code_for_tokens(code, state)
+        code_verifier = session.pop('gcal_code_verifier', None)
+        creds = gcal.exchange_code_for_tokens(code, state, code_verifier=code_verifier)
         db = get_db()
         calendar_id = request.args.get('calendar_id', 'primary')
         gcal.save_credentials(db, creds, calendar_id=calendar_id)
