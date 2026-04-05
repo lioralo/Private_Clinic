@@ -8,6 +8,8 @@ try:
     load_dotenv()
 except ImportError:
     pass
+# OAUTHLIB_INSECURE_TRANSPORT=1 in .env allows OAuth over plain HTTP in local dev.
+# Never set this in production — the production .env does not include it.
 import hashlib
 import threading
 from io import BytesIO
