@@ -3276,6 +3276,29 @@ def patient_detail(patient_id):
                  CAST(COALESCE(session_number, '0') AS INTEGER) DESC,
                  created_at DESC
     ''', (patient_id,)).fetchall()
+
+    # Deduplicate by session_number: prefer note with content; tiebreak by higher id (more recent)
+    if notes:
+        seen_sessions: dict = {}
+        unnumbered = []
+        for note in notes:
+            sn = int(note['session_number'] or 0)
+            if sn == 0:
+                unnumbered.append(note)
+                continue
+            existing = seen_sessions.get(sn)
+            if existing is None:
+                seen_sessions[sn] = note
+            else:
+                existing_has_content = bool((existing['content'] or '').strip())
+                note_has_content = bool((note['content'] or '').strip())
+                if note_has_content and not existing_has_content:
+                    seen_sessions[sn] = note
+                elif note_has_content == existing_has_content and note['id'] > existing['id']:
+                    seen_sessions[sn] = note
+        numbered = sorted(seen_sessions.values(),
+                          key=lambda n: (-(int(n['session_number'] or 0)), -(n['id'])))
+        notes = numbered + unnumbered
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
@@ -4789,10 +4812,34 @@ def build_week_calendar_snapshot(db, week_start, user):
                     }
                 })
 
+    # Fetch external Google Calendar events (calendar events not tracked in our DB)
+    external_events = []
+    if gcal and gcal.GOOGLE_LIBS_AVAILABLE and user.role == 'admin':
+        try:
+            all_gcal = gcal.list_events_for_week(db, week_start.isoformat(), week_end.isoformat())
+            our_event_ids = {
+                row['google_event_id']
+                for row in db.execute(
+                    'SELECT google_event_id FROM appointments WHERE google_event_id IS NOT NULL'
+                ).fetchall()
+            }
+            our_event_ids.update(
+                row['google_event_id']
+                for row in db.execute(
+                    'SELECT google_event_id FROM group_sessions WHERE google_event_id IS NOT NULL'
+                ).fetchall()
+            )
+            for evt in all_gcal:
+                if evt['google_event_id'] and evt['google_event_id'] not in our_event_ids:
+                    external_events.append(evt)
+        except Exception:
+            pass
+
     return {
         'week_start': week_start.isoformat(),
         'week_end': week_end.isoformat(),
         'events': events,
+        'external_events': external_events,
         'weekend_specials': weekend_specials,
         'available_slots': available_slots,
         'follow_up_alerts': follow_up_alerts
@@ -8312,6 +8359,33 @@ def link_gdoc(patient_id):
     return jsonify({
         'status':  'ok',
         'doc_id':  doc_id,
+        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+    })
+
+
+@app.route('/patient/<int:patient_id>/attach-gdoc', methods=['POST'])
+@login_required
+def attach_gdoc(patient_id):
+    """Link an existing Google Doc to a patient by URL or document ID."""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    doc_url = request.form.get('doc_url', '').strip()
+    if not doc_url:
+        return jsonify({'error': 'No document URL provided'}), 400
+    import re as _re
+    m = _re.search(r'/document/d/([a-zA-Z0-9_-]+)', doc_url)
+    doc_id = m.group(1) if m else doc_url.strip()
+    if not doc_id:
+        return jsonify({'error': 'Invalid document URL or ID'}), 400
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return jsonify({'error': 'Patient not found'}), 404
+    db.execute('UPDATE patients SET gdoc_id = ? WHERE id = ?', (doc_id, patient_id))
+    db.commit()
+    return jsonify({
+        'status': 'ok',
+        'doc_id': doc_id,
         'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
     })
 

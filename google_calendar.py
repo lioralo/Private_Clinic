@@ -236,6 +236,46 @@ def list_calendars(db: sqlite3.Connection) -> list:
         return []
 
 
+def list_events_for_week(db: sqlite3.Connection, week_start_iso: str, week_end_iso: str) -> list:
+    """Return Google Calendar events for the given week as a list of dicts.
+
+    Each dict has: google_event_id, title, start (ISO datetime), end (ISO datetime), description.
+    Returns [] if not connected or on any error.
+    """
+    if not GOOGLE_LIBS_AVAILABLE:
+        return []
+    creds = load_credentials(db)
+    if not creds:
+        return []
+    try:
+        creds = _refresh_and_save(db, creds)
+        service = _build_service(creds)
+        calendar_id = get_calendar_id(db)
+        result = service.events().list(
+            calendarId=calendar_id,
+            timeMin=f'{week_start_iso}T00:00:00Z',
+            timeMax=f'{week_end_iso}T23:59:59Z',
+            singleEvents=True,
+            orderBy='startTime',
+            maxResults=200,
+        ).execute()
+        events = []
+        for item in result.get('items', []):
+            start = item.get('start', {})
+            end = item.get('end', {})
+            events.append({
+                'google_event_id': item.get('id', ''),
+                'title': item.get('summary', ''),
+                'start': start.get('dateTime') or start.get('date', ''),
+                'end': end.get('dateTime') or end.get('date', ''),
+                'description': item.get('description', ''),
+            })
+        return events
+    except Exception as exc:
+        print(f'[Google Calendar] list_events_for_week failed: {exc}')
+        return []
+
+
 def sync_appointment_to_google(
     db: sqlite3.Connection,
     appointment_id: int,

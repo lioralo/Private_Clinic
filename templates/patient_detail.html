@@ -1029,12 +1029,21 @@
                             <button class="btn btn-sm btn-outline-primary" id="gdocSyncBtn" onclick="syncFromGdoc({{ patient.id }})">Sync Now</button>
                         </div>
                         {% else %}
-                        <div class="alert alert-light border d-flex align-items-center gap-3 py-2 mb-4" role="alert">
-                            <i class="bi bi-file-earmark-text fs-5 text-muted"></i>
-                            <span class="text-muted small">No Google Doc linked yet.</span>
-                            <button class="btn btn-sm btn-outline-secondary" id="gdocLinkBtn" onclick="linkGdoc({{ patient.id }})">
-                                <i class="bi bi-plus-circle me-1"></i>Create &amp; Link Google Doc
-                            </button>
+                        <div class="alert alert-light border py-2 mb-4" role="alert">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <i class="bi bi-file-earmark-text fs-5 text-muted"></i>
+                                <span class="text-muted small">No Google Doc linked yet.</span>
+                                <button class="btn btn-sm btn-outline-secondary" id="gdocLinkBtn" onclick="linkGdoc({{ patient.id }})">
+                                    <i class="bi bi-plus-circle me-1"></i>Create &amp; Link Google Doc
+                                </button>
+                                <div class="d-flex align-items-center gap-2 ms-auto">
+                                    <input type="text" id="gdocAttachUrl" class="form-control form-control-sm"
+                                        placeholder="Paste existing Google Doc URL (e.g. סיכומי פגישות {{ patient.name }})" style="min-width:260px;">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})">
+                                        <i class="bi bi-link-45deg me-1"></i>Attach
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                         {% endif %}
 
@@ -1777,6 +1786,24 @@ function linkGdoc(pid) {
         alert('Request failed.');
         if (btn) { btn.disabled = false; btn.textContent = 'Create & Link Google Doc'; }
     });
+}
+
+function attachGdoc(pid) {
+    const urlInput = document.getElementById('gdocAttachUrl');
+    const docUrl = urlInput ? urlInput.value.trim() : '';
+    if (!docUrl) { alert('Please paste a Google Doc URL first.'); return; }
+    const csrf = '{{ csrf_token() }}';
+    fetch(`/patient/${pid}/attach-gdoc`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({ doc_url: docUrl })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status === 'ok') { location.reload(); }
+        else { alert('Error: ' + (d.error || 'Could not attach document.')); }
+    })
+    .catch(() => alert('Request failed.'));
 }
 
 function syncFromGdoc(pid) {

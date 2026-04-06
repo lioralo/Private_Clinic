@@ -260,12 +260,20 @@ input.form-control[type="password"] {
     text-align: right;
 }
 
-[dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+[dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="number"]),
 [dir="rtl"] textarea,
 [dir="rtl"] select,
 [dir="rtl"] .form-select {
     text-align: right;
     direction: rtl;
+}
+
+/* date/time/number: right-align text but do NOT reverse direction (breaks pickers) */
+[dir="rtl"] input[type="date"],
+[dir="rtl"] input[type="time"],
+[dir="rtl"] input[type="datetime-local"],
+[dir="rtl"] input[type="number"] {
+    text-align: right;
 }
 
 .treatment-log-form textarea[name="content"] {

@@ -247,6 +247,12 @@
                 <input type="hidden" name="meeting_platform" id="meetingPlatformHidden">
                 <div class="full-span d-flex justify-content-end">
                     {% if current_user.role == 'admin' %}
+                    <div class="form-check me-auto mt-1" id="gcalSyncWrap">
+                        <input class="form-check-input" type="checkbox" id="saveToGoogleCheck" checked>
+                        <label class="form-check-label small" for="saveToGoogleCheck">
+                            <i class="bi bi-google me-1"></i>{{ t('Add to Google Calendar') }}
+                        </label>
+                    </div>
                     <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-4 me-2" id="createVacancyBtn">{{ t('Create Vacancy') }}</button>
                     {% endif %}
                     <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4" id="bookSlotSubmitBtn">{{ t('Book Selected Slot') }}</button>
@@ -819,7 +825,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 meeting_type: selectedType,
                 meeting_link: document.getElementById('editMeetingLink').value || '',
                 meeting_title: document.getElementById('editMeetingTitle').value || '',
-                save_to_google: '0',
+                save_to_google: (document.getElementById('saveToGoogleCheck') && document.getElementById('saveToGoogleCheck').checked) ? '1' : '0',
                 meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : ''),
                 scope: scope,
                 occurrence_date: occurrenceDate
@@ -1996,6 +2002,20 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 calendar.removeAllEvents();
                 (data.events || []).forEach(evt => calendar.addEvent(evt));
+                // Show external Google Calendar events in gray (not from our system)
+                (data.external_events || []).forEach(evt => {
+                    if (!evt.start) return;
+                    calendar.addEvent({
+                        id: 'gcal_ext_' + evt.google_event_id,
+                        title: evt.title || '(Google Calendar)',
+                        start: evt.start,
+                        end: evt.end || evt.start,
+                        color: '#d1d5db',
+                        textColor: '#374151',
+                        editable: false,
+                        extendedProps: { meta: { type: 'external_google' } }
+                    });
+                });
                 applyCalendarFilter();
                 renderWeekendList(fridaySpecials, data.weekend_specials ? data.weekend_specials.friday : []);
                 renderWeekendList(saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
