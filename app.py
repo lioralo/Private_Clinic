@@ -8390,6 +8390,24 @@ def attach_gdoc(patient_id):
     })
 
 
+@app.route('/patient/<int:patient_id>/detach-gdoc', methods=['POST'])
+@login_required
+def detach_gdoc(patient_id):
+    """Unlink the Google Doc from a patient (does not delete the doc itself)."""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return jsonify({'error': 'Patient not found'}), 404
+    db.execute(
+        'UPDATE patients SET gdoc_id = NULL, gdoc_watch_channel = NULL, gdoc_watch_expiry = NULL WHERE id = ?',
+        (patient_id,)
+    )
+    db.commit()
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/patient/<int:patient_id>/open-gdoc')
 @login_required
 def open_gdoc(patient_id):

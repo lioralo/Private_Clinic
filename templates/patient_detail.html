@@ -1022,11 +1022,24 @@
 
                         {# ── Google Docs panel ─────────────────────────────────────── #}
                         {% if patient.gdoc_id %}
-                        <div class="alert alert-success d-flex align-items-center gap-3 py-2 mb-4" role="alert">
-                            <i class="bi bi-file-earmark-text-fill fs-5"></i>
-                            <span class="fw-semibold">Google Doc linked</span>
-                            <a href="{{ url_for('open_gdoc', patient_id=patient.id) }}" target="_blank" class="btn btn-sm btn-outline-success">Open Doc</a>
-                            <button class="btn btn-sm btn-outline-primary" id="gdocSyncBtn" onclick="syncFromGdoc({{ patient.id }})">Sync Now</button>
+                        <div class="alert alert-success py-2 mb-2" role="alert" id="gdocLinkedPanel">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <i class="bi bi-file-earmark-text-fill fs-5"></i>
+                                <span class="fw-semibold">Google Doc linked</span>
+                                <a href="{{ url_for('open_gdoc', patient_id=patient.id) }}" target="_blank" class="btn btn-sm btn-outline-success">Open Doc</a>
+                                <button class="btn btn-sm btn-outline-primary" id="gdocSyncBtn" onclick="syncFromGdoc({{ patient.id }})">Sync Now</button>
+                                <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="showGdocChangePanel()"><i class="bi bi-arrow-repeat me-1"></i>Change Doc</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="detachGdoc({{ patient.id }})" title="Unlink this Google Doc (doc is not deleted)"><i class="bi bi-scissors me-1"></i>Disconnect</button>
+                            </div>
+                        </div>
+                        <div class="alert alert-light border py-2 mb-4 d-none" id="gdocChangePanel" role="alert">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <i class="bi bi-link-45deg text-muted"></i>
+                                <span class="text-muted small">Attach a different doc:</span>
+                                <input type="text" id="gdocAttachUrl" class="form-control form-control-sm" placeholder="Paste Google Doc URL" style="min-width:260px;">
+                                <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})"><i class="bi bi-link-45deg me-1"></i>Attach</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="hideGdocChangePanel()">Cancel</button>
+                            </div>
                         </div>
                         {% else %}
                         <div class="alert alert-light border py-2 mb-4" role="alert">
@@ -1036,12 +1049,10 @@
                                 <button class="btn btn-sm btn-outline-secondary" id="gdocLinkBtn" onclick="linkGdoc({{ patient.id }})">
                                     <i class="bi bi-plus-circle me-1"></i>Create &amp; Link Google Doc
                                 </button>
-                                <div class="d-flex align-items-center gap-2 ms-auto">
+                                <div class="d-flex align-items-center gap-2 ms-auto flex-wrap">
                                     <input type="text" id="gdocAttachUrl" class="form-control form-control-sm"
-                                        placeholder="Paste existing Google Doc URL (e.g. סיכומי פגישות {{ patient.name }})" style="min-width:260px;">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})">
-                                        <i class="bi bi-link-45deg me-1"></i>Attach
-                                    </button>
+                                        placeholder="Paste existing Google Doc URL" style="min-width:260px;">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})"><i class="bi bi-link-45deg me-1"></i>Attach</button>
                                 </div>
                             </div>
                         </div>
@@ -1804,6 +1815,30 @@ function attachGdoc(pid) {
         else { alert('Error: ' + (d.error || 'Could not attach document.')); }
     })
     .catch(() => alert('Request failed.'));
+}
+
+function detachGdoc(pid) {
+    if (!confirm('Disconnect this Google Doc? The document itself will not be deleted.')) return;
+    fetch(`/patient/${pid}/detach-gdoc`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token() }}'}
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status === 'ok') { location.reload(); }
+        else { alert('Error: ' + (d.error || 'Could not disconnect document.')); }
+    })
+    .catch(() => alert('Request failed.'));
+}
+
+function showGdocChangePanel() {
+    const p = document.getElementById('gdocChangePanel');
+    if (p) p.classList.remove('d-none');
+}
+
+function hideGdocChangePanel() {
+    const p = document.getElementById('gdocChangePanel');
+    if (p) p.classList.add('d-none');
 }
 
 function syncFromGdoc(pid) {
