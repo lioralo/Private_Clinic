@@ -12,9 +12,15 @@ Parser format (English):
     SESSION #1 | 2026-04-01 [note:new]
     Free text content…
 
-Parser format (Hebrew):
+Parser format (Hebrew, pipe style):
     פגישה #1 | 2026-04-01 [note:new]
     תוכן חופשי…
+
+Parser format (Hebrew, dash style – real-world):
+    פגישה 1- 05/08/25
+    פגישה 1- 05/08/2025
+    פגישה #1- 05/08/25
+    (# is optional, date is DD/MM/YY or DD/MM/YYYY, separator is a dash)
 
 Identity tags:
     [note:new]    – not yet saved; will be inserted and stamped with [note:id=N]
@@ -39,16 +45,44 @@ except ImportError:
 
 # ---------------------------------------------------------------------------
 # Bilingual session-header regex
-# Matches:  SESSION #3 | 2026-04-01 [note:new]
-#           פגישה #3 | 2026-04-01 [note:id=7]
+#
+# Matches all known formats:
+#   SESSION #3 | 2026-04-01 [note:new]       (English, ISO date, pipe)
+#   פגישה #3 | 2026-04-01 [note:id=7]        (Hebrew, ISO date, pipe)
+#   פגישה 1- 05/08/25                         (Hebrew, DD/MM/YY, dash)
+#   פגישה 1- 05/08/2025                        (Hebrew, DD/MM/YYYY, dash)
+#   פגישה #1- 05/06/25                         (Hebrew, optional #, dash)
 # ---------------------------------------------------------------------------
 _SESSION_RE = re.compile(
-    r'^(?:SESSION|פגישה)\s*#(\d+)\s*\|\s*(\d{4}-\d{2}-\d{2})'
-    r'(?:\s*(\[note:[^\]]+\]))?',
+    r'^(?:SESSION|פגישה)\s*#?(\d+)\s*'   # keyword + optional # + session number
+    r'(?:'
+        r'\|\s*(\d{4}-\d{2}-\d{2})'       # pipe + ISO date (YYYY-MM-DD)
+        r'|'
+        r'-\s*(\d{1,2}/\d{1,2}/\d{2,4})' # dash  + date   (DD/MM/YY or DD/MM/YYYY)
+    r')'
+    r'(?:\s*(\[note:[^\]]+\]))?',          # optional [note:…] tag
     re.MULTILINE | re.IGNORECASE,
 )
 
 _NOTE_ID_RE = re.compile(r'\[note:id=(\d+)\]')
+
+
+def _parse_date(iso_group, slash_group):
+    """Return a YYYY-MM-DD string from whichever capture group matched."""
+    if iso_group:
+        return iso_group  # already ISO
+    # slash_group: DD/MM/YY or DD/MM/YYYY
+    parts = slash_group.split('/')
+    if len(parts) != 3:
+        return None
+    day, month, year = parts
+    if len(year) == 2:
+        year = '20' + year  # 25 → 2025
+    try:
+        dt = datetime(int(year), int(month), int(day))
+        return dt.strftime('%Y-%m-%d')
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +101,9 @@ def parse_doc_into_notes(text):
     matches = list(_SESSION_RE.finditer(text))
     for i, m in enumerate(matches):
         session_num = int(m.group(1))
-        note_date   = m.group(2)
-        raw_tag     = (m.group(3) or '').strip()
+        # group(2) = ISO date from pipe-style; group(3) = DD/MM/YY from dash-style
+        note_date   = _parse_date(m.group(2), m.group(3))
+        raw_tag     = (m.group(4) or '').strip()
 
         block_start = m.end()
         block_end   = matches[i + 1].start() if i + 1 < len(matches) else len(text)
