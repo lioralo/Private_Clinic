@@ -1544,7 +1544,7 @@ def index():
             return redirect(url_for('admin_dashboard'))
         elif current_user.role == 'patient':
             return redirect(url_for('patient_home'))
-    return redirect(url_for('login'))
+    return render_template('landing.html')
 
 
 HEBREW_NUMBER_WORDS = {
