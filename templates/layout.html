@@ -12,72 +12,82 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
+        .bg-primary { background-color: #4f46e5 !important; }
+        .text-primary { color: #4f46e5 !important; }
+        .btn-primary { background-color: #4f46e5; border-color: #4f46e5; }
+        .btn-outline-primary { color: #4f46e5; border-color: #4f46e5; }
+        .btn-outline-primary:hover { background-color: #4f46e5; color: white; }
+        .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important; }
+        .rounded-4 { border-radius: 1rem !important; }
+        .smallest { font-size: 0.75rem; }
+    </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top shadow-sm">
         <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-                <i class="bi bi-heart-pulse-fill me-2"></i> CLINIC CRM
+            <a class="navbar-brand fw-bold d-flex align-items-center" href="{{ url_for('index') }}">
+                <i class="bi bi-heart-pulse-fill me-2 text-white-50"></i> CLINIC CRM
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    {% if current_user.is_authenticated and current_user.role == 'admin' %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='ongoing') }}">Ongoing</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='candidate') }}">Candidates</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
-                        </li>
-                        <li class="nav-item ms-lg-2">
-                            <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
-                                <i class="bi bi-person-plus-fill me-1"></i> Add Patient
-                            </a>
-                        </li>
+                {% if current_user.is_authenticated %}
+                    {% if current_user.role == 'admin' %}
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='ongoing') }}">Ongoing</a></li>
+                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='candidate') }}">Candidates</a></li>
+                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='archived') }}">Archived</a></li>
+                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('agenda') }}"><i class="bi bi-calendar-week me-1"></i> Agenda</a></li>
+                    </ul>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{{ url_for('add_patient') }}" class="btn btn-light btn-sm fw-bold text-primary rounded-pill px-3">
+                            <i class="bi bi-person-plus-fill me-1"></i> New Patient
+                        </a>
                     {% endif %}
-                </ul>
-                <ul class="navbar-nav ms-auto align-items-center">
-                    {% if current_user.is_authenticated %}
-                        <li class="nav-item me-3">
-                            <span class="nav-link text-white-50 small">
-                                <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
-                            </span>
-                        </li>
-                        <li class="nav-item">
-                            <a class="btn btn-outline-light btn-sm rounded-pill px-3" href="{{ url_for('logout') }}">
-                                <i class="bi bi-box-arrow-right me-1"></i> Logout
-                            </a>
-                        </li>
-                    {% else %}
-                        <li class="nav-item">
-                            <a class="btn btn-outline-light btn-sm rounded-pill px-4" href="{{ url_for('login') }}">Login</a>
-                        </li>
+
+                    {% if current_user.role == 'patient' %}
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link fw-medium active" href="{{ url_for('dashboard') }}">My Dashboard</a></li>
+                    </ul>
+                    <div class="d-flex align-items-center gap-2">
                     {% endif %}
-                </ul>
+
+                        <div class="dropdown">
+                            <button class="btn btn-primary dropdown-toggle border-0 py-1 d-flex align-items-center text-white-50" type="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-person-circle fs-5 me-2 text-white"></i>
+                                <span class="small fw-bold text-white">{{ current_user.username }}</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg rounded-3 mt-2">
+                                <li><a class="dropdown-item py-2 small fw-medium" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right me-2 opacity-50"></i>Log Out</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </nav>
 
     <main class="container mb-5">
-        {% for message in get_flashed_messages() %}
-            <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm" role="alert">
-                <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        {% endfor %}
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm rounded-3 mb-4" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
+                        <button type="button" class="btn-close small" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="py-4 mt-auto">
+    <footer class="py-4 mt-auto border-top bg-white">
         <div class="container text-center">
-             <span class="text-muted small">© 2026 Private Psychotherapy Clinic. Modern CRM Solution.</span>
+             <span class="text-muted small">© 2026 Private Psychotherapy Clinic. Secure Patient Management.</span>
         </div>
     </footer>
 

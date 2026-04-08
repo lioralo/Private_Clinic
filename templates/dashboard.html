@@ -3,32 +3,26 @@
 {% block content %}
 <div class="row">
     <div class="col-lg-8">
-        <!-- Balance / Debt Card -->
+        <!-- Balance / Debt Card (Reduced Prominence) -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold text-primary">Financial Summary</h5>
-                <i class="bi bi-wallet2 text-primary fs-5"></i>
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2 text-primary"></i>Financial Overview</h5>
             </div>
-            <div class="card-body p-4 text-center border-top">
-                {% if balance > 0 %}
-                    <div class="p-4 bg-danger bg-opacity-10 rounded-4 border border-danger border-opacity-10 mb-2">
-                        <small class="text-danger fw-bold text-uppercase tracking-wider smallest d-block mb-1">Total Outstanding</small>
-                        <h2 class="display-5 text-danger fw-bold mb-0">${{ "%.2f"|format(balance) }}</h2>
+            <div class="card-body p-4 border-top">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="mb-0 text-muted small">Current outstanding balance</p>
                     </div>
-                    <p class="text-muted small">Outstanding balance for therapeutic services.</p>
-                {% elif balance < 0 %}
-                    <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Credit Balance</small>
-                        <h2 class="display-5 text-success fw-bold mb-0">-${{ "%.2f"|format(balance|abs) }}</h2>
+                    <div>
+                         {% if balance > 0 %}
+                            <span class="fs-4 text-danger fw-bold">${{ "%.2f"|format(balance) }}</span>
+                         {% elif balance < 0 %}
+                            <span class="fs-4 text-success fw-bold">-${{ "%.2f"|format(balance|abs) }}</span>
+                         {% else %}
+                            <span class="fs-4 text-success fw-bold">$0.00</span>
+                         {% endif %}
                     </div>
-                    <p class="text-muted small">You have credit in your account.</p>
-                {% else %}
-                    <div class="p-4 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-10 mb-2">
-                        <small class="text-success fw-bold text-uppercase tracking-wider smallest d-block mb-1">Account Balance</small>
-                        <h2 class="display-5 text-success fw-bold mb-0">$0.00</h2>
-                    </div>
-                    <p class="text-muted small">Your account is fully settled!</p>
-                {% endif %}
+                </div>
             </div>
         </div>
 
@@ -61,7 +55,7 @@
             </div>
         </div>
 
-        <!-- Financial Documents Section -->
+        <!-- Financial Documents & Files -->
         <div class="row g-4 mb-4">
             <div class="col-md-6">
                 <div class="card h-100 border-0 shadow-sm rounded-4">
@@ -114,38 +108,55 @@
     </div>
 
     <div class="col-lg-4">
-        <!-- Contact Therapist Card -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-primary text-white sticky-lg-top" style="top: 100px;">
-            <div class="card-body p-4 p-lg-5">
-                <div class="text-center mb-4">
-                    <div class="bg-white bg-opacity-20 d-inline-block p-3 rounded-circle mb-3">
-                        <i class="bi bi-envelope-fill text-white fs-3"></i>
-                    </div>
-                    <h5 class="fw-bold mb-1">Contact Therapist</h5>
-                    <p class="small text-white-50">Send a direct message to your clinical provider.</p>
+        <!-- Messaging / Chat Interface -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 600px;">
+            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Messages</h5>
+            </div>
+            <div class="card-body p-0 d-flex flex-column bg-light">
+                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
+                    {% for msg in messages %}
+                        <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%;">
+                             <div class="d-flex justify-content-between align-items-start mb-1">
+                                <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
+                                    {% if msg.sender_id == current_user.id %}You{% else %}Therapist{% endif %}
+                                </strong>
+                                <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
+                            </div>
+                            <div class="message-content text-dark small" style="white-space: pre-wrap;">{{ msg.content }}</div>
+                        </div>
+                    {% else %}
+                         <div class="text-center py-5 mt-5">
+                            <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
+                            <p class="text-muted small">No messages yet. Start a conversation.</p>
+                        </div>
+                    {% endfor %}
                 </div>
                 
-                <form method="post" action="{{ url_for('contact_admin') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-4">
-                        <textarea name="content" class="form-control border-0 bg-white bg-opacity-10 text-white placeholder-light py-3 rounded-3" rows="6" placeholder="Type your message here..." required></textarea>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-light py-2 fw-bold rounded-3 text-primary">
-                            Send Securely <i class="bi bi-send-fill ms-2"></i>
-                        </button>
-                    </div>
-                </form>
-                <div class="text-center mt-4 pt-2">
-                    <p class="smallest text-white-50 mb-0">Responses are typically received within 24-48 business hours.</p>
+                <div class="p-3 bg-white border-top">
+                    <form method="post" action="{{ url_for('contact_admin') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Type your message..." required style="resize: none;"></textarea>
+                            <button type="submit" class="btn btn-primary fw-bold px-3">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<script>
+    // Auto-scroll to bottom of chat
+    var chatHistory = document.getElementById('chatHistory');
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+</script>
+
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
-.placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
+.smallest { font-size: 0.7rem; }
 </style>
 {% endblock %}

@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+import datetime
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -117,7 +118,17 @@ def patients():
 
     status = request.args.get('status', 'ongoing')
     db = get_db()
-    patients = db.execute('SELECT * FROM patients WHERE status = ?', (status,)).fetchall()
+
+    # Modified query to include unread message count
+    patients = db.execute('''
+        SELECT p.*,
+        (SELECT COUNT(*) FROM messages m
+         JOIN users u ON m.sender_id = u.id
+         WHERE u.patient_id = p.id AND m.is_read = 0 AND m.recipient_id = ?) as unread_count
+        FROM patients p
+        WHERE p.status = ?
+    ''', (current_user.id, status)).fetchall()
+
     return render_template('index.html', patients=patients, status=status)
 
 @app.route('/add_patient', methods=('GET', 'POST'))
@@ -148,8 +159,6 @@ def add_patient():
 @login_required
 def patient_detail(patient_id):
     if current_user.role != 'admin':
-         # Patients can only see their own profile? No, this view is the Admin view of the patient.
-         # The patient dashboard is separate.
          flash('Access denied.')
          return redirect(url_for('dashboard'))
 
@@ -165,8 +174,64 @@ def patient_detail(patient_id):
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    schedules = db.execute('SELECT * FROM schedules WHERE patient_id = ? ORDER BY day_of_week, appointment_time', (patient_id,)).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments)
+    # Fetch messages between admin and this patient
+    messages = []
+    if user:
+        # Mark messages from this user as read
+        db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (user['id'], current_user.id))
+        db.commit()
+
+        messages = db.execute('''
+            SELECT * FROM messages
+            WHERE (sender_id = ? AND recipient_id = ?)
+               OR (sender_id = ? AND recipient_id = ?)
+            ORDER BY timestamp ASC
+        ''', (current_user.id, user['id'], user['id'], current_user.id)).fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, schedules=schedules, messages=messages)
+
+@app.route('/patient/<int:patient_id>/send_message', methods=('POST',))
+@login_required
+def send_message(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    content = request.form['content']
+    if content:
+        db = get_db()
+        user = db.execute('SELECT id FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+
+        if user:
+            db.execute('INSERT INTO messages (sender_id, recipient_id, content, is_read) VALUES (?, ?, ?, 0)',
+                       (current_user.id, user['id'], content))
+            db.commit()
+        else:
+            flash('Patient does not have an account to receive messages.')
+
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/message/<int:message_id>/edit', methods=('POST',))
+@login_required
+def edit_message(message_id):
+    content = request.form['content']
+    db = get_db()
+    msg = db.execute('SELECT sender_id, recipient_id FROM messages WHERE id = ?', (message_id,)).fetchone()
+
+    if msg and msg['sender_id'] == current_user.id:
+        db.execute('UPDATE messages SET content = ? WHERE id = ?', (content, message_id))
+        db.commit()
+
+        # Redirect based on role
+        if current_user.role == 'admin':
+            # Need to find patient_id from recipient_id (user -> patient)
+            patient_user = db.execute('SELECT patient_id FROM users WHERE id = ?', (msg['recipient_id'],)).fetchone()
+            return redirect(url_for('patient_detail', patient_id=patient_user['patient_id']))
+        else:
+            return redirect(url_for('dashboard'))
+
+    return "Unauthorized", 403
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -258,7 +323,22 @@ def dashboard():
     total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
     balance = total_cost - total_paid
 
-    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance)
+    # Messages logic
+    admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+    messages = []
+    if admin:
+        # Mark messages from admin as read
+        db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (admin['id'], current_user.id))
+        db.commit()
+
+        messages = db.execute('''
+            SELECT * FROM messages
+            WHERE (sender_id = ? AND recipient_id = ?)
+               OR (sender_id = ? AND recipient_id = ?)
+            ORDER BY timestamp ASC
+        ''', (current_user.id, admin['id'], admin['id'], current_user.id)).fetchall()
+
+    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages)
 
 @app.route('/contact_admin', methods=('POST',))
 @login_required
@@ -269,19 +349,13 @@ def contact_admin():
     content = request.form['content']
     if content:
         db = get_db()
-        # For now, we'll store messages in a 'messages' table or just notes if simpler?
-        # The schema has a 'messages' table.
-        # sender_id is current_user.id. Recipient? Let's say Admin (which we don't have a specific ID for easily, unless we look it up).
-        # Or we can just use NULL for recipient to mean "System/Admin".
-
-        # Check if admin user exists to get ID?
         admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
         recipient_id = admin['id'] if admin else None
 
         db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
                    (current_user.id, recipient_id, content))
         db.commit()
-        flash('Message sent to your therapist.')
+        # flash('Message sent to your therapist.') # Removed to behave more like chat
 
     return redirect(url_for('dashboard'))
 
@@ -404,6 +478,117 @@ def delete_appointment(appointment_id):
         return redirect(url_for('patient_detail', patient_id=appt['patient_id']))
 
     return "Appointment not found", 404
+
+@app.route('/agenda')
+@login_required
+def agenda():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    week_offset = request.args.get('week_offset', 0, type=int)
+
+    today = datetime.date.today()
+    start_of_week = today - datetime.timedelta(days=today.weekday()) + datetime.timedelta(weeks=week_offset)
+    end_of_week = start_of_week + datetime.timedelta(days=6)
+
+    db = get_db()
+
+    # Fetch one-time appointments for the week
+    appointments = db.execute('''
+        SELECT a.*, p.name as patient_name
+        FROM appointments a
+        JOIN patients p ON a.patient_id = p.id
+        WHERE a.appointment_date BETWEEN ? AND ?
+    ''', (start_of_week, end_of_week)).fetchall()
+
+    # Fetch recurring schedules
+    # We need to map day_of_week (0-6) to the actual dates in the current week view
+    schedules = db.execute('''
+        SELECT s.*, p.name as patient_name
+        FROM schedules s
+        JOIN patients p ON s.patient_id = p.id
+        WHERE p.status = 'ongoing'
+    ''').fetchall()
+
+    # Construct the calendar data
+    days = []
+    for i in range(7):
+        current_date = start_of_week + datetime.timedelta(days=i)
+        day_name = current_date.strftime("%A")
+        date_str = current_date.strftime("%b %d")
+
+        day_appointments = []
+
+        # Add one-time appointments
+        for appt in appointments:
+            appt_date = datetime.datetime.strptime(appt['appointment_date'], '%Y-%m-%d').date()
+            if appt_date == current_date:
+                # Parse time to get hour for positioning (simplified)
+                hour = int(appt['appointment_time'].split(':')[0])
+                day_appointments.append({
+                    'time': appt['appointment_time'],
+                    'patient_name': appt['patient_name'],
+                    'type': 'one-time',
+                    'hour': hour
+                })
+
+        # Add recurring schedules
+        # Note: In Python weekday() Monday is 0. DB should match this.
+        for sch in schedules:
+            if sch['day_of_week'] == i:
+                hour = int(sch['appointment_time'].split(':')[0])
+                day_appointments.append({
+                    'time': sch['appointment_time'],
+                    'patient_name': sch['patient_name'],
+                    'type': 'recurring',
+                    'hour': hour
+                })
+
+        days.append({
+            'name': day_name,
+            'date': date_str,
+            'appointments': day_appointments
+        })
+
+    return render_template('agenda.html',
+                           days=days,
+                           week_start=start_of_week.strftime("%b %d"),
+                           week_end=end_of_week.strftime("%b %d"),
+                           week_offset=week_offset)
+
+@app.route('/patient/<int:patient_id>/add_schedule', methods=('POST',))
+@login_required
+def add_schedule(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    day = request.form['day']
+    time = request.form['time']
+
+    if day and time:
+        db = get_db()
+        db.execute('INSERT INTO schedules (patient_id, day_of_week, appointment_time) VALUES (?, ?, ?)',
+                   (patient_id, day, time))
+        db.commit()
+        flash('Recurring schedule added.')
+
+    return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/schedule/<int:schedule_id>/delete', methods=('POST',))
+@login_required
+def delete_schedule(schedule_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    sch = db.execute('SELECT patient_id FROM schedules WHERE id = ?', (schedule_id,)).fetchone()
+    if sch:
+        db.execute('DELETE FROM schedules WHERE id = ?', (schedule_id,))
+        db.commit()
+        flash('Recurring schedule removed.')
+        return redirect(url_for('patient_detail', patient_id=sch['patient_id']))
+
+    return "Schedule not found", 404
 
 if __name__ == '__main__':
     init_db()

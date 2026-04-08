@@ -42,44 +42,105 @@
                 <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
             </div>
             <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-md-4">
-                        <label class="form-label smallest text-uppercase fw-bold">Date</label>
-                        <input type="date" name="date" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label smallest text-uppercase fw-bold">Time</label>
-                        <input type="time" name="time" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
-                        <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label d-none d-md-block">&nbsp;</label>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
-                    </div>
-                </form>
-
-                <div class="appointments-list">
-                    {% for appt in appointments %}
-                        <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
-                            <div>
-                                <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
-                                <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
-                                <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
+                <ul class="nav nav-tabs mb-3" id="apptTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active small fw-bold" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button" role="tab">One-Time</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link small fw-bold" id="recurring-tab" data-bs-toggle="tab" data-bs-target="#recurring" type="button" role="tab">Recurring Schedule</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="apptTabContent">
+                    <div class="tab-pane fade show active" id="single" role="tabpanel">
+                        <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="col-md-4">
+                                <label class="form-label smallest text-uppercase fw-bold">Date</label>
+                                <input type="date" name="date" class="form-control" required>
                             </div>
-                            <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
-                            </form>
+                            <div class="col-md-3">
+                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
+                                <input type="time" name="time" class="form-control" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
+                                <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
+                            </div>
+                        </form>
+
+                        <div class="appointments-list">
+                            {% for appt in appointments %}
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
+                                    <div>
+                                        <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
+                                        <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
+                                        <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
+                                    </div>
+                                    <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
+                                    </form>
+                                </div>
+                            {% else %}
+                                <div class="text-center py-4 bg-light rounded-3">
+                                    <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
+                                </div>
+                            {% endfor %}
                         </div>
-                    {% else %}
-                        <div class="text-center py-4 bg-light rounded-3">
-                            <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
+                    </div>
+
+                    <div class="tab-pane fade" id="recurring" role="tabpanel">
+                         <form method="post" action="{{ url_for('add_schedule', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="col-md-6">
+                                <label class="form-label smallest text-uppercase fw-bold">Day of Week</label>
+                                <select name="day" class="form-select" required>
+                                    <option value="0">Monday</option>
+                                    <option value="1">Tuesday</option>
+                                    <option value="2">Wednesday</option>
+                                    <option value="3">Thursday</option>
+                                    <option value="4">Friday</option>
+                                    <option value="5">Saturday</option>
+                                    <option value="6">Sunday</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
+                                <input type="time" name="time" class="form-control" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-success w-100 fw-bold">Set</button>
+                            </div>
+                        </form>
+
+                        <div class="schedules-list">
+                            {% for sch in schedules %}
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
+                                    <div>
+                                        <span class="fw-bold text-dark">
+                                            {% set days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                                            {{ days[sch['day_of_week']] }}s
+                                        </span>
+                                        <span class="text-muted ms-2 small">@ {{ sch['appointment_time'] }}</span>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 rounded-pill small fw-normal">Weekly</span>
+                                    </div>
+                                    <form method="post" action="{{ url_for('delete_schedule', schedule_id=sch['id']) }}" onsubmit="return confirm('Remove recurring schedule?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
+                                    </form>
+                                </div>
+                            {% else %}
+                                <div class="text-center py-4 bg-light rounded-3">
+                                    <p class="text-muted mb-0 small"><i class="bi bi-arrow-repeat me-1"></i>No recurring schedule set.</p>
+                                </div>
+                            {% endfor %}
                         </div>
-                    {% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -116,6 +177,72 @@
     </div>
 
     <div class="col-lg-5">
+        <!-- Messaging / Chat Interface for Admin -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 500px;">
+            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chat</h5>
+            </div>
+            <div class="card-body p-0 d-flex flex-column bg-light">
+                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
+                    {% if user %}
+                        {% for msg in messages %}
+                            <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%; position: relative;">
+                                 <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
+                                        {% if msg.sender_id == current_user.id %}You (Admin){% else %}Patient{% endif %}
+                                    </strong>
+                                    <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
+                                </div>
+
+                                <div class="message-content text-dark small" id="msg-content-{{ msg.id }}" style="white-space: pre-wrap;">{{ msg.content }}</div>
+
+                                {% if msg.sender_id == current_user.id %}
+                                    <div class="text-end mt-1">
+                                        <button class="btn btn-link p-0 text-muted smallest text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#edit-msg-{{ msg.id }}">
+                                            Edit
+                                        </button>
+                                    </div>
+                                    <div class="collapse mt-2" id="edit-msg-{{ msg.id }}">
+                                        <form method="post" action="{{ url_for('edit_message', message_id=msg.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <textarea name="content" class="form-control form-control-sm mb-2" rows="2">{{ msg.content }}</textarea>
+                                            <button type="submit" class="btn btn-primary btn-sm w-100">Update</button>
+                                        </form>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                             <div class="text-center py-5 mt-5">
+                                <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
+                                <p class="text-muted small">No conversation history.</p>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted small p-4 text-center">
+                            <div>
+                                <i class="bi bi-person-slash fs-1 opacity-25 d-block mb-3"></i>
+                                Patient has no active account.<br>Enable access to start chatting.
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if user %}
+                <div class="p-3 bg-white border-top">
+                    <form method="post" action="{{ url_for('send_message', patient_id=patient['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Message patient..." required style="resize: none;"></textarea>
+                            <button type="submit" class="btn btn-primary fw-bold px-3">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Access Management Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden">
             <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
@@ -224,6 +351,14 @@
         </div>
     </div>
 </div>
+
+<script>
+    // Auto-scroll to bottom of chat
+    var chatHistory = document.getElementById('chatHistory');
+    if(chatHistory) {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+</script>
 
 <style>
 .note-item { transition: transform 0.2s; }
