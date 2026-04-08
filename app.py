@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import pyotp
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -54,15 +55,40 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
+        # Migrate existing users table to add otp_secret if it doesn't exist
+        try:
+            db.execute("ALTER TABLE users ADD COLUMN otp_secret TEXT")
+            db.commit()
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
         # Check if admin exists
         admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
         if not admin:
             print("Creating default admin user...")
             hashed_pw = generate_password_hash('admin')
-            db.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                       ('admin', hashed_pw, 'admin'))
+            # Generate a 16-character base32 secret for TOTP
+            otp_secret = pyotp.random_base32()
+            db.execute("INSERT INTO users (username, password_hash, role, otp_secret) VALUES (?, ?, ?, ?)",
+                       ('admin', hashed_pw, 'admin', otp_secret))
             db.commit()
             print("Admin user created (username: admin, password: admin).")
+            print("=" * 60)
+            print(f"Admin 2FA Secret: {otp_secret}")
+            totp_uri = pyotp.totp.TOTP(otp_secret).provisioning_uri(name='admin', issuer_name='Private Clinic')
+            print(f"Admin 2FA URI (use this in an Authenticator app, or copy the secret): {totp_uri}")
+            print("=" * 60)
+        else:
+            if not admin['otp_secret']:
+                print("Generating 2FA secret for existing admin user...")
+                otp_secret = pyotp.random_base32()
+                db.execute("UPDATE users SET otp_secret = ? WHERE id = ?", (otp_secret, admin['id']))
+                db.commit()
+                print("=" * 60)
+                print(f"Admin 2FA Secret: {otp_secret}")
+                totp_uri = pyotp.totp.TOTP(otp_secret).provisioning_uri(name=admin['username'], issuer_name='Private Clinic')
+                print(f"Admin 2FA URI (use this in an Authenticator app, or copy the secret): {totp_uri}")
+                print("=" * 60)
 
         print(f"Initialized the database at {database}.")
 
@@ -84,6 +110,7 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        otp_token = request.form.get('otp_token')
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
@@ -91,6 +118,20 @@ def login():
             if not user['is_active']:
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
+
+            if user['role'] == 'admin':
+                if not otp_token:
+                    flash('2FA token is required for admin login')
+                    return render_template('login.html')
+
+                if user['otp_secret']:
+                    totp = pyotp.TOTP(user['otp_secret'])
+                    if not totp.verify(otp_token):
+                        flash('Invalid 2FA token')
+                        return render_template('login.html')
+                else:
+                    flash('Admin account is missing 2FA configuration')
+                    return render_template('login.html')
 
             user_obj = User(user['id'], user['username'], user['role'], user['patient_id'])
             login_user(user_obj)
