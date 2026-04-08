@@ -1,19 +1,30 @@
 :root {
-    --primary-color: #0f766e;
-    --primary-dark: #115e59;
-    --primary-soft: #ccfbf1;
-    --accent-color: #f59e0b;
-    --secondary-color: #64748b;
-    --background-color: #f5f7f4;
-    --surface-color: rgba(255, 255, 255, 0.88);
-    --surface-strong: #ffffff;
-    --text-color: #1f2937;
-    --muted-color: #5b6472;
-    --border-color: #d8e1df;
-    --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.08);
-    --textbox-min-height: 7.5rem;
+    /* Design system — design_code palette */
+    --primary-color:    #003633;
+    --primary-dark:     #134e4a;
+    --primary-soft:     #b5ede7;
+    --accent-color:     #f59e0b;
+    --secondary-color:  #4e6260;
+    --background-color: #f2f4f6;
+    --surface-color:    rgba(255, 255, 255, 0.92);
+    --surface-strong:   #ffffff;
+    --text-color:       #191c1e;
+    --muted-color:      #4e6260;
+    --border-color:     #bfc8c6;
+    --shadow-soft:      0 4px 24px rgba(0, 54, 51, 0.08);
+    --textbox-min-height:    7.5rem;
     --textbox-min-height-sm: 6rem;
-    --input-min-height: 2.55rem;
+    --input-min-height:      2.55rem;
+
+    /* Bootstrap variable overrides → new teal palette */
+    --bs-primary:        #003633;
+    --bs-primary-rgb:    0, 54, 51;
+    --bs-secondary:      #4e6260;
+    --bs-secondary-rgb:  78, 98, 96;
+    --bs-success:        #0f766e;
+    --bs-success-rgb:    15, 118, 110;
+    --bs-link-color:     #003633;
+    --bs-link-hover-color: #134e4a;
 }
 
 html[data-density="compact"] {
@@ -29,19 +40,13 @@ html[data-density="large"] {
 }
 
 body {
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background:
-        radial-gradient(circle at top left, rgba(20, 184, 166, 0.10), transparent 28%),
-        radial-gradient(circle at top right, rgba(245, 158, 11, 0.12), transparent 24%),
-        linear-gradient(180deg, #f9fbf9 0%, #f3f5f2 100%);
+    font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: #f2f4f6;
     color: var(--text-color);
     -webkit-font-smoothing: antialiased;
-    -webkit-font-feature-settings: "kern" 1;
     font-feature-settings: "kern" 1;
     text-rendering: optimizeLegibility;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
     line-height: 1.6;
 }
 
@@ -79,35 +84,26 @@ p {
     text-align: right;
 }
 
+/*  ── Admin sidebar shell ─────────────────────────────────── */
+/* The sidebar is handled by Tailwind. These are Bootstrap overrides
+   that keep Bootstrap components (cards, forms, tabs) on-brand. */
+
 .navbar {
-    background: linear-gradient(135deg, #0f766e 0%, #134e4a 48%, #1f2937 100%) !important;
-    padding: 1rem 0;
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-    backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    /* kept for any rare usage, but primary nav is sidebar now */
+    background: linear-gradient(135deg, #003633 0%, #134e4a 100%) !important;
+    box-shadow: 0 4px 16px rgba(0, 54, 51, 0.18);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .navbar-brand {
+    font-family: 'Manrope', sans-serif;
     font-weight: 800;
-    letter-spacing: -0.7px;
-    font-size: 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    transition: all 0.2s ease;
-}
-
-.navbar-brand:hover {
-    transform: translateY(-1px);
+    letter-spacing: -0.5px;
 }
 
 .navbar img {
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
     transition: filter 0.2s ease;
-}
-
-.navbar-brand:hover img {
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }
 
 .navbar .btn {
@@ -117,63 +113,56 @@ p {
     transition: all 0.2s ease;
 }
 
-.navbar .btn:hover {
-    transform: translateY(-1px);
-}
-
 .navbar .nav-link {
     font-weight: 600;
     color: rgba(255, 255, 255, 0.9) !important;
     transition: color 0.2s ease;
 }
 
+/* ── Cards ────────────────────────────────────────────────── */
 .card {
-    border: 1px solid rgba(216, 225, 223, 0.85);
-    border-radius: 24px;
+    border: 1px solid rgba(191, 200, 198, 0.7);
+    border-radius: 16px;
     background: var(--surface-color);
-    box-shadow: var(--shadow-soft) !important;
+    box-shadow: 0 2px 12px rgba(0, 54, 51, 0.06);
     overflow: hidden;
-    backdrop-filter: blur(16px);
     transition: all 0.3s ease;
 }
 
 .card:hover {
-    border-color: rgba(15, 118, 110, 0.2);
-    box-shadow: 0 20px 50px rgba(15, 118, 110, 0.15) !important;
+    border-color: rgba(0, 54, 51, 0.18);
+    box-shadow: 0 8px 28px rgba(0, 54, 51, 0.10) !important;
 }
 
 .card-header {
-    background-color: rgba(255, 255, 255, 0.7);
-    border-bottom: 1px solid rgba(216, 225, 223, 0.85);
-    padding: 1.5rem;
+    background-color: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid rgba(191, 200, 198, 0.7);
+    padding: 1rem 1.25rem;
     font-weight: 700;
-    font-size: 1.1rem;
-    color: #0f766e;
+    font-size: 0.95rem;
+    color: #003633;
 }
 
 h1, h2, h3, h4, h5 {
+    font-family: 'Manrope', 'Assistant', sans-serif;
     font-weight: 700;
-    color: #0f172a;
+    color: #003633;
 }
 
 .btn-primary {
-    background-color: var(--primary-color);
-    border: none;
+    background-color: #003633;
+    border-color: #003633;
     border-radius: 999px;
-    padding: 0.65rem 1.75rem;
+    padding: 0.6rem 1.5rem;
     font-weight: 700;
     transition: all 0.2s;
-    letter-spacing: 0.02em;
 }
 
 .btn-primary:hover {
-    background-color: var(--primary-dark);
-    transform: translateY(-2px);
-    box-shadow: 0 12px 28px rgba(15, 118, 110, 0.35);
-}
-
-.btn-primary:active {
-    transform: translateY(0);
+    background-color: #134e4a;
+    border-color: #134e4a;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(0, 54, 51, 0.3);
 }
 
 .btn-outline-secondary,
@@ -216,8 +205,8 @@ h1, h2, h3, h4, h5 {
 
 .form-control:focus,
 .form-select:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    border-color: #003633;
+    box-shadow: 0 0 0 3px rgba(0, 54, 51, 0.12);
     outline: none;
 }
 
@@ -286,23 +275,31 @@ input.form-control[type="password"] {
 
 .form-control:focus,
 .form-select:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    border-color: #003633;
+    box-shadow: 0 0 0 3px rgba(0, 54, 51, 0.12);
 }
 
 .app-shell {
     position: relative;
 }
 
+/* Admin layout: the main section flex fills the viewport height.
+   No top margin needed since there's no sticky navbar any more. */
+.admin-main-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .section-hero {
     position: relative;
-    padding: 1.75rem;
-    border-radius: 28px;
-    background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 248, 0.78) 100%),
-        linear-gradient(120deg, rgba(20, 184, 166, 0.12), rgba(245, 158, 11, 0.12));
-    border: 1px solid rgba(216, 225, 223, 0.95);
-    box-shadow: var(--shadow-soft);
+    padding: 1.5rem 1.75rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #ffffff 0%, #f2f4f6 100%);
+    border: 1px solid rgba(191, 200, 198, 0.7);
+    box-shadow: 0 2px 12px rgba(0, 54, 51, 0.06);
     overflow: hidden;
 }
 
@@ -322,8 +319,8 @@ input.form-control[type="password"] {
     gap: 0.45rem;
     padding: 0.4rem 0.8rem;
     border-radius: 999px;
-    background: rgba(15, 118, 110, 0.10);
-    color: var(--primary-dark);
+    background: rgba(0, 54, 51, 0.08);
+    color: #134e4a;
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -388,8 +385,8 @@ input.form-control[type="password"] {
 
 .pill-nav .nav-link.active {
     color: #fff;
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    box-shadow: 0 12px 24px rgba(15, 118, 110, 0.2);
+    background: linear-gradient(135deg, #003633, #134e4a);
+    box-shadow: 0 8px 20px rgba(0, 54, 51, 0.20);
 }
 
 .chip-row {
@@ -419,7 +416,7 @@ input.form-control[type="password"] {
 }
 
 .patient-card.patient-status-ongoing {
-    background: linear-gradient(135deg, #def7ec 0%, #c7f9e8 100%);
+    background: linear-gradient(135deg, #d1e7e4 0%, #b5ede7 100%);
 }
 
 .patient-card.patient-status-candidate {
@@ -485,13 +482,13 @@ input.form-control[type="password"] {
     padding: 0.5rem 0.7rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.5);
-    color: #334155;
+    color: #191c1e;
     font-size: 0.84rem;
     max-width: 100%;
 }
 
 .patient-info-pill i {
-    color: var(--primary-dark);
+    color: #134e4a;
 }
 
 .patient-cta {
@@ -554,10 +551,10 @@ input.form-control[type="password"] {
 
 .calendar-aux-note {
     padding: 0.9rem 1rem;
-    border-radius: 18px;
-    background: rgba(15, 118, 110, 0.08);
+    border-radius: 14px;
+    background: rgba(0, 54, 51, 0.06);
     color: #134e4a;
-    border: 1px solid rgba(15, 118, 110, 0.14);
+    border: 1px solid rgba(0, 54, 51, 0.12);
 }
 
 .slot-day-details {
@@ -591,8 +588,8 @@ input.form-control[type="password"] {
 }
 
 .crm-summary-mini.active {
-    border-color: rgba(15, 118, 110, 0.38);
-    background: rgba(204, 251, 241, 0.72);
+    border-color: rgba(0, 54, 51, 0.35);
+    background: rgba(181, 237, 231, 0.55);
 }
 
 .crm-summary-label {
@@ -697,13 +694,14 @@ input.form-control[type="password"] {
     color: #64748b;
     transition: background 0.15s, color 0.15s;
 }
+/* ── CRM View Button Active ───────────────────────────────── */
 .crm-view-btn.btn-primary {
-    background: var(--primary-color, #0f766e);
-    border-color: var(--primary-color, #0f766e);
+    background: #003633;
+    border-color: #003633;
     color: #fff;
 }
 
-/* ── Status dot ────────────────────────────────────────── */
+/* ── Status dots ────────────────────────────────────────── */
 .crm-status-dot {
     display: inline-block;
     width: 8px;
@@ -712,13 +710,13 @@ input.form-control[type="password"] {
     flex-shrink: 0;
     vertical-align: middle;
 }
-.crm-status-ongoing  { background: #22c55e; }
+.crm-status-ongoing  { background: #0f766e; }
 .crm-status-waiting  { background: #f59e0b; }
 .crm-status-archived { background: #94a3b8; }
 
 /* ── Type badges ───────────────────────────────────────── */
 .crm-type-badge { font-size: 0.7em; }
-.crm-type-private   { background: #0f766e; color: #fff; }
+.crm-type-private   { background: #003633; color: #fff; }
 .crm-type-residency { background: #92400e; color: #fff; }
 .crm-type-group     { background: #7c3aed; color: #fff; }
 .crm-type-intake    { background: #1d4ed8; color: #fff; }
@@ -726,9 +724,9 @@ input.form-control[type="password"] {
 
 /* ── Treatment method badge ────────────────────────────── */
 .crm-method-badge {
-    background: rgba(15, 118, 110, 0.12);
-    color: #0f766e;
-    border: 1px solid rgba(15, 118, 110, 0.25);
+    background: rgba(0, 54, 51, 0.10);
+    color: #003633;
+    border: 1px solid rgba(0, 54, 51, 0.20);
     font-size: 0.72em;
     font-weight: 600;
 }
@@ -920,7 +918,7 @@ input.form-control[type="password"] {
 .note-item {
     border-radius: 12px !important;
     border: 1px solid var(--border-color) !important;
-    border-inline-start: 4px solid var(--primary-color) !important;
+    border-inline-start: 4px solid #003633 !important;
     background: white;
     padding: 1rem;
     margin-bottom: 1rem;
@@ -1042,15 +1040,15 @@ footer {
     color: #0f172a;
 }
 
-/* Softer event colors */
+/* Softer event colors using new palette */
 .fc-event[style*="background-color: red"] {
-    background-color: #ef4444 !important; /* softer red */
+    background-color: #ba1a1a !important;
 }
 .fc-event[style*="background-color: green"] {
-    background-color: #22c55e !important; /* softer green */
+    background-color: #0f766e !important;
 }
 .fc-event[style*="background-color: gray"] {
-    background-color: #94a3b8 !important; /* softer gray */
+    background-color: #94a3b8 !important;
 }
 
 /* Add some shadow to calendar container */

@@ -1,19 +1,21 @@
 {% extends 'layout.html' %}
 
+{% block page_title %}{{ t('Dashboard') }}{% endblock %}
+
 {% block content %}
 
 {# ── Header ──────────────────────────────────────────────── #}
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+<div class="flex justify-between items-start flex-wrap gap-3 mb-6">
     <div>
-        <h2 class="mb-1 fw-bold text-primary">
-            <i class="bi bi-speedometer2 me-2"></i>{{ t('Clinic Dashboard') }}
+        <h2 class="text-2xl font-bold text-teal-900 font-headline flex items-center gap-2 mb-1">
+            <span class="material-symbols-outlined ms-fill text-[28px]">dashboard</span>{{ t('Clinic Dashboard') }}
         </h2>
-        <p class="text-muted small mb-0">
-            {{ t('Today is') }} <strong>{{ today.strftime('%A, %B %-d, %Y') }}</strong>
+        <p class="text-slate-500 text-sm mb-0">
+            {{ t('Today is') }} <strong class="text-teal-800">{{ today.strftime('%A, %B %-d, %Y') }}</strong>
             &mdash; {{ today_appointments|length }} {{ t('session(s) scheduled today') }}
         </p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2">
         <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill">
             <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
         </a>
@@ -27,55 +29,61 @@
 </div>
 
 {# ── Stats strip ─────────────────────────────────────────── #}
-<div class="dash-stats-strip mb-4">
-    <a href="{{ url_for('weekly_calendar') }}" class="text-decoration-none">
-        <div class="dash-stat-card">
-            <div class="dash-stat-icon bg-primary-subtle text-primary"><i class="bi bi-calendar-check-fill"></i></div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <a href="{{ url_for('weekly_calendar') }}" class="no-underline">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
+            <div class="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+                <span class="material-symbols-outlined text-teal-700 ms-fill" style="font-size:22px">calendar_month</span>
+            </div>
             <div>
-                <div class="dash-stat-value">{{ today_appointments|length }}</div>
-                <div class="dash-stat-label">{{ t("Today's Sessions") }}</div>
+                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ today_appointments|length }}</div>
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t("Today's Sessions") }}</div>
             </div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="text-decoration-none">
-        <div class="dash-stat-card">
-            <div class="dash-stat-icon bg-success-subtle text-success"><i class="bi bi-person-check-fill"></i></div>
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="no-underline">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                <span class="material-symbols-outlined text-emerald-700 ms-fill" style="font-size:22px">person_check</span>
+            </div>
             <div>
-                <div class="dash-stat-value">{{ counts['ongoing'] }}</div>
-                <div class="dash-stat-label">{{ t('Ongoing') }}</div>
+                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ counts['ongoing'] }}</div>
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Ongoing') }}</div>
             </div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="text-decoration-none">
-        <div class="dash-stat-card">
-            <div class="dash-stat-icon bg-warning-subtle text-warning"><i class="bi bi-hourglass-split"></i></div>
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="no-underline">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
+            <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <span class="material-symbols-outlined text-amber-600 ms-fill" style="font-size:22px">hourglass</span>
+            </div>
             <div>
-                <div class="dash-stat-value">{{ counts['waiting'] }}</div>
-                <div class="dash-stat-label">{{ t('Waiting List') }}</div>
+                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ counts['waiting'] }}</div>
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Waiting List') }}</div>
             </div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard') }}" class="text-decoration-none">
-    <div class="dash-stat-card {% if unread_count > 0 %}dash-stat-card-alert{% endif %}">
-        <div class="dash-stat-icon {% if unread_count > 0 %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %}">
-            <i class="bi bi-chat-left-dots-fill"></i>
+    <a href="{{ url_for('crm_dashboard') }}" class="no-underline">
+        <div class="bg-white rounded-2xl border {% if unread_count > 0 %}border-red-200 bg-red-50{% else %}border-slate-200{% endif %} p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
+            <div class="w-11 h-11 rounded-xl {% if unread_count > 0 %}bg-red-100{% else %}bg-slate-100{% endif %} flex items-center justify-center flex-shrink-0">
+                <span class="material-symbols-outlined {% if unread_count > 0 %}text-red-600{% else %}text-slate-500{% endif %} ms-fill" style="font-size:22px">chat</span>
+            </div>
+            <div>
+                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ unread_count }}</div>
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Unread Messages') }}</div>
+            </div>
         </div>
-        <div>
-            <div class="dash-stat-value">{{ unread_count }}</div>
-            <div class="dash-stat-label">{{ t('Unread Messages') }}</div>
-        </div>
-    </div>
     </a>
 </div>
 
 {# ── Alert banners ────────────────────────────────────────── #}
 {% if followup_patients %}
-<div class="alert dash-alert-banner mb-4 d-flex align-items-center gap-2">
-    <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+<div class="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 mb-4 text-sm font-medium">
+    <span class="material-symbols-outlined text-amber-600 ms-fill flex-shrink-0" style="font-size:20px">warning</span>
     <div>
         <strong>{{ followup_patients|length }} {{ t('patient(s) need a follow-up decision') }}</strong>
         &mdash; {{ t('their intake appointment has passed but no next step was taken.') }}
-        <a href="#followupSection" class="alert-link ms-1">{{ t('See below') }} &darr;</a>
+        <a href="#followupSection" class="underline text-amber-800 ms-1">{{ t('See below') }} ↓</a>
     </div>
 </div>
 {% endif %}
