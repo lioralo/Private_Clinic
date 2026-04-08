@@ -13,6 +13,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- FullCalendar CSS -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js'></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top">
@@ -34,6 +38,9 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('messages') }}">Messages</a>
                         </li>
                         <li class="nav-item ms-lg-2">
                             <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">

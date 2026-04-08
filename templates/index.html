@@ -8,6 +8,19 @@
     <span class="badge bg-secondary rounded-pill px-3 py-2">{{ patients|length }} Total</span>
 </div>
 
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>Global Calendar</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id='calendar'></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
     {% for patient in patients %}
         <div class="col">
@@ -62,5 +75,58 @@
     transform: translateY(-5px);
     box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
 }
+#calendar {
+    min-height: 500px;
+}
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        selectable: true,
+        select: function(info) {
+            if (confirm('Create new slot from ' + info.startStr + ' to ' + info.endStr + '?')) {
+                fetch('/api/slots', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        start: info.startStr,
+                        end: info.endStr
+                    })
+                }).then(response => {
+                    if (response.ok) {
+                        calendar.refetchEvents();
+                    }
+                });
+            }
+        },
+        eventClick: function(info) {
+            if (confirm('Delete this slot?')) {
+                fetch('/api/slots/' + info.event.id, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                }).then(response => {
+                    if (response.ok) {
+                        calendar.refetchEvents();
+                    }
+                });
+            }
+        }
+    });
+    calendar.render();
+});
+</script>
 {% endblock %}

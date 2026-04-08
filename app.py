@@ -166,7 +166,47 @@ def patient_detail(patient_id):
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments)
+    # Chart data: Session Frequency (Last 6 Months)
+    from datetime import datetime
+    import json
+
+    # We will just count appointments per month for the last 6 months
+    # Simple SQLite date extraction
+    session_counts = db.execute('''
+        SELECT strftime('%Y-%m', appointment_date) as month, COUNT(*) as count
+        FROM appointments
+        WHERE patient_id = ?
+        GROUP BY month
+        ORDER BY month DESC
+        LIMIT 6
+    ''', (patient_id,)).fetchall()
+
+    session_labels = [row['month'] for row in session_counts]
+    session_data = [row['count'] for row in session_counts]
+    session_labels.reverse()
+    session_data.reverse()
+
+    # Chart data: Key Topics Frequency
+    topics = db.execute('SELECT key_topics FROM notes WHERE patient_id = ? AND key_topics IS NOT NULL AND key_topics != ""', (patient_id,)).fetchall()
+    topic_counts = {}
+    for t in topics:
+        # Split by comma and strip whitespace
+        words = [w.strip().title() for w in t['key_topics'].split(',')]
+        for word in words:
+            if word:
+                topic_counts[word] = topic_counts.get(word, 0) + 1
+
+    topic_labels = list(topic_counts.keys())
+    topic_data = list(topic_counts.values())
+
+    chart_data = {
+        'session_labels': json.dumps(session_labels),
+        'session_data': json.dumps(session_data),
+        'topic_labels': json.dumps(topic_labels),
+        'topic_data': json.dumps(topic_data)
+    }
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, chart_data=chart_data)
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -175,11 +215,54 @@ def add_note(patient_id):
         return "Unauthorized", 403
 
     content = request.form['content']
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
+
     if content:
         db = get_db()
-        db.execute('INSERT INTO notes (patient_id, content) VALUES (?, ?)', (patient_id, content))
+        cursor = db.cursor()
+        cursor.execute('INSERT INTO notes (patient_id, session_number, patient_appearance, key_topics, content) VALUES (?, ?, ?, ?, ?)',
+                   (patient_id, session_number, patient_appearance, key_topics, content))
+        note_id = cursor.lastrowid
         db.commit()
+
+        if 'file' in request.files:
+            file = request.files['file']
+            if file and file.filename != '':
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                db.execute('INSERT INTO files (patient_id, note_id, filename) VALUES (?, ?, ?)',
+                           (patient_id, note_id, filename))
+                db.commit()
+
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/note/<int:note_id>/edit', methods=('POST',))
+@login_required
+def edit_note(note_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    content = request.form['content']
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
+
+    db = get_db()
+    note = db.execute('SELECT patient_id FROM notes WHERE id = ?', (note_id,)).fetchone()
+    if not note:
+        return "Note not found", 404
+
+    db.execute('''
+        UPDATE notes
+        SET content = ?, session_number = ?, patient_appearance = ?, key_topics = ?
+        WHERE id = ?
+    ''', (content, session_number, patient_appearance, key_topics, note_id))
+    db.commit()
+
+    flash('Note updated successfully.')
+    return redirect(url_for('patient_detail', patient_id=note['patient_id']))
 
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
 @login_required
@@ -253,37 +336,79 @@ def dashboard():
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
 
+    messages = db.execute('''
+        SELECT m.*, u.role as sender_role
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.sender_id = ? OR m.recipient_id = ?
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, current_user.id)).fetchall()
+
     # Calculate debt
     total_cost = db.execute('SELECT SUM(cost) as total FROM appointments WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
     total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
     balance = total_cost - total_paid
 
-    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance)
+    return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages)
+
+@app.route('/messages')
+@login_required
+def messages():
+    if current_user.role != 'admin':
+        return redirect(url_for('dashboard'))
+
+    db = get_db()
+
+    # Fetch all patients who have messages
+    patients_with_messages = db.execute('''
+        SELECT DISTINCT p.id, p.name
+        FROM patients p
+        JOIN users u ON u.patient_id = p.id
+        JOIN messages m ON m.sender_id = u.id OR m.recipient_id = u.id
+    ''').fetchall()
+
+    selected_patient_id = request.args.get('patient_id', type=int)
+    messages = []
+
+    if selected_patient_id:
+        user = db.execute('SELECT id FROM users WHERE patient_id = ?', (selected_patient_id,)).fetchone()
+        if user:
+            messages = db.execute('''
+                SELECT m.*, u.role as sender_role
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.sender_id = ? OR m.recipient_id = ?
+                ORDER BY m.timestamp ASC
+            ''', (user['id'], user['id'])).fetchall()
+
+    return render_template('messages.html', patients=patients_with_messages, messages=messages, selected_patient_id=selected_patient_id)
 
 @app.route('/contact_admin', methods=('POST',))
 @login_required
 def contact_admin():
-    if current_user.role != 'patient':
-        return "Unauthorized", 403
-
     content = request.form['content']
-    if content:
-        db = get_db()
-        # For now, we'll store messages in a 'messages' table or just notes if simpler?
-        # The schema has a 'messages' table.
-        # sender_id is current_user.id. Recipient? Let's say Admin (which we don't have a specific ID for easily, unless we look it up).
-        # Or we can just use NULL for recipient to mean "System/Admin".
 
-        # Check if admin user exists to get ID?
-        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-        recipient_id = admin['id'] if admin else None
+    if current_user.role == 'patient':
+        if content:
+            db = get_db()
+            admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+            recipient_id = admin['id'] if admin else None
 
-        db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
-                   (current_user.id, recipient_id, content))
-        db.commit()
-        flash('Message sent to your therapist.')
-
-    return redirect(url_for('dashboard'))
+            db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                       (current_user.id, recipient_id, content))
+            db.commit()
+            flash('Message sent to your therapist.')
+        return redirect(url_for('dashboard'))
+    elif current_user.role == 'admin':
+        patient_id = request.form.get('patient_id')
+        if content and patient_id:
+            db = get_db()
+            patient_user = db.execute("SELECT id FROM users WHERE patient_id = ?", (patient_id,)).fetchone()
+            if patient_user:
+                db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                           (current_user.id, patient_user['id'], content))
+                db.commit()
+        return redirect(url_for('messages', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
 @login_required
@@ -388,6 +513,97 @@ def add_appointment(patient_id):
         flash('Appointment added.')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
+
+@app.route('/api/slots', methods=['GET'])
+@login_required
+def get_slots():
+    db = get_db()
+
+    if current_user.role == 'admin':
+        # Admin sees all slots, with patient names
+        slots = db.execute('''
+            SELECT s.id, s.start_time, s.end_time, s.status, s.patient_id, p.name as patient_name
+            FROM slots s
+            LEFT JOIN patients p ON s.patient_id = p.id
+        ''').fetchall()
+    else:
+        # Patient sees open slots and their own booked slots
+        slots = db.execute('''
+            SELECT id, start_time, end_time, status, patient_id
+            FROM slots
+            WHERE status = 'open' OR patient_id = ?
+        ''', (current_user.patient_id,)).fetchall()
+
+    events = []
+    for slot in slots:
+        event = {
+            'id': slot['id'],
+            'start': slot['start_time'],
+            'end': slot['end_time']
+        }
+
+        if current_user.role == 'admin':
+            if slot['status'] == 'booked':
+                event['title'] = f"Booked: {slot['patient_name']}"
+                event['color'] = '#dc3545' # Red for booked
+            else:
+                event['title'] = 'Open'
+                event['color'] = '#28a745' # Green for open
+        else:
+            if slot['status'] == 'booked' and slot['patient_id'] == current_user.patient_id:
+                event['title'] = 'My Appointment'
+                event['color'] = '#007bff' # Blue for their own
+            else:
+                event['title'] = 'Open'
+                event['color'] = '#28a745'
+
+        events.append(event)
+
+    import json
+    return json.dumps(events), 200, {'Content-Type': 'application/json'}
+
+@app.route('/api/slots', methods=['POST'])
+@login_required
+def create_slot():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    data = request.json
+    start_time = data.get('start')
+    end_time = data.get('end')
+
+    db = get_db()
+    db.execute('INSERT INTO slots (start_time, end_time) VALUES (?, ?)', (start_time, end_time))
+    db.commit()
+    return "Slot created", 201
+
+@app.route('/api/slots/<int:slot_id>/book', methods=['POST'])
+@login_required
+def book_slot(slot_id):
+    if current_user.role != 'patient':
+        return "Unauthorized", 403
+
+    db = get_db()
+    slot = db.execute('SELECT * FROM slots WHERE id = ?', (slot_id,)).fetchone()
+
+    if not slot or slot['status'] != 'open':
+        return "Slot not available", 400
+
+    db.execute('UPDATE slots SET status = ?, patient_id = ? WHERE id = ?',
+               ('booked', current_user.patient_id, slot_id))
+    db.commit()
+    return "Slot booked", 200
+
+@app.route('/api/slots/<int:slot_id>', methods=['DELETE'])
+@login_required
+def delete_slot(slot_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('DELETE FROM slots WHERE id = ?', (slot_id,))
+    db.commit()
+    return "Slot deleted", 200
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required

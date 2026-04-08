@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS patients (
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    session_number INTEGER,
+    patient_appearance TEXT,
+    key_topics TEXT,
     content TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
@@ -18,9 +21,11 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
+    note_id INTEGER,
     filename TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients (id)
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (note_id) REFERENCES notes (id)
 );
 
 CREATE TABLE IF NOT EXISTS receipts (
@@ -54,10 +59,20 @@ CREATE TABLE IF NOT EXISTS appointments (
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
 
+CREATE TABLE IF NOT EXISTS slots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open', -- 'open', 'booked'
+    patient_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id INTEGER NOT NULL,
-    recipient_id INTEGER, -- Null for general admin inbox? Or specific admin user? Let's say specific user for now, or maybe simplified.
+    recipient_id INTEGER,
     content TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_read BOOLEAN DEFAULT 0,
