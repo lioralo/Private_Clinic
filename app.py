@@ -4496,53 +4496,17 @@ def build_booking_management_payload(db, mode='upcoming', future_days=180, histo
     }
 
 
-def build_week_calendar_snapshot(db, week_start, user):
-    week_end = week_start + timedelta(days=6)
-    today = datetime.now().date()
 
-    patients = {
-        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
-    }
-
-    appointment_rows = db.execute('''
-        SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
-        FROM appointments a
-        JOIN patients p ON p.id = a.patient_id
-        WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
-           OR (a.is_recurring = 1 AND a.appointment_date <= ?)
-        ORDER BY a.appointment_date ASC, a.appointment_time ASC
-    ''', (week_start.isoformat(), week_end.isoformat(), week_end.isoformat())).fetchall()
-
-    blocks = db.execute('''
-        SELECT * FROM blocked_slots
-        WHERE blocked_date BETWEEN ? AND ?
-        ORDER BY blocked_date ASC, blocked_time ASC
-    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
-
-    group_sessions = db.execute('''
-        SELECT gs.*, g.name AS group_name
-        FROM group_sessions gs
-        JOIN groups g ON g.id = gs.group_id
-        WHERE gs.session_date BETWEEN ? AND ?
-          AND COALESCE(g.is_active, 1) = 1
-          AND COALESCE(gs.status, 'scheduled') = 'scheduled'
-        ORDER BY gs.session_date ASC, gs.session_time ASC
-    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
-
-    events = []
-    occupied = []
-    emitted_appointment_keys = set()
-    weekend_specials = {'friday': [], 'saturday': []}
+def _process_calendar_follow_ups(db, today):
     follow_up_alerts = []
-
-        # Candidate with a past one-time session and no future booking needs a decision.
+    # Candidate with a past one-time session and no future booking needs a decision.
     follow_up_rows = db.execute('''
         SELECT p.id AS patient_id, p.name, p.status, MAX(a.appointment_date) AS last_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
-                WHERE p.status = 'candidate'
+        WHERE p.status = 'candidate'
           AND a.is_recurring = 0
-                    AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
           AND a.appointment_date < ?
         GROUP BY p.id, p.name, p.status
     ''', (today.isoformat(),)).fetchall()
@@ -4562,7 +4526,10 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'last_meeting_date': row['last_date'],
                 'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
             })
+    return follow_up_alerts
 
+
+def _process_calendar_appointments(appointment_rows, user, week_start, week_end, events, occupied, emitted_appointment_keys):
     for appt in appointment_rows:
         is_recurring = int(appt['is_recurring'] or 0) == 1
         occ_dates = recurring_occurrences_for_week(appt, week_start, week_end) if is_recurring else [parse_date_safe(appt['appointment_date'])]
@@ -4624,6 +4591,8 @@ def build_week_calendar_snapshot(db, week_start, user):
             })
             occupied.append((start_dt, end_dt))
 
+
+def _process_calendar_group_sessions(group_sessions, user, events, occupied):
     for group_session in group_sessions:
         session_date = parse_date_safe(group_session['session_date'])
         if not session_date:
@@ -4667,6 +4636,8 @@ def build_week_calendar_snapshot(db, week_start, user):
         })
         occupied.append((session_start, session_end))
 
+
+def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
     for block in blocks:
         block_date = parse_date_safe(block['blocked_date'])
         if not block_date:
@@ -4728,6 +4699,8 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'type': block_type
             })
 
+
+def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied):
     # Available slots are restricted to admin-enabled vacancy overrides and recurring vacancy templates.
     vacancy_rows = db.execute('''
         SELECT id, slot_date, slot_time, duration_minutes
@@ -4811,8 +4784,10 @@ def build_week_calendar_snapshot(db, week_start, user):
                         'can_delete': True
                     }
                 })
+    return available_slots
 
-    # Fetch external Google Calendar events (calendar events not tracked in our DB)
+
+def _process_calendar_external_events(db, week_start, week_end, user):
     external_events = []
     if gcal and gcal.GOOGLE_LIBS_AVAILABLE and user.role == 'admin':
         try:
@@ -4834,6 +4809,53 @@ def build_week_calendar_snapshot(db, week_start, user):
                     external_events.append(evt)
         except Exception:
             pass
+    return external_events
+
+
+def build_week_calendar_snapshot(db, week_start, user):
+    week_end = week_start + timedelta(days=6)
+    today = datetime.now().date()
+
+    patients = {
+        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
+    }
+
+    appointment_rows = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
+           OR (a.is_recurring = 1 AND a.appointment_date <= ?)
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat(), week_end.isoformat())).fetchall()
+
+    blocks = db.execute('''
+        SELECT * FROM blocked_slots
+        WHERE blocked_date BETWEEN ? AND ?
+        ORDER BY blocked_date ASC, blocked_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
+    group_sessions = db.execute('''
+        SELECT gs.*, g.name AS group_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE gs.session_date BETWEEN ? AND ?
+          AND COALESCE(g.is_active, 1) = 1
+          AND COALESCE(gs.status, 'scheduled') = 'scheduled'
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
+    events = []
+    occupied = []
+    emitted_appointment_keys = set()
+    weekend_specials = {'friday': [], 'saturday': []}
+
+    follow_up_alerts = _process_calendar_follow_ups(db, today)
+    _process_calendar_appointments(appointment_rows, user, week_start, week_end, events, occupied, emitted_appointment_keys)
+    _process_calendar_group_sessions(group_sessions, user, events, occupied)
+    _process_calendar_blocks(blocks, user, events, occupied, weekend_specials)
+    available_slots = _process_calendar_vacancies(db, week_start, week_end, user, events, occupied)
+    external_events = _process_calendar_external_events(db, week_start, week_end, user)
 
     return {
         'week_start': week_start.isoformat(),

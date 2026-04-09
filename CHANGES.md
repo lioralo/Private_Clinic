@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- **2024-11-20 00:00:00:** Refactored `build_week_calendar_snapshot` in `app.py` by extracting inner logic into 6 separate helper functions (`_process_calendar_follow_ups`, `_process_calendar_appointments`, etc.) to improve code maintainability and readability without altering behavior.
