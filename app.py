@@ -7793,12 +7793,16 @@ def import_patient_history(patient_id):
                     notes_added += 1
 
                 # Import receipts
-                for receipt in data.get('receipts', []):
-                    db.execute('''INSERT INTO receipts
+                receipts_data = data.get('receipts', [])
+                if receipts_data:
+                    receipt_tuples = [
+                        (patient_id, r.get('amount'), r.get('description'), r.get('created_at'))
+                        for r in receipts_data
+                    ]
+                    db.executemany('''INSERT INTO receipts
                         (patient_id, amount, description, created_at)
-                        VALUES (?, ?, ?, ?)''',
-                        (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
-                    receipts_added += 1
+                        VALUES (?, ?, ?, ?)''', receipt_tuples)
+                    receipts_added += len(receipts_data)
 
             db.commit()
             flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
