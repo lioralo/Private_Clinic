@@ -9289,6 +9289,78 @@ def toggle_access(patient_id):
 
     return redirect_to_patient_tab(patient_id, 'info')
 
+def _validate_appointment_datetime(date_str, time_str):
+    if not date_str or not time_str:
+        return None, 'Date and time are required!'
+
+    try:
+        datetime.fromisoformat(date_str)
+    except ValueError:
+        return None, 'Invalid date format!'
+
+    try:
+        time_obj = datetime.strptime(time_str, '%H:%M')
+        formatted_time = time_obj.strftime('%H:%M')
+        return formatted_time, None
+    except ValueError:
+        return None, 'Invalid time format! Expected HH:MM'
+
+def _extract_recurrence_data(form):
+    recurrence_interval = int(form.get('interval', 1))
+    recurrence_days = None
+    recurrence_end_date = None
+    recurrence_count = None
+
+    limit_type = form.get('recurrence_limit_type')
+    if limit_type == 'date':
+        recurrence_end_date = form.get('recurrence_end_date', '').strip()
+        if recurrence_end_date:
+            try:
+                datetime.fromisoformat(recurrence_end_date)
+            except ValueError:
+                return None, None, None, None, 'Invalid recurrence end date!'
+    elif limit_type == 'count':
+        try:
+            recurrence_count = int(form.get('recurrence_count', 12))
+            if recurrence_count <= 0:
+                recurrence_count = 12
+        except ValueError:
+            recurrence_count = 12
+
+    days_list = form.getlist('days')
+    if days_list:
+        recurrence_days = ','.join(str(d) for d in days_list if d.strip().isdigit())
+
+    return recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count, None
+
+def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
+                           recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                           recurrence_end_date, recurrence_count, meeting_title, save_to_google):
+    if is_recurring:
+        db.execute('''INSERT INTO appointments
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes,
+                                is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                                                                    recurrence_end_date, recurrence_count, meeting_title, save_to_google, recurrence_group_id)
+                                                                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                   (patient_id, date, time, cost, duration, recurrence_interval,
+                            recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
+                                                            meeting_title or None, save_to_google, build_recurrence_group_id()))
+    else:
+        db.execute('''INSERT INTO appointments
+                      (patient_id, appointment_date, appointment_time, cost, duration_minutes,
+                                meeting_type, meeting_link, meeting_title, save_to_google)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                          (patient_id, date, time, cost, duration, meeting_type, meeting_link,
+                            meeting_title or None, save_to_google))
+
+    # Log the appointment
+    patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient:
+        appt_type = "recurring" if is_recurring else "single"
+        details = f"Patient {patient['name']} has scheduled a {appt_type} appointment on {date} at {time}."
+        db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+                   (patient_id, 'schedule', details))
+
 @app.route('/patient/<int:patient_id>/add_appointment', methods=('POST',))
 @login_required
 def add_appointment(patient_id):
@@ -9312,24 +9384,11 @@ def add_appointment(patient_id):
     is_recurring = int(request.form.get('is_recurring', 0))
     duration = int(request.form.get('duration', 60))
 
-    if not date or not time:
-        flash('Date and time are required!', 'error')
+    formatted_time, dt_error = _validate_appointment_datetime(date, time)
+    if dt_error:
+        flash(dt_error, 'error')
         return redirect(url_for('patient_detail', patient_id=patient_id))
-
-    # Validate date format
-    try:
-        datetime.fromisoformat(date)
-    except ValueError:
-        flash('Invalid date format!', 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
-
-    # Validate time format (should be HH:MM or H:MM)
-    try:
-        time_obj = datetime.strptime(time, '%H:%M')
-        time = time_obj.strftime('%H:%M')
-    except ValueError:
-        flash('Invalid time format! Expected HH:MM', 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
+    time = formatted_time
 
     db = get_db()
     patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
@@ -9337,64 +9396,21 @@ def add_appointment(patient_id):
     if patient_type in ('initial-intake', 'diagnosee'):
         is_recurring = 0
 
-    # Handle recurring appointment fields
     recurrence_interval = None
     recurrence_days = None
     recurrence_end_date = None
     recurrence_count = None
 
     if is_recurring:
-        recurrence_interval = int(request.form.get('interval', 1))
-        
-        # Get recurrence limit type and values
-        limit_type = request.form.get('recurrence_limit_type')
-        if limit_type == 'date':
-            recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
-            if recurrence_end_date:
-                try:
-                    datetime.fromisoformat(recurrence_end_date)
-                except ValueError:
-                    flash('Invalid recurrence end date!', 'error')
-                    return redirect(url_for('patient_detail', patient_id=patient_id))
-        elif limit_type == 'count':
-            try:
-                recurrence_count = int(request.form.get('recurrence_count', 12))
-                if recurrence_count <= 0:
-                    recurrence_count = 12
-            except ValueError:
-                recurrence_count = 12
-        
-        # Get days (if provided, otherwise default will be set in the calendar)
-        days_list = request.form.getlist('days')
-        if days_list:
-            recurrence_days = ','.join(str(d) for d in days_list if d.strip().isdigit())
+        recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count, rec_error = _extract_recurrence_data(request.form)
+        if rec_error:
+            flash(rec_error, 'error')
+            return redirect(url_for('patient_detail', patient_id=patient_id))
 
     try:
-        if is_recurring:
-            db.execute('''INSERT INTO appointments 
-                          (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
-                                    is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                                                                        recurrence_end_date, recurrence_count, meeting_title, save_to_google, recurrence_group_id) 
-                                                                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                       (patient_id, date, time, cost, duration, recurrence_interval, 
-                                recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
-                                                                meeting_title or None, save_to_google, build_recurrence_group_id()))
-        else:
-            db.execute('''INSERT INTO appointments 
-                          (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
-                                    meeting_type, meeting_link, meeting_title, save_to_google) 
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                              (patient_id, date, time, cost, duration, meeting_type, meeting_link,
-                                meeting_title or None, save_to_google))
-
-        # Log the appointment
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if patient:
-            appt_type = "recurring" if is_recurring else "single"
-            details = f"Patient {patient['name']} has scheduled a {appt_type} appointment on {date} at {time}."
-            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', 
-                       (patient_id, 'schedule', details))
-
+        _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
+                               recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                               recurrence_end_date, recurrence_count, meeting_title, save_to_google)
         db.commit()
         appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
         flash(appt_msg)

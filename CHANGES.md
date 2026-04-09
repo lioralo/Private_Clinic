@@ -1759,3 +1759,9 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+
+### 5. **Refactored `add_appointment` for Code Health** ✅
+**Date:** April 9, 2026
+**Problem:** The `add_appointment` function in `app.py` was too long and complex, mixing validation, extraction, and database logic.
+**Solution:** Extracted logic into three private helper functions (`_validate_appointment_datetime`, `_extract_recurrence_data`, and `_insert_appointment_db`). Reduced main function complexity while preserving all existing functionality and safety.
+**Files Modified:** `app.py`
