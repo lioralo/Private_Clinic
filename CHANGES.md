@@ -1759,3 +1759,6 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+
+### Update
+- Updated comment in templates/calendar.html to clarify that the FullCalendar size refresh logic is a known workaround/note rather than an unresolved bug.
