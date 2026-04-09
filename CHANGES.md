@@ -1801,6 +1801,19 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+
+## Session 34
+
+**Date:** April 5, 2026
+
+**Objective:** Clean up FullCalendar comment notation in the template.
+
+**Release Summary:**
+
+1. **Comment Cleanup:**
+- Changed a `// Fix:` comment to `// Note:` in `templates/calendar.html`.
+- This clarifies that the associated FullCalendar size refresh logic on tab switch is an explanatory note of an implemented workaround, rather than a pending bug to be resolved.
+- Verified that this change has no functional impact and 64 automated tests pass successfully.
 - **2026-04-09 08:12:00:** Added comprehensive unit tests for `backup_db.py` in `test_backup_db.py` with mock implementations for testing database backup flows, missing source file handling, encryption flows via `shutil.copy2` and `Fernet.encrypt`, and checking custom environment variable secrets (`BACKUP_ENCRYPTION_KEY`).
 
 ### 5. **Refactored `add_appointment` for Code Health** ✅
