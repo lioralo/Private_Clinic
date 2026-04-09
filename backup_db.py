@@ -35,10 +35,17 @@ def database_backup_fingerprint(db_file_path):
             ).fetchall()
         ]
 
-        table_counts = {}
-        for table_name in tables:
-            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{table_name}"').fetchone()
-            table_counts[table_name] = int(count_row['c'] if count_row else 0)
+        table_counts = {table_name: 0 for table_name in tables}
+
+        # SQLite defaults to a max of 500 compound selects. Chunk to avoid OperationalError.
+        chunk_size = 200
+        for i in range(0, len(tables), chunk_size):
+            chunk = tables[i:i + chunk_size]
+            query = " UNION ALL ".join(
+                [f"SELECT '{table_name}' AS t_name, COUNT(*) AS c FROM \"{table_name}\"" for table_name in chunk]
+            )
+            for row in conn.execute(query).fetchall():
+                table_counts[row['t_name']] = int(row['c'] if row['c'] is not None else 0)
 
         appointment_stats = conn.execute('''
             SELECT
