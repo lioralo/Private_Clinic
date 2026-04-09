@@ -1,3 +1,5 @@
+from pathlib import Path
+import unittest.mock
 import os
 import shutil
 import unittest
@@ -2252,6 +2254,65 @@ class ClinicTestCase(unittest.TestCase):
             assert today_r['is_tomorrow'] is False
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
+
+
+class TestHebrewTranslationOverrides(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name)
+
+        self.patcher = unittest.mock.patch('app.TRANSLATION_OVERRIDES_FILE', self.temp_path / 'he.json')
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.temp_dir.cleanup()
+
+    def test_file_does_not_exist(self):
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
+
+    def test_file_exists_valid_json(self):
+        test_data = {"key1": "value1", "key2": "value2"}
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
+
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, test_data)
+
+    def test_file_exists_invalid_json(self):
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            f.write("invalid json")
+
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
+
+    def test_file_exists_not_a_dict(self):
+        test_data = ["not", "a", "dict"]
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
+
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
+
+    def test_file_exists_filters_non_string_keys_and_values(self):
+        test_data = {
+            "key1": "value1",
+            "key2": 123,
+            "123": "value3",
+            "key4": ["list"],
+            "key5": {"dict": "dict"}
+        }
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
+
+        result = app_module.load_hebrew_translation_overrides()
+
+        expected = {
+            "key1": "value1",
+            "123": "value3"
+        }
+        self.assertEqual(result, expected)
 
 if __name__ == '__main__':
     unittest.main()
