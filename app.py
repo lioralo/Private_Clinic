@@ -6172,22 +6172,30 @@ def api_calendar_block():
         if conflict_message:
             return jsonify({'status': 'error', 'message': f'{conflict_message} ({block_day.isoformat()})'}), 409
 
-    for block_day in dates_to_create:
-        db.execute('''
+    if dates_to_create:
+        now_iso = datetime.now().isoformat()
+
+        blocked_slots_data = [
+            (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id)
+            for block_day in dates_to_create
+        ]
+
+        slots_override_data = [
+            (title or 'Blocked Slot', now_iso, block_day.isoformat(), parsed_start.strftime('%H:%M'))
+            for block_day in dates_to_create
+        ]
+
+        db.executemany('''
             INSERT INTO blocked_slots
             (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id))
-        db.execute('''
+        ''', blocked_slots_data)
+
+        db.executemany('''
             UPDATE slots_override
             SET status = 'booked', booked_by_name = ?, booked_at = ?
             WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', (
-            title or 'Blocked Slot',
-            datetime.now().isoformat(),
-            block_day.isoformat(),
-            parsed_start.strftime('%H:%M')
-        ))
+        ''', slots_override_data)
 
     db.commit()
     return jsonify({'status': 'success', 'created': len(dates_to_create)})
