@@ -89,6 +89,52 @@ class ClinicTestCase(unittest.TestCase):
             ''', (date_iso, time_text, duration_minutes))
             db.commit()
 
+    def test_api_treatment_method_options_get(self):
+        # 1. Unauthenticated access should be blocked (redirects to login)
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 302)
+        self.assertIn('/login', rv.headers['Location'])
+
+        # 2. Patient access should return 403 Unauthorized
+        # Create a patient and give them access
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Test Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='testpatient',
+            password='password123'
+        ), follow_redirects=True)
+        self.logout()
+
+        self.login('testpatient', 'password123')
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 403)
+        self.logout()
+
+        # 3. Admin access should return 200 and a JSON list
+        # Insert a test method option
+        with app.app_context():
+            db = get_db()
+            db.execute('INSERT INTO treatment_method_options (label, display_order) VALUES (?, ?)', ('Cognitive Behavioral Therapy', 1))
+            db.commit()
+
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 200)
+        data = rv.get_json()
+        self.assertTrue(isinstance(data, list))
+        labels = [item['label'] for item in data]
+        self.assertIn('Cognitive Behavioral Therapy', labels)
+
+        # Verify structure
+        for item in data:
+            self.assertIn('id', item)
+            self.assertIn('label', item)
+
+        self.logout()
+
     def test_login_logout(self):
         rv = self.login('lioraloni', 'Flo@tingind4')
         assert b'Log out' in rv.data or b'Logout' in rv.data
