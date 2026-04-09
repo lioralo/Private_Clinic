@@ -1793,4 +1793,5 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
 
-- **2026-04-09 08:26**: Added comprehensive unit testing coverage for `google_docs.py` API integrations by introducing `test_google_docs.py` using `unittest.mock` for Google Docs and Drive APIs.
+## 2026-04-09 08:25
+- Optimized `/api/messages` endpoint to check for updated rows via `cursor.rowcount` to skip `db.commit()` when marking messages as read without actually updating any rows.
