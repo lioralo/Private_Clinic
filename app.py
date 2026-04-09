@@ -2166,77 +2166,33 @@ def build_intake_docx(patient_name, data, language='en'):
     return doc
 
 
-def build_patient_background_from_notes(db, patient_id, patient_name=None):
-    if patient_name is None:
-        patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
 
-    patient_row = db.execute('''
-        SELECT intake_assessment, intake_questionnaire
-        FROM patients
-        WHERE id = ?
-    ''', (patient_id,)).fetchone()
-
-    notes = db.execute('''
-        SELECT note_date, content, mood_summary, created_at
-        FROM notes
-        WHERE patient_id = ?
-        ORDER BY COALESCE(note_date, date(created_at)) ASC, created_at ASC
-    ''', (patient_id,)).fetchall()
-
-    if not notes:
-        intake_questionnaire = parse_intake_questionnaire(
-            patient_row['intake_questionnaire'] if patient_row else None,
-            patient_row['intake_assessment'] if patient_row else None
-        )
-        main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
-        problem_history = (intake_questionnaire.get('problem_history') or '').strip()
-        intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
-
-        main_problem = main_complaint or problem_history
-        if not main_problem and intake_assessment.strip():
-            main_problem = intake_assessment.strip().splitlines()[0]
-
-        if main_problem:
-            return (
-                f"סיכום מטופל: {patient_name}. "
-                "סטטוס תיעוד: מידע ראשוני מאינטייק בלבד (ללא מפגשים שוטפים מתועדים). "
-                f"מוקד עיקרי נוכחי: {main_problem}."
-            )
-        return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
-
-    note_texts = []
-    for note in notes:
-        note_texts.append(note['content'])
-        if note['mood_summary']:
-            note_texts.append(note['mood_summary'])
-
-    first_date = notes[0]['note_date']
-    last_date = notes[-1]['note_date']
-
-    if first_date and last_date:
-        timeframe = f" בין {first_date} ל-{last_date}"
-    elif last_date:
-        timeframe = f" עד המפגש האחרון המתועד ב-{last_date}"
-    else:
-        timeframe = ''
-
-    age_fact = extract_age_fact(note_texts, patient_name)
-    occupation_fact = extract_occupation_fact(note_texts, patient_name)
-    family_fact = extract_family_fact(note_texts)
-    reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
-    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
-    recent_focus = extract_recent_focus(notes)
-    key_points = extract_key_summary_points(notes, limit=3)
-
+def _get_intake_data(patient_row):
+    if not patient_row:
+        return {}, ''
     intake_questionnaire = parse_intake_questionnaire(
-        patient_row['intake_questionnaire'] if patient_row else None,
-        patient_row['intake_assessment'] if patient_row else None
+        patient_row['intake_questionnaire'],
+        patient_row['intake_assessment']
     )
+    return intake_questionnaire, patient_row['intake_assessment'] or ''
+
+
+def _extract_main_problem_no_notes(patient_row):
+    intake_questionnaire, intake_assessment = _get_intake_data(patient_row)
     main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
     problem_history = (intake_questionnaire.get('problem_history') or '').strip()
 
-    intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
+    main_problem = main_complaint or problem_history
+    if not main_problem and intake_assessment.strip():
+        main_problem = intake_assessment.strip().splitlines()[0]
+    return main_problem
+
+
+def _extract_main_problem_with_notes(patient_row, notes, reason_topics, theme_topics, recent_focus):
+    intake_questionnaire, intake_assessment = _get_intake_data(patient_row)
+    main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
+    problem_history = (intake_questionnaire.get('problem_history') or '').strip()
+
     intake_problem_line = ''
     if intake_assessment:
         for line in intake_assessment.splitlines():
@@ -2246,20 +2202,33 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
                 break
 
     if main_complaint:
-        main_problem = main_complaint
+        return main_complaint
     elif problem_history:
-        main_problem = problem_history
+        return problem_history
     elif intake_problem_line:
-        main_problem = intake_problem_line
+        return intake_problem_line
     elif reason_topics:
-        main_problem = f"קושי מרכזי סביב {', '.join(reason_topics)}"
+        return f"קושי מרכזי סביב {', '.join(reason_topics)}"
     elif theme_topics:
-        main_problem = f"מוקד קושי חוזר סביב {', '.join(theme_topics)}"
+        return f"מוקד קושי חוזר סביב {', '.join(theme_topics)}"
     elif recent_focus:
-        main_problem = recent_focus
+        return recent_focus
     else:
-        main_problem = extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
+        return extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
 
+
+def _get_notes_timeframe(notes):
+    first_date = notes[0]['note_date']
+    last_date = notes[-1]['note_date']
+
+    if first_date and last_date:
+        return f" בין {first_date} ל-{last_date}"
+    if last_date:
+        return f" עד המפגש האחרון המתועד ב-{last_date}"
+    return ''
+
+
+def _format_patient_summary(patient_name, notes, timeframe, age_fact, occupation_fact, family_fact, reason_topics, theme_topics, key_points, recent_focus, main_problem):
     parts = [f"סיכום מטופל: {patient_name}."]
     parts.append(f"תמונת זמן: {len(notes)} מפגשים מתועדים{timeframe}.")
 
@@ -2282,6 +2251,58 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     parts.append(f"תמצית קלינית נוכחית: {main_problem}.")
 
     return ' '.join(part.strip() for part in parts if part).strip()
+
+
+def build_patient_background_from_notes(db, patient_id, patient_name=None):
+    if patient_name is None:
+        patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
+
+    patient_row = db.execute('''
+        SELECT intake_assessment, intake_questionnaire
+        FROM patients
+        WHERE id = ?
+    ''', (patient_id,)).fetchone()
+
+    notes = db.execute('''
+        SELECT note_date, content, mood_summary, created_at
+        FROM notes
+        WHERE patient_id = ?
+        ORDER BY COALESCE(note_date, date(created_at)) ASC, created_at ASC
+    ''', (patient_id,)).fetchall()
+
+    if not notes:
+        main_problem = _extract_main_problem_no_notes(patient_row)
+        if main_problem:
+            return (
+                f"סיכום מטופל: {patient_name}. "
+                "סטטוס תיעוד: מידע ראשוני מאינטייק בלבד (ללא מפגשים שוטפים מתועדים). "
+                f"מוקד עיקרי נוכחי: {main_problem}."
+            )
+        return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
+
+    note_texts = []
+    for note in notes:
+        note_texts.append(note['content'])
+        if note['mood_summary']:
+            note_texts.append(note['mood_summary'])
+
+    timeframe = _get_notes_timeframe(notes)
+
+    age_fact = extract_age_fact(note_texts, patient_name)
+    occupation_fact = extract_occupation_fact(note_texts, patient_name)
+    family_fact = extract_family_fact(note_texts)
+    reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
+    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
+    recent_focus = extract_recent_focus(notes)
+    key_points = extract_key_summary_points(notes, limit=3)
+
+    main_problem = _extract_main_problem_with_notes(patient_row, notes, reason_topics, theme_topics, recent_focus)
+
+    return _format_patient_summary(
+        patient_name, notes, timeframe, age_fact, occupation_fact, family_fact,
+        reason_topics, theme_topics, key_points, recent_focus, main_problem
+    )
 
 
 def _normalize_session_number(value):
