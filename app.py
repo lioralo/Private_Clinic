@@ -7942,11 +7942,13 @@ def api_get_messages():
             requested_user = None
 
         if requested_user is not None:
-            db.execute(
-                'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?',
+            cursor = db.execute(
+                'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND COALESCE(is_read, 0) = 0',
                 (current_user.id, requested_user)
             )
-            db.commit()
+            if cursor.rowcount > 0:
+                db.commit()
+
             normalized = []
             for c in conversations:
                 c_dict = dict(c)
