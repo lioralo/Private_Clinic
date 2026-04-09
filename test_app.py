@@ -1,6 +1,9 @@
+from pathlib import Path
+import unittest.mock
 import os
 import shutil
 import unittest
+from unittest.mock import patch, MagicMock
 import tempfile
 import sqlite3
 import json
@@ -87,6 +90,52 @@ class ClinicTestCase(unittest.TestCase):
                 VALUES (?, ?, 'available', ?)
             ''', (date_iso, time_text, duration_minutes))
             db.commit()
+
+    def test_api_treatment_method_options_get(self):
+        # 1. Unauthenticated access should be blocked (redirects to login)
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 302)
+        self.assertIn('/login', rv.headers['Location'])
+
+        # 2. Patient access should return 403 Unauthorized
+        # Create a patient and give them access
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Test Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='testpatient',
+            password='password123'
+        ), follow_redirects=True)
+        self.logout()
+
+        self.login('testpatient', 'password123')
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 403)
+        self.logout()
+
+        # 3. Admin access should return 200 and a JSON list
+        # Insert a test method option
+        with app.app_context():
+            db = get_db()
+            db.execute('INSERT INTO treatment_method_options (label, display_order) VALUES (?, ?)', ('Cognitive Behavioral Therapy', 1))
+            db.commit()
+
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.get('/api/treatment_method_options')
+        self.assertEqual(rv.status_code, 200)
+        data = rv.get_json()
+        self.assertTrue(isinstance(data, list))
+        labels = [item['label'] for item in data]
+        self.assertIn('Cognitive Behavioral Therapy', labels)
+
+        # Verify structure
+        for item in data:
+            self.assertIn('id', item)
+            self.assertIn('label', item)
+
+        self.logout()
 
     def test_login_logout(self):
         rv = self.login('lioraloni', 'Flo@tingind4')
@@ -466,6 +515,48 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.client.post(f'/api/calendar/appointment/{appt_id}/delete')
         assert rv.status_code == 200
         assert rv.get_json().get('status') == 'success'
+
+    def test_api_patients_reorder(self):
+        # Unauthenticated access should be redirected to login
+        rv = self.client.post('/api/patients/reorder', json={'order': [1, 2, 3]})
+        assert rv.status_code == 302
+        assert '/login' in rv.headers.get('Location', '')
+
+        self.login('lioraloni', 'Flo@tingind4')
+
+        # Create three patients
+        for i in range(3):
+            self.client.post('/add_patient', data=dict(name=f'Reorder Patient {i}', status='ongoing'))
+
+        with app.app_context():
+            db = get_db()
+            # Get the IDs of the newly created patients
+            patients = db.execute('SELECT id, name FROM patients ORDER BY id DESC LIMIT 3').fetchall()
+            patient_ids = [p['id'] for p in reversed(patients)]
+
+        assert len(patient_ids) == 3
+
+        # Test missing payload
+        rv = self.client.post('/api/patients/reorder', json={})
+        assert rv.status_code == 400
+        assert b'No order provided' in rv.data or rv.get_json().get('error') == 'No order provided'
+
+        # Test missing 'order' field in payload
+        rv = self.client.post('/api/patients/reorder', json={'some_other_field': [1, 2]})
+        assert rv.status_code == 400
+        assert b'No order provided' in rv.data or rv.get_json().get('error') == 'No order provided'
+
+        # Test happy path
+        new_order = [patient_ids[2], patient_ids[0], patient_ids[1]]
+        rv = self.client.post('/api/patients/reorder', json={'order': new_order})
+        assert rv.status_code == 200
+        assert rv.get_json() == {'success': True}
+
+        with app.app_context():
+            db = get_db()
+            for idx, p_id in enumerate(new_order):
+                row = db.execute('SELECT sort_order FROM patients WHERE id = ?', (p_id,)).fetchone()
+                assert row['sort_order'] == idx
 
     def test_calendar_booking_sets_ongoing_as_recurring(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -2252,6 +2343,51 @@ class ClinicTestCase(unittest.TestCase):
             assert today_r['is_tomorrow'] is False
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
+
+    def test_backup_database_error_path(self):
+        import backup_db
+        from unittest.mock import patch
+        import io
+        import sys
+
+        # Provide a dummy database with the necessary tables to allow fingerprinting
+        db_fd, db_path = tempfile.mkstemp(suffix='.db')
+        os.close(db_fd)
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE appointments (id INTEGER, is_recurring INTEGER, meeting_link TEXT, recurrence_days TEXT, recurrence_interval INTEGER, recurrence_end_date TEXT, recurrence_count INTEGER)")
+        conn.close()
+
+        with tempfile.TemporaryDirectory() as tmp_backup_dir:
+            original_db_file = backup_db.DB_FILE
+            original_backup_dir = backup_db.BACKUP_DIR
+            backup_db.DB_FILE = db_path
+            backup_db.BACKUP_DIR = tmp_backup_dir
+            try:
+                with patch('backup_db.Path.read_bytes') as mock_read_bytes:
+                    mock_read_bytes.side_effect = Exception("Simulated read error")
+
+                    captured_out = io.StringIO()
+                    old_stdout = sys.stdout
+                    sys.stdout = captured_out
+                    try:
+                        result = backup_db.backup_database()
+                    finally:
+                        sys.stdout = old_stdout
+
+                    self.assertIn("Backup failed: Simulated read error", captured_out.getvalue())
+                    self.assertFalse(result)
+
+                    files = os.listdir(tmp_backup_dir)
+                    for f in files:
+                        self.assertNotIn('clinic_', f)
+                        self.assertNotIn('.verify_', f)
+            finally:
+                backup_db.DB_FILE = original_db_file
+                backup_db.BACKUP_DIR = original_backup_dir
+
+        os.unlink(db_path)
 
 if __name__ == '__main__':
     unittest.main()
