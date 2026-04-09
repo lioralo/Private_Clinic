@@ -1583,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     calendar.render();
 
-    // Fix: when switching back to the schedule tab, FullCalendar needs a size refresh
+    // Note: when switching back to the schedule tab, FullCalendar needs a size refresh
     // because the tab pane was hidden (display:none) during initial render.
     const scheduleTabEl = document.getElementById('schedule-tab');
     if (scheduleTabEl) {
