@@ -2620,10 +2620,12 @@ def api_patients_reorder():
     if not isinstance(order, list):
         return jsonify({'error': 'order must be a list'}), 400
     db = get_db()
+    update_data = []
     for idx, patient_id in enumerate(order):
         if not isinstance(patient_id, int):
             return jsonify({'error': 'Invalid patient id'}), 400
-        db.execute('UPDATE patients SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted,0) = 0', (idx, patient_id))
+        update_data.append((idx, patient_id))
+    db.executemany('UPDATE patients SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted,0) = 0', update_data)
     db.commit()
     return jsonify({'ok': True})
 
