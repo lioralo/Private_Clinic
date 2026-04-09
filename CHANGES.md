@@ -1792,6 +1792,12 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+
+### 5. **Refactored `add_appointment` for Code Health** ✅
+**Date:** April 9, 2026
+**Problem:** The `add_appointment` function in `app.py` was too long and complex, mixing validation, extraction, and database logic.
+**Solution:** Extracted logic into three private helper functions (`_validate_appointment_datetime`, `_extract_recurrence_data`, and `_insert_appointment_db`). Reduced main function complexity while preserving all existing functionality and safety.
+**Files Modified:** `app.py`
 - $(date +'%Y-%m-%d %H:%M'): Fixed N+1 query issue in `ensure_recurrence_group_id` by replacing `db.execute` inside a loop with a single `db.executemany` statement.
 * **2026-04-09 08:15:54**: Added `test_calendar_snapshot_with_appointments` to `test_app.py` to ensure proper testing for the `/api/calendar/snapshot` endpoint's JSON payload when appointments exist in the tested date range.
 - **2024-11-20 00:00:00:** Refactored `build_week_calendar_snapshot` in `app.py` by extracting inner logic into 6 separate helper functions (`_process_calendar_follow_ups`, `_process_calendar_appointments`, etc.) to improve code maintainability and readability without altering behavior.
