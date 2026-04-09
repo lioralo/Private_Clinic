@@ -8751,6 +8751,145 @@ def update_admin_profile_name():
     flash('Admin display name updated.')
     return redirect(request.referrer or url_for('crm_dashboard'))
 
+def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
+    occ_date = parse_date_safe(occurrence_date_raw)
+    if not occ_date:
+        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+    new_day = parse_date_safe(booking_date)
+    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+    new_end_dt = new_start_dt + timedelta(minutes=duration)
+    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
+    if conflict:
+        return jsonify({'status': 'error', 'message': conflict}), 409
+    existing_excluded = appt['excluded_dates'] or ''
+    excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
+    if occ_date.isoformat() not in excluded_list:
+        excluded_list.append(occ_date.isoformat())
+    # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
+    # exclude it from the series too so the moved standalone is the only event on that day.
+    if new_day and new_day.isoformat() != occ_date.isoformat():
+        series_days = parse_recurrence_days(appt)
+        series_base = parse_date_safe(appt['appointment_date'])
+        series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
+        if (custom_weekday(new_day) in series_days
+                and series_base and new_day >= series_base
+                and (not series_end or new_day <= series_end)
+                and new_day.isoformat() not in excluded_list):
+            excluded_list.append(new_day.isoformat())
+    db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
+               (','.join(excluded_list), appointment_id))
+    db.execute('''
+        INSERT INTO appointments
+        (patient_id, appointment_date, appointment_time, duration_minutes,
+         is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    ''', (appt['patient_id'], new_day.isoformat(),
+          parse_time_safe(booking_time).strftime('%H:%M'), duration,
+          meeting_type, meeting_link or None, meeting_platform or None,
+          meeting_title or None, save_to_google))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id):
+    occ_date = parse_date_safe(occurrence_date_raw)
+    if not occ_date:
+        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+
+    affects_series = False
+    inherited_end = None
+    cutoff = (occ_date - timedelta(days=1)).isoformat()
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+
+        row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
+        if row_end and (inherited_end is None or row_end > inherited_end):
+            inherited_end = row_end
+
+        if row_base >= occ_date:
+            affects_series = True
+            db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+            continue
+
+        row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
+        if row_occurs_on_cutoff:
+            affects_series = True
+            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
+
+    if not affects_series:
+        return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
+
+    new_day = parse_date_safe(booking_date)
+    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+    new_end_dt = new_start_dt + timedelta(minutes=duration)
+    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
+    if conflict:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': conflict}), 409
+    # Use the new date's weekday for the new series so occurrences land on the new day.
+    rec_days = str(custom_weekday(new_day)) if new_day else (
+        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+    )
+    rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
+    rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
+    db.execute('''
+        INSERT INTO appointments
+        (patient_id, appointment_date, appointment_time, duration_minutes,
+         is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+         meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (appt['patient_id'], new_day.isoformat(),
+          parse_time_safe(booking_time).strftime('%H:%M'), duration,
+          rec_days, rec_interval, rec_end,
+          meeting_type, meeting_link or None, meeting_platform or None,
+          meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
+    new_day = parse_date_safe(booking_date)
+    occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
+    delta_days = (new_day - occ_date).days if new_day and occ_date else 0
+    new_rec_days = str(custom_weekday(new_day)) if new_day else (
+        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+    )
+
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+        shifted_day = row_base + timedelta(days=delta_days)
+        shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
+        shifted_end = shifted_start + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(
+            db,
+            shifted_day,
+            shifted_start,
+            shifted_end,
+            exclude_appointment_id=row['id']
+        )
+        if conflict_message:
+            return jsonify({'status': 'error', 'message': conflict_message}), 409
+
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+        shifted_day = row_base + timedelta(days=delta_days)
+        db.execute('''
+            UPDATE appointments
+            SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
+                meeting_type = ?, meeting_link = ?, meeting_platform = ?,
+                meeting_title = ?, save_to_google = ?, recurrence_days = ?
+            WHERE id = ?
+        ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
+              meeting_type, meeting_link or None, meeting_platform or None,
+              meeting_title or None, save_to_google, new_rec_days, row['id']))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
 @app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
 @login_required
 def api_calendar_appointment_update(appointment_id):
@@ -8800,143 +8939,14 @@ def api_calendar_appointment_update(appointment_id):
 
     # --- Scope: this occurrence only ---
     if is_recurring and scope == 'one':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        new_day = parse_date_safe(booking_date)
-        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        new_end_dt = new_start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
-        if conflict:
-            return jsonify({'status': 'error', 'message': conflict}), 409
-        existing_excluded = appt['excluded_dates'] or ''
-        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-        if occ_date.isoformat() not in excluded_list:
-            excluded_list.append(occ_date.isoformat())
-        # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
-        # exclude it from the series too so the moved standalone is the only event on that day.
-        if new_day and new_day.isoformat() != occ_date.isoformat():
-            series_days = parse_recurrence_days(appt)
-            series_base = parse_date_safe(appt['appointment_date'])
-            series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
-            if (custom_weekday(new_day) in series_days
-                    and series_base and new_day >= series_base
-                    and (not series_end or new_day <= series_end)
-                    and new_day.isoformat() not in excluded_list):
-                excluded_list.append(new_day.isoformat())
-        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-                   (','.join(excluded_list), appointment_id))
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, duration_minutes,
-             is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
-        ''', (appt['patient_id'], new_day.isoformat(),
-              parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
 
     # --- Scope: this and all upcoming ---
     if is_recurring and scope == 'upcoming':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-
-        affects_series = False
-        inherited_end = None
-        cutoff = (occ_date - timedelta(days=1)).isoformat()
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-
-            row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
-            if row_end and (inherited_end is None or row_end > inherited_end):
-                inherited_end = row_end
-
-            if row_base >= occ_date:
-                affects_series = True
-                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                continue
-
-            row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
-            if row_occurs_on_cutoff:
-                affects_series = True
-                db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
-
-        if not affects_series:
-            return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
-
-        new_day = parse_date_safe(booking_date)
-        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        new_end_dt = new_start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
-        if conflict:
-            db.rollback()
-            return jsonify({'status': 'error', 'message': conflict}), 409
-        # Use the new date's weekday for the new series so occurrences land on the new day.
-        rec_days = str(custom_weekday(new_day)) if new_day else (
-            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-        )
-        rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
-        rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, duration_minutes,
-             is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-             meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (appt['patient_id'], new_day.isoformat(),
-              parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              rec_days, rec_interval, rec_end,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
 
     if is_recurring and scope == 'all':
-        new_day = parse_date_safe(booking_date)
-        occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
-        delta_days = (new_day - occ_date).days if new_day and occ_date else 0
-        new_rec_days = str(custom_weekday(new_day)) if new_day else (
-            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-        )
-
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-            shifted_day = row_base + timedelta(days=delta_days)
-            shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
-            shifted_end = shifted_start + timedelta(minutes=duration)
-            conflict_message = has_time_conflict(
-                db,
-                shifted_day,
-                shifted_start,
-                shifted_end,
-                exclude_appointment_id=row['id']
-            )
-            if conflict_message:
-                return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-            shifted_day = row_base + timedelta(days=delta_days)
-            db.execute('''
-                UPDATE appointments
-                SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-                    meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-                    meeting_title = ?, save_to_google = ?, recurrence_days = ?
-                WHERE id = ?
-            ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  meeting_type, meeting_link or None, meeting_platform or None,
-                  meeting_title or None, save_to_google, new_rec_days, row['id']))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
 
     # --- Default / scope='all': update the record directly ---
     day_obj = parse_date_safe(booking_date)

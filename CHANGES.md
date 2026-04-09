@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- **2024-04-09 08:05:00**: 🧹 Refactored `api_calendar_appointment_update` in `app.py` by extracting logic into specific helper functions (`_handle_appointment_update_one`, `_handle_appointment_update_upcoming`, `_handle_appointment_update_all`) to reduce function length and improve maintainability.
