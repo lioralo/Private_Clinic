@@ -9029,15 +9029,11 @@ def api_update_group_session(session_id):
         if conflict_message:
             return jsonify({'status': 'error', 'message': f"{conflict_message} ({updated_date.isoformat()})"}), 409
 
+    update_data = []
     for row in target_rows:
         row_date = parse_date_safe(row['session_date'])
         updated_date = row_date + timedelta(days=day_delta) if apply_future else parsed_date
-        db.execute('''
-            UPDATE group_sessions
-            SET session_date = ?, session_time = ?, duration_minutes = ?,
-                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
-            WHERE id = ?
-        ''', (
+        update_data.append((
             updated_date.isoformat(),
             parsed_time.strftime('%H:%M'),
             duration,
@@ -9047,6 +9043,14 @@ def api_update_group_session(session_id):
             meeting_link or None,
             row['id']
         ))
+
+    if update_data:
+        db.executemany('''
+            UPDATE group_sessions
+            SET session_date = ?, session_time = ?, duration_minutes = ?,
+                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
+            WHERE id = ?
+        ''', update_data)
 
     if apply_future and existing['series_id']:
         db.execute('''
