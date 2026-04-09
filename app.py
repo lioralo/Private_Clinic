@@ -3452,23 +3452,8 @@ def register():
 
     return render_template('register.html')
 
-@app.route('/patient/<int:patient_id>')
-@login_required
-def patient_detail(patient_id):
-    if current_user.role != 'admin':
-         # Patients can only see their own profile? No, this view is the Admin view of the patient.
-         # The patient dashboard is separate.
-         flash('Access denied.')
-         return redirect(url_for('patient_home'))
 
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
-    if patient is None:
-        return "Patient not found", 404
-
-    # Fetch user account if exists
-    user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
-
+def _get_patient_notes(db, patient_id):
     notes = db.execute('''
         SELECT * FROM notes
         WHERE patient_id = ?
@@ -3477,7 +3462,6 @@ def patient_detail(patient_id):
                  created_at DESC
     ''', (patient_id,)).fetchall()
 
-    # Deduplicate by session_number: prefer note with content; tiebreak by higher id (more recent)
     if notes:
         seen_sessions: dict = {}
         unnumbered = []
@@ -3499,9 +3483,9 @@ def patient_detail(patient_id):
         numbered = sorted(seen_sessions.values(),
                           key=lambda n: (-(int(n['session_number'] or 0)), -(n['id'])))
         notes = numbered + unnumbered
-    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    return notes
+
+def _get_patient_group_data(db, patient_id):
     group_attendance_rows = db.execute('''
         SELECT gsa.session_id,
                gsa.attendance_status,
@@ -3536,8 +3520,9 @@ def patient_detail(patient_id):
     ''', (patient_id,)).fetchall()
 
     group_arrived_count = sum(1 for row in group_attendance_rows if (row['attendance_status'] or '') == 'present')
+    return group_attendance_rows, group_membership_rows, group_arrived_count
 
-    # Get messages
+def _get_patient_messages(db, user, current_user_id):
     messages = []
     unread_messages_count = 0
     if user:
@@ -3545,7 +3530,7 @@ def patient_detail(patient_id):
             SELECT COUNT(*) AS c
             FROM messages
             WHERE sender_id = ? AND recipient_id = ? AND COALESCE(is_read, 0) = 0
-        ''', (user['id'], current_user.id)).fetchone()['c']
+        ''', (user['id'], current_user_id)).fetchone()['c']
         messages = db.execute('''
             SELECT m.*, u.username as sender_name
             FROM messages m
@@ -3553,19 +3538,10 @@ def patient_detail(patient_id):
             WHERE (m.sender_id = ? AND m.recipient_id = ?)
                OR (m.sender_id = ? AND m.recipient_id = ?)
             ORDER BY timestamp ASC
-        ''', (current_user.id, user['id'], user['id'], current_user.id)).fetchall()
+        ''', (current_user_id, user['id'], user['id'], current_user_id)).fetchall()
+    return messages, unread_messages_count
 
-    # Get resources for assignment
-    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
-
-    # Get assigned resources
-    assigned_resources = db.execute('''
-        SELECT r.*
-        FROM resources r
-        JOIN patient_resources pr ON r.id = pr.resource_id
-        WHERE pr.patient_id = ?
-    ''', (patient_id,)).fetchall()
-
+def _get_patient_behavior_info(notes):
     behavior_options = [
         'Calm', 'Anxious', 'Restless', 'Withdrawn', 'Cooperative', 'Engaged', 'Low Energy', 'Irritable'
     ]
@@ -3583,6 +3559,46 @@ def patient_detail(patient_id):
         latest_behavior['behavior_checklist'] = {
             item.strip() for item in checklist_raw.split(',') if item.strip()
         }
+    return behavior_options, latest_behavior
+
+@app.route('/patient/<int:patient_id>')
+@login_required
+def patient_detail(patient_id):
+    if current_user.role != 'admin':
+         # Patients can only see their own profile? No, this view is the Admin view of the patient.
+         # The patient dashboard is separate.
+         flash('Access denied.')
+         return redirect(url_for('patient_home'))
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if patient is None:
+        return "Patient not found", 404
+
+    # Fetch user account if exists
+    user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+
+    notes = _get_patient_notes(db, patient_id)
+    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+
+    group_attendance_rows, group_membership_rows, group_arrived_count = _get_patient_group_data(db, patient_id)
+
+    messages, unread_messages_count = _get_patient_messages(db, user, current_user.id)
+
+    # Get resources for assignment
+    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
+
+    # Get assigned resources
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+    ''', (patient_id,)).fetchall()
+
+    behavior_options, latest_behavior = _get_patient_behavior_info(notes)
 
     active_tab = request.args.get('tab', 'info')
     intake_enabled = patient['patient_type'] in ('initial-intake', 'diagnosee') or int(patient['has_intake_tab'] or 0) == 1
