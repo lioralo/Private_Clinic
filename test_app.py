@@ -451,6 +451,31 @@ class ClinicTestCase(unittest.TestCase):
         assert 'available_slots' in payload
         assert 'weekend_specials' in payload
 
+    def test_calendar_snapshot_with_appointments(self):
+        """Test calendar snapshot API returns correct structure for appointments."""
+        self.login('lioraloni', 'Flo@tingind4')
+
+        self.client.post('/add_patient', data=dict(name='Snapshot Test Patient', status='ongoing'), follow_redirects=True)
+
+        test_date = (datetime.now().date() + timedelta(days=2)).isoformat()
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                VALUES (1, ?, '10:00', 60, 'scheduled', 0)
+            ''', (test_date,))
+            db.commit()
+
+        rv = self.client.get(f'/api/calendar/snapshot?week_start={test_date}')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        events = payload.get('events', [])
+        test_appt = next((e for e in events if e.get('title') == 'Snapshot Test Patient' and e.get('start', '').startswith(test_date)), None)
+        assert test_appt is not None
+        assert test_appt['meta']['type'] == 'appointment'
+        assert test_appt['meta']['patient_name'] == 'Snapshot Test Patient'
+
     def test_calendar_snapshot_group_session_has_detail_url(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Calendar Group Patient', status='ongoing', patient_type='group'), follow_redirects=True)
