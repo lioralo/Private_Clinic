@@ -920,6 +920,606 @@ def perform_encrypted_restore(db_path, backup_filename=None):
 
     return str(target), str(safety_copy)
 
+def _run_db_migrations(db):
+    """Run all schema migrations and index creations."""
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL,
+            recipient_id INTEGER,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_read BOOLEAN DEFAULT 0,
+            FOREIGN KEY (sender_id) REFERENCES users (id),
+            FOREIGN KEY (recipient_id) REFERENCES users (id)
+        )
+    ''')
+
+    # Handle column migrations
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass # Column exists
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            blocked_date DATE NOT NULL,
+            blocked_time TIME NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_group_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN email TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS vacancy_recurring (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6),
+            slot_time TEXT NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE vacancy_recurring ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            action TEXT NOT NULL,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS public_booking_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            created_by INTEGER,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            group_type TEXT DEFAULT 'support',
+            description TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            left_at TIMESTAMP,
+            role TEXT DEFAULT 'member',
+            PRIMARY KEY (group_id, patient_id),
+            FOREIGN KEY (group_id) REFERENCES groups (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            session_date DATE NOT NULL,
+            session_time TIME NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            title TEXT,
+            facilitator TEXT,
+            meeting_type TEXT DEFAULT 'in-person',
+            meeting_link TEXT,
+            series_id INTEGER,
+            occurrence_index INTEGER,
+            session_summary TEXT,
+            status TEXT DEFAULT 'scheduled',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            left_at TIMESTAMP,
+            role TEXT DEFAULT 'member',
+            FOREIGN KEY (group_id) REFERENCES groups (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_session_series (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            start_date DATE NOT NULL,
+            start_time TIME NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            recurrence_interval_weeks INTEGER DEFAULT 1,
+            recurrence_end_date DATE,
+            recurrence_count INTEGER,
+            title TEXT,
+            facilitator TEXT,
+            meeting_type TEXT DEFAULT 'in-person',
+            meeting_link TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_session_attendance (
+            session_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            attendance_status TEXT NOT NULL DEFAULT 'pending',
+            absence_reason TEXT,
+            notified_on_time BOOLEAN DEFAULT 0,
+            attendance_note TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (session_id, patient_id),
+            FOREIGN KEY (session_id) REFERENCES group_sessions (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+
+    # Performance indexes for common filters and sort paths.
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_recurrence_group ON appointments(recurrence_group_id)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS supervisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            group_id INTEGER,
+            supervision_date DATE NOT NULL,
+            supervisor_name TEXT,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id),
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date)')
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS diagnosis_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            category TEXT NOT NULL DEFAULT 'test_document',
+            title TEXT,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
+
+    # Google Calendar: add google_event_id to appointments and group_sessions
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    # Ensure google_calendar_tokens table exists
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+            id INTEGER PRIMARY KEY,
+            owner TEXT NOT NULL DEFAULT 'admin',
+            token_json TEXT NOT NULL,
+            calendar_id TEXT NOT NULL DEFAULT 'primary',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Treatment method tag and manual sort order for patients
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL UNIQUE,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    # Seed default options (only inserts if they don't exist yet)
+    for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
+        db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
+
+    # Google Docs integration columns
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    db.commit()
+
+def _seed_admin_user(db):
+    """Seed the default admin user and handle legacy migrations."""
+    # Check if admin exists
+    admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
+    if not admin:
+        print("Creating default admin user...")
+        hashed_pw = generate_password_hash('Flo@tingind4')
+        db.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
+            ('lioraloni', hashed_pw, 'admin', 0)
+        )
+        db.commit()
+        print("Admin user created (username: lioraloni).")
+        admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
+
+    # One-time migration from legacy default admin credentials.
+    legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
+    if legacy_admin:
+        collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
+        if not collision:
+            db.execute(
+                '''
+                UPDATE users
+                SET username = ?, password_hash = ?, force_password_change = ?
+                WHERE id = ?
+                ''',
+                ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
+            )
+            db.commit()
+            admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
+            print('Legacy admin account migrated to lioraloni.')
+
+    if admin and not admin['display_name']:
+        db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
+        db.commit()
+
+
 def init_db():
 
     database = app.config.get('DATABASE', DATABASE)
@@ -930,600 +1530,8 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender_id INTEGER NOT NULL,
-                recipient_id INTEGER,
-                content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_read BOOLEAN DEFAULT 0,
-                FOREIGN KEY (sender_id) REFERENCES users (id),
-                FOREIGN KEY (recipient_id) REFERENCES users (id)
-            )
-        ''')
-
-        # Handle column migrations
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass # Column exists
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                blocked_date DATE NOT NULL,
-                blocked_time TIME NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_group_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN email TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS vacancy_recurring (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6),
-                slot_time TEXT NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE vacancy_recurring ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER,
-                action TEXT NOT NULL,
-                details TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS public_booking_links (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT UNIQUE NOT NULL,
-                created_by INTEGER,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS goals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS groups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                group_type TEXT DEFAULT 'support',
-                description TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_members (
-                group_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                left_at TIMESTAMP,
-                role TEXT DEFAULT 'member',
-                PRIMARY KEY (group_id, patient_id),
-                FOREIGN KEY (group_id) REFERENCES groups (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                session_date DATE NOT NULL,
-                session_time TIME NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                title TEXT,
-                facilitator TEXT,
-                meeting_type TEXT DEFAULT 'in-person',
-                meeting_link TEXT,
-                series_id INTEGER,
-                occurrence_index INTEGER,
-                session_summary TEXT,
-                status TEXT DEFAULT 'scheduled',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                left_at TIMESTAMP,
-                role TEXT DEFAULT 'member',
-                FOREIGN KEY (group_id) REFERENCES groups (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_session_series (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                start_date DATE NOT NULL,
-                start_time TIME NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                recurrence_interval_weeks INTEGER DEFAULT 1,
-                recurrence_end_date DATE,
-                recurrence_count INTEGER,
-                title TEXT,
-                facilitator TEXT,
-                meeting_type TEXT DEFAULT 'in-person',
-                meeting_link TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_session_attendance (
-                session_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                attendance_status TEXT NOT NULL DEFAULT 'pending',
-                absence_reason TEXT,
-                notified_on_time BOOLEAN DEFAULT 0,
-                attendance_note TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (session_id, patient_id),
-                FOREIGN KEY (session_id) REFERENCES group_sessions (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-
-        # Performance indexes for common filters and sort paths.
-        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_recurrence_group ON appointments(recurrence_group_id)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS supervisions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER,
-                group_id INTEGER,
-                supervision_date DATE NOT NULL,
-                supervisor_name TEXT,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id),
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date)')
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS diagnosis_documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL,
-                category TEXT NOT NULL DEFAULT 'test_document',
-                title TEXT,
-                original_filename TEXT NOT NULL,
-                stored_filename TEXT NOT NULL,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
-
-        # Google Calendar: add google_event_id to appointments and group_sessions
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        # Ensure google_calendar_tokens table exists
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS google_calendar_tokens (
-                id INTEGER PRIMARY KEY,
-                owner TEXT NOT NULL DEFAULT 'admin',
-                token_json TEXT NOT NULL,
-                calendar_id TEXT NOT NULL DEFAULT 'primary',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Treatment method tag and manual sort order for patients
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label TEXT NOT NULL UNIQUE,
-            display_order INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # Seed default options (only inserts if they don't exist yet)
-        for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
-            db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
-
-        # Google Docs integration columns
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
-        except sqlite3.OperationalError:
-            pass
-
-        db.commit()
-
-        # Check if admin exists
-        admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
-        if not admin:
-            print("Creating default admin user...")
-            hashed_pw = generate_password_hash('Flo@tingind4')
-            db.execute(
-                "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
-                ('lioraloni', hashed_pw, 'admin', 0)
-            )
-            db.commit()
-            print("Admin user created (username: lioraloni).")
-            admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
-
-        # One-time migration from legacy default admin credentials.
-        legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
-        if legacy_admin:
-            collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
-            if not collision:
-                db.execute(
-                    '''
-                    UPDATE users
-                    SET username = ?, password_hash = ?, force_password_change = ?
-                    WHERE id = ?
-                    ''',
-                    ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
-                )
-                db.commit()
-                admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
-                print('Legacy admin account migrated to lioraloni.')
-
-        if admin and not admin['display_name']:
-            db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
-            db.commit()
+        _run_db_migrations(db)
+        _seed_admin_user(db)
 
         print(f"Initialized the database at {database}.")
 
