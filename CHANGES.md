@@ -1792,4 +1792,6 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
-- Refactored `seed_data` in `app.py` into separate helper functions (`_seed_ongoing_patient`, `_seed_candidate_patient`, `_seed_waiting_patient`, `_seed_archived_patient`) to fix function length issue and improve maintainability (2025-02-28 14:00).
+
+### Update
+- Updated comment in templates/calendar.html to clarify that the FullCalendar size refresh logic is a known workaround/note rather than an unresolved bug.
