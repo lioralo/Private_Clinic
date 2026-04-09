@@ -1792,6 +1792,7 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- Refactored `api_get_messages` in `app.py` on Thu Apr  9 08:16:55 UTC 2026 by extracting admin and patient logic into `_get_admin_messages` and `_get_patient_messages` helper functions.
 - **[$(date '+%Y-%m-%d %H:%M:%S')]** Refactored `api_calendar_book` route handler to extract logic into `_api_calendar_book_special` and `_api_calendar_book_regular` helper functions for improved readability, replacing duplicated conflict checking with existing `has_time_conflict` function.
 
 ### 2026-04-09 08:20

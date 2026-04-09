@@ -8085,34 +8085,67 @@ def download_file(name):
 
     return "Access denied", 403
 
-@app.route('/api/messages', methods=['GET'])
-@login_required
-def api_get_messages():
-    db = get_db()
-    if current_user.role == 'admin':
-        search_query = request.args.get('q', '').strip().lower()
-        patient_type = request.args.get('patient_type', 'all').strip().lower()
-        status_filter = request.args.get('status', 'all').strip().lower()
+def _get_admin_messages(db):
+    search_query = request.args.get('q', '').strip().lower()
+    patient_type = request.args.get('patient_type', 'all').strip().lower()
+    status_filter = request.args.get('status', 'all').strip().lower()
 
-        filters = ["COALESCE(p.is_deleted, 0) = 0"]
-        params = [current_user.id, current_user.id, current_user.id]
+    filters = ["COALESCE(p.is_deleted, 0) = 0"]
+    params = [current_user.id, current_user.id, current_user.id]
 
-        if search_query:
-            filters.append('(LOWER(p.name) LIKE ? OR LOWER(COALESCE(u.username, "")) LIKE ? OR LOWER(COALESCE(u.display_name, "")) LIKE ?)')
-            like_query = f"%{search_query}%"
-            params.extend([like_query, like_query, like_query])
+    if search_query:
+        filters.append('(LOWER(p.name) LIKE ? OR LOWER(COALESCE(u.username, "")) LIKE ? OR LOWER(COALESCE(u.display_name, "")) LIKE ?)')
+        like_query = f"%{search_query}%"
+        params.extend([like_query, like_query, like_query])
 
-        if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
-            filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
-            params.append(patient_type)
+    if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
+        filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
+        params.append(patient_type)
 
-        if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
-            if status_filter == 'waiting':
-                filters.append("p.status IN ('waiting', 'waiting for scheduling')")
-            else:
-                filters.append('LOWER(p.status) = ?')
-                params.append(status_filter)
+    if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
+        if status_filter == 'waiting':
+            filters.append("p.status IN ('waiting', 'waiting for scheduling')")
+        else:
+            filters.append('LOWER(p.status) = ?')
+            params.append(status_filter)
 
+    where_clause = ' AND '.join(filters)
+    conversations = db.execute('''
+        SELECT
+            p.id AS patient_id,
+            u.id AS user_id,
+            COALESCE(u.username, '') AS username,
+            COALESCE(u.display_name, '') AS display_name,
+            p.name AS patient_name,
+            p.status AS patient_status,
+            COALESCE(p.patient_type, 'private') AS patient_type,
+            MAX(m.timestamp) AS last_message_at,
+            SUM(CASE
+                WHEN m.recipient_id = ? AND m.is_read = 0 AND m.sender_id = u.id THEN 1
+                ELSE 0
+            END) AS unread_count,
+            CASE WHEN u.id IS NULL THEN 0 ELSE 1 END AS can_message
+        FROM patients p
+        LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND u.is_active = 1
+        LEFT JOIN messages m ON (
+            u.id IS NOT NULL AND (
+                (m.sender_id = u.id AND m.recipient_id = ?) OR
+                (m.sender_id = ? AND m.recipient_id = u.id)
+            )
+        )
+        WHERE ''' + where_clause + '''
+        GROUP BY p.id, u.id, u.username, u.display_name, p.name, p.status, p.patient_type
+        ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
+                 COALESCE(MAX(m.timestamp), '') DESC,
+                 p.name ASC
+    ''', tuple(params)).fetchall()
+
+    requested_user = request.args.get('conversation_with', type=int)
+    if requested_user is None:
+        for conv in conversations:
+            if conv['user_id'] is not None:
+                requested_user = conv['user_id']
+                break
         where_clause = ' AND '.join(filters)
         conversations = db.execute('''
             SELECT
@@ -8170,30 +8203,56 @@ def api_get_messages():
                 normalized.append(c_dict)
             conversations = normalized
 
-        messages = db.execute('''
-            SELECT m.*, u.username as sender_name
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
-            ORDER BY m.timestamp ASC
-        ''', (current_user.id, requested_user, requested_user, current_user.id)).fetchall() if requested_user else []
+    if requested_user is not None and not any(c['user_id'] == requested_user for c in conversations if c['user_id'] is not None):
+        requested_user = None
 
-        return jsonify({
-            'conversations': [dict(c) for c in conversations],
-            'active_conversation': requested_user,
-            'messages': [dict(m) for m in messages]
-        })
-    else:
-        # Patient gets messages to/from them
-        messages = db.execute('''
-            SELECT m.*, u.username as sender_name
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE m.sender_id = ? OR m.recipient_id = ?
-            ORDER BY m.timestamp ASC
-        ''', (current_user.id, current_user.id)).fetchall()
+    if requested_user is not None:
+        db.execute(
+            'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?',
+            (current_user.id, requested_user)
+        )
+        db.commit()
+        normalized = []
+        for c in conversations:
+            c_dict = dict(c)
+            if c_dict.get('user_id') == requested_user:
+                c_dict['unread_count'] = 0
+            normalized.append(c_dict)
+        conversations = normalized
+
+    messages = db.execute('''
+        SELECT m.*, u.username as sender_name
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.id
+        WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, requested_user, requested_user, current_user.id)).fetchall() if requested_user else []
+
+    return jsonify({
+        'conversations': [dict(c) for c in conversations],
+        'active_conversation': requested_user,
+        'messages': [dict(m) for m in messages]
+    })
+
+def _get_patient_messages(db):
+    messages = db.execute('''
+        SELECT m.*, u.username as sender_name
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.id
+        WHERE m.sender_id = ? OR m.recipient_id = ?
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, current_user.id)).fetchall()
 
     return jsonify([dict(m) for m in messages])
+
+@app.route('/api/messages', methods=['GET'])
+@login_required
+def api_get_messages():
+    db = get_db()
+    if current_user.role == 'admin':
+        return _get_admin_messages(db)
+    else:
+        return _get_patient_messages(db)
 
 @app.route('/api/messages/send', methods=['POST'])
 @login_required
