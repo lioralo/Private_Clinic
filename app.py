@@ -1975,9 +1975,9 @@ def add_intake_line(doc, label, value):
         doc.add_paragraph(item, style='List Bullet')
 
 
-def build_intake_docx(patient_name, data, language='en'):
+def get_intake_docx_text(language):
     is_hebrew = language == 'he'
-    text = {
+    return {
         'title': 'טופס הערכת אינטייק' if is_hebrew else 'Intake Evaluation',
         'patient': 'מטופל/ת' if is_hebrew else 'Patient',
         'generated': 'הופק בתאריך' if is_hebrew else 'Generated',
@@ -2061,6 +2061,94 @@ def build_intake_docx(patient_name, data, language='en'):
         }
     }
 
+
+INTAKE_SECTIONS_MAPPING = [
+    ('prelim', [
+        'meeting_location',
+        'meeting_location_specify',
+        'meeting_time',
+        'meeting_duration',
+        'meeting_conductor'
+    ]),
+    ('background', [
+        'main_complaint',
+        'problem_history',
+        'early_anamnesis',
+        'referral_source',
+        'referral_date'
+    ]),
+    ('administrative', [
+        'family_status',
+        'guardian_status',
+        'guardian_by_whom',
+        'living_with',
+        'living_with_other',
+        'disability_status',
+        'disability_percent',
+        'self_harm_level',
+        'self_harm_recent',
+        'self_harm_count',
+        'forced_treatment',
+        'substance_use',
+        'medical_cannabis',
+        'alcohol_use'
+    ]),
+    ('medical', [
+        'medical_conditions',
+        'psychiatric_conditions'
+    ]),
+    ('mental_status', [
+        'appearance_fit',
+        'appearance_fit_note',
+        'appearance_ordered',
+        'appearance_ordered_note',
+        'cooperation',
+        'cooperation_note',
+        'eye_contact',
+        'eye_contact_note',
+        'behavior_normal',
+        'behavior_note',
+        'speech_style',
+        'speech_note',
+        'mood',
+        'mood_note',
+        'affect_match',
+        'affect_state',
+        'affect_note',
+        'thinking_normal',
+        'thinking_rate',
+        'thinking_sequence',
+        'thinking_content',
+        'perception_normal',
+        'perception_abnormal',
+        'reality_testing',
+        'judgment',
+        'self_insight',
+        'orientation',
+        'memory'
+    ]),
+    ('treatment_plan', [
+        'referral_target',
+        'referral_details',
+        'patient_consent',
+        'treatment_approach',
+        'treatment_frequency',
+        'treatment_estimated_duration',
+        'diag_referral_question',
+        'diag_test_battery',
+        'diag_observations',
+        'diag_differential',
+        'diag_impression',
+        'diag_recommendations',
+        'diag_followup_plan',
+        'diag_final_summary'
+    ])
+]
+
+
+def build_intake_docx(patient_name, data, language='en'):
+    text = get_intake_docx_text(language)
+
     doc = Document()
     title = doc.add_heading(text['title'], level=1)
     title.alignment = 1
@@ -2069,85 +2157,10 @@ def build_intake_docx(patient_name, data, language='en'):
     )
     subtitle.alignment = 1
 
-    add_intake_section_heading(doc, text['sections']['prelim'])
-    add_intake_line(doc, text['labels']['meeting_location'], data.get('meeting_location'))
-    add_intake_line(doc, text['labels']['meeting_location_specify'], data.get('meeting_location_specify'))
-    add_intake_line(doc, text['labels']['meeting_time'], data.get('meeting_time'))
-    add_intake_line(doc, text['labels']['meeting_duration'], data.get('meeting_duration'))
-    add_intake_line(doc, text['labels']['meeting_conductor'], data.get('meeting_conductor'))
-
-    add_intake_section_heading(doc, text['sections']['background'])
-    add_intake_line(doc, text['labels']['main_complaint'], data.get('main_complaint'))
-    add_intake_line(doc, text['labels']['problem_history'], data.get('problem_history'))
-    add_intake_line(doc, text['labels']['early_anamnesis'], data.get('early_anamnesis'))
-    add_intake_line(doc, text['labels']['referral_source'], data.get('referral_source'))
-    add_intake_line(doc, text['labels']['referral_date'], data.get('referral_date'))
-
-    add_intake_section_heading(doc, text['sections']['administrative'])
-    add_intake_line(doc, text['labels']['family_status'], data.get('family_status'))
-    add_intake_line(doc, text['labels']['guardian_status'], data.get('guardian_status'))
-    add_intake_line(doc, text['labels']['guardian_by_whom'], data.get('guardian_by_whom'))
-    add_intake_line(doc, text['labels']['living_with'], data.get('living_with'))
-    add_intake_line(doc, text['labels']['living_with_other'], data.get('living_with_other'))
-    add_intake_line(doc, text['labels']['disability_status'], data.get('disability_status'))
-    add_intake_line(doc, text['labels']['disability_percent'], data.get('disability_percent'))
-    add_intake_line(doc, text['labels']['self_harm_level'], data.get('self_harm_level'))
-    add_intake_line(doc, text['labels']['self_harm_recent'], data.get('self_harm_recent'))
-    add_intake_line(doc, text['labels']['self_harm_count'], data.get('self_harm_count'))
-    add_intake_line(doc, text['labels']['forced_treatment'], data.get('forced_treatment'))
-    add_intake_line(doc, text['labels']['substance_use'], data.get('substance_use'))
-    add_intake_line(doc, text['labels']['medical_cannabis'], data.get('medical_cannabis'))
-    add_intake_line(doc, text['labels']['alcohol_use'], data.get('alcohol_use'))
-
-    add_intake_section_heading(doc, text['sections']['medical'])
-    add_intake_line(doc, text['labels']['medical_conditions'], data.get('medical_conditions'))
-    add_intake_line(doc, text['labels']['psychiatric_conditions'], data.get('psychiatric_conditions'))
-
-    add_intake_section_heading(doc, text['sections']['mental_status'])
-    add_intake_line(doc, text['labels']['appearance_fit'], data.get('appearance_fit'))
-    add_intake_line(doc, text['labels']['appearance_fit_note'], data.get('appearance_fit_note'))
-    add_intake_line(doc, text['labels']['appearance_ordered'], data.get('appearance_ordered'))
-    add_intake_line(doc, text['labels']['appearance_ordered_note'], data.get('appearance_ordered_note'))
-    add_intake_line(doc, text['labels']['cooperation'], data.get('cooperation'))
-    add_intake_line(doc, text['labels']['cooperation_note'], data.get('cooperation_note'))
-    add_intake_line(doc, text['labels']['eye_contact'], data.get('eye_contact'))
-    add_intake_line(doc, text['labels']['eye_contact_note'], data.get('eye_contact_note'))
-    add_intake_line(doc, text['labels']['behavior_normal'], data.get('behavior_normal'))
-    add_intake_line(doc, text['labels']['behavior_note'], data.get('behavior_note'))
-    add_intake_line(doc, text['labels']['speech_style'], data.get('speech_style'))
-    add_intake_line(doc, text['labels']['speech_note'], data.get('speech_note'))
-    add_intake_line(doc, text['labels']['mood'], data.get('mood'))
-    add_intake_line(doc, text['labels']['mood_note'], data.get('mood_note'))
-    add_intake_line(doc, text['labels']['affect_match'], data.get('affect_match'))
-    add_intake_line(doc, text['labels']['affect_state'], data.get('affect_state'))
-    add_intake_line(doc, text['labels']['affect_note'], data.get('affect_note'))
-    add_intake_line(doc, text['labels']['thinking_normal'], data.get('thinking_normal'))
-    add_intake_line(doc, text['labels']['thinking_rate'], data.get('thinking_rate'))
-    add_intake_line(doc, text['labels']['thinking_sequence'], data.get('thinking_sequence'))
-    add_intake_line(doc, text['labels']['thinking_content'], data.get('thinking_content'))
-    add_intake_line(doc, text['labels']['perception_normal'], data.get('perception_normal'))
-    add_intake_line(doc, text['labels']['perception_abnormal'], data.get('perception_abnormal'))
-    add_intake_line(doc, text['labels']['reality_testing'], data.get('reality_testing'))
-    add_intake_line(doc, text['labels']['judgment'], data.get('judgment'))
-    add_intake_line(doc, text['labels']['self_insight'], data.get('self_insight'))
-    add_intake_line(doc, text['labels']['orientation'], data.get('orientation'))
-    add_intake_line(doc, text['labels']['memory'], data.get('memory'))
-
-    add_intake_section_heading(doc, text['sections']['treatment_plan'])
-    add_intake_line(doc, text['labels']['referral_target'], data.get('referral_target'))
-    add_intake_line(doc, text['labels']['referral_details'], data.get('referral_details'))
-    add_intake_line(doc, text['labels']['patient_consent'], data.get('patient_consent'))
-    add_intake_line(doc, text['labels']['treatment_approach'], data.get('treatment_approach'))
-    add_intake_line(doc, text['labels']['treatment_frequency'], data.get('treatment_frequency'))
-    add_intake_line(doc, text['labels']['treatment_estimated_duration'], data.get('treatment_estimated_duration'))
-    add_intake_line(doc, text['labels']['diag_referral_question'], data.get('diag_referral_question'))
-    add_intake_line(doc, text['labels']['diag_test_battery'], data.get('diag_test_battery'))
-    add_intake_line(doc, text['labels']['diag_observations'], data.get('diag_observations'))
-    add_intake_line(doc, text['labels']['diag_differential'], data.get('diag_differential'))
-    add_intake_line(doc, text['labels']['diag_impression'], data.get('diag_impression'))
-    add_intake_line(doc, text['labels']['diag_recommendations'], data.get('diag_recommendations'))
-    add_intake_line(doc, text['labels']['diag_followup_plan'], data.get('diag_followup_plan'))
-    add_intake_line(doc, text['labels']['diag_final_summary'], data.get('diag_final_summary'))
+    for section_key, fields in INTAKE_SECTIONS_MAPPING:
+        add_intake_section_heading(doc, text['sections'][section_key])
+        for field in fields:
+            add_intake_line(doc, text['labels'][field], data.get(field))
 
     return doc
 
