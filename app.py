@@ -606,11 +606,22 @@ def routine_backup_guard():
         return
     if app.config.get('TESTING'):
         return
-    try:
-        perform_routine_encrypted_backup(app.config.get('DATABASE', DATABASE))
-    except Exception:
-        # Keep requests alive even if backup fails, but surface diagnostics.
-        app.logger.exception('Routine encrypted backup failed')
+
+    import os
+    import time
+
+    db_path = app.config.get('DATABASE_PATH') or app.config.get('DATABASE', DATABASE)
+    if not db_path or not os.path.exists(db_path):
+        return
+
+    last_modified = os.path.getmtime(db_path)
+    now = time.time()
+
+    if now - last_modified > 86400: # 24 hours
+        try:
+            perform_routine_encrypted_backup(db_path)
+        except Exception:
+            app.logger.exception('Routine encrypted backup failed')
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None, display_name=None):

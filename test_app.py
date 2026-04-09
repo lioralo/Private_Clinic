@@ -1,6 +1,7 @@
 import os
 import shutil
 import unittest
+from unittest.mock import patch, MagicMock
 import tempfile
 import sqlite3
 import json
@@ -2294,6 +2295,63 @@ class ClinicTestCase(unittest.TestCase):
             assert today_r['is_tomorrow'] is False
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
+
+
+    @patch('os.path.exists')
+    @patch('os.path.getmtime')
+    @patch('time.time')
+    @patch('app.perform_routine_encrypted_backup')
+    def test_routine_backup_guard_triggers_backup_after_24_hours(self, mock_perform, mock_time, mock_getmtime, mock_exists):
+        with app.test_request_context('/dashboard'):
+            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
+                mock_exists.return_value = True
+                mock_getmtime.return_value = 1000000.0
+                mock_time.return_value = 1000000.0 + 86401.0  # > 24 hours
+
+                app_module.routine_backup_guard()
+
+                mock_exists.assert_called_with('/fake/db.sqlite')
+                mock_getmtime.assert_called_with('/fake/db.sqlite')
+                mock_perform.assert_called_once_with('/fake/db.sqlite')
+
+    @patch('os.path.exists')
+    @patch('os.path.getmtime')
+    @patch('time.time')
+    @patch('app.perform_routine_encrypted_backup')
+    def test_routine_backup_guard_skips_backup_under_24_hours(self, mock_perform, mock_time, mock_getmtime, mock_exists):
+        with app.test_request_context('/dashboard'):
+            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
+                mock_exists.return_value = True
+                mock_getmtime.return_value = 1000000.0
+                mock_time.return_value = 1000000.0 + 86399.0  # < 24 hours
+
+                app_module.routine_backup_guard()
+
+                mock_exists.assert_called_with('/fake/db.sqlite')
+                mock_getmtime.assert_called_with('/fake/db.sqlite')
+                mock_perform.assert_not_called()
+
+    @patch('os.path.exists')
+    @patch('app.perform_routine_encrypted_backup')
+    def test_routine_backup_guard_skips_if_no_db(self, mock_perform, mock_exists):
+        with app.test_request_context('/dashboard'):
+            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
+                mock_exists.return_value = False
+
+                app_module.routine_backup_guard()
+
+                mock_exists.assert_called_with('/fake/db.sqlite')
+                mock_perform.assert_not_called()
+
+    @patch('os.path.exists')
+    @patch('app.perform_routine_encrypted_backup')
+    def test_routine_backup_guard_skips_if_db_path_not_configured(self, mock_perform, mock_exists):
+        with app.test_request_context('/dashboard'):
+            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': None, 'DATABASE': None}):
+                app_module.routine_backup_guard()
+
+                mock_exists.assert_not_called()
+                mock_perform.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
