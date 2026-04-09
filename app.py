@@ -2463,19 +2463,8 @@ def crm_dashboard():
                            treatment_method_options=treatment_method_labels)
 
 
-@app.route('/admin/dashboard')
-@login_required
-def admin_dashboard():
-    """At-a-glance clinic overview for the admin."""
-    if current_user.role != 'admin':
-        return redirect(url_for('patient_home'))
-
-    db = get_db()
-    today = datetime.now().date()
-    week_end = today + timedelta(days=6)
-
-    # Today's appointments
-    today_appointments = db.execute('''
+def _get_dashboard_today_appointments(db, today):
+    return db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
                a.meeting_type, a.meeting_link, a.is_recurring,
                p.id AS patient_id, p.name AS patient_name,
@@ -2488,8 +2477,8 @@ def admin_dashboard():
         ORDER BY a.appointment_time ASC
     ''', (today.isoformat(),)).fetchall()
 
-    # Remaining appointments this week (days 1-6 from today)
-    week_appointments = db.execute('''
+def _get_dashboard_week_appointments(db, today, week_end):
+    return db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.meeting_type,
                p.id AS patient_id, p.name AS patient_name
         FROM appointments a
@@ -2501,7 +2490,7 @@ def admin_dashboard():
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
     ''', (today.isoformat(), week_end.isoformat())).fetchall()
 
-    # Patient status counts
+def _get_dashboard_patient_counts(db):
     counts_row = db.execute('''
         SELECT
             COUNT(*) AS total,
@@ -2510,21 +2499,21 @@ def admin_dashboard():
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
         FROM patients WHERE COALESCE(is_deleted, 0) = 0
     ''').fetchone()
-    counts = {
+    return {
         'total':   counts_row['total']   or 0,
         'ongoing': counts_row['ongoing'] or 0,
         'waiting': counts_row['waiting'] or 0,
         'archived':counts_row['archived']or 0,
     }
 
-    # Unread messages for admin
-    unread_count = db.execute(
+def _get_dashboard_unread_count(db, user_id):
+    return db.execute(
         'SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND COALESCE(is_read, 0) = 0',
-        (current_user.id,)
+        (user_id,)
     ).fetchone()[0]
 
-    # Patients needing a follow-up decision (candidates with only past appointments)
-    followup_patients = db.execute('''
+def _get_dashboard_followup_patients(db):
+    return db.execute('''
         SELECT p.id, p.name, p.status, MAX(a.appointment_date) AS last_appt_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
@@ -2544,8 +2533,8 @@ def admin_dashboard():
         LIMIT 8
     ''').fetchall()
 
-    # Waiting patients (no appointment yet scheduled at all)
-    waiting_patients = db.execute('''
+def _get_dashboard_waiting_patients(db):
+    return db.execute('''
         SELECT p.id, p.name, p.created_at
         FROM patients p
         WHERE p.status IN ('waiting', 'waiting for scheduling')
@@ -2559,8 +2548,8 @@ def admin_dashboard():
         LIMIT 6
     ''').fetchall()
 
-    # Recently added patients
-    recent_patients = db.execute('''
+def _get_dashboard_recent_patients(db):
+    return db.execute('''
         SELECT id, name, status, patient_type, treatment_method, created_at
         FROM patients
         WHERE COALESCE(is_deleted, 0) = 0
@@ -2568,8 +2557,8 @@ def admin_dashboard():
         LIMIT 6
     ''').fetchall()
 
-    # Recent audit log activity
-    recent_activity = db.execute('''
+def _get_dashboard_recent_activity(db):
+    return db.execute('''
         SELECT al.action, al.details, al.created_at,
                p.name AS patient_name, p.id AS patient_id
         FROM audit_logs al
@@ -2578,8 +2567,8 @@ def admin_dashboard():
         LIMIT 10
     ''').fetchall()
 
-    # Ongoing patients missing a recurring appointment (alert)
-    missing_recurring = db.execute('''
+def _get_dashboard_missing_recurring(db):
+    return db.execute('''
         SELECT id, name
         FROM patients
         WHERE status = 'ongoing'
@@ -2593,6 +2582,28 @@ def admin_dashboard():
         ORDER BY name ASC
         LIMIT 6
     ''').fetchall()
+
+
+@app.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    """At-a-glance clinic overview for the admin."""
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    today = datetime.now().date()
+    week_end = today + timedelta(days=6)
+
+    today_appointments = _get_dashboard_today_appointments(db, today)
+    week_appointments = _get_dashboard_week_appointments(db, today, week_end)
+    counts = _get_dashboard_patient_counts(db)
+    unread_count = _get_dashboard_unread_count(db, current_user.id)
+    followup_patients = _get_dashboard_followup_patients(db)
+    waiting_patients = _get_dashboard_waiting_patients(db)
+    recent_patients = _get_dashboard_recent_patients(db)
+    recent_activity = _get_dashboard_recent_activity(db)
+    missing_recurring = _get_dashboard_missing_recurring(db)
 
     return render_template('admin_home.html',
                            today=today,
