@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- 2026-04-09 08:30:00: Added missing test suite (`test_patient_engagement.py`) for the patient engagement module. Also added missing Jinja template filters `from_iso_date`, `from_iso_datetime`, `strftime`, and `date` to `app.py` for template rendering safety.

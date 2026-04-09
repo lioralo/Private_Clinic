@@ -216,6 +216,34 @@ def _backup_live_artifacts(safety_root):
 def rjust_filter(s, width, fillchar=' '):
     return str(s).rjust(width, fillchar)
 
+@app.template_filter('from_iso_date')
+def from_iso_date(value):
+    try:
+        return datetime.fromisoformat(value).date()
+    except (ValueError, TypeError):
+        return value
+
+@app.template_filter('from_iso_datetime')
+def from_iso_datetime(value):
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return value
+
+@app.template_filter('strftime')
+def strftime_filter(value, format_string):
+    try:
+        return value.strftime(format_string)
+    except AttributeError:
+        return value
+
+@app.template_filter('date')
+def date_filter(value):
+    try:
+        return value.date()
+    except AttributeError:
+        return value
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -2800,7 +2828,8 @@ def patient_dashboard():
         upcoming_appointments=upcoming_appointments,
         recent_notes=recent_notes,
         goals=goals,
-        engagement=engagement_data
+        engagement=engagement_data,
+        now=datetime.now()
     )
 
 
