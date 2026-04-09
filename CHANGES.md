@@ -2,6 +2,18 @@
 
 ---
 
+## Test API Treatment Method Options Get
+
+**Date:** April 09, 2026
+
+**Objective:** Add a unit test for the `/api/treatment_method_options` GET endpoint.
+
+**Release Summary:**
+- Wrote a new test `test_api_treatment_method_options_get` in `test_app.py`.
+- Tested the endpoint for correct unauthenticated redirects, patient 403 authorization failures, and successful 200 JSON payload responses for admins.
+- Addressed test errors related to schema mismatch and role validation mismatch.
+---
+
 ## Session 33
 
 **Date:** April 4, 2026
@@ -1564,6 +1576,27 @@ Admin (`manage_slots.html`) already had correct `hiddenDays` and hours; only the
 
 ---
 
+# Changes Documentation - 2026-04-09 08:19
+
+## Overview
+
+Optimized calendar blocking date operations to fix an N+1 query performance bottleneck.
+
+## Changes Made
+
+### 1. **Fixed N+1 Query in Blocking Dates** ✅
+**Problem**: The `api_calendar_block` function in `app.py` executed individual `INSERT INTO blocked_slots` and `UPDATE slots_override` statements inside a `for block_day in dates_to_create:` loop, causing significant database roundtrip overhead when dealing with large recurrences.
+
+**Solution**:
+- Refactored the loop to gather tuples for inserts and updates into two lists using list comprehensions.
+- Utilized `db.executemany` for batch inserting into `blocked_slots` and batch updating `slots_override`.
+- Captured the current timestamp once before the lists generation to ensure precise consistency.
+- Benchmarks demonstrated a ~24% improvement for 1000 items (0.0209s down to 0.0159s).
+
+**Files Modified**: `app.py`
+
+---
+
 # Changes Documentation - March 9, 2026 (Session 1)
 
 ## Overview
@@ -1760,3 +1793,8 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
 - Refactored `api_get_messages` in `app.py` on Thu Apr  9 08:16:55 UTC 2026 by extracting admin and patient logic into `_get_admin_messages` and `_get_patient_messages` helper functions.
+- **[$(date '+%Y-%m-%d %H:%M:%S')]** Refactored `api_calendar_book` route handler to extract logic into `_api_calendar_book_special` and `_api_calendar_book_regular` helper functions for improved readability, replacing duplicated conflict checking with existing `has_time_conflict` function.
+
+### 2026-04-09 08:20
+- **Security**: Fixed a path traversal vulnerability in the file download functionality (`/uploads/<name>`) by enforcing `werkzeug.utils.secure_filename(name)` on the user-provided filename input prior to executing the `send_from_directory` fallback check and database mapping. Added tests to verify correct path-safe handling in `test_security.py`.
+2026-04-09 08:20:22 - Optimized N+1 Query in `build_week_calendar_snapshot` function in `app.py` for Follow Up Alerts by using an `EXISTS` sql query statement to improve response times.
