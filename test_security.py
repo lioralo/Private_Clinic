@@ -110,5 +110,80 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 302)
         self.assertIn('/patients', second.headers.get('Location', ''))
 
+    def test_inactivity_timeout_updates_last_activity(self):
+        # Login
+        self.client.post('/login', data=dict(
+            username='admin',
+            password='admin'
+        ), follow_redirects=True)
+
+        # Make a request
+        with self.client as c:
+            c.get('/patients')
+            from flask import session
+            self.assertIn('last_activity_at', session)
+            self.assertIsNotNone(session['last_activity_at'])
+
+    def test_inactivity_timeout_logs_out_user(self):
+        # Login
+        self.client.post('/login', data=dict(
+            username='admin',
+            password='admin'
+        ), follow_redirects=True)
+
+        # Simulate time passing by modifying the session
+        with self.client.session_transaction() as sess:
+            # Set to 10 minutes ago
+            import datetime
+            sess['last_activity_at'] = int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - 600
+
+        # Make a request
+        with self.client as c:
+            rv = c.get('/patients', follow_redirects=True)
+
+            # Should be redirected to login and flashed message
+            self.assertIn(b'Session expired due to inactivity. Please log in again.', rv.data)
+
+            from flask import session
+            # last_activity_at should be popped during logout process or next request unauthenticated
+            self.assertNotIn('last_activity_at', session)
+
+    def test_inactivity_timeout_ignored_for_static_files(self):
+        # Login
+        self.client.post('/login', data=dict(
+            username='admin',
+            password='admin'
+        ), follow_redirects=True)
+
+        # Simulate time passing by modifying the session
+        with self.client.session_transaction() as sess:
+            import datetime
+            sess['last_activity_at'] = int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - 600
+
+        # Make a request to a static file (which shouldn't trigger timeout)
+        # Even if the file doesn't exist, the before_request logic runs before the 404
+        rv = self.client.get('/static/nonexistent.css', follow_redirects=False)
+
+        # Should not redirect to login, should probably 404
+        self.assertEqual(rv.status_code, 404)
+
+        # Verify last_activity_at was NOT modified and user is not logged out
+        with self.client as c:
+            c.get('/static/nonexistent.css')
+            from flask import session
+            self.assertIn('last_activity_at', session)
+            self.assertLess(session['last_activity_at'], int(datetime.datetime.now(datetime.timezone.utc).timestamp()) - 500)
+
+    def test_inactivity_timeout_unauthenticated(self):
+        # Set a last_activity_at without being logged in
+        with self.client.session_transaction() as sess:
+            sess['last_activity_at'] = 12345
+
+        with self.client as c:
+            c.get('/login')
+            from flask import session
+            self.assertNotIn('last_activity_at', session)
+
+
 if __name__ == '__main__':
     unittest.main()
