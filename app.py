@@ -5372,6 +5372,84 @@ def groups_dashboard():
     return render_template('groups_overview.html', groups=groups)
 
 
+
+def _get_group_member_history(db, group_id):
+    member_history_rows = db.execute('''
+         SELECT h.id,
+             h.group_id,
+               h.patient_id,
+               p.name AS patient_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN patients p ON p.id = h.patient_id
+                WHERE h.group_id = ?
+                    AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY h.group_id ASC, h.joined_at DESC
+        ''', (group_id,)).fetchall()
+
+    member_history_rows = [dict(row) for row in member_history_rows]
+    now_date = datetime.now().date()
+    for row in member_history_rows:
+        joined_date = parse_date_safe((row.get('joined_at') or '')[:10])
+        left_date = parse_date_safe((row.get('left_at') or '')[:10]) if row.get('left_at') else None
+        if joined_date:
+            end_date = left_date or now_date
+            row['membership_days'] = max(0, (end_date - joined_date).days)
+        else:
+            row['membership_days'] = None
+    return member_history_rows
+
+
+def _get_group_attendance_data(db, group_sessions):
+    session_member_map = {}
+    attendance_by_session = {}
+    session_ids = [int(row['id']) for row in group_sessions]
+
+    for gs_row in group_sessions:
+        session_member_map[int(gs_row['id'])] = get_group_members_for_session(
+            db, int(gs_row['group_id']), gs_row['session_date']
+        )
+
+    if session_ids:
+        marks = db.execute(f'''
+            SELECT session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note
+            FROM group_session_attendance
+            WHERE session_id IN ({','.join(['?'] * len(session_ids))})
+        ''', session_ids).fetchall()
+        for row in marks:
+            session_key = int(row['session_id'])
+            attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
+                'attendance_status': row['attendance_status'] or 'pending',
+                'absence_reason': row['absence_reason'] or '',
+                'notified_on_time': int(row['notified_on_time'] or 0),
+                'attendance_note': row['attendance_note'] or ''
+            }
+
+    return session_member_map, attendance_by_session
+
+
+def _get_patient_arrived_counts(db):
+    arrived_rows = db.execute('''
+        SELECT patient_id, COUNT(*) AS arrived_count
+        FROM group_session_attendance
+        WHERE attendance_status = 'present'
+        GROUP BY patient_id
+    ''').fetchall()
+    return {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
+
+
+def _get_available_group_patients(db):
+    return db.execute('''
+        SELECT id, name
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+          AND COALESCE(patient_type, 'private') = 'group'
+        ORDER BY name ASC
+    ''').fetchall()
+
+
 def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcoming=False):
     group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group:
@@ -5399,70 +5477,10 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
         ORDER BY gs.session_date ASC, gs.session_time ASC
     ''', (group_id,)).fetchall()
 
-    member_history_rows = db.execute('''
-         SELECT h.id,
-             h.group_id,
-               h.patient_id,
-               p.name AS patient_name,
-               h.joined_at,
-               h.left_at,
-               COALESCE(h.role, 'member') AS role
-        FROM group_member_history h
-        JOIN patients p ON p.id = h.patient_id
-                WHERE h.group_id = ?
-                    AND COALESCE(p.is_deleted, 0) = 0
-        ORDER BY h.group_id ASC, h.joined_at DESC
-        ''', (group_id,)).fetchall()
-
-    member_history_rows = [dict(row) for row in member_history_rows]
-    now_date = datetime.now().date()
-    for row in member_history_rows:
-        joined_date = parse_date_safe((row.get('joined_at') or '')[:10])
-        left_date = parse_date_safe((row.get('left_at') or '')[:10]) if row.get('left_at') else None
-        if joined_date:
-            end_date = left_date or now_date
-            row['membership_days'] = max(0, (end_date - joined_date).days)
-        else:
-            row['membership_days'] = None
-
-    session_member_map = {}
-    attendance_by_session = {}
-    session_ids = [int(row['id']) for row in group_sessions]
-    for gs_row in group_sessions:
-        session_member_map[int(gs_row['id'])] = get_group_members_for_session(
-            db, int(gs_row['group_id']), gs_row['session_date']
-        )
-
-    if session_ids:
-        marks = db.execute(f'''
-            SELECT session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note
-            FROM group_session_attendance
-            WHERE session_id IN ({','.join(['?'] * len(session_ids))})
-        ''', session_ids).fetchall()
-        for row in marks:
-            session_key = int(row['session_id'])
-            attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
-                'attendance_status': row['attendance_status'] or 'pending',
-                'absence_reason': row['absence_reason'] or '',
-                'notified_on_time': int(row['notified_on_time'] or 0),
-                'attendance_note': row['attendance_note'] or ''
-            }
-
-    arrived_rows = db.execute('''
-        SELECT patient_id, COUNT(*) AS arrived_count
-        FROM group_session_attendance
-        WHERE attendance_status = 'present'
-        GROUP BY patient_id
-    ''').fetchall()
-    arrived_count_map = {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
-
-    patients = db.execute('''
-        SELECT id, name
-        FROM patients
-        WHERE COALESCE(is_deleted, 0) = 0
-          AND COALESCE(patient_type, 'private') = 'group'
-        ORDER BY name ASC
-    ''').fetchall()
+    member_history_rows = _get_group_member_history(db, group_id)
+    session_member_map, attendance_by_session = _get_group_attendance_data(db, group_sessions)
+    arrived_count_map = _get_patient_arrived_counts(db)
+    patients = _get_available_group_patients(db)
 
     session_collections = build_group_session_collections(
         group_sessions,

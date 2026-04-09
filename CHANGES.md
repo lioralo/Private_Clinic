@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- **2025-04-09**: Refactored `build_group_detail_payload` function in `app.py` by extracting inner logic into four helper functions (`_get_group_member_history`, `_get_group_attendance_data`, `_get_patient_arrived_counts`, and `_get_available_group_patients`) to improve readability and maintainability.
