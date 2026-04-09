@@ -6058,44 +6058,34 @@ def update_group_member_history_dates(history_id):
     return redirect_target()
 
 
-@app.route('/groups/<int:group_id>/sessions', methods=['POST'])
-@login_required
-def add_group_session(group_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
+def _parse_group_session_form(form):
+    return {
+        'session_date': (form.get('session_date') or '').strip(),
+        'session_time': (form.get('session_time') or '').strip(),
+        'end_time_raw': (form.get('end_time') or '').strip(),
+        'title': (form.get('title') or '').strip(),
+        'facilitator': (form.get('facilitator') or '').strip(),
+        'meeting_type': (form.get('meeting_type') or 'in-person').strip(),
+        'meeting_link': (form.get('meeting_link') or '').strip(),
+        'recurrence_mode': (form.get('recurrence_mode') or 'one-time').strip().lower(),
+        'recurrence_interval_raw': (form.get('recurrence_interval_weeks') or '1').strip(),
+        'recurrence_end_mode': (form.get('recurrence_end_mode') or 'count').strip().lower(),
+        'recurrence_end_raw': (form.get('recurrence_end_date') or '').strip(),
+        'recurrence_count_raw': (form.get('recurrence_count') or '').strip()
+    }
 
-    session_date = (request.form.get('session_date') or '').strip()
-    session_time = (request.form.get('session_time') or '').strip()
-    end_time_raw = (request.form.get('end_time') or '').strip()
-    title = (request.form.get('title') or '').strip()
-    facilitator = (request.form.get('facilitator') or '').strip()
-    meeting_type = (request.form.get('meeting_type') or 'in-person').strip()
-    meeting_link = (request.form.get('meeting_link') or '').strip()
-    recurrence_mode = (request.form.get('recurrence_mode') or 'one-time').strip().lower()
-    recurrence_interval_raw = (request.form.get('recurrence_interval_weeks') or '1').strip()
-    recurrence_end_mode = (request.form.get('recurrence_end_mode') or 'count').strip().lower()
-    recurrence_end_raw = (request.form.get('recurrence_end_date') or '').strip()
-    recurrence_count_raw = (request.form.get('recurrence_count') or '').strip()
 
-    parsed_date = parse_date_safe(session_date)
-    parsed_time = parse_time_safe(session_time)
-    parsed_end = parse_time_safe(end_time_raw)
-    if not parsed_date or not parsed_time:
-        flash('Valid session date and start time are required.')
-        return redirect(url_for('group_detail', group_id=group_id))
-
+def _calculate_group_session_duration(parsed_time, parsed_end):
     duration = 60
     if parsed_end:
         start_minutes = parsed_time.hour * 60 + parsed_time.minute
         end_minutes = parsed_end.hour * 60 + parsed_end.minute
         if end_minutes > start_minutes:
             duration = end_minutes - start_minutes
+    return duration
 
-    session_start = datetime.combine(parsed_date, parsed_time)
-    # session_end used per-occurrence in the recurrence loop below
 
-    db = get_db()
-    recurrence_interval_weeks = 1
+def _resolve_group_recurrence_params(recurrence_mode, recurrence_interval_raw, recurrence_end_mode, recurrence_end_raw, recurrence_count_raw):
     try:
         recurrence_interval_weeks = max(1, int(recurrence_interval_raw or '1'))
     except ValueError:
@@ -6109,35 +6099,21 @@ def add_group_session(group_id):
         except ValueError:
             recurrence_count = None
 
+    error_msg = None
     if recurrence_mode == 'weekly':
         if recurrence_end_mode == 'date':
             recurrence_count = None
             if not recurrence_end_date:
-                flash('Please choose an end date for the recurring meetings.')
-                return redirect(url_for('group_detail', group_id=group_id))
+                error_msg = 'Please choose an end date for the recurring meetings.'
         else:
             recurrence_end_date = None
             if recurrence_count is None:
-                flash('Please choose how many meetings to create.')
-                return redirect(url_for('group_detail', group_id=group_id))
+                error_msg = 'Please choose how many meetings to create.'
 
-    recurrence_dates = [parsed_date]
-    if recurrence_mode == 'weekly':
-        recurrence_dates = build_group_recurrence_dates(
-            parsed_date,
-            recurrence_interval_weeks=recurrence_interval_weeks,
-            recurrence_end_date=recurrence_end_date,
-            recurrence_count=recurrence_count
-        )
+    return recurrence_interval_weeks, recurrence_end_date, recurrence_count, error_msg
 
-    for date_item in recurrence_dates:
-        start_at = datetime.combine(date_item, parsed_time)
-        end_at = start_at + timedelta(minutes=duration)
-        conflict_message = has_time_conflict(db, date_item, start_at, end_at)
-        if conflict_message:
-            flash(f'{conflict_message} ({date_item.isoformat()})')
-            return redirect(url_for('group_detail', group_id=group_id))
 
+def _insert_group_sessions(db, group_id, parsed_date, parsed_time, duration, recurrence_dates, recurrence_mode, recurrence_interval_weeks, recurrence_end_date, recurrence_count, title, facilitator, meeting_type, meeting_link):
     series_id = None
     if recurrence_mode == 'weekly' and len(recurrence_dates) > 1:
         cur = db.execute('''
@@ -6181,11 +6157,67 @@ def add_group_session(group_id):
         ))
         last_session_id = cur.lastrowid
 
+    return series_id, last_session_id
+
+
+@app.route('/groups/<int:group_id>/sessions', methods=['POST'])
+@login_required
+def add_group_session(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    data = _parse_group_session_form(request.form)
+
+    parsed_date = parse_date_safe(data['session_date'])
+    parsed_time = parse_time_safe(data['session_time'])
+    parsed_end = parse_time_safe(data['end_time_raw'])
+
+    if not parsed_date or not parsed_time:
+        flash('Valid session date and start time are required.')
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    duration = _calculate_group_session_duration(parsed_time, parsed_end)
+    db = get_db()
+
+    recurrence_interval_weeks, recurrence_end_date, recurrence_count, error_msg = _resolve_group_recurrence_params(
+        data['recurrence_mode'], data['recurrence_interval_raw'],
+        data['recurrence_end_mode'], data['recurrence_end_raw'], data['recurrence_count_raw']
+    )
+
+    if error_msg:
+        flash(error_msg)
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    recurrence_dates = [parsed_date]
+    if data['recurrence_mode'] == 'weekly':
+        recurrence_dates = build_group_recurrence_dates(
+            parsed_date,
+            recurrence_interval_weeks=recurrence_interval_weeks,
+            recurrence_end_date=recurrence_end_date,
+            recurrence_count=recurrence_count
+        )
+
+    for date_item in recurrence_dates:
+        start_at = datetime.combine(date_item, parsed_time)
+        end_at = start_at + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(db, date_item, start_at, end_at)
+        if conflict_message:
+            flash(f'{conflict_message} ({date_item.isoformat()})')
+            return redirect(url_for('group_detail', group_id=group_id))
+
+    series_id, last_session_id = _insert_group_sessions(
+        db, group_id, parsed_date, parsed_time, duration, recurrence_dates,
+        data['recurrence_mode'], recurrence_interval_weeks, recurrence_end_date, recurrence_count,
+        data['title'], data['facilitator'], data['meeting_type'], data['meeting_link']
+    )
+
     db.commit()
+
     if series_id:
-        flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
+        flash(f"Group recurrence added ({len(recurrence_dates)} sessions).")
     else:
         flash('Group session added.')
+
     destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
     if last_session_id:
         destination = f'{destination}#session-record-{last_session_id}'
