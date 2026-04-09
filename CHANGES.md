@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- **[$(date '+%Y-%m-%d %H:%M:%S')]** Refactored `api_calendar_book` route handler to extract logic into `_api_calendar_book_special` and `_api_calendar_book_regular` helper functions for improved readability, replacing duplicated conflict checking with existing `has_time_conflict` function.

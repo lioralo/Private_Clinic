@@ -6589,132 +6589,56 @@ def api_calendar_vacancy_delete(override_id):
     return jsonify({'status': 'success'})
 
 
-@app.route('/api/calendar/book', methods=['POST'])
-@login_required
-def api_calendar_book():
-    db = get_db()
+def _api_calendar_book_special(db, current_user, anchor, booking_time, duration, special_pattern, special_repeat_until, special_title):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
-    booking_date = request.form.get('date', '').strip()
-    booking_time = request.form.get('time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
-    meeting_link = request.form.get('meeting_link', '').strip()
-    meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-    is_recurring_explicit = request.form.get('is_recurring')
-    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
-    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
-    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
-    special_repeat_until = request.form.get('special_repeat_until', '').strip()
-    special_title = request.form.get('special_title', '').strip()
+    if special_pattern not in ('one-time', 'weekly'):
+        special_pattern = 'one-time'
 
-    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+    dates_to_block = [anchor]
+    if special_pattern == 'weekly':
+        repeat_until = parse_date_safe(special_repeat_until)
+        if not repeat_until or repeat_until < anchor:
+            return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
+        dates_to_block = []
+        current = anchor
+        while current <= repeat_until:
+            dates_to_block.append(current)
+            current += timedelta(days=7)
 
-    # Compute duration from start + end time.
-    duration = 60
-    parsed_start = parse_time_safe(booking_time)
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
+    parsed_booking_time = parse_time_safe(booking_time)
 
-    if current_user.role == 'admin':
-        patient_id_raw = request.form.get('patient_id', '').strip()
-        if booking_type != 'special' and not patient_id_raw.isdigit():
-            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
-        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
-    else:
-        if booking_type == 'special':
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        patient_id = current_user.patient_id
-        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if not patient or int(patient['can_self_schedule'] or 0) != 1:
-            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+    for d in dates_to_block:
+        date_iso = d.isoformat()
+        start_dt = combine_dt(d, parsed_booking_time.strftime('%H:%M'))
+        end_dt = start_dt + timedelta(minutes=duration)
+        conflict = has_time_conflict(db, d, start_dt, end_dt)
+        if conflict:
+            return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
 
-    patient_status = None
-    if booking_type != 'special' and patient_id:
-        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        patient_status = (patient_row['status'] if patient_row else '') or ''
+    for d in dates_to_block:
+        db.execute('''
+            INSERT INTO blocked_slots
+            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+              VALUES (?, ?, ?, ?, 1, 'blocked', ?)
+        ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
+              special_title or 'Special Occasion', current_user.id))
+        db.execute('''
+            UPDATE slots_override
+            SET status = 'booked', booked_by_name = ?, booked_at = ?
+            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+        ''', (
+            special_title or 'Special Occasion',
+            datetime.now().isoformat(),
+            d.isoformat(),
+            parsed_booking_time.strftime('%H:%M')
+        ))
+    db.commit()
+    return jsonify({'status': 'success'})
 
-    def slot_is_available(date_iso, start_time_str, slot_duration):
-        date_obj = parse_date_safe(date_iso)
-        if not date_obj:
-            return False
-        slot_start = combine_dt(date_obj, start_time_str)
-        slot_end = slot_start + timedelta(minutes=slot_duration)
 
-        date_rows = db.execute('''
-            SELECT appointment_time, duration_minutes FROM appointments WHERE appointment_date = ?
-        ''', (date_iso,)).fetchall()
-        for row in date_rows:
-            row_start = combine_dt(date_obj, row['appointment_time'])
-            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-            if overlaps(slot_start, slot_end, row_start, row_end):
-                return False
-
-        block_rows = db.execute('''
-            SELECT blocked_time, duration_minutes FROM blocked_slots WHERE blocked_date = ?
-        ''', (date_iso,)).fetchall()
-        for row in block_rows:
-            row_start = combine_dt(date_obj, row['blocked_time'])
-            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-            if overlaps(slot_start, slot_end, row_start, row_end):
-                return False
-
-        return True
-
-    anchor = parse_date_safe(booking_date)
-    if not anchor:
-        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
-
-    if booking_type == 'special':
-        if current_user.role != 'admin':
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-        if special_pattern not in ('one-time', 'weekly'):
-            special_pattern = 'one-time'
-
-        dates_to_block = [anchor]
-        if special_pattern == 'weekly':
-            repeat_until = parse_date_safe(special_repeat_until)
-            if not repeat_until or repeat_until < anchor:
-                return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
-            dates_to_block = []
-            current = anchor
-            while current <= repeat_until:
-                dates_to_block.append(current)
-                current += timedelta(days=7)
-
-        for d in dates_to_block:
-            date_iso = d.isoformat()
-            if not slot_is_available(date_iso, booking_time, duration):
-                return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
-
-        for d in dates_to_block:
-            db.execute('''
-                INSERT INTO blocked_slots
-                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-                  VALUES (?, ?, ?, ?, 1, 'blocked', ?)
-            ''', (d.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  special_title or 'Special Occasion', current_user.id))
-            db.execute('''
-                UPDATE slots_override
-                SET status = 'booked', booked_by_name = ?, booked_at = ?
-                WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-            ''', (
-                special_title or 'Special Occasion',
-                datetime.now().isoformat(),
-                d.isoformat(),
-                parse_time_safe(booking_time).strftime('%H:%M')
-            ))
-        db.commit()
-        return jsonify({'status': 'success'})
-
+def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_time, parsed_booking_time, duration, patient_id, patient_status, is_recurring_explicit, recurrence_end_date_form, meeting_type, meeting_link, meeting_platform, meeting_remarks, save_to_google):
     # Business rule: honour explicit form value first, then default by patient status.
     # Ongoing patients default to weekly recurring; others default to one-time.
     if is_recurring_explicit == '1' or is_recurring_explicit == 'on' or is_recurring_explicit == 'true':
@@ -6725,10 +6649,6 @@ def api_calendar_book():
         is_recurring = 1 if patient_status == 'ongoing' else 0
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
-
-    parsed_booking_time = parse_time_safe(booking_time)
-    if not parsed_booking_time:
-        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
 
     start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
     end_dt = start_dt + timedelta(minutes=duration)
@@ -6790,12 +6710,18 @@ def api_calendar_book():
     db.commit()
 
     # Sync to Google Calendar if save_to_google flag is set and admin is connected
-    if save_to_google and gcal and patient_id:
+    try:
+        import google_calendar as gcal_module
+        gcal_ref = gcal_module
+    except ImportError:
+        gcal_ref = None
+
+    if save_to_google and gcal_ref and patient_id:
         new_appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
                               (patient_id, booking_date, parsed_booking_time.strftime('%H:%M'))).fetchone()
         if new_appt:
             patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-            gcal.sync_appointment_to_google(
+            gcal_ref.sync_appointment_to_google(
                 db,
                 appointment_id=new_appt['id'],
                 patient_name=(patient_row['name'] if patient_row else booked_label),
@@ -6807,6 +6733,80 @@ def api_calendar_book():
             )
 
     return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/book', methods=['POST'])
+@login_required
+def api_calendar_book():
+    db = get_db()
+
+    booking_date = request.form.get('date', '').strip()
+    booking_time = request.form.get('time', '').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
+    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
+    meeting_link = request.form.get('meeting_link', '').strip()
+    meeting_platform = request.form.get('meeting_platform', '').strip()
+    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
+    is_recurring_explicit = request.form.get('is_recurring')
+    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
+    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
+    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
+    special_repeat_until = request.form.get('special_repeat_until', '').strip()
+    special_title = request.form.get('special_title', '').strip()
+
+    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    # Compute duration from start + end time.
+    duration = 60
+    parsed_start = parse_time_safe(booking_time)
+    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
+    if parsed_start and parsed_end:
+        start_minutes = parsed_start.hour * 60 + parsed_start.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration = computed
+
+    if current_user.role == 'admin':
+        patient_id_raw = request.form.get('patient_id', '').strip()
+        if booking_type != 'special' and not patient_id_raw.isdigit():
+            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
+        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
+    else:
+        if booking_type == 'special':
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        patient_id = current_user.patient_id
+        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if not patient or int(patient['can_self_schedule'] or 0) != 1:
+            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+
+    patient_status = None
+    if booking_type != 'special' and patient_id:
+        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_status = (patient_row['status'] if patient_row else '') or ''
+
+    anchor = parse_date_safe(booking_date)
+    if not anchor:
+        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
+
+    if booking_type == 'special':
+        return _api_calendar_book_special(
+            db, current_user, anchor, booking_time, duration,
+            special_pattern, special_repeat_until, special_title
+        )
+
+    parsed_booking_time = parse_time_safe(booking_time)
+    if not parsed_booking_time:
+        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
+
+    return _api_calendar_book_regular(
+        db, current_user, anchor, booking_date, booking_time, parsed_booking_time,
+        duration, patient_id, patient_status, is_recurring_explicit,
+        recurrence_end_date_form, meeting_type, meeting_link,
+        meeting_platform, meeting_remarks, save_to_google
+    )
 
 
 @app.route('/patient/<int:patient_id>/quick_book', methods=('POST',))
