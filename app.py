@@ -47,6 +47,7 @@ app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOU
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
+DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
 BACKUP_INTERVAL_HOURS = 12
@@ -3149,7 +3150,13 @@ def login():
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
-        if user and check_password_hash(user['password_hash'], password):
+        if user:
+            password_correct = check_password_hash(user['password_hash'], password)
+        else:
+            check_password_hash(DUMMY_PASSWORD_HASH, password)
+            password_correct = False
+
+        if user and password_correct:
             if not user['is_active']:
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
