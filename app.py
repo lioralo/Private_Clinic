@@ -5617,33 +5617,8 @@ def groups_dashboard():
     return render_template('groups_overview.html', groups=groups)
 
 
-def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcoming=False):
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return None
 
-    group_members = db.execute('''
-        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, gm.joined_at, gm.left_at
-        FROM group_members gm
-        JOIN patients p ON p.id = gm.patient_id
-                WHERE gm.group_id = ?
-                    AND gm.left_at IS NULL
-                    AND COALESCE(p.is_deleted, 0) = 0
-        ORDER BY p.name ASC
-        ''', (group_id,)).fetchall()
-
-    group_sessions = db.execute('''
-        SELECT gs.*, g.name AS group_name,
-               ss.recurrence_interval_weeks,
-               ss.recurrence_end_date,
-               ss.recurrence_count
-        FROM group_sessions gs
-        JOIN groups g ON g.id = gs.group_id
-        LEFT JOIN group_session_series ss ON ss.id = gs.series_id
-        WHERE gs.group_id = ?
-        ORDER BY gs.session_date ASC, gs.session_time ASC
-    ''', (group_id,)).fetchall()
-
+def _get_group_member_history(db, group_id):
     member_history_rows = db.execute('''
          SELECT h.id,
              h.group_id,
@@ -5669,40 +5644,13 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
             row['membership_days'] = max(0, (end_date - joined_date).days)
         else:
             row['membership_days'] = None
+    return member_history_rows
 
+
+def _get_group_attendance_data(db, group_sessions):
     session_member_map = {}
     attendance_by_session = {}
     session_ids = [int(row['id']) for row in group_sessions]
-
-    # Pre-fetch history and members for N+1 optimization
-    history_rows = db.execute('''
-        SELECT p.id AS patient_id,
-               p.name AS patient_name,
-               h.joined_at,
-               h.left_at,
-               COALESCE(h.role, 'member') AS role
-        FROM group_member_history h
-        JOIN patients p ON p.id = h.patient_id
-        WHERE h.group_id = ?
-          AND COALESCE(p.is_deleted, 0) = 0
-        ORDER BY p.name ASC
-    ''', (group_id,)).fetchall()
-
-    fallback_rows = db.execute('''
-        SELECT p.id AS patient_id,
-               p.name AS patient_name,
-               gm.joined_at,
-               gm.left_at,
-               COALESCE(gm.role, 'member') AS role
-        FROM group_members gm
-        JOIN patients p ON p.id = gm.patient_id
-        WHERE gm.group_id = ?
-          AND COALESCE(p.is_deleted, 0) = 0
-        ORDER BY p.name ASC
-    ''', (group_id,)).fetchall()
-
-    history_list = [dict(row) for row in history_rows]
-    fallback_list = [dict(row) for row in fallback_rows]
 
     for gs_row in group_sessions:
         session_date_iso = gs_row['session_date']
@@ -5740,21 +5688,60 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
                 'attendance_note': row['attendance_note'] or ''
             }
 
+    return session_member_map, attendance_by_session
+
+
+def _get_patient_arrived_counts(db):
     arrived_rows = db.execute('''
         SELECT patient_id, COUNT(*) AS arrived_count
         FROM group_session_attendance
         WHERE attendance_status = 'present'
         GROUP BY patient_id
     ''').fetchall()
-    arrived_count_map = {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
+    return {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
 
-    patients = db.execute('''
+
+def _get_available_group_patients(db):
+    return db.execute('''
         SELECT id, name
         FROM patients
         WHERE COALESCE(is_deleted, 0) = 0
           AND COALESCE(patient_type, 'private') = 'group'
         ORDER BY name ASC
     ''').fetchall()
+
+
+def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcoming=False):
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return None
+
+    group_members = db.execute('''
+        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, gm.joined_at, gm.left_at
+        FROM group_members gm
+        JOIN patients p ON p.id = gm.patient_id
+                WHERE gm.group_id = ?
+                    AND gm.left_at IS NULL
+                    AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+        ''', (group_id,)).fetchall()
+
+    group_sessions = db.execute('''
+        SELECT gs.*, g.name AS group_name,
+               ss.recurrence_interval_weeks,
+               ss.recurrence_end_date,
+               ss.recurrence_count
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        LEFT JOIN group_session_series ss ON ss.id = gs.series_id
+        WHERE gs.group_id = ?
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''', (group_id,)).fetchall()
+
+    member_history_rows = _get_group_member_history(db, group_id)
+    session_member_map, attendance_by_session = _get_group_attendance_data(db, group_sessions)
+    arrived_count_map = _get_patient_arrived_counts(db)
+    patients = _get_available_group_patients(db)
 
     session_collections = build_group_session_collections(
         group_sessions,
