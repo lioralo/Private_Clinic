@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- Refactored `api_get_messages` in `app.py` on Thu Apr  9 08:16:55 UTC 2026 by extracting admin and patient logic into `_get_admin_messages` and `_get_patient_messages` helper functions.
