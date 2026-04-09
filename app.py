@@ -2469,7 +2469,7 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
     return False
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+def _get_patients_select_clause(admin_user_id):
     unread_case = '0'
     if admin_user_id is not None:
         unread_case = f'''(
@@ -2481,7 +2481,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
               AND COALESCE(m.is_read, 0) = 0
         )'''
 
-    base_query = '''
+    return f'''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
         (SELECT MIN(a0.appointment_date) FROM appointments a0 WHERE a0.patient_id = p.id AND COALESCE(a0.status, 'scheduled') = 'scheduled' AND a0.appointment_date >= DATE('now')) AS next_appointment_date,
@@ -2494,7 +2494,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
             ORDER BY a1.appointment_date ASC, a1.appointment_time ASC
             LIMIT 1
         ) AS next_appointment_time,
-        ''' + unread_case + ''' AS unread_messages,
+        {unread_case} AS unread_messages,
         (
             CASE
                 WHEN p.status = 'candidate' AND EXISTS (
@@ -2533,29 +2533,34 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
 
+def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
+    where_query = ""
     params = []
 
     if status in ['candidate', 'waiting for scheduling', 'waiting']:
-        base_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
+        where_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
     elif status != 'all':
-        base_query += ' AND p.status = ?'
+        where_query += ' AND p.status = ?'
         params.append(status)
 
     if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
-        base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
+        where_query += ' AND COALESCE(p.patient_type, "private") = ?'
         params.append(patient_type)
     elif not include_group:
-        base_query += ' AND COALESCE(p.patient_type, \"private\") != \"group\"'
+        where_query += ' AND COALESCE(p.patient_type, "private") != "group"'
 
     if search_query:
-        base_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, \"\")) LIKE ? OR LOWER(COALESCE(p.phone, \"\")) LIKE ?)'
+        where_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, "")) LIKE ? OR LOWER(COALESCE(p.phone, "")) LIKE ?)'
         like_value = f"%{search_query.lower()}%"
         params.extend([like_value, like_value, like_value])
 
     if treatment_method and treatment_method != 'all':
-        base_query += ' AND COALESCE(p.treatment_method, \"\") = ?'
+        where_query += ' AND COALESCE(p.treatment_method, "") = ?'
         params.append(treatment_method)
 
+    return where_query, params
+
+def _get_patients_order_clause(sort_by):
     order_map = {
         'name_asc': 'p.name ASC',
         'name_desc': 'p.name DESC',
@@ -2572,9 +2577,15 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
             p.created_at DESC
         '''
     }
-    order_clause = order_map.get(sort_by, order_map['status_priority'])
+    return " ORDER BY " + order_map.get(sort_by, order_map['status_priority'])
 
-    final_query = f"{base_query} ORDER BY {order_clause}"
+
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+    select_clause = _get_patients_select_clause(admin_user_id)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
+    order_clause = _get_patients_order_clause(sort_by)
+
+    final_query = f"{select_clause}{where_clause}{order_clause}"
     return db.execute(final_query, tuple(params)).fetchall()
 
 
