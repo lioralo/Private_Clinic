@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+2026-04-09 08:20:22 - Optimized N+1 Query in `build_week_calendar_snapshot` function in `app.py` for Follow Up Alerts by using an `EXISTS` sql query statement to improve response times.

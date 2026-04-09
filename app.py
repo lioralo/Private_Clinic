@@ -4540,28 +4540,27 @@ def build_week_calendar_snapshot(db, week_start, user):
         SELECT p.id AS patient_id, p.name, p.status, MAX(a.appointment_date) AS last_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
-                WHERE p.status = 'candidate'
+        WHERE p.status = 'candidate'
           AND a.is_recurring = 0
-                    AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
           AND a.appointment_date < ?
+          AND NOT EXISTS (
+              SELECT 1 FROM appointments a2
+              WHERE a2.patient_id = p.id
+                AND a2.appointment_date >= ?
+                AND COALESCE(a2.status, 'scheduled') = 'scheduled'
+          )
         GROUP BY p.id, p.name, p.status
-    ''', (today.isoformat(),)).fetchall()
+    ''', (today.isoformat(), today.isoformat())).fetchall()
 
     for row in follow_up_rows:
-        has_future = db.execute('''
-            SELECT 1 FROM appointments
-            WHERE patient_id = ? AND appointment_date >= ?
-              AND COALESCE(status, 'scheduled') = 'scheduled'
-            LIMIT 1
-        ''', (row['patient_id'], today.isoformat())).fetchone()
-        if not has_future:
-            follow_up_alerts.append({
-                'patient_id': row['patient_id'],
-                'patient_name': row['name'],
-                'status': row['status'],
-                'last_meeting_date': row['last_date'],
-                'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
-            })
+        follow_up_alerts.append({
+            'patient_id': row['patient_id'],
+            'patient_name': row['name'],
+            'status': row['status'],
+            'last_meeting_date': row['last_date'],
+            'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
+        })
 
     for appt in appointment_rows:
         is_recurring = int(appt['is_recurring'] or 0) == 1
