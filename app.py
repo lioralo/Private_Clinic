@@ -5450,10 +5450,57 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
     session_member_map = {}
     attendance_by_session = {}
     session_ids = [int(row['id']) for row in group_sessions]
+
+    # Pre-fetch history and members for N+1 optimization
+    history_rows = db.execute('''
+        SELECT p.id AS patient_id,
+               p.name AS patient_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN patients p ON p.id = h.patient_id
+        WHERE h.group_id = ?
+          AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+    ''', (group_id,)).fetchall()
+
+    fallback_rows = db.execute('''
+        SELECT p.id AS patient_id,
+               p.name AS patient_name,
+               gm.joined_at,
+               gm.left_at,
+               COALESCE(gm.role, 'member') AS role
+        FROM group_members gm
+        JOIN patients p ON p.id = gm.patient_id
+        WHERE gm.group_id = ?
+          AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY p.name ASC
+    ''', (group_id,)).fetchall()
+
+    history_list = [dict(row) for row in history_rows]
+    fallback_list = [dict(row) for row in fallback_rows]
+
     for gs_row in group_sessions:
-        session_member_map[int(gs_row['id'])] = get_group_members_for_session(
-            db, int(gs_row['group_id']), gs_row['session_date']
-        )
+        session_date_iso = gs_row['session_date']
+
+        members = []
+        for row in history_list:
+            joined_date = row['joined_at'][:10] if row['joined_at'] else ''
+            left_date = row['left_at'][:10] if row['left_at'] else None
+
+            if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
+                members.append(row.copy())
+
+        if not members:
+            for row in fallback_list:
+                joined_date = row['joined_at'][:10] if row['joined_at'] else ''
+                left_date = row['left_at'][:10] if row['left_at'] else None
+
+                if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
+                    members.append(row.copy())
+
+        session_member_map[int(gs_row['id'])] = members
 
     if session_ids:
         marks = db.execute(f'''
