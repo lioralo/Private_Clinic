@@ -4692,10 +4692,6 @@ def build_week_calendar_snapshot(db, week_start, user):
     week_end = week_start + timedelta(days=6)
     today = datetime.now().date()
 
-    patients = {
-        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
-    }
-
     appointment_rows = db.execute('''
         SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
         FROM appointments a
