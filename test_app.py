@@ -7,6 +7,7 @@ import json
 import app as app_module
 from datetime import datetime, timedelta, timezone
 from flask import g
+from unittest.mock import patch
 from app import app, init_db, get_db
 
 class ClinicTestCase(unittest.TestCase):
@@ -2252,6 +2253,15 @@ class ClinicTestCase(unittest.TestCase):
             assert today_r['is_tomorrow'] is False
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
+
+    @patch('app.get_db')
+    @patch('app.init_db')
+    def test_index_db_error(self, mock_init_db, mock_get_db):
+        import sqlite3
+        mock_get_db.side_effect = sqlite3.OperationalError("no such table: users")
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 302)
+        mock_init_db.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

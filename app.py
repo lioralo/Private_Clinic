@@ -1539,6 +1539,11 @@ def init_db():
 
 @app.route('/')
 def index():
+    try:
+        get_db()
+    except sqlite3.OperationalError:
+        init_db()
+
     if current_user.is_authenticated:
         if current_user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
