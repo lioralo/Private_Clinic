@@ -721,7 +721,8 @@ def _database_backup_fingerprint(db_file_path):
 
         table_counts = {}
         for table_name in tables:
-            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{table_name}"').fetchone()
+            safe_table_name = table_name.replace('"', '""')
+            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{safe_table_name}"').fetchone()
             table_counts[table_name] = int(count_row['c'] if count_row else 0)
 
         appointment_stats = conn.execute('''
