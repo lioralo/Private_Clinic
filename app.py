@@ -2282,6 +2282,159 @@ def _normalize_session_number(value):
         return raw
 
 
+def _parse_note_fields(item):
+    meeting_number = _normalize_session_number(item.get('meeting_number') or item.get('session_number'))
+    date_str = (item.get('date') or item.get('note_date') or '').strip() or None
+    content_text = (item.get('content') or '').strip()
+    appearance_text = (item.get('patient_appearance') or '').strip()
+    checklist_text = item.get('behavior_checklist')
+    if isinstance(checklist_text, list):
+        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
+    checklist_text = (checklist_text or '').strip()
+    mood_summary = (item.get('mood_summary') or '').strip()
+    behavior_notes = (item.get('behavior_notes') or '').strip()
+
+    if not meeting_number and not _has_meaningful_note_information(
+        content_text,
+        mood_summary,
+        behavior_notes,
+        appearance_text,
+        checklist_text,
+    ):
+        return None
+
+    if not content_text:
+        content_text = mood_summary or behavior_notes or appearance_text
+    if not content_text:
+        return None
+
+    return {
+        'meeting_number': meeting_number,
+        'date_str': date_str,
+        'content_text': content_text,
+        'appearance_text': appearance_text,
+        'checklist_text': checklist_text,
+        'mood_summary': mood_summary,
+        'behavior_notes': behavior_notes
+    }
+
+
+def _import_flat_patient_history(db, patient_id, data):
+    appointments_added = 0
+    notes_added = 0
+
+    def _sort_key(item):
+        raw_date = (item.get('date') or item.get('note_date') or '').strip()
+        meeting_raw = item.get('meeting_number') or item.get('session_number') or 0
+        try:
+            meeting_num = int(meeting_raw)
+        except (TypeError, ValueError):
+            meeting_num = 0
+        return (raw_date, meeting_num)
+
+    for item in sorted(data, key=_sort_key):
+        parsed = _parse_note_fields(item)
+        if not parsed:
+            continue
+
+        appt_id = None
+        if parsed['date_str']:
+            existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, parsed['date_str'])).fetchone()
+            if not existing:
+                cursor = db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)', (patient_id, parsed['date_str'], '00:00', 'completed'))
+                appt_id = cursor.lastrowid
+                appointments_added += 1
+            else:
+                appt_id = existing['id']
+
+        db.execute(
+            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
+                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                patient_id,
+                appt_id,
+                parsed['meeting_number'],
+                parsed['date_str'],
+                parsed['content_text'],
+                parsed['appearance_text'],
+                parsed['checklist_text'],
+                parsed['mood_summary'],
+                parsed['behavior_notes']
+            )
+        )
+        notes_added += 1
+
+    return appointments_added, notes_added, 0
+
+def _import_structured_patient_history(db, patient_id, data):
+    appointments_added = 0
+    notes_added = 0
+    receipts_added = 0
+
+    # Import appointments
+    appt_id_map = {}
+    sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
+    for appt in sorted_appts:
+        existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
+            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
+        if not existing:
+            cursor = db.execute('''INSERT INTO appointments
+                (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
+                 appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
+                 appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
+            appt_id_map[appt.get('id')] = cursor.lastrowid
+            appointments_added += 1
+        else:
+            appt_id_map[appt.get('id')] = existing['id']
+
+    # Import notes
+    sorted_notes = sorted(
+        data.get('notes', []),
+        key=lambda x: (
+            x.get('note_date') or x.get('date') or x.get('created_at', ''),
+            str(x.get('session_number') or x.get('meeting_number') or '')
+        )
+    )
+    for note in sorted_notes:
+        parsed = _parse_note_fields(note)
+        if not parsed:
+            continue
+
+        new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+
+        db.execute('''INSERT INTO notes
+            (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
+             behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                patient_id,
+                new_appt_id,
+                parsed['meeting_number'],
+                parsed['date_str'],
+                parsed['content_text'],
+                parsed['appearance_text'],
+                parsed['checklist_text'],
+                parsed['mood_summary'],
+                parsed['behavior_notes'],
+                note.get('needs_review'),
+                note.get('created_at')
+            ))
+        notes_added += 1
+
+    # Import receipts
+    for receipt in data.get('receipts', []):
+        db.execute('''INSERT INTO receipts
+            (patient_id, amount, description, created_at)
+            VALUES (?, ?, ?, ?)''',
+            (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
+        receipts_added += 1
+
+    return appointments_added, notes_added, receipts_added
+
+
 def _has_meaningful_note_information(content_text, mood_summary, behavior_notes, appearance_text, checklist_text):
     placeholders = {
         '',
@@ -7721,153 +7874,9 @@ def import_patient_history(patient_id):
             receipts_added = 0
 
             if isinstance(data, list):
-                def _sort_key(item):
-                    raw_date = (item.get('date') or item.get('note_date') or '').strip()
-                    meeting_raw = item.get('meeting_number') or item.get('session_number') or 0
-                    try:
-                        meeting_num = int(meeting_raw)
-                    except (TypeError, ValueError):
-                        meeting_num = 0
-                    return (raw_date, meeting_num)
-
-                # Handle flat list of treatment logs (meeting number, date, content)
-                for item in sorted(data, key=_sort_key):
-                    meeting_number = _normalize_session_number(item.get('meeting_number') or item.get('session_number'))
-                    date_str = (item.get('date') or item.get('note_date') or '').strip() or None
-                    content_text = (item.get('content') or '').strip()
-                    appearance_text = (item.get('patient_appearance') or '').strip()
-                    checklist_text = item.get('behavior_checklist')
-                    if isinstance(checklist_text, list):
-                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
-                    checklist_text = (checklist_text or '').strip()
-                    mood_summary = (item.get('mood_summary') or '').strip()
-                    behavior_notes = (item.get('behavior_notes') or '').strip()
-
-                    if not meeting_number and not _has_meaningful_note_information(
-                        content_text,
-                        mood_summary,
-                        behavior_notes,
-                        appearance_text,
-                        checklist_text,
-                    ):
-                        continue
-
-                    if not content_text:
-                        content_text = mood_summary or behavior_notes or appearance_text
-                    if not content_text:
-                        continue
-
-                    appt_id = None
-                    if date_str:
-                        existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, date_str)).fetchone()
-                        if not existing:
-                            cursor = db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)', (patient_id, date_str, '00:00', 'completed'))
-                            appt_id = cursor.lastrowid
-                            appointments_added += 1
-                        else:
-                            appt_id = existing['id']
-
-                    db.execute(
-                        '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
-                                              patient_appearance, behavior_checklist, mood_summary, behavior_notes)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        (
-                            patient_id,
-                            appt_id,
-                            meeting_number,
-                            date_str,
-                            content_text,
-                            appearance_text,
-                            checklist_text,
-                            mood_summary,
-                            behavior_notes
-                        )
-                    )
-                    notes_added += 1
+                appointments_added, notes_added, receipts_added = _import_flat_patient_history(db, patient_id, data)
             else:
-
-
-                # Import appointments
-                appt_id_map = {}
-                # Sort appointments by date and time
-                sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
-                for appt in sorted_appts:
-                    # Check for existing
-                    existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
-                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
-                    if not existing:
-                        cursor = db.execute('''INSERT INTO appointments
-                            (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
-                             appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
-                             appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
-                        appt_id_map[appt.get('id')] = cursor.lastrowid
-                        appointments_added += 1
-                    else:
-                        appt_id_map[appt.get('id')] = existing['id']
-
-                # Import notes sorted by date and meeting number.
-                sorted_notes = sorted(
-                    data.get('notes', []),
-                    key=lambda x: (
-                        x.get('note_date') or x.get('date') or x.get('created_at', ''),
-                        str(x.get('session_number') or x.get('meeting_number') or '')
-                    )
-                )
-                for note in sorted_notes:
-                    new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
-                    session_number = _normalize_session_number(note.get('session_number') or note.get('meeting_number'))
-                    note_date = (note.get('note_date') or note.get('date') or '').strip() or None
-                    content_text = (note.get('content') or '').strip()
-                    appearance_text = (note.get('patient_appearance') or '').strip()
-                    checklist_text = note.get('behavior_checklist')
-                    if isinstance(checklist_text, list):
-                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
-                    checklist_text = (checklist_text or '').strip()
-                    mood_summary = (note.get('mood_summary') or '').strip()
-                    behavior_notes = (note.get('behavior_notes') or '').strip()
-
-                    if not session_number and not _has_meaningful_note_information(
-                        content_text,
-                        mood_summary,
-                        behavior_notes,
-                        appearance_text,
-                        checklist_text,
-                    ):
-                        continue
-
-                    if not content_text:
-                        content_text = mood_summary or behavior_notes or appearance_text
-                    if not content_text:
-                        continue
-
-                    db.execute('''INSERT INTO notes
-                        (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
-                         behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        (
-                            patient_id,
-                            new_appt_id,
-                            session_number,
-                            note_date,
-                            content_text,
-                            appearance_text,
-                            checklist_text,
-                            mood_summary,
-                            behavior_notes,
-                            note.get('needs_review'),
-                            note.get('created_at')
-                        ))
-                    notes_added += 1
-
-                # Import receipts
-                for receipt in data.get('receipts', []):
-                    db.execute('''INSERT INTO receipts
-                        (patient_id, amount, description, created_at)
-                        VALUES (?, ?, ?, ?)''',
-                        (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
-                    receipts_added += 1
+                appointments_added, notes_added, receipts_added = _import_structured_patient_history(db, patient_id, data)
 
             db.commit()
             flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
