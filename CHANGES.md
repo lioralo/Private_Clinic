@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- **2026-04-09 08:12:00:** Added comprehensive unit tests for `backup_db.py` in `test_backup_db.py` with mock implementations for testing database backup flows, missing source file handling, encryption flows via `shutil.copy2` and `Fernet.encrypt`, and checking custom environment variable secrets (`BACKUP_ENCRYPTION_KEY`).
