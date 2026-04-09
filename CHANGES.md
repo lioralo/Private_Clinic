@@ -1792,4 +1792,7 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+
+### 2026-04-09 08:20
+- **Security**: Fixed a path traversal vulnerability in the file download functionality (`/uploads/<name>`) by enforcing `werkzeug.utils.secure_filename(name)` on the user-provided filename input prior to executing the `send_from_directory` fallback check and database mapping. Added tests to verify correct path-safe handling in `test_security.py`.
 2026-04-09 08:20:22 - Optimized N+1 Query in `build_week_calendar_snapshot` function in `app.py` for Follow Up Alerts by using an `EXISTS` sql query statement to improve response times.
