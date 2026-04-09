@@ -118,11 +118,13 @@ def backup_database():
         raw_path.unlink(missing_ok=True)
         verify_path.unlink(missing_ok=True)
         print(f"Encrypted backup successful: {encrypted_path}")
+        return True
     except Exception as exc:
         raw_path.unlink(missing_ok=True)
         encrypted_path.unlink(missing_ok=True)
         verify_path.unlink(missing_ok=True)
         print(f"Backup failed: {exc}")
+        return False
 
 
 def restore_database(encrypted_backup_path: str, target_db_path: str = None):

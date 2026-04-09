@@ -2253,5 +2253,50 @@ class ClinicTestCase(unittest.TestCase):
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
 
+    def test_backup_database_error_path(self):
+        import backup_db
+        from unittest.mock import patch
+        import io
+        import sys
+
+        # Provide a dummy database with the necessary tables to allow fingerprinting
+        db_fd, db_path = tempfile.mkstemp(suffix='.db')
+        os.close(db_fd)
+
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE appointments (id INTEGER, is_recurring INTEGER, meeting_link TEXT, recurrence_days TEXT, recurrence_interval INTEGER, recurrence_end_date TEXT, recurrence_count INTEGER)")
+        conn.close()
+
+        with tempfile.TemporaryDirectory() as tmp_backup_dir:
+            original_db_file = backup_db.DB_FILE
+            original_backup_dir = backup_db.BACKUP_DIR
+            backup_db.DB_FILE = db_path
+            backup_db.BACKUP_DIR = tmp_backup_dir
+            try:
+                with patch('backup_db.Path.read_bytes') as mock_read_bytes:
+                    mock_read_bytes.side_effect = Exception("Simulated read error")
+
+                    captured_out = io.StringIO()
+                    old_stdout = sys.stdout
+                    sys.stdout = captured_out
+                    try:
+                        result = backup_db.backup_database()
+                    finally:
+                        sys.stdout = old_stdout
+
+                    self.assertIn("Backup failed: Simulated read error", captured_out.getvalue())
+                    self.assertFalse(result)
+
+                    files = os.listdir(tmp_backup_dir)
+                    for f in files:
+                        self.assertNotIn('clinic_', f)
+                        self.assertNotIn('.verify_', f)
+            finally:
+                backup_db.DB_FILE = original_db_file
+                backup_db.BACKUP_DIR = original_backup_dir
+
+        os.unlink(db_path)
+
 if __name__ == '__main__':
     unittest.main()
