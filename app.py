@@ -4242,6 +4242,97 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
     return converted
 
 
+def _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, now_time, horizon_weeks):
+    """Helper to check and create upcoming bookings for a single patient."""
+    if patient_type in ('initial-intake', 'diagnosee'):
+        return False
+
+    has_future = db.execute('''
+        SELECT 1
+        FROM appointments
+        WHERE patient_id = ?
+          AND COALESCE(status, 'scheduled') = 'scheduled'
+          AND (
+              (COALESCE(is_recurring, 0) = 0 AND appointment_date >= ?)
+              OR (COALESCE(is_recurring, 0) = 1
+                  AND (recurrence_end_date IS NULL
+                       OR recurrence_end_date >= DATE(?, ? || ' days')))
+          )
+        LIMIT 1
+    ''', (patient_id, today.isoformat(), today.isoformat(), f'-{horizon_weeks * 7}')).fetchone()
+    if has_future:
+        return False
+
+    latest = db.execute('''
+        SELECT *
+        FROM appointments
+        WHERE patient_id = ?
+        ORDER BY appointment_date DESC, appointment_time DESC, id DESC
+        LIMIT 1
+    ''', (patient_id,)).fetchone()
+    if not latest:
+        return False
+
+    base_date = parse_date_safe(latest['appointment_date'])
+    base_time = parse_time_safe(latest['appointment_time'])
+    if not base_date or not base_time:
+        return False
+
+    day_code = custom_weekday(base_date)
+    today_code = custom_weekday(today)
+    offset_days = (day_code - today_code) % 7
+    candidate_date = today + timedelta(days=offset_days)
+    if candidate_date == today and base_time <= now_time:
+        candidate_date += timedelta(days=7)
+
+    duration = int(latest['duration_minutes'] or 60)
+    if duration <= 0:
+        duration = 60
+
+    meeting_type = latest['meeting_type'] or 'in-person'
+    meeting_link = latest['meeting_link'] or None
+    meeting_title = latest['meeting_title'] or None
+    meeting_platform = latest['meeting_platform'] if 'meeting_platform' in latest.keys() else None
+    if not meeting_platform and meeting_type in ('zoom', 'google-meet'):
+        meeting_platform = meeting_type
+    save_to_google = int(latest['save_to_google'] or 0) if 'save_to_google' in latest.keys() else 0
+
+    booked = False
+    for week_step in range(0, max(1, horizon_weeks)):
+        booking_day = candidate_date + timedelta(days=week_step * 7)
+        start_dt = combine_dt(booking_day, base_time.strftime('%H:%M'))
+        end_dt = start_dt + timedelta(minutes=duration)
+
+        conflict = has_time_conflict(db, booking_day, start_dt, end_dt)
+        if conflict:
+            continue
+
+        db.execute('''
+            INSERT INTO appointments (
+                patient_id, appointment_date, appointment_time, duration_minutes,
+                meeting_type, meeting_link, meeting_platform, meeting_title,
+                save_to_google, status, is_recurring, recurrence_interval,
+                recurrence_days, recurrence_end_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
+        ''', (
+            patient_id,
+            booking_day.isoformat(),
+            base_time.strftime('%H:%M'),
+            duration,
+            meeting_type,
+            meeting_link,
+            meeting_platform,
+            meeting_title,
+            save_to_google,
+            str(day_code),
+            (booking_day + timedelta(days=365)).isoformat()
+        ))
+        booked = True
+        break
+
+    return booked
+
+
 def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, horizon_weeks=12):
     """Guarantee ongoing patients have at least one upcoming scheduled booking."""
     today = reference_date or datetime.now().date()
@@ -4258,95 +4349,8 @@ def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, hori
     for patient in rows:
         patient_id = int(patient['id'])
         patient_type = (patient['patient_type'] or 'private').strip().lower()
-        if patient_type in ('initial-intake', 'diagnosee'):
-            continue
-
-        has_future = db.execute('''
-            SELECT 1
-            FROM appointments
-            WHERE patient_id = ?
-              AND COALESCE(status, 'scheduled') = 'scheduled'
-              AND (
-                  (COALESCE(is_recurring, 0) = 0 AND appointment_date >= ?)
-                  OR (COALESCE(is_recurring, 0) = 1
-                      AND (recurrence_end_date IS NULL
-                           OR recurrence_end_date >= DATE(?, ? || ' days')))
-              )
-            LIMIT 1
-        ''', (patient_id, today.isoformat(), today.isoformat(), f'-{horizon_weeks * 7}')).fetchone()
-        if has_future:
-            continue
-
-        latest = db.execute('''
-            SELECT *
-            FROM appointments
-            WHERE patient_id = ?
-            ORDER BY appointment_date DESC, appointment_time DESC, id DESC
-            LIMIT 1
-        ''', (patient_id,)).fetchone()
-        if not latest:
-            continue
-
-        base_date = parse_date_safe(latest['appointment_date'])
-        base_time = parse_time_safe(latest['appointment_time'])
-        if not base_date or not base_time:
-            continue
-
-        day_code = custom_weekday(base_date)
-        today_code = custom_weekday(today)
-        offset_days = (day_code - today_code) % 7
-        candidate_date = today + timedelta(days=offset_days)
-        if candidate_date == today and base_time <= now_time:
-            candidate_date += timedelta(days=7)
-
-        duration = int(latest['duration_minutes'] or 60)
-        if duration <= 0:
-            duration = 60
-
-        meeting_type = latest['meeting_type'] or 'in-person'
-        meeting_link = latest['meeting_link'] or None
-        meeting_title = latest['meeting_title'] or None
-        meeting_platform = latest['meeting_platform'] if 'meeting_platform' in latest.keys() else None
-        if not meeting_platform and meeting_type in ('zoom', 'google-meet'):
-            meeting_platform = meeting_type
-        save_to_google = int(latest['save_to_google'] or 0) if 'save_to_google' in latest.keys() else 0
-
-        booked = False
-        for week_step in range(0, max(1, horizon_weeks)):
-            booking_day = candidate_date + timedelta(days=week_step * 7)
-            start_dt = combine_dt(booking_day, base_time.strftime('%H:%M'))
-            end_dt = start_dt + timedelta(minutes=duration)
-
-            conflict = has_time_conflict(db, booking_day, start_dt, end_dt)
-            if conflict:
-                continue
-
-            db.execute('''
-                INSERT INTO appointments (
-                    patient_id, appointment_date, appointment_time, duration_minutes,
-                    meeting_type, meeting_link, meeting_platform, meeting_title,
-                    save_to_google, status, is_recurring, recurrence_interval,
-                    recurrence_days, recurrence_end_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
-            ''', (
-                patient_id,
-                booking_day.isoformat(),
-                base_time.strftime('%H:%M'),
-                duration,
-                meeting_type,
-                meeting_link,
-                meeting_platform,
-                meeting_title,
-                save_to_google,
-                str(day_code),
-                (booking_day + timedelta(days=365)).isoformat()
-            ))
+        if _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, now_time, horizon_weeks):
             created += 1
-            booked = True
-            break
-
-        if not booked:
-            continue
 
     if created:
         db.commit()
