@@ -9469,9 +9469,11 @@ def get_notifications():
     db = get_db()
     notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
 
-    for n in notifications:
-        db.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', (n['id'],))
-    db.commit()
+    if notifications:
+        notification_ids = [n['id'] for n in notifications]
+        placeholders = ','.join(['?'] * len(notification_ids))
+        db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', notification_ids)
+        db.commit()
 
     return jsonify([dict(n) for n in notifications])
 
