@@ -3937,8 +3937,8 @@ def ensure_recurrence_group_id(db, appt):
         ''
     )
     group_id = discovered_group_id or build_recurrence_group_id()
-    for row in related_rows:
-        db.execute('UPDATE appointments SET recurrence_group_id = ? WHERE id = ?', (group_id, row['id']))
+    update_data = [(group_id, row['id']) for row in related_rows]
+    db.executemany('UPDATE appointments SET recurrence_group_id = ? WHERE id = ?', update_data)
     return group_id
 
 

@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+- $(date +'%Y-%m-%d %H:%M'): Fixed N+1 query issue in `ensure_recurrence_group_id` by replacing `db.execute` inside a loop with a single `db.executemany` statement.
