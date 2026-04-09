@@ -15,6 +15,7 @@ import shutil
 import sqlite3
 from collections.abc import Iterable
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -34,11 +35,13 @@ def get_tables(conn: sqlite3.Connection) -> set[str]:
     return {row[0] for row in rows}
 
 
+@lru_cache(maxsize=None)
 def get_table_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
     return [row[1] for row in rows]
 
 
+@lru_cache(maxsize=None)
 def get_primary_key_columns(conn: sqlite3.Connection, table: str) -> list[str]:
     rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
     pk_rows = sorted((row for row in rows if row[5] > 0), key=lambda row: row[5])
