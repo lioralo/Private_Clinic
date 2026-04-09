@@ -1759,3 +1759,4 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 5. `templates/index.html` - Improved color coding
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
+* **2026-04-09 08:15:54**: Added `test_calendar_snapshot_with_appointments` to `test_app.py` to ensure proper testing for the `/api/calendar/snapshot` endpoint's JSON payload when appointments exist in the tested date range.
