@@ -110,5 +110,17 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 302)
         self.assertIn('/patients', second.headers.get('Location', ''))
 
+    def test_path_traversal_in_download_file(self):
+        app.config['TESTING'] = True
+        self.client.post('/login', data=dict(username='admin', password='admin'), follow_redirects=True)
+
+        # Test basic traversal attempt
+        rv = self.client.get('/uploads/..%2F..%2F..%2F..%2F..%2F..%2F..%2Fetc%2Fpasswd')
+        self.assertEqual(rv.status_code, 404)
+
+        # Test the DB bypass / file mapping mechanism safely resolving the file instead of allowing traversal
+        rv = self.client.get('/uploads/../../../../../../../etc/passwd')
+        self.assertEqual(rv.status_code, 404)
+
 if __name__ == '__main__':
     unittest.main()
