@@ -47,6 +47,7 @@ app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOU
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
+DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
 BACKUP_INTERVAL_HOURS = 12
@@ -215,6 +216,34 @@ def _backup_live_artifacts(safety_root):
 @app.template_filter('rjust')
 def rjust_filter(s, width, fillchar=' '):
     return str(s).rjust(width, fillchar)
+
+@app.template_filter('from_iso_date')
+def from_iso_date(value):
+    try:
+        return datetime.fromisoformat(value).date()
+    except (ValueError, TypeError):
+        return value
+
+@app.template_filter('from_iso_datetime')
+def from_iso_datetime(value):
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return value
+
+@app.template_filter('strftime')
+def strftime_filter(value, format_string):
+    try:
+        return value.strftime(format_string)
+    except AttributeError:
+        return value
+
+@app.template_filter('date')
+def date_filter(value):
+    try:
+        return value.date()
+    except AttributeError:
+        return value
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -605,11 +634,22 @@ def routine_backup_guard():
         return
     if app.config.get('TESTING'):
         return
-    try:
-        perform_routine_encrypted_backup(app.config.get('DATABASE', DATABASE))
-    except Exception:
-        # Keep requests alive even if backup fails, but surface diagnostics.
-        app.logger.exception('Routine encrypted backup failed')
+
+    import os
+    import time
+
+    db_path = app.config.get('DATABASE_PATH') or app.config.get('DATABASE', DATABASE)
+    if not db_path or not os.path.exists(db_path):
+        return
+
+    last_modified = os.path.getmtime(db_path)
+    now = time.time()
+
+    if now - last_modified > 86400: # 24 hours
+        try:
+            perform_routine_encrypted_backup(db_path)
+        except Exception:
+            app.logger.exception('Routine encrypted backup failed')
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None, display_name=None):
@@ -721,7 +761,8 @@ def _database_backup_fingerprint(db_file_path):
 
         table_counts = {}
         for table_name in tables:
-            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{table_name}"').fetchone()
+            safe_table_name = table_name.replace('"', '""')
+            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{safe_table_name}"').fetchone()
             table_counts[table_name] = int(count_row['c'] if count_row else 0)
 
         appointment_stats = conn.execute('''
@@ -920,6 +961,606 @@ def perform_encrypted_restore(db_path, backup_filename=None):
 
     return str(target), str(safety_copy)
 
+def _run_db_migrations(db):
+    """Run all schema migrations and index creations."""
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL,
+            recipient_id INTEGER,
+            content TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_read BOOLEAN DEFAULT 0,
+            FOREIGN KEY (sender_id) REFERENCES users (id),
+            FOREIGN KEY (recipient_id) REFERENCES users (id)
+        )
+    ''')
+
+    # Handle column migrations
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass # Column exists
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            blocked_date DATE NOT NULL,
+            blocked_time TIME NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_group_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN email TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS vacancy_recurring (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6),
+            slot_time TEXT NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE vacancy_recurring ADD COLUMN duration_minutes INTEGER DEFAULT 60')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            action TEXT NOT NULL,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS public_booking_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            created_by INTEGER,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            group_type TEXT DEFAULT 'support',
+            description TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            left_at TIMESTAMP,
+            role TEXT DEFAULT 'member',
+            PRIMARY KEY (group_id, patient_id),
+            FOREIGN KEY (group_id) REFERENCES groups (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            session_date DATE NOT NULL,
+            session_time TIME NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            title TEXT,
+            facilitator TEXT,
+            meeting_type TEXT DEFAULT 'in-person',
+            meeting_link TEXT,
+            series_id INTEGER,
+            occurrence_index INTEGER,
+            session_summary TEXT,
+            status TEXT DEFAULT 'scheduled',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            left_at TIMESTAMP,
+            role TEXT DEFAULT 'member',
+            FOREIGN KEY (group_id) REFERENCES groups (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_session_series (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL,
+            start_date DATE NOT NULL,
+            start_time TIME NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            recurrence_interval_weeks INTEGER DEFAULT 1,
+            recurrence_end_date DATE,
+            recurrence_count INTEGER,
+            title TEXT,
+            facilitator TEXT,
+            meeting_type TEXT DEFAULT 'in-person',
+            meeting_link TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS group_session_attendance (
+            session_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            attendance_status TEXT NOT NULL DEFAULT 'pending',
+            absence_reason TEXT,
+            notified_on_time BOOLEAN DEFAULT 0,
+            attendance_note TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (session_id, patient_id),
+            FOREIGN KEY (session_id) REFERENCES group_sessions (id),
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+
+    # Performance indexes for common filters and sort paths.
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_recurrence_group ON appointments(recurrence_group_id)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status)')
+
+    db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS supervisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            group_id INTEGER,
+            supervision_date DATE NOT NULL,
+            supervisor_name TEXT,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id),
+            FOREIGN KEY (group_id) REFERENCES groups (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date)')
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS diagnosis_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            category TEXT NOT NULL DEFAULT 'test_document',
+            title TEXT,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
+
+    # Google Calendar: add google_event_id to appointments and group_sessions
+    try:
+        db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    # Ensure google_calendar_tokens table exists
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS google_calendar_tokens (
+            id INTEGER PRIMARY KEY,
+            owner TEXT NOT NULL DEFAULT 'admin',
+            token_json TEXT NOT NULL,
+            calendar_id TEXT NOT NULL DEFAULT 'primary',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Treatment method tag and manual sort order for patients
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL UNIQUE,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    # Seed default options (only inserts if they don't exist yet)
+    for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
+        db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
+
+    # Google Docs integration columns
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
+    except sqlite3.OperationalError:
+        pass
+
+    db.commit()
+
+def _seed_admin_user(db):
+    """Seed the default admin user and handle legacy migrations."""
+    # Check if admin exists
+    admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
+    if not admin:
+        print("Creating default admin user...")
+        hashed_pw = generate_password_hash('Flo@tingind4')
+        db.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
+            ('lioraloni', hashed_pw, 'admin', 0)
+        )
+        db.commit()
+        print("Admin user created (username: lioraloni).")
+        admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
+
+    # One-time migration from legacy default admin credentials.
+    legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
+    if legacy_admin:
+        collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
+        if not collision:
+            db.execute(
+                '''
+                UPDATE users
+                SET username = ?, password_hash = ?, force_password_change = ?
+                WHERE id = ?
+                ''',
+                ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
+            )
+            db.commit()
+            admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
+            print('Legacy admin account migrated to lioraloni.')
+
+    if admin and not admin['display_name']:
+        db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
+        db.commit()
+
+
 def init_db():
 
     database = app.config.get('DATABASE', DATABASE)
@@ -930,600 +1571,8 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sender_id INTEGER NOT NULL,
-                recipient_id INTEGER,
-                content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_read BOOLEAN DEFAULT 0,
-                FOREIGN KEY (sender_id) REFERENCES users (id),
-                FOREIGN KEY (recipient_id) REFERENCES users (id)
-            )
-        ''')
-
-        # Handle column migrations
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass # Column exists
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                blocked_date DATE NOT NULL,
-                blocked_time TIME NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN recurrence_group_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN email TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS vacancy_recurring (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                weekday INTEGER NOT NULL CHECK(weekday >= 0 AND weekday <= 6),
-                slot_time TEXT NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE vacancy_recurring ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER,
-                action TEXT NOT NULL,
-                details TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT NOT NULL,
-                is_read BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS public_booking_links (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT UNIQUE NOT NULL,
-                created_by INTEGER,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS goals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS groups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                group_type TEXT DEFAULT 'support',
-                description TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_members (
-                group_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                left_at TIMESTAMP,
-                role TEXT DEFAULT 'member',
-                PRIMARY KEY (group_id, patient_id),
-                FOREIGN KEY (group_id) REFERENCES groups (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                session_date DATE NOT NULL,
-                session_time TIME NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                title TEXT,
-                facilitator TEXT,
-                meeting_type TEXT DEFAULT 'in-person',
-                meeting_link TEXT,
-                series_id INTEGER,
-                occurrence_index INTEGER,
-                session_summary TEXT,
-                status TEXT DEFAULT 'scheduled',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                left_at TIMESTAMP,
-                role TEXT DEFAULT 'member',
-                FOREIGN KEY (group_id) REFERENCES groups (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_session_series (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                start_date DATE NOT NULL,
-                start_time TIME NOT NULL,
-                duration_minutes INTEGER DEFAULT 60,
-                recurrence_interval_weeks INTEGER DEFAULT 1,
-                recurrence_end_date DATE,
-                recurrence_count INTEGER,
-                title TEXT,
-                facilitator TEXT,
-                meeting_type TEXT DEFAULT 'in-person',
-                meeting_link TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS group_session_attendance (
-                session_id INTEGER NOT NULL,
-                patient_id INTEGER NOT NULL,
-                attendance_status TEXT NOT NULL DEFAULT 'pending',
-                absence_reason TEXT,
-                notified_on_time BOOLEAN DEFAULT 0,
-                attendance_note TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (session_id, patient_id),
-                FOREIGN KEY (session_id) REFERENCES group_sessions (id),
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
-        except sqlite3.OperationalError:
-            pass
-
-        # Performance indexes for common filters and sort paths.
-        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_status_date ON appointments(patient_id, status, appointment_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_date_time_status ON appointments(appointment_date, appointment_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_recurrence_group ON appointments(recurrence_group_id)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_notes_patient_created ON notes(patient_id, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_receipts_patient_created ON receipts(patient_id, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_files_patient_created ON files(patient_id, created_at)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_member_history_group_patient ON group_member_history(group_id, patient_id, joined_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_series_group_start ON group_session_series(group_id, start_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_group_attendance_session_status ON group_session_attendance(session_id, attendance_status)')
-
-        db.execute('CREATE INDEX IF NOT EXISTS idx_notifications_read_created ON notifications(is_read, created_at)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_goals_patient_status ON goals(patient_id, status)')
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS supervisions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER,
-                group_id INTEGER,
-                supervision_date DATE NOT NULL,
-                supervisor_name TEXT,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id),
-                FOREIGN KEY (group_id) REFERENCES groups (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_patient ON supervisions(patient_id, supervision_date)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_supervisions_group ON supervisions(group_id, supervision_date)')
-
-        try:
-            db.execute('''CREATE TABLE IF NOT EXISTS diagnosis_documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL,
-                category TEXT NOT NULL DEFAULT 'test_document',
-                title TEXT,
-                original_filename TEXT NOT NULL,
-                stored_filename TEXT NOT NULL,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (patient_id) REFERENCES patients (id)
-            )''')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
-
-        # Google Calendar: add google_event_id to appointments and group_sessions
-        try:
-            db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        # Ensure google_calendar_tokens table exists
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS google_calendar_tokens (
-                id INTEGER PRIMARY KEY,
-                owner TEXT NOT NULL DEFAULT 'admin',
-                token_json TEXT NOT NULL,
-                calendar_id TEXT NOT NULL DEFAULT 'primary',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Treatment method tag and manual sort order for patients
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
-        except sqlite3.OperationalError:
-            pass
-        db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label TEXT NOT NULL UNIQUE,
-            display_order INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # Seed default options (only inserts if they don't exist yet)
-        for _label in ['Psychodynamic', 'CBT', 'EFT', 'Management', '15 sessions', '3 sessions']:
-            db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
-
-        # Google Docs integration columns
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
-        except sqlite3.OperationalError:
-            pass
-        try:
-            db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
-        except sqlite3.OperationalError:
-            pass
-
-        db.commit()
-
-        # Check if admin exists
-        admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
-        if not admin:
-            print("Creating default admin user...")
-            hashed_pw = generate_password_hash('Flo@tingind4')
-            db.execute(
-                "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
-                ('lioraloni', hashed_pw, 'admin', 0)
-            )
-            db.commit()
-            print("Admin user created (username: lioraloni).")
-            admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
-
-        # One-time migration from legacy default admin credentials.
-        legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
-        if legacy_admin:
-            collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
-            if not collision:
-                db.execute(
-                    '''
-                    UPDATE users
-                    SET username = ?, password_hash = ?, force_password_change = ?
-                    WHERE id = ?
-                    ''',
-                    ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
-                )
-                db.commit()
-                admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
-                print('Legacy admin account migrated to lioraloni.')
-
-        if admin and not admin['display_name']:
-            db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
-            db.commit()
+        _run_db_migrations(db)
+        _seed_admin_user(db)
 
         print(f"Initialized the database at {database}.")
 
@@ -1539,6 +1588,11 @@ def init_db():
 
 @app.route('/')
 def index():
+    try:
+        get_db()
+    except sqlite3.OperationalError:
+        init_db()
+
     if current_user.is_authenticated:
         if current_user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
@@ -1963,9 +2017,9 @@ def add_intake_line(doc, label, value):
         doc.add_paragraph(item, style='List Bullet')
 
 
-def build_intake_docx(patient_name, data, language='en'):
+def get_intake_docx_text(language):
     is_hebrew = language == 'he'
-    text = {
+    return {
         'title': 'טופס הערכת אינטייק' if is_hebrew else 'Intake Evaluation',
         'patient': 'מטופל/ת' if is_hebrew else 'Patient',
         'generated': 'הופק בתאריך' if is_hebrew else 'Generated',
@@ -2049,6 +2103,94 @@ def build_intake_docx(patient_name, data, language='en'):
         }
     }
 
+
+INTAKE_SECTIONS_MAPPING = [
+    ('prelim', [
+        'meeting_location',
+        'meeting_location_specify',
+        'meeting_time',
+        'meeting_duration',
+        'meeting_conductor'
+    ]),
+    ('background', [
+        'main_complaint',
+        'problem_history',
+        'early_anamnesis',
+        'referral_source',
+        'referral_date'
+    ]),
+    ('administrative', [
+        'family_status',
+        'guardian_status',
+        'guardian_by_whom',
+        'living_with',
+        'living_with_other',
+        'disability_status',
+        'disability_percent',
+        'self_harm_level',
+        'self_harm_recent',
+        'self_harm_count',
+        'forced_treatment',
+        'substance_use',
+        'medical_cannabis',
+        'alcohol_use'
+    ]),
+    ('medical', [
+        'medical_conditions',
+        'psychiatric_conditions'
+    ]),
+    ('mental_status', [
+        'appearance_fit',
+        'appearance_fit_note',
+        'appearance_ordered',
+        'appearance_ordered_note',
+        'cooperation',
+        'cooperation_note',
+        'eye_contact',
+        'eye_contact_note',
+        'behavior_normal',
+        'behavior_note',
+        'speech_style',
+        'speech_note',
+        'mood',
+        'mood_note',
+        'affect_match',
+        'affect_state',
+        'affect_note',
+        'thinking_normal',
+        'thinking_rate',
+        'thinking_sequence',
+        'thinking_content',
+        'perception_normal',
+        'perception_abnormal',
+        'reality_testing',
+        'judgment',
+        'self_insight',
+        'orientation',
+        'memory'
+    ]),
+    ('treatment_plan', [
+        'referral_target',
+        'referral_details',
+        'patient_consent',
+        'treatment_approach',
+        'treatment_frequency',
+        'treatment_estimated_duration',
+        'diag_referral_question',
+        'diag_test_battery',
+        'diag_observations',
+        'diag_differential',
+        'diag_impression',
+        'diag_recommendations',
+        'diag_followup_plan',
+        'diag_final_summary'
+    ])
+]
+
+
+def build_intake_docx(patient_name, data, language='en'):
+    text = get_intake_docx_text(language)
+
     doc = Document()
     title = doc.add_heading(text['title'], level=1)
     title.alignment = 1
@@ -2057,160 +2199,41 @@ def build_intake_docx(patient_name, data, language='en'):
     )
     subtitle.alignment = 1
 
-    add_intake_section_heading(doc, text['sections']['prelim'])
-    add_intake_line(doc, text['labels']['meeting_location'], data.get('meeting_location'))
-    add_intake_line(doc, text['labels']['meeting_location_specify'], data.get('meeting_location_specify'))
-    add_intake_line(doc, text['labels']['meeting_time'], data.get('meeting_time'))
-    add_intake_line(doc, text['labels']['meeting_duration'], data.get('meeting_duration'))
-    add_intake_line(doc, text['labels']['meeting_conductor'], data.get('meeting_conductor'))
-
-    add_intake_section_heading(doc, text['sections']['background'])
-    add_intake_line(doc, text['labels']['main_complaint'], data.get('main_complaint'))
-    add_intake_line(doc, text['labels']['problem_history'], data.get('problem_history'))
-    add_intake_line(doc, text['labels']['early_anamnesis'], data.get('early_anamnesis'))
-    add_intake_line(doc, text['labels']['referral_source'], data.get('referral_source'))
-    add_intake_line(doc, text['labels']['referral_date'], data.get('referral_date'))
-
-    add_intake_section_heading(doc, text['sections']['administrative'])
-    add_intake_line(doc, text['labels']['family_status'], data.get('family_status'))
-    add_intake_line(doc, text['labels']['guardian_status'], data.get('guardian_status'))
-    add_intake_line(doc, text['labels']['guardian_by_whom'], data.get('guardian_by_whom'))
-    add_intake_line(doc, text['labels']['living_with'], data.get('living_with'))
-    add_intake_line(doc, text['labels']['living_with_other'], data.get('living_with_other'))
-    add_intake_line(doc, text['labels']['disability_status'], data.get('disability_status'))
-    add_intake_line(doc, text['labels']['disability_percent'], data.get('disability_percent'))
-    add_intake_line(doc, text['labels']['self_harm_level'], data.get('self_harm_level'))
-    add_intake_line(doc, text['labels']['self_harm_recent'], data.get('self_harm_recent'))
-    add_intake_line(doc, text['labels']['self_harm_count'], data.get('self_harm_count'))
-    add_intake_line(doc, text['labels']['forced_treatment'], data.get('forced_treatment'))
-    add_intake_line(doc, text['labels']['substance_use'], data.get('substance_use'))
-    add_intake_line(doc, text['labels']['medical_cannabis'], data.get('medical_cannabis'))
-    add_intake_line(doc, text['labels']['alcohol_use'], data.get('alcohol_use'))
-
-    add_intake_section_heading(doc, text['sections']['medical'])
-    add_intake_line(doc, text['labels']['medical_conditions'], data.get('medical_conditions'))
-    add_intake_line(doc, text['labels']['psychiatric_conditions'], data.get('psychiatric_conditions'))
-
-    add_intake_section_heading(doc, text['sections']['mental_status'])
-    add_intake_line(doc, text['labels']['appearance_fit'], data.get('appearance_fit'))
-    add_intake_line(doc, text['labels']['appearance_fit_note'], data.get('appearance_fit_note'))
-    add_intake_line(doc, text['labels']['appearance_ordered'], data.get('appearance_ordered'))
-    add_intake_line(doc, text['labels']['appearance_ordered_note'], data.get('appearance_ordered_note'))
-    add_intake_line(doc, text['labels']['cooperation'], data.get('cooperation'))
-    add_intake_line(doc, text['labels']['cooperation_note'], data.get('cooperation_note'))
-    add_intake_line(doc, text['labels']['eye_contact'], data.get('eye_contact'))
-    add_intake_line(doc, text['labels']['eye_contact_note'], data.get('eye_contact_note'))
-    add_intake_line(doc, text['labels']['behavior_normal'], data.get('behavior_normal'))
-    add_intake_line(doc, text['labels']['behavior_note'], data.get('behavior_note'))
-    add_intake_line(doc, text['labels']['speech_style'], data.get('speech_style'))
-    add_intake_line(doc, text['labels']['speech_note'], data.get('speech_note'))
-    add_intake_line(doc, text['labels']['mood'], data.get('mood'))
-    add_intake_line(doc, text['labels']['mood_note'], data.get('mood_note'))
-    add_intake_line(doc, text['labels']['affect_match'], data.get('affect_match'))
-    add_intake_line(doc, text['labels']['affect_state'], data.get('affect_state'))
-    add_intake_line(doc, text['labels']['affect_note'], data.get('affect_note'))
-    add_intake_line(doc, text['labels']['thinking_normal'], data.get('thinking_normal'))
-    add_intake_line(doc, text['labels']['thinking_rate'], data.get('thinking_rate'))
-    add_intake_line(doc, text['labels']['thinking_sequence'], data.get('thinking_sequence'))
-    add_intake_line(doc, text['labels']['thinking_content'], data.get('thinking_content'))
-    add_intake_line(doc, text['labels']['perception_normal'], data.get('perception_normal'))
-    add_intake_line(doc, text['labels']['perception_abnormal'], data.get('perception_abnormal'))
-    add_intake_line(doc, text['labels']['reality_testing'], data.get('reality_testing'))
-    add_intake_line(doc, text['labels']['judgment'], data.get('judgment'))
-    add_intake_line(doc, text['labels']['self_insight'], data.get('self_insight'))
-    add_intake_line(doc, text['labels']['orientation'], data.get('orientation'))
-    add_intake_line(doc, text['labels']['memory'], data.get('memory'))
-
-    add_intake_section_heading(doc, text['sections']['treatment_plan'])
-    add_intake_line(doc, text['labels']['referral_target'], data.get('referral_target'))
-    add_intake_line(doc, text['labels']['referral_details'], data.get('referral_details'))
-    add_intake_line(doc, text['labels']['patient_consent'], data.get('patient_consent'))
-    add_intake_line(doc, text['labels']['treatment_approach'], data.get('treatment_approach'))
-    add_intake_line(doc, text['labels']['treatment_frequency'], data.get('treatment_frequency'))
-    add_intake_line(doc, text['labels']['treatment_estimated_duration'], data.get('treatment_estimated_duration'))
-    add_intake_line(doc, text['labels']['diag_referral_question'], data.get('diag_referral_question'))
-    add_intake_line(doc, text['labels']['diag_test_battery'], data.get('diag_test_battery'))
-    add_intake_line(doc, text['labels']['diag_observations'], data.get('diag_observations'))
-    add_intake_line(doc, text['labels']['diag_differential'], data.get('diag_differential'))
-    add_intake_line(doc, text['labels']['diag_impression'], data.get('diag_impression'))
-    add_intake_line(doc, text['labels']['diag_recommendations'], data.get('diag_recommendations'))
-    add_intake_line(doc, text['labels']['diag_followup_plan'], data.get('diag_followup_plan'))
-    add_intake_line(doc, text['labels']['diag_final_summary'], data.get('diag_final_summary'))
+    for section_key, fields in INTAKE_SECTIONS_MAPPING:
+        add_intake_section_heading(doc, text['sections'][section_key])
+        for field in fields:
+            add_intake_line(doc, text['labels'][field], data.get(field))
 
     return doc
 
 
-def build_patient_background_from_notes(db, patient_id, patient_name=None):
-    if patient_name is None:
-        patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
 
-    patient_row = db.execute('''
-        SELECT intake_assessment, intake_questionnaire
-        FROM patients
-        WHERE id = ?
-    ''', (patient_id,)).fetchone()
-
-    notes = db.execute('''
-        SELECT note_date, content, mood_summary, created_at
-        FROM notes
-        WHERE patient_id = ?
-        ORDER BY COALESCE(note_date, date(created_at)) ASC, created_at ASC
-    ''', (patient_id,)).fetchall()
-
-    if not notes:
-        intake_questionnaire = parse_intake_questionnaire(
-            patient_row['intake_questionnaire'] if patient_row else None,
-            patient_row['intake_assessment'] if patient_row else None
-        )
-        main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
-        problem_history = (intake_questionnaire.get('problem_history') or '').strip()
-        intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
-
-        main_problem = main_complaint or problem_history
-        if not main_problem and intake_assessment.strip():
-            main_problem = intake_assessment.strip().splitlines()[0]
-
-        if main_problem:
-            return (
-                f"סיכום מטופל: {patient_name}. "
-                "סטטוס תיעוד: מידע ראשוני מאינטייק בלבד (ללא מפגשים שוטפים מתועדים). "
-                f"מוקד עיקרי נוכחי: {main_problem}."
-            )
-        return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
-
-    note_texts = []
-    for note in notes:
-        note_texts.append(note['content'])
-        if note['mood_summary']:
-            note_texts.append(note['mood_summary'])
-
-    first_date = notes[0]['note_date']
-    last_date = notes[-1]['note_date']
-
-    if first_date and last_date:
-        timeframe = f" בין {first_date} ל-{last_date}"
-    elif last_date:
-        timeframe = f" עד המפגש האחרון המתועד ב-{last_date}"
-    else:
-        timeframe = ''
-
-    age_fact = extract_age_fact(note_texts, patient_name)
-    occupation_fact = extract_occupation_fact(note_texts, patient_name)
-    family_fact = extract_family_fact(note_texts)
-    reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
-    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
-    recent_focus = extract_recent_focus(notes)
-    key_points = extract_key_summary_points(notes, limit=3)
-
+def _get_intake_data(patient_row):
+    if not patient_row:
+        return {}, ''
     intake_questionnaire = parse_intake_questionnaire(
-        patient_row['intake_questionnaire'] if patient_row else None,
-        patient_row['intake_assessment'] if patient_row else None
+        patient_row['intake_questionnaire'],
+        patient_row['intake_assessment']
     )
+    return intake_questionnaire, patient_row['intake_assessment'] or ''
+
+
+def _extract_main_problem_no_notes(patient_row):
+    intake_questionnaire, intake_assessment = _get_intake_data(patient_row)
     main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
     problem_history = (intake_questionnaire.get('problem_history') or '').strip()
 
-    intake_assessment = (patient_row['intake_assessment'] if patient_row else '') or ''
+    main_problem = main_complaint or problem_history
+    if not main_problem and intake_assessment.strip():
+        main_problem = intake_assessment.strip().splitlines()[0]
+    return main_problem
+
+
+def _extract_main_problem_with_notes(patient_row, notes, reason_topics, theme_topics, recent_focus):
+    intake_questionnaire, intake_assessment = _get_intake_data(patient_row)
+    main_complaint = (intake_questionnaire.get('main_complaint') or '').strip()
+    problem_history = (intake_questionnaire.get('problem_history') or '').strip()
+
     intake_problem_line = ''
     if intake_assessment:
         for line in intake_assessment.splitlines():
@@ -2220,20 +2243,33 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
                 break
 
     if main_complaint:
-        main_problem = main_complaint
+        return main_complaint
     elif problem_history:
-        main_problem = problem_history
+        return problem_history
     elif intake_problem_line:
-        main_problem = intake_problem_line
+        return intake_problem_line
     elif reason_topics:
-        main_problem = f"קושי מרכזי סביב {', '.join(reason_topics)}"
+        return f"קושי מרכזי סביב {', '.join(reason_topics)}"
     elif theme_topics:
-        main_problem = f"מוקד קושי חוזר סביב {', '.join(theme_topics)}"
+        return f"מוקד קושי חוזר סביב {', '.join(theme_topics)}"
     elif recent_focus:
-        main_problem = recent_focus
+        return recent_focus
     else:
-        main_problem = extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
+        return extract_background_sentence(notes[-1]['mood_summary'] or notes[-1]['content'])
 
+
+def _get_notes_timeframe(notes):
+    first_date = notes[0]['note_date']
+    last_date = notes[-1]['note_date']
+
+    if first_date and last_date:
+        return f" בין {first_date} ל-{last_date}"
+    if last_date:
+        return f" עד המפגש האחרון המתועד ב-{last_date}"
+    return ''
+
+
+def _format_patient_summary(patient_name, notes, timeframe, age_fact, occupation_fact, family_fact, reason_topics, theme_topics, key_points, recent_focus, main_problem):
     parts = [f"סיכום מטופל: {patient_name}."]
     parts.append(f"תמונת זמן: {len(notes)} מפגשים מתועדים{timeframe}.")
 
@@ -2258,6 +2294,58 @@ def build_patient_background_from_notes(db, patient_id, patient_name=None):
     return ' '.join(part.strip() for part in parts if part).strip()
 
 
+def build_patient_background_from_notes(db, patient_id, patient_name=None):
+    if patient_name is None:
+        patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_name = patient_row['name'] if patient_row else 'המטופל/ת'
+
+    patient_row = db.execute('''
+        SELECT intake_assessment, intake_questionnaire
+        FROM patients
+        WHERE id = ?
+    ''', (patient_id,)).fetchone()
+
+    notes = db.execute('''
+        SELECT note_date, content, mood_summary, created_at
+        FROM notes
+        WHERE patient_id = ?
+        ORDER BY COALESCE(note_date, date(created_at)) ASC, created_at ASC
+    ''', (patient_id,)).fetchall()
+
+    if not notes:
+        main_problem = _extract_main_problem_no_notes(patient_row)
+        if main_problem:
+            return (
+                f"סיכום מטופל: {patient_name}. "
+                "סטטוס תיעוד: מידע ראשוני מאינטייק בלבד (ללא מפגשים שוטפים מתועדים). "
+                f"מוקד עיקרי נוכחי: {main_problem}."
+            )
+        return 'לא נמצאה היסטוריה טיפולית מתועדת במערכת.'
+
+    note_texts = []
+    for note in notes:
+        note_texts.append(note['content'])
+        if note['mood_summary']:
+            note_texts.append(note['mood_summary'])
+
+    timeframe = _get_notes_timeframe(notes)
+
+    age_fact = extract_age_fact(note_texts, patient_name)
+    occupation_fact = extract_occupation_fact(note_texts, patient_name)
+    family_fact = extract_family_fact(note_texts)
+    reason_topics = pick_top_summary_topics(note_texts[:8], BACKGROUND_REASON_TOPICS, 2)
+    theme_topics = pick_top_summary_topics(note_texts, BACKGROUND_THEME_TOPICS, 2)
+    recent_focus = extract_recent_focus(notes)
+    key_points = extract_key_summary_points(notes, limit=3)
+
+    main_problem = _extract_main_problem_with_notes(patient_row, notes, reason_topics, theme_topics, recent_focus)
+
+    return _format_patient_summary(
+        patient_name, notes, timeframe, age_fact, occupation_fact, family_fact,
+        reason_topics, theme_topics, key_points, recent_focus, main_problem
+    )
+
+
 def _normalize_session_number(value):
     if value is None:
         return None
@@ -2268,6 +2356,159 @@ def _normalize_session_number(value):
         return str(int(raw))
     except (TypeError, ValueError):
         return raw
+
+
+def _parse_note_fields(item):
+    meeting_number = _normalize_session_number(item.get('meeting_number') or item.get('session_number'))
+    date_str = (item.get('date') or item.get('note_date') or '').strip() or None
+    content_text = (item.get('content') or '').strip()
+    appearance_text = (item.get('patient_appearance') or '').strip()
+    checklist_text = item.get('behavior_checklist')
+    if isinstance(checklist_text, list):
+        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
+    checklist_text = (checklist_text or '').strip()
+    mood_summary = (item.get('mood_summary') or '').strip()
+    behavior_notes = (item.get('behavior_notes') or '').strip()
+
+    if not meeting_number and not _has_meaningful_note_information(
+        content_text,
+        mood_summary,
+        behavior_notes,
+        appearance_text,
+        checklist_text,
+    ):
+        return None
+
+    if not content_text:
+        content_text = mood_summary or behavior_notes or appearance_text
+    if not content_text:
+        return None
+
+    return {
+        'meeting_number': meeting_number,
+        'date_str': date_str,
+        'content_text': content_text,
+        'appearance_text': appearance_text,
+        'checklist_text': checklist_text,
+        'mood_summary': mood_summary,
+        'behavior_notes': behavior_notes
+    }
+
+
+def _import_flat_patient_history(db, patient_id, data):
+    appointments_added = 0
+    notes_added = 0
+
+    def _sort_key(item):
+        raw_date = (item.get('date') or item.get('note_date') or '').strip()
+        meeting_raw = item.get('meeting_number') or item.get('session_number') or 0
+        try:
+            meeting_num = int(meeting_raw)
+        except (TypeError, ValueError):
+            meeting_num = 0
+        return (raw_date, meeting_num)
+
+    for item in sorted(data, key=_sort_key):
+        parsed = _parse_note_fields(item)
+        if not parsed:
+            continue
+
+        appt_id = None
+        if parsed['date_str']:
+            existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, parsed['date_str'])).fetchone()
+            if not existing:
+                cursor = db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)', (patient_id, parsed['date_str'], '00:00', 'completed'))
+                appt_id = cursor.lastrowid
+                appointments_added += 1
+            else:
+                appt_id = existing['id']
+
+        db.execute(
+            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
+                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                patient_id,
+                appt_id,
+                parsed['meeting_number'],
+                parsed['date_str'],
+                parsed['content_text'],
+                parsed['appearance_text'],
+                parsed['checklist_text'],
+                parsed['mood_summary'],
+                parsed['behavior_notes']
+            )
+        )
+        notes_added += 1
+
+    return appointments_added, notes_added, 0
+
+def _import_structured_patient_history(db, patient_id, data):
+    appointments_added = 0
+    notes_added = 0
+    receipts_added = 0
+
+    # Import appointments
+    appt_id_map = {}
+    sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
+    for appt in sorted_appts:
+        existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
+            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
+        if not existing:
+            cursor = db.execute('''INSERT INTO appointments
+                (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
+                 appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
+                 appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
+            appt_id_map[appt.get('id')] = cursor.lastrowid
+            appointments_added += 1
+        else:
+            appt_id_map[appt.get('id')] = existing['id']
+
+    # Import notes
+    sorted_notes = sorted(
+        data.get('notes', []),
+        key=lambda x: (
+            x.get('note_date') or x.get('date') or x.get('created_at', ''),
+            str(x.get('session_number') or x.get('meeting_number') or '')
+        )
+    )
+    for note in sorted_notes:
+        parsed = _parse_note_fields(note)
+        if not parsed:
+            continue
+
+        new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
+
+        db.execute('''INSERT INTO notes
+            (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
+             behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                patient_id,
+                new_appt_id,
+                parsed['meeting_number'],
+                parsed['date_str'],
+                parsed['content_text'],
+                parsed['appearance_text'],
+                parsed['checklist_text'],
+                parsed['mood_summary'],
+                parsed['behavior_notes'],
+                note.get('needs_review'),
+                note.get('created_at')
+            ))
+        notes_added += 1
+
+    # Import receipts
+    for receipt in data.get('receipts', []):
+        db.execute('''INSERT INTO receipts
+            (patient_id, amount, description, created_at)
+            VALUES (?, ?, ?, ?)''',
+            (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
+        receipts_added += 1
+
+    return appointments_added, notes_added, receipts_added
 
 
 def _has_meaningful_note_information(content_text, mood_summary, behavior_notes, appearance_text, checklist_text):
@@ -2291,7 +2532,7 @@ def _has_meaningful_note_information(content_text, mood_summary, behavior_notes,
     return False
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+def _get_patients_select_clause(admin_user_id):
     unread_case = '0'
     if admin_user_id is not None:
         unread_case = f'''(
@@ -2303,7 +2544,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
               AND COALESCE(m.is_read, 0) = 0
         )'''
 
-    base_query = '''
+    return f'''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
         (SELECT MIN(a0.appointment_date) FROM appointments a0 WHERE a0.patient_id = p.id AND COALESCE(a0.status, 'scheduled') = 'scheduled' AND a0.appointment_date >= DATE('now')) AS next_appointment_date,
@@ -2316,7 +2557,7 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
             ORDER BY a1.appointment_date ASC, a1.appointment_time ASC
             LIMIT 1
         ) AS next_appointment_time,
-        ''' + unread_case + ''' AS unread_messages,
+        {unread_case} AS unread_messages,
         (
             CASE
                 WHEN p.status = 'candidate' AND EXISTS (
@@ -2355,29 +2596,34 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
 
+def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
+    where_query = ""
     params = []
 
     if status in ['candidate', 'waiting for scheduling', 'waiting']:
-        base_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
+        where_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
     elif status != 'all':
-        base_query += ' AND p.status = ?'
+        where_query += ' AND p.status = ?'
         params.append(status)
 
     if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
-        base_query += ' AND COALESCE(p.patient_type, \"private\") = ?'
+        where_query += ' AND COALESCE(p.patient_type, "private") = ?'
         params.append(patient_type)
     elif not include_group:
-        base_query += ' AND COALESCE(p.patient_type, \"private\") != \"group\"'
+        where_query += ' AND COALESCE(p.patient_type, "private") != "group"'
 
     if search_query:
-        base_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, \"\")) LIKE ? OR LOWER(COALESCE(p.phone, \"\")) LIKE ?)'
+        where_query += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, "")) LIKE ? OR LOWER(COALESCE(p.phone, "")) LIKE ?)'
         like_value = f"%{search_query.lower()}%"
         params.extend([like_value, like_value, like_value])
 
     if treatment_method and treatment_method != 'all':
-        base_query += ' AND COALESCE(p.treatment_method, \"\") = ?'
+        where_query += ' AND COALESCE(p.treatment_method, "") = ?'
         params.append(treatment_method)
 
+    return where_query, params
+
+def _get_patients_order_clause(sort_by):
     order_map = {
         'name_asc': 'p.name ASC',
         'name_desc': 'p.name DESC',
@@ -2394,9 +2640,15 @@ def fetch_patients_by_status(db, status, patient_type='all', search_query='', so
             p.created_at DESC
         '''
     }
-    order_clause = order_map.get(sort_by, order_map['status_priority'])
+    return " ORDER BY " + order_map.get(sort_by, order_map['status_priority'])
 
-    final_query = f"{base_query} ORDER BY {order_clause}"
+
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+    select_clause = _get_patients_select_clause(admin_user_id)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
+    order_clause = _get_patients_order_clause(sort_by)
+
+    final_query = f"{select_clause}{where_clause}{order_clause}"
     return db.execute(final_query, tuple(params)).fetchall()
 
 
@@ -2463,19 +2715,8 @@ def crm_dashboard():
                            treatment_method_options=treatment_method_labels)
 
 
-@app.route('/admin/dashboard')
-@login_required
-def admin_dashboard():
-    """At-a-glance clinic overview for the admin."""
-    if current_user.role != 'admin':
-        return redirect(url_for('patient_home'))
-
-    db = get_db()
-    today = datetime.now().date()
-    week_end = today + timedelta(days=6)
-
-    # Today's appointments
-    today_appointments = db.execute('''
+def _get_dashboard_today_appointments(db, today):
+    return db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
                a.meeting_type, a.meeting_link, a.is_recurring,
                p.id AS patient_id, p.name AS patient_name,
@@ -2488,8 +2729,8 @@ def admin_dashboard():
         ORDER BY a.appointment_time ASC
     ''', (today.isoformat(),)).fetchall()
 
-    # Remaining appointments this week (days 1-6 from today)
-    week_appointments = db.execute('''
+def _get_dashboard_week_appointments(db, today, week_end):
+    return db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.meeting_type,
                p.id AS patient_id, p.name AS patient_name
         FROM appointments a
@@ -2501,7 +2742,7 @@ def admin_dashboard():
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
     ''', (today.isoformat(), week_end.isoformat())).fetchall()
 
-    # Patient status counts
+def _get_dashboard_patient_counts(db):
     counts_row = db.execute('''
         SELECT
             COUNT(*) AS total,
@@ -2510,21 +2751,21 @@ def admin_dashboard():
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
         FROM patients WHERE COALESCE(is_deleted, 0) = 0
     ''').fetchone()
-    counts = {
+    return {
         'total':   counts_row['total']   or 0,
         'ongoing': counts_row['ongoing'] or 0,
         'waiting': counts_row['waiting'] or 0,
         'archived':counts_row['archived']or 0,
     }
 
-    # Unread messages for admin
-    unread_count = db.execute(
+def _get_dashboard_unread_count(db, user_id):
+    return db.execute(
         'SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND COALESCE(is_read, 0) = 0',
-        (current_user.id,)
+        (user_id,)
     ).fetchone()[0]
 
-    # Patients needing a follow-up decision (candidates with only past appointments)
-    followup_patients = db.execute('''
+def _get_dashboard_followup_patients(db):
+    return db.execute('''
         SELECT p.id, p.name, p.status, MAX(a.appointment_date) AS last_appt_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
@@ -2544,8 +2785,8 @@ def admin_dashboard():
         LIMIT 8
     ''').fetchall()
 
-    # Waiting patients (no appointment yet scheduled at all)
-    waiting_patients = db.execute('''
+def _get_dashboard_waiting_patients(db):
+    return db.execute('''
         SELECT p.id, p.name, p.created_at
         FROM patients p
         WHERE p.status IN ('waiting', 'waiting for scheduling')
@@ -2559,8 +2800,8 @@ def admin_dashboard():
         LIMIT 6
     ''').fetchall()
 
-    # Recently added patients
-    recent_patients = db.execute('''
+def _get_dashboard_recent_patients(db):
+    return db.execute('''
         SELECT id, name, status, patient_type, treatment_method, created_at
         FROM patients
         WHERE COALESCE(is_deleted, 0) = 0
@@ -2568,8 +2809,8 @@ def admin_dashboard():
         LIMIT 6
     ''').fetchall()
 
-    # Recent audit log activity
-    recent_activity = db.execute('''
+def _get_dashboard_recent_activity(db):
+    return db.execute('''
         SELECT al.action, al.details, al.created_at,
                p.name AS patient_name, p.id AS patient_id
         FROM audit_logs al
@@ -2578,8 +2819,8 @@ def admin_dashboard():
         LIMIT 10
     ''').fetchall()
 
-    # Ongoing patients missing a recurring appointment (alert)
-    missing_recurring = db.execute('''
+def _get_dashboard_missing_recurring(db):
+    return db.execute('''
         SELECT id, name
         FROM patients
         WHERE status = 'ongoing'
@@ -2593,6 +2834,28 @@ def admin_dashboard():
         ORDER BY name ASC
         LIMIT 6
     ''').fetchall()
+
+
+@app.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    """At-a-glance clinic overview for the admin."""
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    today = datetime.now().date()
+    week_end = today + timedelta(days=6)
+
+    today_appointments = _get_dashboard_today_appointments(db, today)
+    week_appointments = _get_dashboard_week_appointments(db, today, week_end)
+    counts = _get_dashboard_patient_counts(db)
+    unread_count = _get_dashboard_unread_count(db, current_user.id)
+    followup_patients = _get_dashboard_followup_patients(db)
+    waiting_patients = _get_dashboard_waiting_patients(db)
+    recent_patients = _get_dashboard_recent_patients(db)
+    recent_activity = _get_dashboard_recent_activity(db)
+    missing_recurring = _get_dashboard_missing_recurring(db)
 
     return render_template('admin_home.html',
                            today=today,
@@ -2610,15 +2873,9 @@ def admin_dashboard():
 @app.route('/api/patients/reorder', methods=['POST'])
 @login_required
 def api_patients_reorder():
-    """Save the manual drag-and-drop sort order for patients."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    data = request.get_json(silent=True)
+    data = request.json
     if not data or 'order' not in data:
-        return jsonify({'error': 'Invalid payload'}), 400
-    order = data['order']
-    if not isinstance(order, list):
-        return jsonify({'error': 'order must be a list'}), 400
+        return jsonify({'error': 'No order provided'}), 400
     db = get_db()
     update_data = []
     for idx, patient_id in enumerate(order):
@@ -2626,8 +2883,11 @@ def api_patients_reorder():
             return jsonify({'error': 'Invalid patient id'}), 400
         update_data.append((idx, patient_id))
     db.executemany('UPDATE patients SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted,0) = 0', update_data)
+
+    for idx, patient_id in enumerate(data['order']):
+        db.execute('UPDATE patients SET sort_order = ? WHERE id = ?', (idx, patient_id))
     db.commit()
-    return jsonify({'ok': True})
+    return jsonify({'success': True})
 
 
 @app.route('/api/treatment_method_options', methods=['GET'])
@@ -2802,7 +3062,8 @@ def patient_dashboard():
         upcoming_appointments=upcoming_appointments,
         recent_notes=recent_notes,
         goals=goals,
-        engagement=engagement_data
+        engagement=engagement_data,
+        now=datetime.now()
     )
 
 
@@ -3151,7 +3412,13 @@ def login():
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
-        if user and check_password_hash(user['password_hash'], password):
+        if user:
+            password_correct = check_password_hash(user['password_hash'], password)
+        else:
+            check_password_hash(DUMMY_PASSWORD_HASH, password)
+            password_correct = False
+
+        if user and password_correct:
             if not user['is_active']:
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
@@ -3254,23 +3521,8 @@ def register():
 
     return render_template('register.html')
 
-@app.route('/patient/<int:patient_id>')
-@login_required
-def patient_detail(patient_id):
-    if current_user.role != 'admin':
-         # Patients can only see their own profile? No, this view is the Admin view of the patient.
-         # The patient dashboard is separate.
-         flash('Access denied.')
-         return redirect(url_for('patient_home'))
 
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
-    if patient is None:
-        return "Patient not found", 404
-
-    # Fetch user account if exists
-    user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
-
+def _get_patient_notes(db, patient_id):
     notes = db.execute('''
         SELECT * FROM notes
         WHERE patient_id = ?
@@ -3279,7 +3531,6 @@ def patient_detail(patient_id):
                  created_at DESC
     ''', (patient_id,)).fetchall()
 
-    # Deduplicate by session_number: prefer note with content; tiebreak by higher id (more recent)
     if notes:
         seen_sessions: dict = {}
         unnumbered = []
@@ -3301,9 +3552,9 @@ def patient_detail(patient_id):
         numbered = sorted(seen_sessions.values(),
                           key=lambda n: (-(int(n['session_number'] or 0)), -(n['id'])))
         notes = numbered + unnumbered
-    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    return notes
+
+def _get_patient_group_data(db, patient_id):
     group_attendance_rows = db.execute('''
         SELECT gsa.session_id,
                gsa.attendance_status,
@@ -3338,8 +3589,9 @@ def patient_detail(patient_id):
     ''', (patient_id,)).fetchall()
 
     group_arrived_count = sum(1 for row in group_attendance_rows if (row['attendance_status'] or '') == 'present')
+    return group_attendance_rows, group_membership_rows, group_arrived_count
 
-    # Get messages
+def _get_patient_messages(db, user, current_user_id):
     messages = []
     unread_messages_count = 0
     if user:
@@ -3347,7 +3599,7 @@ def patient_detail(patient_id):
             SELECT COUNT(*) AS c
             FROM messages
             WHERE sender_id = ? AND recipient_id = ? AND COALESCE(is_read, 0) = 0
-        ''', (user['id'], current_user.id)).fetchone()['c']
+        ''', (user['id'], current_user_id)).fetchone()['c']
         messages = db.execute('''
             SELECT m.*, u.username as sender_name
             FROM messages m
@@ -3355,19 +3607,10 @@ def patient_detail(patient_id):
             WHERE (m.sender_id = ? AND m.recipient_id = ?)
                OR (m.sender_id = ? AND m.recipient_id = ?)
             ORDER BY timestamp ASC
-        ''', (current_user.id, user['id'], user['id'], current_user.id)).fetchall()
+        ''', (current_user_id, user['id'], user['id'], current_user_id)).fetchall()
+    return messages, unread_messages_count
 
-    # Get resources for assignment
-    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
-
-    # Get assigned resources
-    assigned_resources = db.execute('''
-        SELECT r.*
-        FROM resources r
-        JOIN patient_resources pr ON r.id = pr.resource_id
-        WHERE pr.patient_id = ?
-    ''', (patient_id,)).fetchall()
-
+def _get_patient_behavior_info(notes):
     behavior_options = [
         'Calm', 'Anxious', 'Restless', 'Withdrawn', 'Cooperative', 'Engaged', 'Low Energy', 'Irritable'
     ]
@@ -3385,6 +3628,46 @@ def patient_detail(patient_id):
         latest_behavior['behavior_checklist'] = {
             item.strip() for item in checklist_raw.split(',') if item.strip()
         }
+    return behavior_options, latest_behavior
+
+@app.route('/patient/<int:patient_id>')
+@login_required
+def patient_detail(patient_id):
+    if current_user.role != 'admin':
+         # Patients can only see their own profile? No, this view is the Admin view of the patient.
+         # The patient dashboard is separate.
+         flash('Access denied.')
+         return redirect(url_for('patient_home'))
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if patient is None:
+        return "Patient not found", 404
+
+    # Fetch user account if exists
+    user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+
+    notes = _get_patient_notes(db, patient_id)
+    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+
+    group_attendance_rows, group_membership_rows, group_arrived_count = _get_patient_group_data(db, patient_id)
+
+    messages, unread_messages_count = _get_patient_messages(db, user, current_user.id)
+
+    # Get resources for assignment
+    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
+
+    # Get assigned resources
+    assigned_resources = db.execute('''
+        SELECT r.*
+        FROM resources r
+        JOIN patient_resources pr ON r.id = pr.resource_id
+        WHERE pr.patient_id = ?
+    ''', (patient_id,)).fetchall()
+
+    behavior_options, latest_behavior = _get_patient_behavior_info(notes)
 
     active_tab = request.args.get('tab', 'info')
     intake_enabled = patient['patient_type'] in ('initial-intake', 'diagnosee') or int(patient['has_intake_tab'] or 0) == 1
@@ -3939,8 +4222,8 @@ def ensure_recurrence_group_id(db, appt):
         ''
     )
     group_id = discovered_group_id or build_recurrence_group_id()
-    for row in related_rows:
-        db.execute('UPDATE appointments SET recurrence_group_id = ? WHERE id = ?', (group_id, row['id']))
+    update_data = [(group_id, row['id']) for row in related_rows]
+    db.executemany('UPDATE appointments SET recurrence_group_id = ? WHERE id = ?', update_data)
     return group_id
 
 
@@ -4056,6 +4339,97 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
     return converted
 
 
+def _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, now_time, horizon_weeks):
+    """Helper to check and create upcoming bookings for a single patient."""
+    if patient_type in ('initial-intake', 'diagnosee'):
+        return False
+
+    has_future = db.execute('''
+        SELECT 1
+        FROM appointments
+        WHERE patient_id = ?
+          AND COALESCE(status, 'scheduled') = 'scheduled'
+          AND (
+              (COALESCE(is_recurring, 0) = 0 AND appointment_date >= ?)
+              OR (COALESCE(is_recurring, 0) = 1
+                  AND (recurrence_end_date IS NULL
+                       OR recurrence_end_date >= DATE(?, ? || ' days')))
+          )
+        LIMIT 1
+    ''', (patient_id, today.isoformat(), today.isoformat(), f'-{horizon_weeks * 7}')).fetchone()
+    if has_future:
+        return False
+
+    latest = db.execute('''
+        SELECT *
+        FROM appointments
+        WHERE patient_id = ?
+        ORDER BY appointment_date DESC, appointment_time DESC, id DESC
+        LIMIT 1
+    ''', (patient_id,)).fetchone()
+    if not latest:
+        return False
+
+    base_date = parse_date_safe(latest['appointment_date'])
+    base_time = parse_time_safe(latest['appointment_time'])
+    if not base_date or not base_time:
+        return False
+
+    day_code = custom_weekday(base_date)
+    today_code = custom_weekday(today)
+    offset_days = (day_code - today_code) % 7
+    candidate_date = today + timedelta(days=offset_days)
+    if candidate_date == today and base_time <= now_time:
+        candidate_date += timedelta(days=7)
+
+    duration = int(latest['duration_minutes'] or 60)
+    if duration <= 0:
+        duration = 60
+
+    meeting_type = latest['meeting_type'] or 'in-person'
+    meeting_link = latest['meeting_link'] or None
+    meeting_title = latest['meeting_title'] or None
+    meeting_platform = latest['meeting_platform'] if 'meeting_platform' in latest.keys() else None
+    if not meeting_platform and meeting_type in ('zoom', 'google-meet'):
+        meeting_platform = meeting_type
+    save_to_google = int(latest['save_to_google'] or 0) if 'save_to_google' in latest.keys() else 0
+
+    booked = False
+    for week_step in range(0, max(1, horizon_weeks)):
+        booking_day = candidate_date + timedelta(days=week_step * 7)
+        start_dt = combine_dt(booking_day, base_time.strftime('%H:%M'))
+        end_dt = start_dt + timedelta(minutes=duration)
+
+        conflict = has_time_conflict(db, booking_day, start_dt, end_dt)
+        if conflict:
+            continue
+
+        db.execute('''
+            INSERT INTO appointments (
+                patient_id, appointment_date, appointment_time, duration_minutes,
+                meeting_type, meeting_link, meeting_platform, meeting_title,
+                save_to_google, status, is_recurring, recurrence_interval,
+                recurrence_days, recurrence_end_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
+        ''', (
+            patient_id,
+            booking_day.isoformat(),
+            base_time.strftime('%H:%M'),
+            duration,
+            meeting_type,
+            meeting_link,
+            meeting_platform,
+            meeting_title,
+            save_to_google,
+            str(day_code),
+            (booking_day + timedelta(days=365)).isoformat()
+        ))
+        booked = True
+        break
+
+    return booked
+
+
 def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, horizon_weeks=12):
     """Guarantee ongoing patients have at least one upcoming scheduled booking."""
     today = reference_date or datetime.now().date()
@@ -4072,95 +4446,8 @@ def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, hori
     for patient in rows:
         patient_id = int(patient['id'])
         patient_type = (patient['patient_type'] or 'private').strip().lower()
-        if patient_type in ('initial-intake', 'diagnosee'):
-            continue
-
-        has_future = db.execute('''
-            SELECT 1
-            FROM appointments
-            WHERE patient_id = ?
-              AND COALESCE(status, 'scheduled') = 'scheduled'
-              AND (
-                  (COALESCE(is_recurring, 0) = 0 AND appointment_date >= ?)
-                  OR (COALESCE(is_recurring, 0) = 1
-                      AND (recurrence_end_date IS NULL
-                           OR recurrence_end_date >= DATE(?, ? || ' days')))
-              )
-            LIMIT 1
-        ''', (patient_id, today.isoformat(), today.isoformat(), f'-{horizon_weeks * 7}')).fetchone()
-        if has_future:
-            continue
-
-        latest = db.execute('''
-            SELECT *
-            FROM appointments
-            WHERE patient_id = ?
-            ORDER BY appointment_date DESC, appointment_time DESC, id DESC
-            LIMIT 1
-        ''', (patient_id,)).fetchone()
-        if not latest:
-            continue
-
-        base_date = parse_date_safe(latest['appointment_date'])
-        base_time = parse_time_safe(latest['appointment_time'])
-        if not base_date or not base_time:
-            continue
-
-        day_code = custom_weekday(base_date)
-        today_code = custom_weekday(today)
-        offset_days = (day_code - today_code) % 7
-        candidate_date = today + timedelta(days=offset_days)
-        if candidate_date == today and base_time <= now_time:
-            candidate_date += timedelta(days=7)
-
-        duration = int(latest['duration_minutes'] or 60)
-        if duration <= 0:
-            duration = 60
-
-        meeting_type = latest['meeting_type'] or 'in-person'
-        meeting_link = latest['meeting_link'] or None
-        meeting_title = latest['meeting_title'] or None
-        meeting_platform = latest['meeting_platform'] if 'meeting_platform' in latest.keys() else None
-        if not meeting_platform and meeting_type in ('zoom', 'google-meet'):
-            meeting_platform = meeting_type
-        save_to_google = int(latest['save_to_google'] or 0) if 'save_to_google' in latest.keys() else 0
-
-        booked = False
-        for week_step in range(0, max(1, horizon_weeks)):
-            booking_day = candidate_date + timedelta(days=week_step * 7)
-            start_dt = combine_dt(booking_day, base_time.strftime('%H:%M'))
-            end_dt = start_dt + timedelta(minutes=duration)
-
-            conflict = has_time_conflict(db, booking_day, start_dt, end_dt)
-            if conflict:
-                continue
-
-            db.execute('''
-                INSERT INTO appointments (
-                    patient_id, appointment_date, appointment_time, duration_minutes,
-                    meeting_type, meeting_link, meeting_platform, meeting_title,
-                    save_to_google, status, is_recurring, recurrence_interval,
-                    recurrence_days, recurrence_end_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
-            ''', (
-                patient_id,
-                booking_day.isoformat(),
-                base_time.strftime('%H:%M'),
-                duration,
-                meeting_type,
-                meeting_link,
-                meeting_platform,
-                meeting_title,
-                save_to_google,
-                str(day_code),
-                (booking_day + timedelta(days=365)).isoformat()
-            ))
+        if _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, now_time, horizon_weeks):
             created += 1
-            booked = True
-            break
-
-        if not booked:
-            continue
 
     if created:
         db.commit()
@@ -4502,10 +4789,6 @@ def build_week_calendar_snapshot(db, week_start, user):
     week_end = week_start + timedelta(days=6)
     today = datetime.now().date()
 
-    patients = {
-        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
-    }
-
     appointment_rows = db.execute('''
         SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
         FROM appointments a
@@ -4531,23 +4814,25 @@ def build_week_calendar_snapshot(db, week_start, user):
         ORDER BY gs.session_date ASC, gs.session_time ASC
     ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
 
-    events = []
-    occupied = []
-    emitted_appointment_keys = set()
-    weekend_specials = {'friday': [], 'saturday': []}
+def _process_calendar_follow_ups(db, today):
     follow_up_alerts = []
-
-        # Candidate with a past one-time session and no future booking needs a decision.
+    # Candidate with a past one-time session and no future booking needs a decision.
     follow_up_rows = db.execute('''
         SELECT p.id AS patient_id, p.name, p.status, MAX(a.appointment_date) AS last_date
         FROM patients p
         JOIN appointments a ON a.patient_id = p.id
-                WHERE p.status = 'candidate'
+        WHERE p.status = 'candidate'
           AND a.is_recurring = 0
-                    AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
           AND a.appointment_date < ?
+          AND NOT EXISTS (
+              SELECT 1 FROM appointments a2
+              WHERE a2.patient_id = p.id
+                AND a2.appointment_date >= ?
+                AND COALESCE(a2.status, 'scheduled') = 'scheduled'
+          )
         GROUP BY p.id, p.name, p.status
-    ''', (today.isoformat(),)).fetchall()
+    ''', (today.isoformat(), today.isoformat())).fetchall()
 
     for row in follow_up_rows:
         has_future = db.execute('''
@@ -4564,7 +4849,17 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'last_meeting_date': row['last_date'],
                 'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
             })
+    return follow_up_alerts
 
+        follow_up_alerts.append({
+            'patient_id': row['patient_id'],
+            'patient_name': row['name'],
+            'status': row['status'],
+            'last_meeting_date': row['last_date'],
+            'message': 'Initial one-time meeting has passed with no next booking. Further decision is needed.'
+        })
+
+def _process_calendar_appointments(appointment_rows, user, week_start, week_end, events, occupied, emitted_appointment_keys):
     for appt in appointment_rows:
         is_recurring = int(appt['is_recurring'] or 0) == 1
         occ_dates = recurring_occurrences_for_week(appt, week_start, week_end) if is_recurring else [parse_date_safe(appt['appointment_date'])]
@@ -4626,6 +4921,8 @@ def build_week_calendar_snapshot(db, week_start, user):
             })
             occupied.append((start_dt, end_dt))
 
+
+def _process_calendar_group_sessions(group_sessions, user, events, occupied):
     for group_session in group_sessions:
         session_date = parse_date_safe(group_session['session_date'])
         if not session_date:
@@ -4669,6 +4966,8 @@ def build_week_calendar_snapshot(db, week_start, user):
         })
         occupied.append((session_start, session_end))
 
+
+def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
     for block in blocks:
         block_date = parse_date_safe(block['blocked_date'])
         if not block_date:
@@ -4730,6 +5029,8 @@ def build_week_calendar_snapshot(db, week_start, user):
                 'type': block_type
             })
 
+
+def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied):
     # Available slots are restricted to admin-enabled vacancy overrides and recurring vacancy templates.
     vacancy_rows = db.execute('''
         SELECT id, slot_date, slot_time, duration_minutes
@@ -4813,8 +5114,10 @@ def build_week_calendar_snapshot(db, week_start, user):
                         'can_delete': True
                     }
                 })
+    return available_slots
 
-    # Fetch external Google Calendar events (calendar events not tracked in our DB)
+
+def _process_calendar_external_events(db, week_start, week_end, user):
     external_events = []
     if gcal and gcal.GOOGLE_LIBS_AVAILABLE and user.role == 'admin':
         try:
@@ -4836,6 +5139,53 @@ def build_week_calendar_snapshot(db, week_start, user):
                     external_events.append(evt)
         except Exception:
             pass
+    return external_events
+
+
+def build_week_calendar_snapshot(db, week_start, user):
+    week_end = week_start + timedelta(days=6)
+    today = datetime.now().date()
+
+    patients = {
+        row['id']: row for row in db.execute('SELECT id, name, status, can_self_schedule FROM patients').fetchall()
+    }
+
+    appointment_rows = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
+           OR (a.is_recurring = 1 AND a.appointment_date <= ?)
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat(), week_end.isoformat())).fetchall()
+
+    blocks = db.execute('''
+        SELECT * FROM blocked_slots
+        WHERE blocked_date BETWEEN ? AND ?
+        ORDER BY blocked_date ASC, blocked_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
+    group_sessions = db.execute('''
+        SELECT gs.*, g.name AS group_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE gs.session_date BETWEEN ? AND ?
+          AND COALESCE(g.is_active, 1) = 1
+          AND COALESCE(gs.status, 'scheduled') = 'scheduled'
+        ORDER BY gs.session_date ASC, gs.session_time ASC
+    ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
+
+    events = []
+    occupied = []
+    emitted_appointment_keys = set()
+    weekend_specials = {'friday': [], 'saturday': []}
+
+    follow_up_alerts = _process_calendar_follow_ups(db, today)
+    _process_calendar_appointments(appointment_rows, user, week_start, week_end, events, occupied, emitted_appointment_keys)
+    _process_calendar_group_sessions(group_sessions, user, events, occupied)
+    _process_calendar_blocks(blocks, user, events, occupied, weekend_specials)
+    available_slots = _process_calendar_vacancies(db, week_start, week_end, user, events, occupied)
+    external_events = _process_calendar_external_events(db, week_start, week_end, user)
 
     return {
         'week_start': week_start.isoformat(),
@@ -5374,6 +5724,100 @@ def groups_dashboard():
     return render_template('groups_overview.html', groups=groups)
 
 
+
+def _get_group_member_history(db, group_id):
+    member_history_rows = db.execute('''
+         SELECT h.id,
+             h.group_id,
+               h.patient_id,
+               p.name AS patient_name,
+               h.joined_at,
+               h.left_at,
+               COALESCE(h.role, 'member') AS role
+        FROM group_member_history h
+        JOIN patients p ON p.id = h.patient_id
+                WHERE h.group_id = ?
+                    AND COALESCE(p.is_deleted, 0) = 0
+        ORDER BY h.group_id ASC, h.joined_at DESC
+        ''', (group_id,)).fetchall()
+
+    member_history_rows = [dict(row) for row in member_history_rows]
+    now_date = datetime.now().date()
+    for row in member_history_rows:
+        joined_date = parse_date_safe((row.get('joined_at') or '')[:10])
+        left_date = parse_date_safe((row.get('left_at') or '')[:10]) if row.get('left_at') else None
+        if joined_date:
+            end_date = left_date or now_date
+            row['membership_days'] = max(0, (end_date - joined_date).days)
+        else:
+            row['membership_days'] = None
+    return member_history_rows
+
+
+def _get_group_attendance_data(db, group_sessions):
+    session_member_map = {}
+    attendance_by_session = {}
+    session_ids = [int(row['id']) for row in group_sessions]
+
+    for gs_row in group_sessions:
+        session_date_iso = gs_row['session_date']
+
+        members = []
+        for row in history_list:
+            joined_date = row['joined_at'][:10] if row['joined_at'] else ''
+            left_date = row['left_at'][:10] if row['left_at'] else None
+
+            if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
+                members.append(row.copy())
+
+        if not members:
+            for row in fallback_list:
+                joined_date = row['joined_at'][:10] if row['joined_at'] else ''
+                left_date = row['left_at'][:10] if row['left_at'] else None
+
+                if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
+                    members.append(row.copy())
+
+        session_member_map[int(gs_row['id'])] = members
+
+    if session_ids:
+        marks = db.execute(f'''
+            SELECT session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note
+            FROM group_session_attendance
+            WHERE session_id IN ({','.join(['?'] * len(session_ids))})
+        ''', session_ids).fetchall()
+        for row in marks:
+            session_key = int(row['session_id'])
+            attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
+                'attendance_status': row['attendance_status'] or 'pending',
+                'absence_reason': row['absence_reason'] or '',
+                'notified_on_time': int(row['notified_on_time'] or 0),
+                'attendance_note': row['attendance_note'] or ''
+            }
+
+    return session_member_map, attendance_by_session
+
+
+def _get_patient_arrived_counts(db):
+    arrived_rows = db.execute('''
+        SELECT patient_id, COUNT(*) AS arrived_count
+        FROM group_session_attendance
+        WHERE attendance_status = 'present'
+        GROUP BY patient_id
+    ''').fetchall()
+    return {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
+
+
+def _get_available_group_patients(db):
+    return db.execute('''
+        SELECT id, name
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+          AND COALESCE(patient_type, 'private') = 'group'
+        ORDER BY name ASC
+    ''').fetchall()
+
+
 def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcoming=False):
     group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group:
@@ -5401,70 +5845,10 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
         ORDER BY gs.session_date ASC, gs.session_time ASC
     ''', (group_id,)).fetchall()
 
-    member_history_rows = db.execute('''
-         SELECT h.id,
-             h.group_id,
-               h.patient_id,
-               p.name AS patient_name,
-               h.joined_at,
-               h.left_at,
-               COALESCE(h.role, 'member') AS role
-        FROM group_member_history h
-        JOIN patients p ON p.id = h.patient_id
-                WHERE h.group_id = ?
-                    AND COALESCE(p.is_deleted, 0) = 0
-        ORDER BY h.group_id ASC, h.joined_at DESC
-        ''', (group_id,)).fetchall()
-
-    member_history_rows = [dict(row) for row in member_history_rows]
-    now_date = datetime.now().date()
-    for row in member_history_rows:
-        joined_date = parse_date_safe((row.get('joined_at') or '')[:10])
-        left_date = parse_date_safe((row.get('left_at') or '')[:10]) if row.get('left_at') else None
-        if joined_date:
-            end_date = left_date or now_date
-            row['membership_days'] = max(0, (end_date - joined_date).days)
-        else:
-            row['membership_days'] = None
-
-    session_member_map = {}
-    attendance_by_session = {}
-    session_ids = [int(row['id']) for row in group_sessions]
-    for gs_row in group_sessions:
-        session_member_map[int(gs_row['id'])] = get_group_members_for_session(
-            db, int(gs_row['group_id']), gs_row['session_date']
-        )
-
-    if session_ids:
-        marks = db.execute(f'''
-            SELECT session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note
-            FROM group_session_attendance
-            WHERE session_id IN ({','.join(['?'] * len(session_ids))})
-        ''', session_ids).fetchall()
-        for row in marks:
-            session_key = int(row['session_id'])
-            attendance_by_session.setdefault(session_key, {})[int(row['patient_id'])] = {
-                'attendance_status': row['attendance_status'] or 'pending',
-                'absence_reason': row['absence_reason'] or '',
-                'notified_on_time': int(row['notified_on_time'] or 0),
-                'attendance_note': row['attendance_note'] or ''
-            }
-
-    arrived_rows = db.execute('''
-        SELECT patient_id, COUNT(*) AS arrived_count
-        FROM group_session_attendance
-        WHERE attendance_status = 'present'
-        GROUP BY patient_id
-    ''').fetchall()
-    arrived_count_map = {int(row['patient_id']): int(row['arrived_count'] or 0) for row in arrived_rows}
-
-    patients = db.execute('''
-        SELECT id, name
-        FROM patients
-        WHERE COALESCE(is_deleted, 0) = 0
-          AND COALESCE(patient_type, 'private') = 'group'
-        ORDER BY name ASC
-    ''').fetchall()
+    member_history_rows = _get_group_member_history(db, group_id)
+    session_member_map, attendance_by_session = _get_group_attendance_data(db, group_sessions)
+    arrived_count_map = _get_patient_arrived_counts(db)
+    patients = _get_available_group_patients(db)
 
     session_collections = build_group_session_collections(
         group_sessions,
@@ -5813,44 +6197,34 @@ def update_group_member_history_dates(history_id):
     return redirect_target()
 
 
-@app.route('/groups/<int:group_id>/sessions', methods=['POST'])
-@login_required
-def add_group_session(group_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
+def _parse_group_session_form(form):
+    return {
+        'session_date': (form.get('session_date') or '').strip(),
+        'session_time': (form.get('session_time') or '').strip(),
+        'end_time_raw': (form.get('end_time') or '').strip(),
+        'title': (form.get('title') or '').strip(),
+        'facilitator': (form.get('facilitator') or '').strip(),
+        'meeting_type': (form.get('meeting_type') or 'in-person').strip(),
+        'meeting_link': (form.get('meeting_link') or '').strip(),
+        'recurrence_mode': (form.get('recurrence_mode') or 'one-time').strip().lower(),
+        'recurrence_interval_raw': (form.get('recurrence_interval_weeks') or '1').strip(),
+        'recurrence_end_mode': (form.get('recurrence_end_mode') or 'count').strip().lower(),
+        'recurrence_end_raw': (form.get('recurrence_end_date') or '').strip(),
+        'recurrence_count_raw': (form.get('recurrence_count') or '').strip()
+    }
 
-    session_date = (request.form.get('session_date') or '').strip()
-    session_time = (request.form.get('session_time') or '').strip()
-    end_time_raw = (request.form.get('end_time') or '').strip()
-    title = (request.form.get('title') or '').strip()
-    facilitator = (request.form.get('facilitator') or '').strip()
-    meeting_type = (request.form.get('meeting_type') or 'in-person').strip()
-    meeting_link = (request.form.get('meeting_link') or '').strip()
-    recurrence_mode = (request.form.get('recurrence_mode') or 'one-time').strip().lower()
-    recurrence_interval_raw = (request.form.get('recurrence_interval_weeks') or '1').strip()
-    recurrence_end_mode = (request.form.get('recurrence_end_mode') or 'count').strip().lower()
-    recurrence_end_raw = (request.form.get('recurrence_end_date') or '').strip()
-    recurrence_count_raw = (request.form.get('recurrence_count') or '').strip()
 
-    parsed_date = parse_date_safe(session_date)
-    parsed_time = parse_time_safe(session_time)
-    parsed_end = parse_time_safe(end_time_raw)
-    if not parsed_date or not parsed_time:
-        flash('Valid session date and start time are required.')
-        return redirect(url_for('group_detail', group_id=group_id))
-
+def _calculate_group_session_duration(parsed_time, parsed_end):
     duration = 60
     if parsed_end:
         start_minutes = parsed_time.hour * 60 + parsed_time.minute
         end_minutes = parsed_end.hour * 60 + parsed_end.minute
         if end_minutes > start_minutes:
             duration = end_minutes - start_minutes
+    return duration
 
-    session_start = datetime.combine(parsed_date, parsed_time)
-    # session_end used per-occurrence in the recurrence loop below
 
-    db = get_db()
-    recurrence_interval_weeks = 1
+def _resolve_group_recurrence_params(recurrence_mode, recurrence_interval_raw, recurrence_end_mode, recurrence_end_raw, recurrence_count_raw):
     try:
         recurrence_interval_weeks = max(1, int(recurrence_interval_raw or '1'))
     except ValueError:
@@ -5864,35 +6238,21 @@ def add_group_session(group_id):
         except ValueError:
             recurrence_count = None
 
+    error_msg = None
     if recurrence_mode == 'weekly':
         if recurrence_end_mode == 'date':
             recurrence_count = None
             if not recurrence_end_date:
-                flash('Please choose an end date for the recurring meetings.')
-                return redirect(url_for('group_detail', group_id=group_id))
+                error_msg = 'Please choose an end date for the recurring meetings.'
         else:
             recurrence_end_date = None
             if recurrence_count is None:
-                flash('Please choose how many meetings to create.')
-                return redirect(url_for('group_detail', group_id=group_id))
+                error_msg = 'Please choose how many meetings to create.'
 
-    recurrence_dates = [parsed_date]
-    if recurrence_mode == 'weekly':
-        recurrence_dates = build_group_recurrence_dates(
-            parsed_date,
-            recurrence_interval_weeks=recurrence_interval_weeks,
-            recurrence_end_date=recurrence_end_date,
-            recurrence_count=recurrence_count
-        )
+    return recurrence_interval_weeks, recurrence_end_date, recurrence_count, error_msg
 
-    for date_item in recurrence_dates:
-        start_at = datetime.combine(date_item, parsed_time)
-        end_at = start_at + timedelta(minutes=duration)
-        conflict_message = has_time_conflict(db, date_item, start_at, end_at)
-        if conflict_message:
-            flash(f'{conflict_message} ({date_item.isoformat()})')
-            return redirect(url_for('group_detail', group_id=group_id))
 
+def _insert_group_sessions(db, group_id, parsed_date, parsed_time, duration, recurrence_dates, recurrence_mode, recurrence_interval_weeks, recurrence_end_date, recurrence_count, title, facilitator, meeting_type, meeting_link):
     series_id = None
     if recurrence_mode == 'weekly' and len(recurrence_dates) > 1:
         cur = db.execute('''
@@ -5936,11 +6296,67 @@ def add_group_session(group_id):
         ))
         last_session_id = cur.lastrowid
 
+    return series_id, last_session_id
+
+
+@app.route('/groups/<int:group_id>/sessions', methods=['POST'])
+@login_required
+def add_group_session(group_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    data = _parse_group_session_form(request.form)
+
+    parsed_date = parse_date_safe(data['session_date'])
+    parsed_time = parse_time_safe(data['session_time'])
+    parsed_end = parse_time_safe(data['end_time_raw'])
+
+    if not parsed_date or not parsed_time:
+        flash('Valid session date and start time are required.')
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    duration = _calculate_group_session_duration(parsed_time, parsed_end)
+    db = get_db()
+
+    recurrence_interval_weeks, recurrence_end_date, recurrence_count, error_msg = _resolve_group_recurrence_params(
+        data['recurrence_mode'], data['recurrence_interval_raw'],
+        data['recurrence_end_mode'], data['recurrence_end_raw'], data['recurrence_count_raw']
+    )
+
+    if error_msg:
+        flash(error_msg)
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    recurrence_dates = [parsed_date]
+    if data['recurrence_mode'] == 'weekly':
+        recurrence_dates = build_group_recurrence_dates(
+            parsed_date,
+            recurrence_interval_weeks=recurrence_interval_weeks,
+            recurrence_end_date=recurrence_end_date,
+            recurrence_count=recurrence_count
+        )
+
+    for date_item in recurrence_dates:
+        start_at = datetime.combine(date_item, parsed_time)
+        end_at = start_at + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(db, date_item, start_at, end_at)
+        if conflict_message:
+            flash(f'{conflict_message} ({date_item.isoformat()})')
+            return redirect(url_for('group_detail', group_id=group_id))
+
+    series_id, last_session_id = _insert_group_sessions(
+        db, group_id, parsed_date, parsed_time, duration, recurrence_dates,
+        data['recurrence_mode'], recurrence_interval_weeks, recurrence_end_date, recurrence_count,
+        data['title'], data['facilitator'], data['meeting_type'], data['meeting_link']
+    )
+
     db.commit()
+
     if series_id:
-        flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
+        flash(f"Group recurrence added ({len(recurrence_dates)} sessions).")
     else:
         flash('Group session added.')
+
     destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
     if last_session_id:
         destination = f'{destination}#session-record-{last_session_id}'
@@ -6174,22 +6590,30 @@ def api_calendar_block():
         if conflict_message:
             return jsonify({'status': 'error', 'message': f'{conflict_message} ({block_day.isoformat()})'}), 409
 
-    for block_day in dates_to_create:
-        db.execute('''
+    if dates_to_create:
+        now_iso = datetime.now().isoformat()
+
+        blocked_slots_data = [
+            (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id)
+            for block_day in dates_to_create
+        ]
+
+        slots_override_data = [
+            (title or 'Blocked Slot', now_iso, block_day.isoformat(), parsed_start.strftime('%H:%M'))
+            for block_day in dates_to_create
+        ]
+
+        db.executemany('''
             INSERT INTO blocked_slots
             (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id))
-        db.execute('''
+        ''', blocked_slots_data)
+
+        db.executemany('''
             UPDATE slots_override
             SET status = 'booked', booked_by_name = ?, booked_at = ?
             WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', (
-            title or 'Blocked Slot',
-            datetime.now().isoformat(),
-            block_day.isoformat(),
-            parsed_start.strftime('%H:%M')
-        ))
+        ''', slots_override_data)
 
     db.commit()
     return jsonify({'status': 'success', 'created': len(dates_to_create)})
@@ -6591,132 +7015,56 @@ def api_calendar_vacancy_delete(override_id):
     return jsonify({'status': 'success'})
 
 
-@app.route('/api/calendar/book', methods=['POST'])
-@login_required
-def api_calendar_book():
-    db = get_db()
+def _api_calendar_book_special(db, current_user, anchor, booking_time, duration, special_pattern, special_repeat_until, special_title):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
-    booking_date = request.form.get('date', '').strip()
-    booking_time = request.form.get('time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
-    meeting_link = request.form.get('meeting_link', '').strip()
-    meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-    is_recurring_explicit = request.form.get('is_recurring')
-    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
-    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
-    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
-    special_repeat_until = request.form.get('special_repeat_until', '').strip()
-    special_title = request.form.get('special_title', '').strip()
+    if special_pattern not in ('one-time', 'weekly'):
+        special_pattern = 'one-time'
 
-    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+    dates_to_block = [anchor]
+    if special_pattern == 'weekly':
+        repeat_until = parse_date_safe(special_repeat_until)
+        if not repeat_until or repeat_until < anchor:
+            return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
+        dates_to_block = []
+        current = anchor
+        while current <= repeat_until:
+            dates_to_block.append(current)
+            current += timedelta(days=7)
 
-    # Compute duration from start + end time.
-    duration = 60
-    parsed_start = parse_time_safe(booking_time)
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
+    parsed_booking_time = parse_time_safe(booking_time)
 
-    if current_user.role == 'admin':
-        patient_id_raw = request.form.get('patient_id', '').strip()
-        if booking_type != 'special' and not patient_id_raw.isdigit():
-            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
-        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
-    else:
-        if booking_type == 'special':
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        patient_id = current_user.patient_id
-        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if not patient or int(patient['can_self_schedule'] or 0) != 1:
-            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+    for d in dates_to_block:
+        date_iso = d.isoformat()
+        start_dt = combine_dt(d, parsed_booking_time.strftime('%H:%M'))
+        end_dt = start_dt + timedelta(minutes=duration)
+        conflict = has_time_conflict(db, d, start_dt, end_dt)
+        if conflict:
+            return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
 
-    patient_status = None
-    if booking_type != 'special' and patient_id:
-        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        patient_status = (patient_row['status'] if patient_row else '') or ''
+    for d in dates_to_block:
+        db.execute('''
+            INSERT INTO blocked_slots
+            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+              VALUES (?, ?, ?, ?, 1, 'blocked', ?)
+        ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
+              special_title or 'Special Occasion', current_user.id))
+        db.execute('''
+            UPDATE slots_override
+            SET status = 'booked', booked_by_name = ?, booked_at = ?
+            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+        ''', (
+            special_title or 'Special Occasion',
+            datetime.now().isoformat(),
+            d.isoformat(),
+            parsed_booking_time.strftime('%H:%M')
+        ))
+    db.commit()
+    return jsonify({'status': 'success'})
 
-    def slot_is_available(date_iso, start_time_str, slot_duration):
-        date_obj = parse_date_safe(date_iso)
-        if not date_obj:
-            return False
-        slot_start = combine_dt(date_obj, start_time_str)
-        slot_end = slot_start + timedelta(minutes=slot_duration)
 
-        date_rows = db.execute('''
-            SELECT appointment_time, duration_minutes FROM appointments WHERE appointment_date = ?
-        ''', (date_iso,)).fetchall()
-        for row in date_rows:
-            row_start = combine_dt(date_obj, row['appointment_time'])
-            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-            if overlaps(slot_start, slot_end, row_start, row_end):
-                return False
-
-        block_rows = db.execute('''
-            SELECT blocked_time, duration_minutes FROM blocked_slots WHERE blocked_date = ?
-        ''', (date_iso,)).fetchall()
-        for row in block_rows:
-            row_start = combine_dt(date_obj, row['blocked_time'])
-            row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))
-            if overlaps(slot_start, slot_end, row_start, row_end):
-                return False
-
-        return True
-
-    anchor = parse_date_safe(booking_date)
-    if not anchor:
-        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
-
-    if booking_type == 'special':
-        if current_user.role != 'admin':
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-        if special_pattern not in ('one-time', 'weekly'):
-            special_pattern = 'one-time'
-
-        dates_to_block = [anchor]
-        if special_pattern == 'weekly':
-            repeat_until = parse_date_safe(special_repeat_until)
-            if not repeat_until or repeat_until < anchor:
-                return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
-            dates_to_block = []
-            current = anchor
-            while current <= repeat_until:
-                dates_to_block.append(current)
-                current += timedelta(days=7)
-
-        for d in dates_to_block:
-            date_iso = d.isoformat()
-            if not slot_is_available(date_iso, booking_time, duration):
-                return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
-
-        for d in dates_to_block:
-            db.execute('''
-                INSERT INTO blocked_slots
-                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-                  VALUES (?, ?, ?, ?, 1, 'blocked', ?)
-            ''', (d.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  special_title or 'Special Occasion', current_user.id))
-            db.execute('''
-                UPDATE slots_override
-                SET status = 'booked', booked_by_name = ?, booked_at = ?
-                WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-            ''', (
-                special_title or 'Special Occasion',
-                datetime.now().isoformat(),
-                d.isoformat(),
-                parse_time_safe(booking_time).strftime('%H:%M')
-            ))
-        db.commit()
-        return jsonify({'status': 'success'})
-
+def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_time, parsed_booking_time, duration, patient_id, patient_status, is_recurring_explicit, recurrence_end_date_form, meeting_type, meeting_link, meeting_platform, meeting_remarks, save_to_google):
     # Business rule: honour explicit form value first, then default by patient status.
     # Ongoing patients default to weekly recurring; others default to one-time.
     if is_recurring_explicit == '1' or is_recurring_explicit == 'on' or is_recurring_explicit == 'true':
@@ -6727,10 +7075,6 @@ def api_calendar_book():
         is_recurring = 1 if patient_status == 'ongoing' else 0
     recurrence_interval = 1 if is_recurring else None
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
-
-    parsed_booking_time = parse_time_safe(booking_time)
-    if not parsed_booking_time:
-        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
 
     start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
     end_dt = start_dt + timedelta(minutes=duration)
@@ -6792,12 +7136,18 @@ def api_calendar_book():
     db.commit()
 
     # Sync to Google Calendar if save_to_google flag is set and admin is connected
-    if save_to_google and gcal and patient_id:
+    try:
+        import google_calendar as gcal_module
+        gcal_ref = gcal_module
+    except ImportError:
+        gcal_ref = None
+
+    if save_to_google and gcal_ref and patient_id:
         new_appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
                               (patient_id, booking_date, parsed_booking_time.strftime('%H:%M'))).fetchone()
         if new_appt:
             patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-            gcal.sync_appointment_to_google(
+            gcal_ref.sync_appointment_to_google(
                 db,
                 appointment_id=new_appt['id'],
                 patient_name=(patient_row['name'] if patient_row else booked_label),
@@ -6809,6 +7159,80 @@ def api_calendar_book():
             )
 
     return jsonify({'status': 'success'})
+
+
+@app.route('/api/calendar/book', methods=['POST'])
+@login_required
+def api_calendar_book():
+    db = get_db()
+
+    booking_date = request.form.get('date', '').strip()
+    booking_time = request.form.get('time', '').strip()
+    end_time_raw = request.form.get('end_time', '').strip()
+    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
+    meeting_link = request.form.get('meeting_link', '').strip()
+    meeting_platform = request.form.get('meeting_platform', '').strip()
+    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
+    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
+    is_recurring_explicit = request.form.get('is_recurring')
+    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
+    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
+    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
+    special_repeat_until = request.form.get('special_repeat_until', '').strip()
+    special_title = request.form.get('special_title', '').strip()
+
+    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    # Compute duration from start + end time.
+    duration = 60
+    parsed_start = parse_time_safe(booking_time)
+    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
+    if parsed_start and parsed_end:
+        start_minutes = parsed_start.hour * 60 + parsed_start.minute
+        end_minutes = parsed_end.hour * 60 + parsed_end.minute
+        computed = end_minutes - start_minutes
+        if computed > 0:
+            duration = computed
+
+    if current_user.role == 'admin':
+        patient_id_raw = request.form.get('patient_id', '').strip()
+        if booking_type != 'special' and not patient_id_raw.isdigit():
+            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
+        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
+    else:
+        if booking_type == 'special':
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        patient_id = current_user.patient_id
+        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        if not patient or int(patient['can_self_schedule'] or 0) != 1:
+            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
+
+    patient_status = None
+    if booking_type != 'special' and patient_id:
+        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        patient_status = (patient_row['status'] if patient_row else '') or ''
+
+    anchor = parse_date_safe(booking_date)
+    if not anchor:
+        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
+
+    if booking_type == 'special':
+        return _api_calendar_book_special(
+            db, current_user, anchor, booking_time, duration,
+            special_pattern, special_repeat_until, special_title
+        )
+
+    parsed_booking_time = parse_time_safe(booking_time)
+    if not parsed_booking_time:
+        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
+
+    return _api_calendar_book_regular(
+        db, current_user, anchor, booking_date, booking_time, parsed_booking_time,
+        duration, patient_id, patient_status, is_recurring_explicit,
+        recurrence_end_date_form, meeting_type, meeting_link,
+        meeting_platform, meeting_remarks, save_to_google
+    )
 
 
 @app.route('/patient/<int:patient_id>/quick_book', methods=('POST',))
@@ -7345,6 +7769,205 @@ def export_calendar():
     response.headers['Content-Disposition'] = 'attachment; filename=calendar_export.json'
     return response
 
+def _seed_ongoing_patient(db, admin_id, today):
+    db.execute(
+        """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            'Maya Cohen',
+            'ongoing',
+            'maya.cohen@example.com',
+            '050-1234567',
+            'Mid-30s professional. Referred by GP following prolonged work-related stress. '
+            'Presents with symptoms of generalized anxiety and mild sleep disturbance.',
+            'CBT formulation agreed. Exploring cognitive distortions related to performance at work. '
+            'Engagement is strong, regular homework compliance.'
+        )
+    )
+    ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # Past appointments (last 8 weeks)
+    past_appt_ids = []
+    for week in range(8, 0, -1):
+        appt_date = (today - timedelta(weeks=week)).strftime('%Y-%m-%d')
+        db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
+                        cost, duration_minutes, status, meeting_type, is_recurring,
+                        recurrence_interval, recurrence_days)
+                      VALUES (?, ?, '10:00', 350, 50, 'completed', 'in-person', 1, 1, '0')""",
+                   (ongoing_id, appt_date))
+        past_appt_ids.append((db.execute("SELECT last_insert_rowid()").fetchone()[0], week, appt_date))
+
+    # Session notes for past appointments
+    notes_data = [
+        (1, 'Initial assessment. Patient reports chronic work stress for ~18 months. Sleep disturbed — waking at 3am with racing thoughts. Explored presenting concerns, treatment goals set: reduce anxiety baseline, improve sleep hygiene, build assertiveness at work.', 'Tense, guarded initially. Warmed through session.', 'Work stress triggers, sleep patterns, goal-setting'),
+        (2, 'Introduced thought records. Patient practiced identifying automatic negative thoughts around a recent conflict with manager. Good engagement. Homework: daily thought record.', 'More relaxed than session 1.', 'Cognitive distortions, thought records'),
+        (3, 'Reviewed homework — completed 4/7 days. Identified core belief: "I must not disappoint others." Explored origin. Introduced behavioural activation for mood.', 'Reflective, some distress when exploring core beliefs.', 'Core beliefs, behavioural activation'),
+        (4, 'Sleep significantly improved (5→7hrs avg). Reports using progressive relaxation technique. Discussed assertiveness — role-played declining extra work from colleague. Patient found it difficult but agreed to try.', 'Visibly more relaxed than prior sessions.', 'Sleep improvement, assertiveness, relaxation'),
+        (5, 'Used assertiveness with manager — partial success. Processed feelings of guilt. Sleep still good. Introduced mindfulness breathing.', 'Confident, engaged.', 'Assertiveness in practice, guilt, mindfulness'),
+        (6, 'Mid-treatment review. PHQ-9 reduced from 14 to 7. GAD-7 reduced from 16 to 9. Patient attributes progress to thought monitoring and sleep routine. Identified remaining work: perfectionism.', 'Positive, motivated.', 'Progress review, perfectionism, measurement'),
+        (7, 'Explored perfectionism schema — linked to early family expectations. Patient journalled between sessions about "good enough." Discussed self-compassion.', 'Somewhat emotional, insight-oriented.', 'Perfectionism, self-compassion, schema'),
+        (8, 'Strong session. Patient reported turning down optional weekend project without significant guilt. Sleep 7-8hrs consistently. Planning consolidation phase.', 'Settled, confident.', 'Consolidation, boundary-setting success'),
+    ]
+    for (appt_id, week, appt_date), (sn, content, appearance, topics) in zip(past_appt_ids, notes_data):
+        db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                      VALUES (?, ?, ?, ?)""",
+                   (ongoing_id, appt_id, str(sn), content))
+
+    # Upcoming recurring appointment (next Monday)
+    days_ahead = (7 - today.weekday()) % 7 or 7
+    next_session = (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
+    db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
+                    cost, duration_minutes, status, meeting_type, is_recurring,
+                    recurrence_interval, recurrence_days)
+                  VALUES (?, ?, '10:00', 350, 50, 'scheduled', 'in-person', 1, 1, '0')""",
+               (ongoing_id, next_session))
+
+    # Receipts for past sessions
+    for (appt_id, week, appt_date) in past_appt_ids:
+        db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Session payment', ?)",
+                   (ongoing_id, appt_date))
+
+    # Goals
+    db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'achieved')",
+               (ongoing_id, 'Improve sleep to at least 6 hours per night'))
+    db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'achieved')",
+               (ongoing_id, 'Set one work boundary per week'))
+    db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'active')",
+               (ongoing_id, 'Reduce perfectionist self-criticism using self-compassion exercises'))
+
+    # Message exchange
+    existing_maya = db.execute("SELECT id FROM users WHERE username = 'maya'").fetchone()
+    if not existing_maya:
+        db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+                   ('maya', generate_password_hash('patient123'), ongoing_id))
+    maya_user = db.execute("SELECT id FROM users WHERE username = 'maya'").fetchone()
+    if maya_user and admin_id:
+        db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                   (maya_user['id'], admin_id, 'Hi, just confirming our appointment next Monday at 10:00. See you then!'))
+        db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                   (admin_id, maya_user['id'], 'Confirmed! See you Monday at 10:00. Bring your thought record homework if you have it ready.'))
+
+
+def _seed_candidate_patient(db, admin_id):
+    db.execute(
+        """INSERT INTO patients (name, status, email, phone, background)
+           VALUES (?, ?, ?, ?, ?)""",
+        (
+            'Daniel Levy',
+            'candidate',
+            'daniel.levy@example.com',
+            '052-9876543',
+            'Late 20s, referred by his GP. Experiencing social anxiety and avoidance '
+            'behaviour. First contact made via intake form. Awaiting initial assessment session.'
+        )
+    )
+    candidate_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    if admin_id:
+        existing_daniel = db.execute("SELECT id FROM users WHERE username = 'daniel'").fetchone()
+        if not existing_daniel:
+            db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+                       ('daniel', generate_password_hash('patient123'), candidate_id))
+        daniel_user = db.execute("SELECT id FROM users WHERE username = 'daniel'").fetchone()
+        if daniel_user:
+            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                       (daniel_user['id'], admin_id, 'Hello, I was referred by Dr. Shapira. I struggle a lot with social situations and anxiety. When would we be able to meet?'))
+            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                       (admin_id, daniel_user['id'], 'Thank you for reaching out, Daniel. I have reviewed your intake form. I can offer an initial assessment on Sunday at 11:00. Does that work for you?'))
+            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                       (daniel_user['id'], admin_id, 'Yes, Sunday at 11:00 works perfectly. Thank you!'))
+
+
+def _seed_waiting_patient(db, admin_id, today):
+    db.execute(
+        """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            'Noa Shapiro',
+            'waiting for scheduling',
+            'noa.shapiro@example.com',
+            '054-3456789',
+            'Early 40s, presenting with grief and adjustment difficulties following loss of parent. '
+            'Initial assessment completed. Psychoeducation around grief provided.',
+            'Humanistic integrative approach planned. Weekly sessions. '
+            'Awaiting mutually available recurring slot to be confirmed.'
+        )
+    )
+    waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # Initial assessment appointment (2 weeks ago)
+    assess_date = (today - timedelta(weeks=2)).strftime('%Y-%m-%d')
+    db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
+                    cost, duration_minutes, status, meeting_type)
+                  VALUES (?, ?, '14:00', 350, 60, 'completed', 'in-person')""",
+               (waiting_id, assess_date))
+    assess_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    db.execute(
+        """INSERT INTO notes (patient_id, appointment_id, session_number, content)
+           VALUES (?, ?, '0', ?)""",
+        (
+            waiting_id,
+            assess_id,
+            "Initial assessment session. Patient describes grief following mother's passing 4 months ago. "
+            "Reports low mood, social withdrawal, and difficulty returning to routine. "
+            "No risk indicators present. Agreed on weekly therapy."
+        )
+    )
+    db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Assessment session', ?)",
+               (waiting_id, assess_date))
+
+    existing_noa = db.execute("SELECT id FROM users WHERE username = 'noa'").fetchone()
+    if not existing_noa:
+        db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
+                   ('noa', generate_password_hash('patient123'), waiting_id))
+    noa_user = db.execute("SELECT id FROM users WHERE username = 'noa'").fetchone()
+    if noa_user and admin_id:
+        db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                   (admin_id, noa_user['id'], 'Hi Noa, thank you for coming in last week. I am looking for a recurring Tuesday slot for us. Are mornings or afternoons better for you?'))
+        db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
+                   (noa_user['id'], admin_id, 'Afternoons work better, anytime after 15:00. Thank you for checking.'))
+
+
+def _seed_archived_patient(db, today):
+    db.execute(
+        """INSERT INTO patients (name, status, email, phone, background, treatment_info)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            'Eran Mizrahi',
+            'archived',
+            'eran.mizrahi@example.com',
+            '053-7654321',
+            'Early 50s. Presented with panic disorder and agoraphobia. '
+            'Referred by psychiatrist. Treatment completed after 22 sessions.',
+            'CBT for panic disorder. Completed January 2025. Full remission achieved. '
+            'Discharged with relapse prevention plan. Follow-up offered in 6 months.'
+        )
+    )
+    archived_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    # 6 representative past sessions (spanning ~5 months, ending ~2 months ago)
+    archive_notes = [
+        ('1', 'Psychoeducation on panic cycle. Explained fight/flight response. Patient very relieved to understand physical symptoms are not dangerous.', 'Anxious, engaged.', 'Panic psychoeducation, normalisation'),
+        ('5', 'Began interoceptive exposure — spun in chair, breathing through straw. High anxiety initially but habituated within session. Great work.', 'Nervous but willing.', 'Interoceptive exposure'),
+        ('10', 'First in vivo exposure — entered shopping centre for 10 minutes. Panic peaked at SUDS 7, dropped to 3. Huge milestone.', 'Visibly proud.', 'In vivo exposure, SUDS monitoring'),
+        ('15', 'Supermarket visit alone completed between sessions. No panic attack. Patient reports increased confidence. PRN medication use dropped to zero past 3 weeks.', 'Confident, energised.', 'Medication reduction, independence'),
+        ('20', 'Near full remission. PDQ-A score 4 (was 28 at intake). Patient planning holiday abroad — first since onset.', 'Bright, motivated.', 'Outcome measurement, relapse prevention'),
+        ('22', 'Termination session. Reviewed progress, consolidated relapse prevention plan. Patient tearful and grateful. Discussed open-door policy for future support.', 'Emotional, positive.', 'Termination, relapse prevention plan'),
+    ]
+    for i, (sn, content, appearance, topics) in enumerate(archive_notes):
+        session_offset_weeks = 22 - (i * 4) + 8  # ended ~2 months ago
+        appt_date = (today - timedelta(weeks=session_offset_weeks)).strftime('%Y-%m-%d')
+        db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
+                        cost, duration_minutes, status, meeting_type)
+                      VALUES (?, ?, '09:00', 350, 50, 'completed', 'in-person')""",
+                   (archived_id, appt_date))
+        appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
+                      VALUES (?, ?, ?, ?)""",
+                   (archived_id, appt_id, sn, content))
+        db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Session payment', ?)",
+                   (archived_id, appt_date))
+
+
 @app.route('/admin/seed_data', methods=('POST',))
 @login_required
 def seed_data():
@@ -7363,203 +7986,13 @@ def seed_data():
 
     try:
         today = datetime.now()
-
-        # ─── 1. ONGOING patient — active therapy, recurring weekly session ───
-        db.execute(
-            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                'Maya Cohen',
-                'ongoing',
-                'maya.cohen@example.com',
-                '050-1234567',
-                'Mid-30s professional. Referred by GP following prolonged work-related stress. '
-                'Reports difficulty sleeping, concentration issues, and emotional exhaustion.',
-                'Weekly CBT sessions. Focus areas: stress regulation, cognitive reframing, '
-                'work-life boundaries. 8 sessions completed, good progress.'
-            )
-        )
-        ongoing_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # Past appointments (last 8 weeks)
-        past_appt_ids = []
-        for week in range(8, 0, -1):
-            appt_date = (today - timedelta(weeks=week)).strftime('%Y-%m-%d')
-            db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
-                            cost, duration_minutes, status, meeting_type, is_recurring,
-                            recurrence_interval, recurrence_days)
-                          VALUES (?, ?, '10:00', 350, 50, 'completed', 'in-person', 1, 1, '0')""",
-                       (ongoing_id, appt_date))
-            past_appt_ids.append((db.execute("SELECT last_insert_rowid()").fetchone()[0], week, appt_date))
-
-        # Session notes for past appointments
-        notes_data = [
-            (1, 'Initial assessment. Patient reports chronic work stress for ~18 months. Sleep disturbed — waking at 3am with racing thoughts. Explored presenting concerns, treatment goals set: reduce anxiety baseline, improve sleep hygiene, build assertiveness at work.', 'Tense, guarded initially. Warmed through session.', 'Work stress triggers, sleep patterns, goal-setting'),
-            (2, 'Introduced thought records. Patient practiced identifying automatic negative thoughts around a recent conflict with manager. Good engagement. Homework: daily thought record.', 'More relaxed than session 1.', 'Cognitive distortions, thought records'),
-            (3, 'Reviewed homework — completed 4/7 days. Identified core belief: "I must not disappoint others." Explored origin. Introduced behavioural activation for mood.', 'Reflective, some distress when exploring core beliefs.', 'Core beliefs, behavioural activation'),
-            (4, 'Sleep significantly improved (5→7hrs avg). Reports using progressive relaxation technique. Discussed assertiveness — role-played declining extra work from colleague. Patient found it difficult but agreed to try.', 'Visibly more relaxed than prior sessions.', 'Sleep improvement, assertiveness, relaxation'),
-            (5, 'Used assertiveness with manager — partial success. Processed feelings of guilt. Sleep still good. Introduced mindfulness breathing.', 'Confident, engaged.', 'Assertiveness in practice, guilt, mindfulness'),
-            (6, 'Mid-treatment review. PHQ-9 reduced from 14 to 7. GAD-7 reduced from 16 to 9. Patient attributes progress to thought monitoring and sleep routine. Identified remaining work: perfectionism.', 'Positive, motivated.', 'Progress review, perfectionism, measurement'),
-            (7, 'Explored perfectionism schema — linked to early family expectations. Patient journalled between sessions about "good enough." Discussed self-compassion.', 'Somewhat emotional, insight-oriented.', 'Perfectionism, self-compassion, schema'),
-            (8, 'Strong session. Patient reported turning down optional weekend project without significant guilt. Sleep 7-8hrs consistently. Planning consolidation phase.', 'Settled, confident.', 'Consolidation, boundary-setting success'),
-        ]
-        for (appt_id, week, appt_date), (sn, content, appearance, topics) in zip(past_appt_ids, notes_data):
-            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
-                          VALUES (?, ?, ?, ?)""",
-                       (ongoing_id, appt_id, str(sn), content))
-
-        # Upcoming recurring appointment (next Monday)
-        days_ahead = (7 - today.weekday()) % 7 or 7
-        next_session = (today + timedelta(days=days_ahead)).strftime('%Y-%m-%d')
-        db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
-                        cost, duration_minutes, status, meeting_type, is_recurring,
-                        recurrence_interval, recurrence_days)
-                      VALUES (?, ?, '10:00', 350, 50, 'scheduled', 'in-person', 1, 1, '0')""",
-                   (ongoing_id, next_session))
-
-        # Receipts for past sessions
-        for (appt_id, week, appt_date) in past_appt_ids:
-            db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Session payment', ?)",
-                       (ongoing_id, appt_date))
-
-        # Goals
-        db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'achieved')",
-                   (ongoing_id, 'Improve sleep to at least 6 hours per night'))
-        db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'achieved')",
-                   (ongoing_id, 'Set one work boundary per week'))
-        db.execute("INSERT INTO goals (patient_id, description, status) VALUES (?, ?, 'active')",
-                   (ongoing_id, 'Reduce perfectionist self-criticism using self-compassion exercises'))
-
-        # Message exchange
         admin_user = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
         admin_id = admin_user['id'] if admin_user else None
-        existing_maya = db.execute("SELECT id FROM users WHERE username = 'maya'").fetchone()
-        if not existing_maya:
-            db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
-                       ('maya', generate_password_hash('patient123'), ongoing_id))
-        maya_user = db.execute("SELECT id FROM users WHERE username = 'maya'").fetchone()
-        if maya_user and admin_id:
-            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                       (maya_user['id'], admin_id, 'Hi, just confirming our appointment next Monday at 10:00. See you then!'))
-            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                       (admin_id, maya_user['id'], 'Confirmed! See you Monday at 10:00. Bring your thought record homework if you have it ready.'))
 
-        # ─── 2. CANDIDATE patient — initial inquiry, no appointments yet ───
-        db.execute(
-            """INSERT INTO patients (name, status, email, phone, background)
-               VALUES (?, ?, ?, ?, ?)""",
-            (
-                'Daniel Levy',
-                'candidate',
-                'daniel.levy@example.com',
-                '052-9876543',
-                'Late 20s, referred by his GP. Experiencing social anxiety and avoidance '
-                'behaviour. First contact made via intake form. Awaiting initial assessment session.'
-            )
-        )
-        candidate_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        if admin_id:
-            existing_daniel = db.execute("SELECT id FROM users WHERE username = 'daniel'").fetchone()
-            if not existing_daniel:
-                db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
-                           ('daniel', generate_password_hash('patient123'), candidate_id))
-            daniel_user = db.execute("SELECT id FROM users WHERE username = 'daniel'").fetchone()
-            if daniel_user:
-                db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                           (daniel_user['id'], admin_id, 'Hello, I was referred by Dr. Shapira. I struggle a lot with social situations and anxiety. When would we be able to meet?'))
-                db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                           (admin_id, daniel_user['id'], 'Thank you for reaching out, Daniel. I have reviewed your intake form. I can offer an initial assessment on Sunday at 11:00. Does that work for you?'))
-                db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                           (daniel_user['id'], admin_id, 'Yes, Sunday at 11:00 works perfectly. Thank you!'))
-
-        # ─── 3. WAITING FOR SCHEDULING patient — assessed, slot being arranged ───
-        db.execute(
-            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                'Noa Shapiro',
-                'waiting for scheduling',
-                'noa.shapiro@example.com',
-                '054-3456789',
-                'Early 40s, presenting with grief and adjustment difficulties following loss of parent. '
-                'Initial assessment completed. Psychoeducation around grief provided.',
-                'Humanistic integrative approach planned. Weekly sessions. '
-                'Awaiting mutually available recurring slot to be confirmed.'
-            )
-        )
-        waiting_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # Initial assessment appointment (2 weeks ago)
-        assess_date = (today - timedelta(weeks=2)).strftime('%Y-%m-%d')
-        db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
-                        cost, duration_minutes, status, meeting_type)
-                      VALUES (?, ?, '14:00', 350, 60, 'completed', 'in-person')""",
-                   (waiting_id, assess_date))
-        assess_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute(
-            """INSERT INTO notes (patient_id, appointment_id, session_number, content)
-               VALUES (?, ?, '0', ?)""",
-            (
-                waiting_id,
-                assess_id,
-                "Initial assessment session. Patient describes grief following mother's passing 4 months ago. "
-                "Reports low mood, social withdrawal, and difficulty returning to routine. "
-                "No risk indicators present. Agreed on weekly therapy."
-            )
-        )
-        db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Assessment session', ?)",
-                   (waiting_id, assess_date))
-
-        existing_noa = db.execute("SELECT id FROM users WHERE username = 'noa'").fetchone()
-        if not existing_noa:
-            db.execute("INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', ?)",
-                       ('noa', generate_password_hash('patient123'), waiting_id))
-        noa_user = db.execute("SELECT id FROM users WHERE username = 'noa'").fetchone()
-        if noa_user and admin_id:
-            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                       (admin_id, noa_user['id'], 'Hi Noa, thank you for coming in last week. I am looking for a recurring Tuesday slot for us. Are mornings or afternoons better for you?'))
-            db.execute("INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)",
-                       (noa_user['id'], admin_id, 'Afternoons work better, anytime after 15:00. Thank you for checking.'))
-
-        # ─── 4. ARCHIVED patient — completed treatment ───
-        db.execute(
-            """INSERT INTO patients (name, status, email, phone, background, treatment_info)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                'Eran Mizrahi',
-                'archived',
-                'eran.mizrahi@example.com',
-                '053-7654321',
-                'Early 50s. Presented with panic disorder and agoraphobia. '
-                'Referred by psychiatrist. Treatment completed after 22 sessions.',
-                'CBT for panic disorder. Completed January 2025. Full remission achieved. '
-                'Discharged with relapse prevention plan. Follow-up offered in 6 months.'
-            )
-        )
-        archived_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-
-        # 6 representative past sessions (spanning ~5 months, ending ~2 months ago)
-        archive_notes = [
-            ('1', 'Psychoeducation on panic cycle. Explained fight/flight response. Patient very relieved to understand physical symptoms are not dangerous.', 'Anxious, engaged.', 'Panic psychoeducation, normalisation'),
-            ('5', 'Began interoceptive exposure — spun in chair, breathing through straw. High anxiety initially but habituated within session. Great work.', 'Nervous but willing.', 'Interoceptive exposure'),
-            ('10', 'First in vivo exposure — entered shopping centre for 10 minutes. Panic peaked at SUDS 7, dropped to 3. Huge milestone.', 'Visibly proud.', 'In vivo exposure, SUDS monitoring'),
-            ('15', 'Supermarket visit alone completed between sessions. No panic attack. Patient reports increased confidence. PRN medication use dropped to zero past 3 weeks.', 'Confident, energised.', 'Medication reduction, independence'),
-            ('20', 'Near full remission. PDQ-A score 4 (was 28 at intake). Patient planning holiday abroad — first since onset.', 'Bright, motivated.', 'Outcome measurement, relapse prevention'),
-            ('22', 'Termination session. Reviewed progress, consolidated relapse prevention plan. Patient tearful and grateful. Discussed open-door policy for future support.', 'Emotional, positive.', 'Termination, relapse prevention plan'),
-        ]
-        for i, (sn, content, appearance, topics) in enumerate(archive_notes):
-            session_offset_weeks = 22 - (i * 4) + 8  # ended ~2 months ago
-            appt_date = (today - timedelta(weeks=session_offset_weeks)).strftime('%Y-%m-%d')
-            db.execute("""INSERT INTO appointments (patient_id, appointment_date, appointment_time,
-                            cost, duration_minutes, status, meeting_type)
-                          VALUES (?, ?, '09:00', 350, 50, 'completed', 'in-person')""",
-                       (archived_id, appt_date))
-            appt_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-            db.execute("""INSERT INTO notes (patient_id, appointment_id, session_number, content)
-                          VALUES (?, ?, ?, ?)""",
-                       (archived_id, appt_id, sn, content))
-            db.execute("INSERT INTO receipts (patient_id, amount, description, created_at) VALUES (?, 350, 'Session payment', ?)",
-                       (archived_id, appt_date))
+        _seed_ongoing_patient(db, admin_id, today)
+        _seed_candidate_patient(db, admin_id)
+        _seed_waiting_patient(db, admin_id, today)
+        _seed_archived_patient(db, today)
 
         db.commit()
         flash('Example patients created: Maya Cohen (ongoing), Daniel Levy (candidate), Noa Shapiro (waiting), Eran Mizrahi (archived). Credentials: username = maya / daniel / noa, password = patient123', 'success')
@@ -7654,153 +8087,9 @@ def import_patient_history(patient_id):
             receipts_added = 0
 
             if isinstance(data, list):
-                def _sort_key(item):
-                    raw_date = (item.get('date') or item.get('note_date') or '').strip()
-                    meeting_raw = item.get('meeting_number') or item.get('session_number') or 0
-                    try:
-                        meeting_num = int(meeting_raw)
-                    except (TypeError, ValueError):
-                        meeting_num = 0
-                    return (raw_date, meeting_num)
-
-                # Handle flat list of treatment logs (meeting number, date, content)
-                for item in sorted(data, key=_sort_key):
-                    meeting_number = _normalize_session_number(item.get('meeting_number') or item.get('session_number'))
-                    date_str = (item.get('date') or item.get('note_date') or '').strip() or None
-                    content_text = (item.get('content') or '').strip()
-                    appearance_text = (item.get('patient_appearance') or '').strip()
-                    checklist_text = item.get('behavior_checklist')
-                    if isinstance(checklist_text, list):
-                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
-                    checklist_text = (checklist_text or '').strip()
-                    mood_summary = (item.get('mood_summary') or '').strip()
-                    behavior_notes = (item.get('behavior_notes') or '').strip()
-
-                    if not meeting_number and not _has_meaningful_note_information(
-                        content_text,
-                        mood_summary,
-                        behavior_notes,
-                        appearance_text,
-                        checklist_text,
-                    ):
-                        continue
-
-                    if not content_text:
-                        content_text = mood_summary or behavior_notes or appearance_text
-                    if not content_text:
-                        continue
-
-                    appt_id = None
-                    if date_str:
-                        existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ?', (patient_id, date_str)).fetchone()
-                        if not existing:
-                            cursor = db.execute('INSERT INTO appointments (patient_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?)', (patient_id, date_str, '00:00', 'completed'))
-                            appt_id = cursor.lastrowid
-                            appointments_added += 1
-                        else:
-                            appt_id = existing['id']
-
-                    db.execute(
-                        '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
-                                              patient_appearance, behavior_checklist, mood_summary, behavior_notes)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        (
-                            patient_id,
-                            appt_id,
-                            meeting_number,
-                            date_str,
-                            content_text,
-                            appearance_text,
-                            checklist_text,
-                            mood_summary,
-                            behavior_notes
-                        )
-                    )
-                    notes_added += 1
+                appointments_added, notes_added, receipts_added = _import_flat_patient_history(db, patient_id, data)
             else:
-
-
-                # Import appointments
-                appt_id_map = {}
-                # Sort appointments by date and time
-                sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
-                for appt in sorted_appts:
-                    # Check for existing
-                    existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
-                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
-                    if not existing:
-                        cursor = db.execute('''INSERT INTO appointments
-                            (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
-                             appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
-                             appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
-                        appt_id_map[appt.get('id')] = cursor.lastrowid
-                        appointments_added += 1
-                    else:
-                        appt_id_map[appt.get('id')] = existing['id']
-
-                # Import notes sorted by date and meeting number.
-                sorted_notes = sorted(
-                    data.get('notes', []),
-                    key=lambda x: (
-                        x.get('note_date') or x.get('date') or x.get('created_at', ''),
-                        str(x.get('session_number') or x.get('meeting_number') or '')
-                    )
-                )
-                for note in sorted_notes:
-                    new_appt_id = appt_id_map.get(note.get('appointment_id')) if note.get('appointment_id') else None
-                    session_number = _normalize_session_number(note.get('session_number') or note.get('meeting_number'))
-                    note_date = (note.get('note_date') or note.get('date') or '').strip() or None
-                    content_text = (note.get('content') or '').strip()
-                    appearance_text = (note.get('patient_appearance') or '').strip()
-                    checklist_text = note.get('behavior_checklist')
-                    if isinstance(checklist_text, list):
-                        checklist_text = ','.join([str(i).strip() for i in checklist_text if str(i).strip()])
-                    checklist_text = (checklist_text or '').strip()
-                    mood_summary = (note.get('mood_summary') or '').strip()
-                    behavior_notes = (note.get('behavior_notes') or '').strip()
-
-                    if not session_number and not _has_meaningful_note_information(
-                        content_text,
-                        mood_summary,
-                        behavior_notes,
-                        appearance_text,
-                        checklist_text,
-                    ):
-                        continue
-
-                    if not content_text:
-                        content_text = mood_summary or behavior_notes or appearance_text
-                    if not content_text:
-                        continue
-
-                    db.execute('''INSERT INTO notes
-                        (patient_id, appointment_id, session_number, note_date, content, patient_appearance,
-                         behavior_checklist, mood_summary, behavior_notes, needs_review, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        (
-                            patient_id,
-                            new_appt_id,
-                            session_number,
-                            note_date,
-                            content_text,
-                            appearance_text,
-                            checklist_text,
-                            mood_summary,
-                            behavior_notes,
-                            note.get('needs_review'),
-                            note.get('created_at')
-                        ))
-                    notes_added += 1
-
-                # Import receipts
-                for receipt in data.get('receipts', []):
-                    db.execute('''INSERT INTO receipts
-                        (patient_id, amount, description, created_at)
-                        VALUES (?, ?, ?, ?)''',
-                        (patient_id, receipt.get('amount'), receipt.get('description'), receipt.get('created_at')))
-                    receipts_added += 1
+                appointments_added, notes_added, receipts_added = _import_structured_patient_history(db, patient_id, data)
 
             db.commit()
             flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
@@ -7855,6 +8144,7 @@ def download_file(name):
     # For now, allow admin and the patient who owns the file.
     # But finding the owner of a file from filename is hard if filenames aren't unique or mapped.
     # The 'files' table maps filename to patient_id.
+    name = secure_filename(name)
 
     db = get_db()
     file_record = db.execute('SELECT patient_id, treatment_id FROM files WHERE filename = ?', (name,)).fetchone()
@@ -7874,34 +8164,67 @@ def download_file(name):
 
     return "Access denied", 403
 
-@app.route('/api/messages', methods=['GET'])
-@login_required
-def api_get_messages():
-    db = get_db()
-    if current_user.role == 'admin':
-        search_query = request.args.get('q', '').strip().lower()
-        patient_type = request.args.get('patient_type', 'all').strip().lower()
-        status_filter = request.args.get('status', 'all').strip().lower()
+def _get_admin_messages(db):
+    search_query = request.args.get('q', '').strip().lower()
+    patient_type = request.args.get('patient_type', 'all').strip().lower()
+    status_filter = request.args.get('status', 'all').strip().lower()
 
-        filters = ["COALESCE(p.is_deleted, 0) = 0"]
-        params = [current_user.id, current_user.id, current_user.id]
+    filters = ["COALESCE(p.is_deleted, 0) = 0"]
+    params = [current_user.id, current_user.id, current_user.id]
 
-        if search_query:
-            filters.append('(LOWER(p.name) LIKE ? OR LOWER(COALESCE(u.username, "")) LIKE ? OR LOWER(COALESCE(u.display_name, "")) LIKE ?)')
-            like_query = f"%{search_query}%"
-            params.extend([like_query, like_query, like_query])
+    if search_query:
+        filters.append('(LOWER(p.name) LIKE ? OR LOWER(COALESCE(u.username, "")) LIKE ? OR LOWER(COALESCE(u.display_name, "")) LIKE ?)')
+        like_query = f"%{search_query}%"
+        params.extend([like_query, like_query, like_query])
 
-        if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
-            filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
-            params.append(patient_type)
+    if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
+        filters.append('LOWER(COALESCE(p.patient_type, "private")) = ?')
+        params.append(patient_type)
 
-        if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
-            if status_filter == 'waiting':
-                filters.append("p.status IN ('waiting', 'waiting for scheduling')")
-            else:
-                filters.append('LOWER(p.status) = ?')
-                params.append(status_filter)
+    if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
+        if status_filter == 'waiting':
+            filters.append("p.status IN ('waiting', 'waiting for scheduling')")
+        else:
+            filters.append('LOWER(p.status) = ?')
+            params.append(status_filter)
 
+    where_clause = ' AND '.join(filters)
+    conversations = db.execute('''
+        SELECT
+            p.id AS patient_id,
+            u.id AS user_id,
+            COALESCE(u.username, '') AS username,
+            COALESCE(u.display_name, '') AS display_name,
+            p.name AS patient_name,
+            p.status AS patient_status,
+            COALESCE(p.patient_type, 'private') AS patient_type,
+            MAX(m.timestamp) AS last_message_at,
+            SUM(CASE
+                WHEN m.recipient_id = ? AND m.is_read = 0 AND m.sender_id = u.id THEN 1
+                ELSE 0
+            END) AS unread_count,
+            CASE WHEN u.id IS NULL THEN 0 ELSE 1 END AS can_message
+        FROM patients p
+        LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND u.is_active = 1
+        LEFT JOIN messages m ON (
+            u.id IS NOT NULL AND (
+                (m.sender_id = u.id AND m.recipient_id = ?) OR
+                (m.sender_id = ? AND m.recipient_id = u.id)
+            )
+        )
+        WHERE ''' + where_clause + '''
+        GROUP BY p.id, u.id, u.username, u.display_name, p.name, p.status, p.patient_type
+        ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
+                 COALESCE(MAX(m.timestamp), '') DESC,
+                 p.name ASC
+    ''', tuple(params)).fetchall()
+
+    requested_user = request.args.get('conversation_with', type=int)
+    if requested_user is None:
+        for conv in conversations:
+            if conv['user_id'] is not None:
+                requested_user = conv['user_id']
+                break
         where_clause = ' AND '.join(filters)
         conversations = db.execute('''
             SELECT
@@ -7944,11 +8267,13 @@ def api_get_messages():
             requested_user = None
 
         if requested_user is not None:
-            db.execute(
-                'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?',
+            cursor = db.execute(
+                'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND COALESCE(is_read, 0) = 0',
                 (current_user.id, requested_user)
             )
-            db.commit()
+            if cursor.rowcount > 0:
+                db.commit()
+
             normalized = []
             for c in conversations:
                 c_dict = dict(c)
@@ -7957,30 +8282,56 @@ def api_get_messages():
                 normalized.append(c_dict)
             conversations = normalized
 
-        messages = db.execute('''
-            SELECT m.*, u.username as sender_name
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
-            ORDER BY m.timestamp ASC
-        ''', (current_user.id, requested_user, requested_user, current_user.id)).fetchall() if requested_user else []
+    if requested_user is not None and not any(c['user_id'] == requested_user for c in conversations if c['user_id'] is not None):
+        requested_user = None
 
-        return jsonify({
-            'conversations': [dict(c) for c in conversations],
-            'active_conversation': requested_user,
-            'messages': [dict(m) for m in messages]
-        })
-    else:
-        # Patient gets messages to/from them
-        messages = db.execute('''
-            SELECT m.*, u.username as sender_name
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE m.sender_id = ? OR m.recipient_id = ?
-            ORDER BY m.timestamp ASC
-        ''', (current_user.id, current_user.id)).fetchall()
+    if requested_user is not None:
+        db.execute(
+            'UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?',
+            (current_user.id, requested_user)
+        )
+        db.commit()
+        normalized = []
+        for c in conversations:
+            c_dict = dict(c)
+            if c_dict.get('user_id') == requested_user:
+                c_dict['unread_count'] = 0
+            normalized.append(c_dict)
+        conversations = normalized
+
+    messages = db.execute('''
+        SELECT m.*, u.username as sender_name
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.id
+        WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, requested_user, requested_user, current_user.id)).fetchall() if requested_user else []
+
+    return jsonify({
+        'conversations': [dict(c) for c in conversations],
+        'active_conversation': requested_user,
+        'messages': [dict(m) for m in messages]
+    })
+
+def _get_patient_messages(db):
+    messages = db.execute('''
+        SELECT m.*, u.username as sender_name
+        FROM messages m
+        LEFT JOIN users u ON m.sender_id = u.id
+        WHERE m.sender_id = ? OR m.recipient_id = ?
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, current_user.id)).fetchall()
 
     return jsonify([dict(m) for m in messages])
+
+@app.route('/api/messages', methods=['GET'])
+@login_required
+def api_get_messages():
+    db = get_db()
+    if current_user.role == 'admin':
+        return _get_admin_messages(db)
+    else:
+        return _get_patient_messages(db)
 
 @app.route('/api/messages/send', methods=['POST'])
 @login_required
@@ -8753,6 +9104,145 @@ def update_admin_profile_name():
     flash('Admin display name updated.')
     return redirect(request.referrer or url_for('crm_dashboard'))
 
+def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
+    occ_date = parse_date_safe(occurrence_date_raw)
+    if not occ_date:
+        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+    new_day = parse_date_safe(booking_date)
+    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+    new_end_dt = new_start_dt + timedelta(minutes=duration)
+    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
+    if conflict:
+        return jsonify({'status': 'error', 'message': conflict}), 409
+    existing_excluded = appt['excluded_dates'] or ''
+    excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
+    if occ_date.isoformat() not in excluded_list:
+        excluded_list.append(occ_date.isoformat())
+    # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
+    # exclude it from the series too so the moved standalone is the only event on that day.
+    if new_day and new_day.isoformat() != occ_date.isoformat():
+        series_days = parse_recurrence_days(appt)
+        series_base = parse_date_safe(appt['appointment_date'])
+        series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
+        if (custom_weekday(new_day) in series_days
+                and series_base and new_day >= series_base
+                and (not series_end or new_day <= series_end)
+                and new_day.isoformat() not in excluded_list):
+            excluded_list.append(new_day.isoformat())
+    db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
+               (','.join(excluded_list), appointment_id))
+    db.execute('''
+        INSERT INTO appointments
+        (patient_id, appointment_date, appointment_time, duration_minutes,
+         is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    ''', (appt['patient_id'], new_day.isoformat(),
+          parse_time_safe(booking_time).strftime('%H:%M'), duration,
+          meeting_type, meeting_link or None, meeting_platform or None,
+          meeting_title or None, save_to_google))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id):
+    occ_date = parse_date_safe(occurrence_date_raw)
+    if not occ_date:
+        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+
+    affects_series = False
+    inherited_end = None
+    cutoff = (occ_date - timedelta(days=1)).isoformat()
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+
+        row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
+        if row_end and (inherited_end is None or row_end > inherited_end):
+            inherited_end = row_end
+
+        if row_base >= occ_date:
+            affects_series = True
+            db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+            continue
+
+        row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
+        if row_occurs_on_cutoff:
+            affects_series = True
+            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
+
+    if not affects_series:
+        return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
+
+    new_day = parse_date_safe(booking_date)
+    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+    new_end_dt = new_start_dt + timedelta(minutes=duration)
+    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
+    if conflict:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': conflict}), 409
+    # Use the new date's weekday for the new series so occurrences land on the new day.
+    rec_days = str(custom_weekday(new_day)) if new_day else (
+        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+    )
+    rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
+    rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
+    db.execute('''
+        INSERT INTO appointments
+        (patient_id, appointment_date, appointment_time, duration_minutes,
+         is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+         meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (appt['patient_id'], new_day.isoformat(),
+          parse_time_safe(booking_time).strftime('%H:%M'), duration,
+          rec_days, rec_interval, rec_end,
+          meeting_type, meeting_link or None, meeting_platform or None,
+          meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
+    new_day = parse_date_safe(booking_date)
+    occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
+    delta_days = (new_day - occ_date).days if new_day and occ_date else 0
+    new_rec_days = str(custom_weekday(new_day)) if new_day else (
+        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+    )
+
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+        shifted_day = row_base + timedelta(days=delta_days)
+        shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
+        shifted_end = shifted_start + timedelta(minutes=duration)
+        conflict_message = has_time_conflict(
+            db,
+            shifted_day,
+            shifted_start,
+            shifted_end,
+            exclude_appointment_id=row['id']
+        )
+        if conflict_message:
+            return jsonify({'status': 'error', 'message': conflict_message}), 409
+
+    for row in related_rows:
+        row_base = parse_date_safe(row['appointment_date'])
+        if not row_base:
+            continue
+        shifted_day = row_base + timedelta(days=delta_days)
+        db.execute('''
+            UPDATE appointments
+            SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
+                meeting_type = ?, meeting_link = ?, meeting_platform = ?,
+                meeting_title = ?, save_to_google = ?, recurrence_days = ?
+            WHERE id = ?
+        ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
+              meeting_type, meeting_link or None, meeting_platform or None,
+              meeting_title or None, save_to_google, new_rec_days, row['id']))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
 @app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
 @login_required
 def api_calendar_appointment_update(appointment_id):
@@ -8802,143 +9292,14 @@ def api_calendar_appointment_update(appointment_id):
 
     # --- Scope: this occurrence only ---
     if is_recurring and scope == 'one':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        new_day = parse_date_safe(booking_date)
-        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        new_end_dt = new_start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
-        if conflict:
-            return jsonify({'status': 'error', 'message': conflict}), 409
-        existing_excluded = appt['excluded_dates'] or ''
-        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-        if occ_date.isoformat() not in excluded_list:
-            excluded_list.append(occ_date.isoformat())
-        # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
-        # exclude it from the series too so the moved standalone is the only event on that day.
-        if new_day and new_day.isoformat() != occ_date.isoformat():
-            series_days = parse_recurrence_days(appt)
-            series_base = parse_date_safe(appt['appointment_date'])
-            series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
-            if (custom_weekday(new_day) in series_days
-                    and series_base and new_day >= series_base
-                    and (not series_end or new_day <= series_end)
-                    and new_day.isoformat() not in excluded_list):
-                excluded_list.append(new_day.isoformat())
-        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-                   (','.join(excluded_list), appointment_id))
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, duration_minutes,
-             is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-            VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
-        ''', (appt['patient_id'], new_day.isoformat(),
-              parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
 
     # --- Scope: this and all upcoming ---
     if is_recurring and scope == 'upcoming':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-
-        affects_series = False
-        inherited_end = None
-        cutoff = (occ_date - timedelta(days=1)).isoformat()
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-
-            row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
-            if row_end and (inherited_end is None or row_end > inherited_end):
-                inherited_end = row_end
-
-            if row_base >= occ_date:
-                affects_series = True
-                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                continue
-
-            row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
-            if row_occurs_on_cutoff:
-                affects_series = True
-                db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
-
-        if not affects_series:
-            return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
-
-        new_day = parse_date_safe(booking_date)
-        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        new_end_dt = new_start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
-        if conflict:
-            db.rollback()
-            return jsonify({'status': 'error', 'message': conflict}), 409
-        # Use the new date's weekday for the new series so occurrences land on the new day.
-        rec_days = str(custom_weekday(new_day)) if new_day else (
-            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-        )
-        rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
-        rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, duration_minutes,
-             is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-             meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (appt['patient_id'], new_day.isoformat(),
-              parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              rec_days, rec_interval, rec_end,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
 
     if is_recurring and scope == 'all':
-        new_day = parse_date_safe(booking_date)
-        occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
-        delta_days = (new_day - occ_date).days if new_day and occ_date else 0
-        new_rec_days = str(custom_weekday(new_day)) if new_day else (
-            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-        )
-
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-            shifted_day = row_base + timedelta(days=delta_days)
-            shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
-            shifted_end = shifted_start + timedelta(minutes=duration)
-            conflict_message = has_time_conflict(
-                db,
-                shifted_day,
-                shifted_start,
-                shifted_end,
-                exclude_appointment_id=row['id']
-            )
-            if conflict_message:
-                return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-        for row in related_rows:
-            row_base = parse_date_safe(row['appointment_date'])
-            if not row_base:
-                continue
-            shifted_day = row_base + timedelta(days=delta_days)
-            db.execute('''
-                UPDATE appointments
-                SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-                    meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-                    meeting_title = ?, save_to_google = ?, recurrence_days = ?
-                WHERE id = ?
-            ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  meeting_type, meeting_link or None, meeting_platform or None,
-                  meeting_title or None, save_to_google, new_rec_days, row['id']))
-        db.commit()
-        return jsonify({'status': 'success'})
+        return _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
 
     # --- Default / scope='all': update the record directly ---
     day_obj = parse_date_safe(booking_date)
@@ -9471,9 +9832,11 @@ def get_notifications():
     db = get_db()
     notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
 
-    for n in notifications:
-        db.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', (n['id'],))
-    db.commit()
+    if notifications:
+        notification_ids = [n['id'] for n in notifications]
+        placeholders = ','.join(['?'] * len(notification_ids))
+        db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', notification_ids)
+        db.commit()
 
     return jsonify([dict(n) for n in notifications])
 
