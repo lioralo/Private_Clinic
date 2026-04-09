@@ -2,6 +2,18 @@
 
 ---
 
+## Test API Treatment Method Options Get
+
+**Date:** April 09, 2026
+
+**Objective:** Add a unit test for the `/api/treatment_method_options` GET endpoint.
+
+**Release Summary:**
+- Wrote a new test `test_api_treatment_method_options_get` in `test_app.py`.
+- Tested the endpoint for correct unauthenticated redirects, patient 403 authorization failures, and successful 200 JSON payload responses for admins.
+- Addressed test errors related to schema mismatch and role validation mismatch.
+---
+
 ## Session 33
 
 **Date:** April 4, 2026
