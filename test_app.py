@@ -467,6 +467,48 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         assert rv.get_json().get('status') == 'success'
 
+    def test_api_patients_reorder(self):
+        # Unauthenticated access should be redirected to login
+        rv = self.client.post('/api/patients/reorder', json={'order': [1, 2, 3]})
+        assert rv.status_code == 302
+        assert '/login' in rv.headers.get('Location', '')
+
+        self.login('lioraloni', 'Flo@tingind4')
+
+        # Create three patients
+        for i in range(3):
+            self.client.post('/add_patient', data=dict(name=f'Reorder Patient {i}', status='ongoing'))
+
+        with app.app_context():
+            db = get_db()
+            # Get the IDs of the newly created patients
+            patients = db.execute('SELECT id, name FROM patients ORDER BY id DESC LIMIT 3').fetchall()
+            patient_ids = [p['id'] for p in reversed(patients)]
+
+        assert len(patient_ids) == 3
+
+        # Test missing payload
+        rv = self.client.post('/api/patients/reorder', json={})
+        assert rv.status_code == 400
+        assert b'No order provided' in rv.data or rv.get_json().get('error') == 'No order provided'
+
+        # Test missing 'order' field in payload
+        rv = self.client.post('/api/patients/reorder', json={'some_other_field': [1, 2]})
+        assert rv.status_code == 400
+        assert b'No order provided' in rv.data or rv.get_json().get('error') == 'No order provided'
+
+        # Test happy path
+        new_order = [patient_ids[2], patient_ids[0], patient_ids[1]]
+        rv = self.client.post('/api/patients/reorder', json={'order': new_order})
+        assert rv.status_code == 200
+        assert rv.get_json() == {'success': True}
+
+        with app.app_context():
+            db = get_db()
+            for idx, p_id in enumerate(new_order):
+                row = db.execute('SELECT sort_order FROM patients WHERE id = ?', (p_id,)).fetchone()
+                assert row['sort_order'] == idx
+
     def test_calendar_booking_sets_ongoing_as_recurring(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(

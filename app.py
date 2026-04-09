@@ -2610,22 +2610,15 @@ def admin_dashboard():
 @app.route('/api/patients/reorder', methods=['POST'])
 @login_required
 def api_patients_reorder():
-    """Save the manual drag-and-drop sort order for patients."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    data = request.get_json(silent=True)
+    data = request.json
     if not data or 'order' not in data:
-        return jsonify({'error': 'Invalid payload'}), 400
-    order = data['order']
-    if not isinstance(order, list):
-        return jsonify({'error': 'order must be a list'}), 400
+        return jsonify({'error': 'No order provided'}), 400
     db = get_db()
-    for idx, patient_id in enumerate(order):
-        if not isinstance(patient_id, int):
-            return jsonify({'error': 'Invalid patient id'}), 400
-        db.execute('UPDATE patients SET sort_order = ? WHERE id = ? AND COALESCE(is_deleted,0) = 0', (idx, patient_id))
+
+    for idx, patient_id in enumerate(data['order']):
+        db.execute('UPDATE patients SET sort_order = ? WHERE id = ?', (idx, patient_id))
     db.commit()
-    return jsonify({'ok': True})
+    return jsonify({'success': True})
 
 
 @app.route('/api/treatment_method_options', methods=['GET'])
