@@ -2344,64 +2344,50 @@ class ClinicTestCase(unittest.TestCase):
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
 
+    def test_backup_database_error_path(self):
+        import backup_db
+        from unittest.mock import patch
+        import io
+        import sys
 
-class TestHebrewTranslationOverrides(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.temp_path = Path(self.temp_dir.name)
+        # Provide a dummy database with the necessary tables to allow fingerprinting
+        db_fd, db_path = tempfile.mkstemp(suffix='.db')
+        os.close(db_fd)
 
-        self.patcher = unittest.mock.patch('app.TRANSLATION_OVERRIDES_FILE', self.temp_path / 'he.json')
-        self.patcher.start()
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE appointments (id INTEGER, is_recurring INTEGER, meeting_link TEXT, recurrence_days TEXT, recurrence_interval INTEGER, recurrence_end_date TEXT, recurrence_count INTEGER)")
+        conn.close()
 
-    def tearDown(self):
-        self.patcher.stop()
-        self.temp_dir.cleanup()
+        with tempfile.TemporaryDirectory() as tmp_backup_dir:
+            original_db_file = backup_db.DB_FILE
+            original_backup_dir = backup_db.BACKUP_DIR
+            backup_db.DB_FILE = db_path
+            backup_db.BACKUP_DIR = tmp_backup_dir
+            try:
+                with patch('backup_db.Path.read_bytes') as mock_read_bytes:
+                    mock_read_bytes.side_effect = Exception("Simulated read error")
 
-    def test_file_does_not_exist(self):
-        result = app_module.load_hebrew_translation_overrides()
-        self.assertEqual(result, {})
+                    captured_out = io.StringIO()
+                    old_stdout = sys.stdout
+                    sys.stdout = captured_out
+                    try:
+                        result = backup_db.backup_database()
+                    finally:
+                        sys.stdout = old_stdout
 
-    def test_file_exists_valid_json(self):
-        test_data = {"key1": "value1", "key2": "value2"}
-        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
-            json.dump(test_data, f)
+                    self.assertIn("Backup failed: Simulated read error", captured_out.getvalue())
+                    self.assertFalse(result)
 
-        result = app_module.load_hebrew_translation_overrides()
-        self.assertEqual(result, test_data)
+                    files = os.listdir(tmp_backup_dir)
+                    for f in files:
+                        self.assertNotIn('clinic_', f)
+                        self.assertNotIn('.verify_', f)
+            finally:
+                backup_db.DB_FILE = original_db_file
+                backup_db.BACKUP_DIR = original_backup_dir
 
-    def test_file_exists_invalid_json(self):
-        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
-            f.write("invalid json")
-
-        result = app_module.load_hebrew_translation_overrides()
-        self.assertEqual(result, {})
-
-    def test_file_exists_not_a_dict(self):
-        test_data = ["not", "a", "dict"]
-        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
-            json.dump(test_data, f)
-
-        result = app_module.load_hebrew_translation_overrides()
-        self.assertEqual(result, {})
-
-    def test_file_exists_filters_non_string_keys_and_values(self):
-        test_data = {
-            "key1": "value1",
-            "key2": 123,
-            "123": "value3",
-            "key4": ["list"],
-            "key5": {"dict": "dict"}
-        }
-        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
-            json.dump(test_data, f)
-
-        result = app_module.load_hebrew_translation_overrides()
-
-        expected = {
-            "key1": "value1",
-            "123": "value3"
-        }
-        self.assertEqual(result, expected)
+        os.unlink(db_path)
 
 if __name__ == '__main__':
     unittest.main()

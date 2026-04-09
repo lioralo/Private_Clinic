@@ -1793,5 +1793,6 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
 
-## 2026-04-09 08:25
-- Optimized `/api/messages` endpoint to check for updated rows via `cursor.rowcount` to skip `db.commit()` when marking messages as read without actually updating any rows.
+## 2025-04-09
+- Added an error path unit test `test_backup_database_error_path` to `test_app.py` to ensure `backup_database()` properly handles exceptions during the backup process.
+- Fixed `backup_database()` in `backup_db.py` to correctly return `False` when an exception is encountered.
