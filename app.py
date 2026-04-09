@@ -8999,20 +8999,26 @@ def api_calendar_appointment_update(appointment_id):
             if conflict_message:
                 return jsonify({'status': 'error', 'message': conflict_message}), 409
 
+        update_data = []
         for row in related_rows:
             row_base = parse_date_safe(row['appointment_date'])
             if not row_base:
                 continue
             shifted_day = row_base + timedelta(days=delta_days)
-            db.execute('''
+            update_data.append((
+                shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
+                meeting_type, meeting_link or None, meeting_platform or None,
+                meeting_title or None, save_to_google, new_rec_days, row['id']
+            ))
+
+        if update_data:
+            db.executemany('''
                 UPDATE appointments
                 SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
                     meeting_type = ?, meeting_link = ?, meeting_platform = ?,
                     meeting_title = ?, save_to_google = ?, recurrence_days = ?
                 WHERE id = ?
-            ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  meeting_type, meeting_link or None, meeting_platform or None,
-                  meeting_title or None, save_to_google, new_rec_days, row['id']))
+            ''', update_data)
         db.commit()
         return jsonify({'status': 'success'})
 
