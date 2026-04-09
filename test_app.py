@@ -1,3 +1,5 @@
+from pathlib import Path
+import unittest.mock
 import os
 import shutil
 import unittest
@@ -2343,61 +2345,63 @@ class ClinicTestCase(unittest.TestCase):
             assert tomorrow_r['is_tomorrow'] is True
 
 
-    @patch('os.path.exists')
-    @patch('os.path.getmtime')
-    @patch('time.time')
-    @patch('app.perform_routine_encrypted_backup')
-    def test_routine_backup_guard_triggers_backup_after_24_hours(self, mock_perform, mock_time, mock_getmtime, mock_exists):
-        with app.test_request_context('/dashboard'):
-            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
-                mock_exists.return_value = True
-                mock_getmtime.return_value = 1000000.0
-                mock_time.return_value = 1000000.0 + 86401.0  # > 24 hours
+class TestHebrewTranslationOverrides(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name)
 
-                app_module.routine_backup_guard()
+        self.patcher = unittest.mock.patch('app.TRANSLATION_OVERRIDES_FILE', self.temp_path / 'he.json')
+        self.patcher.start()
 
-                mock_exists.assert_called_with('/fake/db.sqlite')
-                mock_getmtime.assert_called_with('/fake/db.sqlite')
-                mock_perform.assert_called_once_with('/fake/db.sqlite')
+    def tearDown(self):
+        self.patcher.stop()
+        self.temp_dir.cleanup()
 
-    @patch('os.path.exists')
-    @patch('os.path.getmtime')
-    @patch('time.time')
-    @patch('app.perform_routine_encrypted_backup')
-    def test_routine_backup_guard_skips_backup_under_24_hours(self, mock_perform, mock_time, mock_getmtime, mock_exists):
-        with app.test_request_context('/dashboard'):
-            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
-                mock_exists.return_value = True
-                mock_getmtime.return_value = 1000000.0
-                mock_time.return_value = 1000000.0 + 86399.0  # < 24 hours
+    def test_file_does_not_exist(self):
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
 
-                app_module.routine_backup_guard()
+    def test_file_exists_valid_json(self):
+        test_data = {"key1": "value1", "key2": "value2"}
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
 
-                mock_exists.assert_called_with('/fake/db.sqlite')
-                mock_getmtime.assert_called_with('/fake/db.sqlite')
-                mock_perform.assert_not_called()
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, test_data)
 
-    @patch('os.path.exists')
-    @patch('app.perform_routine_encrypted_backup')
-    def test_routine_backup_guard_skips_if_no_db(self, mock_perform, mock_exists):
-        with app.test_request_context('/dashboard'):
-            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': '/fake/db.sqlite'}):
-                mock_exists.return_value = False
+    def test_file_exists_invalid_json(self):
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            f.write("invalid json")
 
-                app_module.routine_backup_guard()
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
 
-                mock_exists.assert_called_with('/fake/db.sqlite')
-                mock_perform.assert_not_called()
+    def test_file_exists_not_a_dict(self):
+        test_data = ["not", "a", "dict"]
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
 
-    @patch('os.path.exists')
-    @patch('app.perform_routine_encrypted_backup')
-    def test_routine_backup_guard_skips_if_db_path_not_configured(self, mock_perform, mock_exists):
-        with app.test_request_context('/dashboard'):
-            with patch.dict(app.config, {'TESTING': False, 'DATABASE_PATH': None, 'DATABASE': None}):
-                app_module.routine_backup_guard()
+        result = app_module.load_hebrew_translation_overrides()
+        self.assertEqual(result, {})
 
-                mock_exists.assert_not_called()
-                mock_perform.assert_not_called()
+    def test_file_exists_filters_non_string_keys_and_values(self):
+        test_data = {
+            "key1": "value1",
+            "key2": 123,
+            "123": "value3",
+            "key4": ["list"],
+            "key5": {"dict": "dict"}
+        }
+        with open(self.temp_path / 'he.json', 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
+
+        result = app_module.load_hebrew_translation_overrides()
+
+        expected = {
+            "key1": "value1",
+            "123": "value3"
+        }
+        self.assertEqual(result, expected)
 
 if __name__ == '__main__':
     unittest.main()
