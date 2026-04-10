@@ -1712,6 +1712,37 @@ class ClinicTestCase(unittest.TestCase):
         )
         export_rv.close()
 
+
+
+    def test_list_encrypted_backups(self):
+        """Test that list_encrypted_backups returns a sorted list of matching .enc files by date."""
+        from unittest.mock import patch
+        from app import list_encrypted_backups
+
+        # We mock the hardcoded 'archive/backups' without needing a real temp dir on disk
+        with patch('app.os.listdir', return_value=['clinic_2.db.enc', 'other.txt', 'clinic_1.db.enc', 'clinic_3.db.enc']), \
+             patch('app.os.path.exists', return_value=True), \
+             patch('app.os.path.getsize', return_value=1024):
+
+            # We need to mock os.path.getmtime to return different times for different files
+            def mock_getmtime(path):
+                if 'clinic_1' in path: return 1000
+                if 'clinic_2' in path: return 2000
+                if 'clinic_3' in path: return 3000
+                return 0
+
+            with patch('app.os.path.getmtime', side_effect=mock_getmtime):
+                backups = list_encrypted_backups()
+
+                self.assertEqual(len(backups), 3)
+
+                # Should be sorted reverse by date (newest first, so 3000, then 2000, then 1000)
+                self.assertEqual(backups[0]['name'], 'clinic_3.db.enc')
+                self.assertEqual(backups[1]['name'], 'clinic_2.db.enc')
+                self.assertEqual(backups[2]['name'], 'clinic_1.db.enc')
+
+                self.assertEqual(backups[0]['size'], 1024)
+
     def test_encrypted_backup_preserves_meeting_fields(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
