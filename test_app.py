@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import os
 import shutil
 import unittest
@@ -287,7 +288,6 @@ class ClinicTestCase(unittest.TestCase):
         assert unread_after == 0
 
     def test_import_treatment_log_json_list(self):
-        import json
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Import Patient', status='ongoing'), follow_redirects=True)
 
@@ -2253,5 +2253,37 @@ class ClinicTestCase(unittest.TestCase):
             assert tomorrow_r['is_today'] is False
             assert tomorrow_r['is_tomorrow'] is True
 
+
+
+    @patch('app.gcal')
+    def test_api_google_calendar_status_connected(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_gcal.is_connected.return_value = True
+
+        rv = self.client.get('/api/google_calendar/status')
+        data = json.loads(rv.data)
+        self.assertEqual(rv.status_code, 200)
+        self.assertTrue(data['connected'])
+
+    @patch('app.gcal')
+    def test_api_google_calendar_status_disconnected(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_gcal.is_connected.return_value = False
+
+        rv = self.client.get('/api/google_calendar/status')
+        data = json.loads(rv.data)
+        self.assertEqual(rv.status_code, 200)
+        self.assertFalse(data['connected'])
+
+    @patch('app.gcal')
+    def test_api_google_calendar_status_exception(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_gcal.is_connected.side_effect = Exception("Test Error")
+
+        rv = self.client.get('/api/google_calendar/status')
+        data = json.loads(rv.data)
+        self.assertEqual(rv.status_code, 200)
+        self.assertFalse(data['connected'])
+        self.assertEqual(data['error'], 'Test Error')
 if __name__ == '__main__':
     unittest.main()
