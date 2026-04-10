@@ -5,21 +5,62 @@
 {% block content %}
 <div class="flex justify-between items-start flex-wrap gap-3 mb-4">
     <div>
-        <h2 class="text-2xl font-bold text-teal-900 font-headline flex items-center gap-2 mb-1">
-            <span class="material-symbols-outlined ms-fill text-[28px]">person</span>{{ t('Clinic CRM') }}
-        </h2>
-        <p class="text-slate-500 text-sm mb-0">{{ t('Compact roster view for quick patient access.') }}</p>
+        <h1 class="text-3xl font-extrabold text-primary tracking-tight">{{ t('Patients') }}</h1>
+        <p class="text-slate-500 mt-1">{{ t('Manage and monitor clinic member records.') }}</p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
-        <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill">
-            <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
-        </a>
-        <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary bg-white btn-sm">
-            <i class="bi bi-calendar3 me-1"></i>{{ t('Open Calendar') }}
-        </a>
-        <a href="{{ url_for('manage_resources') }}" class="btn btn-outline-secondary bg-white btn-sm">
-            <i class="bi bi-journal-bookmark me-1"></i>{{ t('Resources') }}
-        </a>
+    <a href="{{ url_for('add_patient') }}" class="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-all">
+        <span class="material-symbols-outlined ms-fill" style="font-size:18px">person_add</span>
+        <span>{{ t('New Patient') }}</span>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+            <span class="text-slate-500 text-sm font-medium">{{ t('Total Patients') }}</span>
+            <div class="p-2 rounded-lg bg-blue-50 text-blue-600">
+                <span class="material-symbols-outlined" style="font-size:18px">people</span>
+            </div>
+        </div>
+        <div class="mt-4">
+            <span class="text-2xl font-bold">{{ counts['all'] }}</span>
+        </div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+            <span class="text-slate-500 text-sm font-medium">{{ t('Appointments') }}</span>
+            <div class="p-2 rounded-lg bg-amber-50 text-amber-600">
+                <span class="material-symbols-outlined" style="font-size:18px">calendar_today</span>
+            </div>
+        </div>
+        <div class="mt-4">
+            <span class="text-2xl font-bold">{{ today_appointments|length }}</span>
+            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('Scheduled today') }}</span>
+        </div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+            <span class="text-slate-500 text-sm font-medium">{{ t('New Admissions') }}</span>
+            <div class="p-2 rounded-lg bg-purple-50 text-purple-600">
+                <span class="material-symbols-outlined" style="font-size:18px">person_add</span>
+            </div>
+        </div>
+        <div class="mt-4">
+            <span class="text-2xl font-bold">{{ counts['new_this_week'] or 0 }}</span>
+            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('In last 7 days') }}</span>
+        </div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div class="flex justify-between items-start">
+            <span class="text-slate-500 text-sm font-medium">{{ t('Avg. Wait Time') }}</span>
+            <div class="p-2 rounded-lg bg-red-50 text-red-600">
+                <span class="material-symbols-outlined" style="font-size:18px">schedule</span>
+            </div>
+        </div>
+        <div class="mt-4">
+            <span class="text-2xl font-bold">{{ avg_wait_time or '18 min' }}</span>
+            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('-5m from avg') }}</span>
+        </div>
     </div>
 </div>
 

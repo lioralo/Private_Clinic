@@ -29,51 +29,31 @@
 </div>
 
 {# ── Stats strip ─────────────────────────────────────────── #}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <a href="{{ url_for('weekly_calendar') }}" class="no-underline">
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
-            <div class="w-11 h-11 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
-                <span class="material-symbols-outlined text-teal-700 ms-fill" style="font-size:22px">calendar_month</span>
-            </div>
-            <div>
-                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ today_appointments|length }}</div>
-                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t("Today's Sessions") }}</div>
-            </div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('All Patients') }}</span>
+        <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['total'] }}</span>
         </div>
-    </a>
-    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="no-underline">
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
-            <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                <span class="material-symbols-outlined text-emerald-700 ms-fill" style="font-size:22px">person_check</span>
-            </div>
-            <div>
-                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ counts['ongoing'] }}</div>
-                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Ongoing') }}</div>
-            </div>
+    </div>
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Ongoing') }}</span>
+        <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['ongoing'] }}</span>
         </div>
-    </a>
-    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="no-underline">
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
-            <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                <span class="material-symbols-outlined text-amber-600 ms-fill" style="font-size:22px">hourglass</span>
-            </div>
-            <div>
-                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ counts['waiting'] }}</div>
-                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Waiting List') }}</div>
-            </div>
+    </div>
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Waiting') }}</span>
+        <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['waiting'] }}</span>
         </div>
-    </a>
-    <a href="{{ url_for('crm_dashboard') }}" class="no-underline">
-        <div class="bg-white rounded-2xl border {% if unread_count > 0 %}border-red-200 bg-red-50{% else %}border-slate-200{% endif %} p-5 flex items-center gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer h-full">
-            <div class="w-11 h-11 rounded-xl {% if unread_count > 0 %}bg-red-100{% else %}bg-slate-100{% endif %} flex items-center justify-center flex-shrink-0">
-                <span class="material-symbols-outlined {% if unread_count > 0 %}text-red-600{% else %}text-slate-500{% endif %} ms-fill" style="font-size:22px">chat</span>
-            </div>
-            <div>
-                <div class="text-3xl font-extrabold text-teal-900 leading-none">{{ unread_count }}</div>
-                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ t('Unread Messages') }}</div>
-            </div>
+    </div>
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Archived') }}</span>
+        <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['archived'] }}</span>
         </div>
-    </a>
+    </div>
 </div>
 
 {# ── Alert banners ────────────────────────────────────────── #}
