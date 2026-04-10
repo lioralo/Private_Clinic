@@ -9,63 +9,20 @@
     {% if patient['has_recurring'] %}{% set stats.recurring = stats.recurring + 1 %}{% endif %}
 {% endfor %}
 
-<section class="section-hero mb-4">
-    <div class="row g-4 align-items-end">
-        <div class="col-xl-8">
-            <span class="hero-kicker"><i class="bi bi-heart-pulse"></i> {{ t('Patient Overview') }}</span>
-            <h1 class="hero-title mt-3 mb-3">
-                {% if status == 'all' %}
-                    {{ t('A clearer view of every patient in care') }}
-                {% elif status in ['candidate', 'waiting for scheduling'] %}
-                    {{ t('Candidates and waiting patients, ready for action') }}
-                {% else %}
-                    {{ t('Focus on') }} {{ t(status|capitalize) }} {{ t('patients') }}
-                {% endif %}
-            </h1>
-            <p class="hero-subtitle mb-0">
-                {{ t('Track readiness, follow-up risk, and recurring care from one dashboard. Open any card to continue directly into the patient record.') }}
-            </p>
-        </div>
-        <div class="col-xl-4">
-            <div class="d-flex flex-wrap gap-2 justify-content-xl-end">
-                {% if current_user.is_authenticated and current_user.role == 'admin' %}
-                <a href="{{ url_for('add_patient') }}" class="btn btn-primary">
-                    <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
-                </a>
-                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary bg-white">
-                    <i class="bi bi-calendar3 me-1"></i>{{ t('Open Calendar') }}
-                </a>
-                <form method="POST" action="{{ url_for('seed_data') }}" class="d-inline-block">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-outline-secondary bg-white">
-                        <i class="bi bi-database-add me-1"></i>{{ t('Load Example Patients') }}
-                    </button>
-                </form>
-                {% endif %}
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>Global Calendar</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id='calendar'></div>
             </div>
         </div>
     </div>
-    <div class="stat-strip mt-4">
-        <div class="stat-card">
-            <span class="label">{{ t('Visible Patients') }}</span>
-            <span class="value">{{ patients|length }}</span>
-        </div>
-        <div class="stat-card">
-            <span class="label">{{ t('Ongoing') }}</span>
-            <span class="value">{{ stats.ongoing }}</span>
-        </div>
-        <div class="stat-card">
-            <span class="label">{{ t('Candidates') }}</span>
-            <span class="value">{{ stats.candidates + stats.waiting }}</span>
-        </div>
-        <div class="stat-card">
-            <span class="label">{{ t('Recurring Active') }}</span>
-            <span class="value">{{ stats.recurring }}</span>
-        </div>
-    </div>
-</section>
+</div>
 
-<div class="dashboard-grid">
+<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
     {% for patient in patients %}
         <div class="col">
             <div class="card h-100 border-0 shadow-sm patient-card position-relative">
@@ -152,81 +109,67 @@
         </div>
     {% endfor %}
 </div>
-<!-- Notification Toast Container -->
-<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1055;">
-</div>
-{% endblock %}
 
-{% block scripts %}
+<style>
+.patient-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.patient-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+}
+#calendar {
+    min-height: 500px;
+}
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.patient-card-clickable').forEach(function (card) {
-        card.addEventListener('click', function (event) {
-            if (event.target.closest('a, button, input, textarea, select, label, form')) {
-                return;
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        selectable: true,
+        select: function(info) {
+            if (confirm('Create new slot from ' + info.startStr + ' to ' + info.endStr + '?')) {
+                fetch('/api/slots', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        start: info.startStr,
+                        end: info.endStr
+                    })
+                }).then(response => {
+                    if (response.ok) {
+                        calendar.refetchEvents();
+                    }
+                });
             }
-            const href = card.getAttribute('data-href');
-            if (href) {
-                window.location.href = href;
+        },
+        eventClick: function(info) {
+            if (confirm('Delete this slot?')) {
+                fetch('/api/slots/' + info.event.id, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                }).then(response => {
+                    if (response.ok) {
+                        calendar.refetchEvents();
+                    }
+                });
             }
-        });
+        }
     });
-
-    let lastNotificationId = 0;
-
-    function fetchNotifications() {
-        fetch('/api/notifications?last_id=' + lastNotificationId)
-            .then(response => response.json())
-            .then(data => {
-                if (data.length > 0) {
-                    data.forEach(notification => {
-                        showToast(notification.message);
-                        if (notification.id > lastNotificationId) {
-                            lastNotificationId = notification.id;
-                        }
-                    });
-                }
-            })
-            .catch(err => console.error('Error fetching notifications:', err));
-    }
-
-    function showToast(message) {
-        const container = document.getElementById('toastContainer');
-        const toastEl = document.createElement('div');
-        toastEl.className = 'toast align-items-center text-bg-primary border-0';
-        toastEl.setAttribute('role', 'alert');
-        toastEl.setAttribute('aria-live', 'assertive');
-        toastEl.setAttribute('aria-atomic', 'true');
-
-        toastEl.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body">
-                    <i class="bi bi-bell-fill me-2"></i> ${message}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-        `;
-
-        container.appendChild(toastEl);
-        const toast = new bootstrap.Toast(toastEl, { delay: 10000 });
-        toast.show();
-
-        toastEl.addEventListener('hidden.bs.toast', () => {
-            toastEl.remove();
-        });
-    }
-
-    // Initial fetch to get the latest ID so we don't spam on load
-    fetch('/api/notifications')
-        .then(response => response.json())
-        .then(data => {
-            if (data.length > 0) {
-                lastNotificationId = Math.max(...data.map(n => n.id));
-            }
-            // Start polling every 5 seconds
-            setInterval(fetchNotifications, 5000);
-        })
-        .catch(err => console.error(err));
+    calendar.render();
 });
 </script>
 {% endblock %}

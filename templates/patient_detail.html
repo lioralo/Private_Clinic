@@ -1,11 +1,31 @@
 {% extends 'layout.html' %}
 
 {% block content %}
-<div class="alert alert-warning mobile-readonly-banner d-none" role="alert">
-    <i class="bi bi-phone me-1"></i>{{ 'Mobile read mode is active. Editing actions are limited on this screen.' if lang == 'en' else 'מצב קריאה בנייד פעיל. פעולות עריכה מוגבלות במסך זה.' }}
-</div>
-<div class="row patient-page-shell g-4">
-    <div class="col-xl-9 order-2 order-xl-1">
+<div class="row">
+    <div class="col-lg-7">
+        <!-- Analytics & Progress Charts -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-graph-up me-2 text-primary"></i>Therapeutic Insights</h5>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="bg-light p-3 rounded-3 border">
+                            <h6 class="text-center smallest text-uppercase fw-bold text-muted mb-3">Session Frequency (Last 6 Months)</h6>
+                            <canvas id="sessionChart" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="bg-light p-3 rounded-3 border">
+                            <h6 class="text-center smallest text-uppercase fw-bold text-muted mb-3">Key Topics Frequency</h6>
+                            <canvas id="topicsChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Patient Summary Card -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
             <div class="card-header bg-white py-3 border-0 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -149,81 +169,80 @@
                 </div>
             </div>
 
-            <!-- BILLING TAB -->
-            <div class="tab-pane fade" id="billing" role="tabpanel" aria-labelledby="billing-tab">
-                <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Financial Receipts') }}</h5>
-                    </div>
-                    <div class="card-body p-4 bg-light bg-opacity-25">
-                        <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="mb-4 p-3 bg-white rounded-4 shadow-sm">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="row g-2 mb-3">
-                                <div class="col-md-4">
-                                    <label class="form-label smallest text-uppercase fw-bold">{{ t('Amount ($)') }}</label>
-                                    <input type="number" step="0.01" name="amount" class="form-control shadow-sm border-0" required>
-                                </div>
-                                <div class="col-md-8">
-                                    <label class="form-label smallest text-uppercase fw-bold">{{ t('Description') }}</label>
-                                    <input type="text" name="description" class="form-control shadow-sm border-0">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label smallest text-uppercase fw-bold">External receipt upload (coming soon)</label>
-                                    <input type="file" class="form-control shadow-sm border-0" disabled>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100 fw-bold rounded-pill">{{ t('Create New Receipt') }}</button>
-                        </form>
-                        <div class="receipts-list bg-white rounded-3 shadow-sm border overflow-hidden">
-                            {% for receipt in receipts %}
-                                <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <span class="fw-bold text-success d-block">${{ "%.2f"|format(receipt['amount']) }}</span>
-                                        <span class="text-muted smaller">{{ receipt['description'] or t('Medical Service') }}</span>
-                                    </div>
-                                    <span class="text-muted smallest">{{ receipt['created_at'].split(' ')[0] }}</span>
-                                </div>
-                            {% else %}
-                                <div class="p-4 text-center text-muted small">{{ t('No financial records.') }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+        <!-- Treatment Notes Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
             </div>
+            <div class="card-body p-4">
+                <button type="button" class="btn btn-primary mb-4 w-100 fw-bold rounded-pill" data-bs-toggle="modal" data-bs-target="#addNoteModal">
+                    <i class="bi bi-plus-lg me-1"></i> Add Clinical Note
+                </button>
 
-            <!-- SUPERVISION TAB -->
-            <div class="tab-pane fade" id="supervision" role="tabpanel" aria-labelledby="supervision-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-shield-check me-2 text-primary"></i>{{ 'Supervision' if lang == 'en' else 'הדרכה' }}</h5>
-                        <button class="btn btn-sm btn-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#addPatientSupervisionForm" aria-expanded="false">
-                            <i class="bi bi-plus-circle me-1"></i>{{ 'Add Supervision' if lang == 'en' else 'הוסף הדרכה' }}
-                        </button>
-                    </div>
-                    <div class="card-body p-4">
-                        <div class="collapse mb-4" id="addPatientSupervisionForm">
-                            <div class="border rounded-4 p-3 bg-light-subtle">
-                                <form method="post" action="{{ url_for('add_patient_supervision', patient_id=patient['id']) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="row g-3">
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold">{{ 'Date' if lang == 'en' else 'תאריך' }}</label>
-                                            <input type="date" name="supervision_date" class="form-control" required>
+                <div class="notes-timeline">
+                    {% for note in notes %}
+                        <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="badge bg-light text-primary border rounded-pill">Session {{ note['session_number'] or 'N/A' }}</div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 smallest border-0" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                            </div>
+
+                            <div class="text-dark mb-3">{{ note['content'] }}</div>
+
+                            {% if note['patient_appearance'] or note['key_topics'] %}
+                                <div class="bg-light p-2 rounded-3 mb-3 small border">
+                                    {% if note['patient_appearance'] %}
+                                        <div class="mb-1"><strong>Appearance/Demeanor:</strong> {{ note['patient_appearance'] }}</div>
+                                    {% endif %}
+                                    {% if note['key_topics'] %}
+                                        <div><strong>Key Topics:</strong> <span class="badge bg-secondary rounded-pill px-2">{{ note['key_topics'] }}</span></div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+
+                            <div class="text-muted smaller d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-clock me-1"></i> {{ note['created_at'] }}</span>
+                            </div>
+
+                            <!-- Edit Note Modal -->
+                            <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Edit Clinical Note</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
-                                        <div class="col-md-8">
-                                            <label class="form-label small fw-bold">{{ 'Supervisor' if lang == 'en' else 'מדריך' }}</label>
-                                            <input type="text" name="supervisor_name" class="form-control" placeholder="{{ 'Supervisor name' if lang == 'en' else 'שם המדריך' }}">
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label small fw-bold">{{ 'Content' if lang == 'en' else 'תוכן' }}</label>
-                                            <textarea name="content" class="form-control" rows="6" required placeholder="{{ 'Supervision content and insights...' if lang == 'en' else 'תוכן ההדרכה...' }}"></textarea>
-                                        </div>
-                                        <div class="col-12 d-flex justify-content-end gap-2">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-toggle="collapse" data-bs-target="#addPatientSupervisionForm">{{ 'Cancel' if lang == 'en' else 'ביטול' }}</button>
-                                            <button type="submit" class="btn btn-primary btn-sm rounded-pill"><i class="bi bi-save me-1"></i>{{ 'Save' if lang == 'en' else 'שמור' }}</button>
-                                        </div>
+                                        <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}">
+                                            <div class="modal-body">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label smallest text-uppercase fw-bold">Session Number</label>
+                                                        <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
+                                                        <input type="text" name="key_topics" class="form-control" placeholder="e.g. Anxiety, Career" value="{{ note['key_topics'] or '' }}">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label smallest text-uppercase fw-bold">Patient Appearance</label>
+                                                        <input type="text" name="patient_appearance" class="form-control" placeholder="e.g. Tired, Anxious, Well-groomed" value="{{ note['patient_appearance'] or '' }}">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label smallest text-uppercase fw-bold">Note Content</label>
+                                                        <textarea name="content" class="form-control" rows="5" required>{{ note['content'] }}</textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                <button type="submit" class="btn btn-primary">Save changes</button>
+                                            </div>
+                                        </form>
                                     </div>
-                                </form>
+                                </div>
                             </div>
                         </div>
                         {% for sup in supervisions %}
@@ -276,6 +295,50 @@
                             </div>
                         </form>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Note Modal -->
+        <div class="modal fade" id="addNoteModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold text-primary"><i class="bi bi-journal-plus me-2"></i>New Clinical Note</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data">
+                        <div class="modal-body">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label smallest text-uppercase fw-bold">Session Number</label>
+                                    <input type="number" name="session_number" class="form-control" placeholder="e.g. 1">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
+                                    <input type="text" name="key_topics" class="form-control" placeholder="e.g. Anxiety, Career">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label smallest text-uppercase fw-bold">Patient Appearance & Demeanor</label>
+                                    <input type="text" name="patient_appearance" class="form-control" placeholder="e.g. Tired, Anxious, Well-groomed">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label smallest text-uppercase fw-bold">Main Content</label>
+                                    <textarea name="content" class="form-control bg-light" rows="5" required placeholder="Enter clinical observations and notes..."></textarea>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label smallest text-uppercase fw-bold">Attach File (Optional)</label>
+                                    <input type="file" name="file" class="form-control">
+                                    <small class="text-muted smallest">Linked files will sync with the patient's main file storage.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer border-top-0">
+                            <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Save Note</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -445,257 +508,67 @@
 .nav-tabs .nav-link.active { border-bottom: 3px solid #0d6efd !important; color: #0d6efd !important; }
 </style>
 
-{% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const mobileQuery = window.matchMedia('(max-width: 575.98px)');
-    if (mobileQuery.matches) {
-        document.body.classList.add('mobile-read-mode');
-        document.querySelectorAll('#patientTabsContent form[method="post"]').forEach((form) => {
-            form.addEventListener('submit', function(event) {
-                event.preventDefault();
-            });
-        });
-    }
-
-    const tabs = document.querySelectorAll('#patientTabs button[data-bs-toggle="tab"]');
-    const messagesUnreadBadge = document.getElementById('messagesUnreadBadge');
-    const intakeEvaluationFormBlock = document.getElementById('intakeEvaluationFormBlock');
-    const intakeFormHost = document.getElementById('intakeFormHost');
-    if (intakeEvaluationFormBlock && intakeFormHost) {
-        intakeFormHost.appendChild(intakeEvaluationFormBlock);
-    }
-
-    let initialTab = '{{ active_tab or "info" }}';
-    if (initialTab === 'info' && (['initial-intake', 'diagnosee'].includes('{{ patient["patient_type"] }}') || '{{ 1 if patient["has_intake_tab"] else 0 }}' === '1')) {
-        initialTab = 'intake';
-    }
-    const requestedTabButton = document.querySelector(`#${initialTab}-tab`);
-    if (requestedTabButton) {
-        bootstrap.Tab.getOrCreateInstance(requestedTabButton).show();
-    }
-
-    function currentTabId() {
-        const activeBtn = document.querySelector('#patientTabs .nav-link.active');
-        if (!activeBtn || !activeBtn.id.endsWith('-tab')) {
-            return 'info';
-        }
-        return activeBtn.id.replace('-tab', '');
-    }
-
-    function syncActiveTabInputs() {
-        const active = currentTabId();
-        document.querySelectorAll('form').forEach((form) => {
-            let hidden = form.querySelector('input[name="active_tab"]');
-            if (!hidden) {
-                hidden = document.createElement('input');
-                hidden.type = 'hidden';
-                hidden.name = 'active_tab';
-                form.appendChild(hidden);
-            }
-            hidden.value = active;
-        });
-    }
-
-    syncActiveTabInputs();
-    tabs.forEach((tab) => {
-        tab.addEventListener('shown.bs.tab', function() {
-            const tabId = currentTabId();
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', tabId);
-            window.history.replaceState({}, '', url.toString());
-            syncActiveTabInputs();
-            if (tabId === 'messages' && messagesUnreadBadge) {
-                messagesUnreadBadge.remove();
+    // Session Frequency Chart
+    const ctxSession = document.getElementById('sessionChart');
+    if (ctxSession) {
+        new Chart(ctxSession, {
+            type: 'bar',
+            data: {
+                labels: {{ chart_data['session_labels']|safe }},
+                datasets: [{
+                    label: 'Sessions',
+                    data: {{ chart_data['session_data']|safe }},
+                    backgroundColor: 'rgba(13, 110, 253, 0.5)',
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
             }
         });
-    });
-
-    const disabilityStatus = document.getElementById('intakeDisabilityStatus');
-    const disabilityPercent = document.getElementById('intakeDisabilityPercent');
-    const disabilityPercentWrap = document.getElementById('intakeDisabilityPercentWrap');
-    const meetingLocation = document.getElementById('intakeMeetingLocation');
-    const meetingLocationSpecifyWrap = document.getElementById('intakeMeetingLocationSpecifyWrap');
-    const meetingLocationSpecify = document.getElementById('intakeMeetingLocationSpecify');
-    const guardianStatus = document.querySelector('select[name="intake_guardian_status"]');
-    const guardianSpecifyWrap = document.getElementById('intakeGuardianSpecifyWrap');
-    const guardianSpecifyInput = document.querySelector('input[name="intake_guardian_by_whom"]');
-    const livingWith = document.querySelector('select[name="intake_living_with"]');
-    const livingWithOtherWrap = document.getElementById('intakeLivingWithOtherWrap');
-    const livingWithOtherInput = document.querySelector('input[name="intake_living_with_other"]');
-    const referralTargetBoxes = document.querySelectorAll('input[name="intake_referral_target"]');
-    const referralDetailsWrap = document.getElementById('intakeReferralDetailsWrap');
-    const referralDetailsInput = document.querySelector('textarea[name="intake_referral_details"]');
-
-    function toggleFieldGroup(wrap, input, enabled) {
-        if (!wrap || !input) {
-            return;
-        }
-        wrap.classList.toggle('d-none', !enabled);
-        input.disabled = !enabled;
     }
 
-    function syncMeetingLocationSpecify() {
-        const enabled = meetingLocation && meetingLocation.value === 'אחר';
-        toggleFieldGroup(meetingLocationSpecifyWrap, meetingLocationSpecify, enabled);
-    }
-
-    function syncGuardianSpecify() {
-        const enabled = guardianStatus && guardianStatus.value && guardianStatus.value !== 'לא';
-        toggleFieldGroup(guardianSpecifyWrap, guardianSpecifyInput, enabled);
-    }
-
-    function syncLivingWithOther() {
-        const enabled = livingWith && livingWith.value === 'אחר';
-        toggleFieldGroup(livingWithOtherWrap, livingWithOtherInput, enabled);
-    }
-
-    function syncReferralDetails() {
-        if (!referralDetailsWrap || !referralDetailsInput) {
-            return;
-        }
-        const hasTargets = Array.from(referralTargetBoxes || []).some((box) => box.checked && box.value !== 'לא מופנה');
-        referralDetailsWrap.classList.toggle('d-none', !hasTargets);
-        referralDetailsInput.disabled = !hasTargets;
-    }
-
-    if (disabilityStatus && disabilityPercent) {
-        const syncDisabilityPercent = () => {
-            const enabled = disabilityStatus.value === 'כן';
-            disabilityPercent.disabled = !enabled;
-            if (disabilityPercentWrap) {
-                disabilityPercentWrap.classList.toggle('d-none', !enabled);
+    // Key Topics Frequency Chart
+    const ctxTopics = document.getElementById('topicsChart');
+    if (ctxTopics) {
+        new Chart(ctxTopics, {
+            type: 'doughnut',
+            data: {
+                labels: {{ chart_data['topic_labels']|safe }},
+                datasets: [{
+                    label: 'Frequency',
+                    data: {{ chart_data['topic_data']|safe }},
+                    backgroundColor: [
+                        'rgba(13, 110, 253, 0.7)',
+                        'rgba(25, 135, 84, 0.7)',
+                        'rgba(220, 53, 69, 0.7)',
+                        'rgba(255, 193, 7, 0.7)',
+                        'rgba(13, 202, 240, 0.7)',
+                        'rgba(111, 66, 193, 0.7)'
+                    ]
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { boxWidth: 12, font: { size: 10 } }
+                    }
+                }
             }
-            if (!enabled && disabilityPercent.value.trim() === '') {
-                disabilityPercent.placeholder = '';
-            }
-        };
-        disabilityStatus.addEventListener('change', syncDisabilityPercent);
-        syncDisabilityPercent();
-    }
-
-    if (meetingLocation) {
-        meetingLocation.addEventListener('change', syncMeetingLocationSpecify);
-        syncMeetingLocationSpecify();
-    }
-
-    if (guardianStatus) {
-        guardianStatus.addEventListener('change', syncGuardianSpecify);
-        syncGuardianSpecify();
-    }
-
-    if (livingWith) {
-        livingWith.addEventListener('change', syncLivingWithOther);
-        syncLivingWithOther();
-    }
-
-    if (referralTargetBoxes.length) {
-        referralTargetBoxes.forEach((box) => box.addEventListener('change', syncReferralDetails));
-        syncReferralDetails();
-    }
-
-    const selfHarmLevel = document.getElementById('intakeSelfHarmLevel');
-    const selfHarmRecent = document.getElementById('intakeSelfHarmRecent');
-    const selfHarmCount = document.getElementById('intakeSelfHarmCount');
-    if (selfHarmLevel && selfHarmRecent && selfHarmCount) {
-        const syncSelfHarmFields = () => {
-            const requiresDetails = selfHarmLevel.value && selfHarmLevel.value !== 'לא היה';
-            selfHarmRecent.disabled = !requiresDetails;
-            selfHarmCount.disabled = !requiresDetails;
-        };
-        selfHarmLevel.addEventListener('change', syncSelfHarmFields);
-        syncSelfHarmFields();
+        });
     }
 });
-
-function linkGdoc(pid) {
-    const btn = document.getElementById('gdocLinkBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
-    fetch(`/patient/${pid}/link-gdoc`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': '{{ csrf_token() }}'},
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (d.doc_url) {
-            alert('Google Doc created! Opening in a new tab…');
-            window.open(d.doc_url, '_blank');
-            location.reload();
-        } else {
-            alert('Error: ' + (d.error || 'Unknown error'));
-            if (btn) { btn.disabled = false; btn.textContent = 'Create & Link Google Doc'; }
-        }
-    })
-    .catch(() => {
-        alert('Request failed.');
-        if (btn) { btn.disabled = false; btn.textContent = 'Create & Link Google Doc'; }
-    });
-}
-
-function attachGdoc(pid) {
-    const urlInput = document.getElementById('gdocAttachUrl');
-    const docUrl = urlInput ? urlInput.value.trim() : '';
-    if (!docUrl) { alert('Please paste a Google Doc URL first.'); return; }
-    const csrf = '{{ csrf_token() }}';
-    fetch(`/patient/${pid}/attach-gdoc`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({ doc_url: docUrl })
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (d.status === 'ok') { location.reload(); }
-        else { alert('Error: ' + (d.error || 'Could not attach document.')); }
-    })
-    .catch(() => alert('Request failed.'));
-}
-
-function detachGdoc(pid) {
-    if (!confirm('Disconnect this Google Doc? The document itself will not be deleted.')) return;
-    fetch(`/patient/${pid}/detach-gdoc`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': '{{ csrf_token() }}'}
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (d.status === 'ok') { location.reload(); }
-        else { alert('Error: ' + (d.error || 'Could not disconnect document.')); }
-    })
-    .catch(() => alert('Request failed.'));
-}
-
-function showGdocChangePanel() {
-    const p = document.getElementById('gdocChangePanel');
-    if (p) p.classList.remove('d-none');
-}
-
-function hideGdocChangePanel() {
-    const p = document.getElementById('gdocChangePanel');
-    if (p) p.classList.add('d-none');
-}
-
-function syncFromGdoc(pid) {
-    const btn = document.getElementById('gdocSyncBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-    fetch(`/patient/${pid}/sync-from-gdoc`, {
-        method: 'POST',
-        headers: {'X-CSRFToken': '{{ csrf_token() }}'},
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (d.error) {
-            alert('Error: ' + d.error);
-        } else {
-            alert(`Synced ${d.synced} note(s) from Google Doc.`);
-            if (d.synced > 0) location.reload();
-        }
-        if (btn) { btn.disabled = false; btn.textContent = 'Sync Now'; }
-    })
-    .catch(() => {
-        alert('Request failed.');
-        if (btn) { btn.disabled = false; btn.textContent = 'Sync Now'; }
-    });
-}
 </script>
-{% endblock %}
 {% endblock %}

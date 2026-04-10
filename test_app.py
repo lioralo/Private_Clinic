@@ -261,9 +261,7 @@ class ClinicTestCase(unittest.TestCase):
 
         # Login as patient (no OTP token needed)
         rv = self.login('patient', 'password')
-        # "Current Balance" text might have changed in UI updates.
-        # Check for dashboard specific elements like "My Appointments" or "Financial Overview"
-        assert b'My Appointments' in rv.data or b'Financial Overview' in rv.data
+        assert b'Account Balance' in rv.data or b'Financial Summary' in rv.data  # Should be on dashboard
 
         # Try to access admin page
         rv = self.client.get('/add_patient', follow_redirects=True)

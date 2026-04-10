@@ -21,17 +21,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8f9fa; }
-        .bg-primary { background-color: #4f46e5 !important; }
-        .text-primary { color: #4f46e5 !important; }
-        .btn-primary { background-color: #4f46e5; border-color: #4f46e5; }
-        .btn-outline-primary { color: #4f46e5; border-color: #4f46e5; }
-        .btn-outline-primary:hover { background-color: #4f46e5; color: white; }
-        .shadow-sm { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important; }
-        .rounded-4 { border-radius: 1rem !important; }
-        .smallest { font-size: 0.75rem; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- FullCalendar CSS -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js'></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 sticky-top shadow-sm">
@@ -43,18 +37,25 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                {% if current_user.is_authenticated %}
-                    {% if current_user.role == 'admin' %}
-                    <ul class="navbar-nav me-auto">
-                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='ongoing') }}">Ongoing</a></li>
-                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='candidate') }}">Candidates</a></li>
-                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('patients', status='archived') }}">Archived</a></li>
-                        <li class="nav-item"><a class="nav-link fw-medium" href="{{ url_for('agenda') }}"><i class="bi bi-calendar-week me-1"></i> Agenda</a></li>
-                    </ul>
-                    <div class="d-flex align-items-center gap-2">
-                        <a href="{{ url_for('add_patient') }}" class="btn btn-light btn-sm fw-bold text-primary rounded-pill px-3">
-                            <i class="bi bi-person-plus-fill me-1"></i> New Patient
-                        </a>
+                <ul class="navbar-nav me-auto">
+                    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('patients', status='ongoing') }}">Ongoing</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('patients', status='candidate') }}">Candidates</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('patients', status='archived') }}">Archived</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('messages') }}">Messages</a>
+                        </li>
+                        <li class="nav-item ms-lg-2">
+                            <a class="btn btn-light btn-sm mt-1 fw-bold" href="{{ url_for('add_patient') }}">
+                                <i class="bi bi-person-plus-fill me-1"></i> Add Patient
+                            </a>
+                        </li>
                     {% endif %}
 
                     {% if current_user.role == 'patient' %}

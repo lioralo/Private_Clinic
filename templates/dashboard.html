@@ -26,6 +26,16 @@
             </div>
         </div>
 
+        <!-- Calendar Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>Book an Appointment</h5>
+            </div>
+            <div class="card-body p-4">
+                <div id='calendar'></div>
+            </div>
+        </div>
+
         <!-- Appointments Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
@@ -108,41 +118,35 @@
     </div>
 
     <div class="col-lg-4">
-        <!-- Messaging / Chat Interface -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 600px;">
-            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Messages</h5>
+        <!-- Secure Messaging Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-white sticky-lg-top" style="top: 100px; display: flex; flex-direction: column; max-height: 80vh;">
+            <div class="card-header bg-primary text-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-text-fill me-2"></i>Secure Messaging</h5>
             </div>
-            <div class="card-body p-0 d-flex flex-column bg-light">
-                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
-                    {% for msg in messages %}
-                        <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%;">
-                             <div class="d-flex justify-content-between align-items-start mb-1">
-                                <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
-                                    {% if msg.sender_id == current_user.id %}You{% else %}Therapist{% endif %}
-                                </strong>
-                                <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
-                            </div>
-                            <div class="message-content text-dark small" style="white-space: pre-wrap;">{{ msg.content }}</div>
+
+            <div class="card-body p-4 flex-grow-1 overflow-auto" id="chat-window" style="background: #f8f9fa;">
+                {% for message in messages %}
+                    <div class="mb-3 d-flex flex-column {% if message['sender_role'] == 'patient' %}align-items-end{% else %}align-items-start{% endif %}">
+                        <div class="d-inline-block p-3 rounded-4 shadow-sm {% if message['sender_role'] == 'patient' %}bg-primary text-white text-end{% else %}bg-white text-dark border{% endif %}" style="max-width: 85%;">
+                            {{ message['content'] }}
                         </div>
-                    {% else %}
-                         <div class="text-center py-5 mt-5">
-                            <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
-                            <p class="text-muted small">No messages yet. Start a conversation.</p>
-                        </div>
-                    {% endfor %}
-                </div>
-                
-                <div class="p-3 bg-white border-top">
-                    <form method="post" action="{{ url_for('contact_admin') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="input-group">
-                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Type your message..." required style="resize: none;"></textarea>
-                            <button type="submit" class="btn btn-primary fw-bold px-3">
-                                <i class="bi bi-send-fill"></i>
-                            </button>
-                        </div>
-                    </form>
+                        <span class="smallest text-muted mt-1">{{ message['timestamp'] }}</span>
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted p-4">No messages yet. Send a message to your therapist.</div>
+                {% endfor %}
+            </div>
+
+            <div class="card-footer bg-white border-top-0 p-3">
+                <form method="post" action="{{ url_for('contact_admin') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group">
+                        <input type="text" name="content" class="form-control rounded-start-pill py-2 px-3 border-primary" placeholder="Type a message..." required>
+                        <button type="submit" class="btn btn-primary rounded-end-pill px-4 fw-bold">Send</button>
+                    </div>
+                </form>
+                <div class="text-center mt-2">
+                    <p class="smallest text-muted mb-0">Responses are typically received within 24-48 business hours.</p>
                 </div>
             </div>
         </div>
@@ -157,6 +161,53 @@
 
 <style>
 .tracking-wider { letter-spacing: 0.05em; }
-.smallest { font-size: 0.7rem; }
+.placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
+#calendar {
+    min-height: 500px;
+}
 </style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var chatWindow = document.getElementById('chat-window');
+    if (chatWindow) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    var calendarEl = document.getElementById('calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        },
+        events: '/api/slots',
+        eventClick: function(info) {
+            if (info.event.title === 'Open') {
+                if (confirm('Book this slot from ' + info.event.startStr + ' to ' + info.event.endStr + '?')) {
+                    fetch('/api/slots/' + info.event.id + '/book', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token() }}'
+                        }
+                    }).then(response => {
+                        if (response.ok) {
+                            calendar.refetchEvents();
+                            alert('Slot booked successfully!');
+                        } else {
+                            alert('Failed to book slot.');
+                        }
+                    });
+                }
+            } else if (info.event.title === 'My Appointment') {
+                alert('You have already booked this slot.');
+            }
+        }
+    });
+    calendar.render();
+});
+</script>
 {% endblock %}

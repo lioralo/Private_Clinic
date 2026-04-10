@@ -3671,62 +3671,47 @@ def patient_detail(patient_id):
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
     schedules = db.execute('SELECT * FROM schedules WHERE patient_id = ? ORDER BY day_of_week, appointment_time', (patient_id,)).fetchall()
 
-    # Fetch messages between admin and this patient
-    messages = []
-    if user:
-        # Mark messages from this user as read
-        db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (user['id'], current_user.id))
-        db.commit()
+    # Chart data: Session Frequency (Last 6 Months)
+    from datetime import datetime
+    import json
 
-        messages = db.execute('''
-            SELECT * FROM messages
-            WHERE (sender_id = ? AND recipient_id = ?)
-               OR (sender_id = ? AND recipient_id = ?)
-            ORDER BY timestamp ASC
-        ''', (current_user.id, user['id'], user['id'], current_user.id)).fetchall()
+    # We will just count appointments per month for the last 6 months
+    # Simple SQLite date extraction
+    session_counts = db.execute('''
+        SELECT strftime('%Y-%m', appointment_date) as month, COUNT(*) as count
+        FROM appointments
+        WHERE patient_id = ?
+        GROUP BY month
+        ORDER BY month DESC
+        LIMIT 6
+    ''', (patient_id,)).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, schedules=schedules, messages=messages)
+    session_labels = [row['month'] for row in session_counts]
+    session_data = [row['count'] for row in session_counts]
+    session_labels.reverse()
+    session_data.reverse()
 
-@app.route('/patient/<int:patient_id>/send_message', methods=('POST',))
-@login_required
-def send_message(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
+    # Chart data: Key Topics Frequency
+    topics = db.execute('SELECT key_topics FROM notes WHERE patient_id = ? AND key_topics IS NOT NULL AND key_topics != ""', (patient_id,)).fetchall()
+    topic_counts = {}
+    for t in topics:
+        # Split by comma and strip whitespace
+        words = [w.strip().title() for w in t['key_topics'].split(',')]
+        for word in words:
+            if word:
+                topic_counts[word] = topic_counts.get(word, 0) + 1
 
-    content = request.form['content']
-    if content:
-        db = get_db()
-        user = db.execute('SELECT id FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+    topic_labels = list(topic_counts.keys())
+    topic_data = list(topic_counts.values())
 
-        if user:
-            db.execute('INSERT INTO messages (sender_id, recipient_id, content, is_read) VALUES (?, ?, ?, 0)',
-                       (current_user.id, user['id'], content))
-            db.commit()
-        else:
-            flash('Patient does not have an account to receive messages.')
+    chart_data = {
+        'session_labels': json.dumps(session_labels),
+        'session_data': json.dumps(session_data),
+        'topic_labels': json.dumps(topic_labels),
+        'topic_data': json.dumps(topic_data)
+    }
 
-    return redirect(url_for('patient_detail', patient_id=patient_id))
-
-@app.route('/message/<int:message_id>/edit', methods=('POST',))
-@login_required
-def edit_message(message_id):
-    content = request.form['content']
-    db = get_db()
-    msg = db.execute('SELECT sender_id, recipient_id FROM messages WHERE id = ?', (message_id,)).fetchone()
-
-    if msg and msg['sender_id'] == current_user.id:
-        db.execute('UPDATE messages SET content = ? WHERE id = ?', (content, message_id))
-        db.commit()
-
-        # Redirect based on role
-        if current_user.role == 'admin':
-            # Need to find patient_id from recipient_id (user -> patient)
-            patient_user = db.execute('SELECT patient_id FROM users WHERE id = ?', (msg['recipient_id'],)).fetchone()
-            return redirect(url_for('patient_detail', patient_id=patient_user['patient_id']))
-        else:
-            return redirect(url_for('dashboard'))
-
-    return "Unauthorized", 403
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, chart_data=chart_data)
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -3734,70 +3719,29 @@ def add_note(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form.get('content', '').strip()
-    session_number = request.form.get('session_number', '').strip()
-    note_date = request.form.get('note_date', '').strip()
-    patient_appearance = request.form.get('patient_appearance', '').strip()
-    behavior_flags = ','.join(request.form.getlist('behavior_flags'))
-    mood_summary = request.form.get('mood_summary', '').strip()
-    behavior_notes = request.form.get('behavior_notes', '').strip()
-    is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
-    missed_reason = request.form.get('missed_reason', '').strip()
-    if not is_missed_meeting:
-        missed_reason = ''
+    content = request.form['content']
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
 
-    if content or is_missed_meeting:
+    if content:
         db = get_db()
-        appointment_id = None
-        if note_date:
-            existing = db.execute(
-                'SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? LIMIT 1',
-                (patient_id, note_date)
-            ).fetchone()
-            if existing:
-                appointment_id = existing['id']
-
-        cur = db.execute(
-            '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
-                                  patient_appearance, behavior_checklist, mood_summary, behavior_notes,
-                                  is_missed_meeting, missed_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (
-                patient_id,
-                appointment_id,
-                session_number or None,
-                note_date or None,
-                content or 'Missed meeting documented.',
-                patient_appearance or None,
-                behavior_flags or None,
-                mood_summary or None,
-                behavior_notes or None,
-                is_missed_meeting,
-                missed_reason or None
-            )
-        )
-        note_id = cur.lastrowid
+        cursor = db.cursor()
+        cursor.execute('INSERT INTO notes (patient_id, session_number, patient_appearance, key_topics, content) VALUES (?, ?, ?, ?, ?)',
+                   (patient_id, session_number, patient_appearance, key_topics, content))
+        note_id = cursor.lastrowid
         db.commit()
 
-        files = request.files.getlist('files')
-        for file in files:
+        if 'file' in request.files:
+            file = request.files['file']
             if file and file.filename != '':
                 filename = secure_filename(file.filename)
-
-                patient_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'treatments', str(patient_id))
-                if not os.path.exists(patient_dir):
-                    os.makedirs(patient_dir)
-
-                filepath = os.path.join(patient_dir, filename)
-                file.save(filepath)
-
-                db.execute('INSERT INTO files (patient_id, treatment_id, filename) VALUES (?, ?, ?)', (patient_id, note_id, filename))
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                db.execute('INSERT INTO files (patient_id, note_id, filename) VALUES (?, ?, ?)',
+                           (patient_id, note_id, filename))
                 db.commit()
 
-    else:
-        flash('Content is required unless this is marked as a missed meeting.')
-
-    return redirect_to_patient_tab(patient_id, 'notes')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 @app.route('/note/<int:note_id>/edit', methods=('POST',))
 @login_required
@@ -3805,121 +3749,25 @@ def edit_note(note_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form.get('content', '').strip()
-    session_number = request.form.get('session_number', '').strip()
-    note_date = request.form.get('note_date', '').strip()
-    patient_appearance = request.form.get('patient_appearance', '').strip()
-    behavior_flags = ','.join(request.form.getlist('behavior_flags'))
-    mood_summary = request.form.get('mood_summary', '').strip()
-    behavior_notes = request.form.get('behavior_notes', '').strip()
-    is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
-    missed_reason = request.form.get('missed_reason', '').strip()
-    if not is_missed_meeting:
-        missed_reason = ''
+    content = request.form['content']
+    session_number = request.form.get('session_number')
+    patient_appearance = request.form.get('patient_appearance')
+    key_topics = request.form.get('key_topics')
 
     db = get_db()
-    note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
-    if note:
-        db.execute(
-            '''UPDATE notes
-               SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?,
-                   behavior_checklist = ?, mood_summary = ?, behavior_notes = ?,
-                   is_missed_meeting = ?, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
-               WHERE id = ?''',
-            (
-                content or 'Missed meeting documented.',
-                session_number or None,
-                note_date or None,
-                patient_appearance or None,
-                behavior_flags or None,
-                mood_summary or None,
-                behavior_notes or None,
-                is_missed_meeting,
-                missed_reason or None,
-                note_id
-            )
-        )
-        db.commit()
-        return redirect_to_patient_tab(note['patient_id'], 'notes')
-    return "Note not found", 404
-
-
-@app.route('/note/<int:note_id>/delete', methods=('POST',))
-@login_required
-def delete_note(note_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    note = db.execute('SELECT id, patient_id FROM notes WHERE id = ?', (note_id,)).fetchone()
-    if note is None:
+    note = db.execute('SELECT patient_id FROM notes WHERE id = ?', (note_id,)).fetchone()
+    if not note:
         return "Note not found", 404
 
-    db.execute('DELETE FROM notes WHERE id = ?', (note_id,))
+    db.execute('''
+        UPDATE notes
+        SET content = ?, session_number = ?, patient_appearance = ?, key_topics = ?
+        WHERE id = ?
+    ''', (content, session_number, patient_appearance, key_topics, note_id))
     db.commit()
-    flash('Meeting log deleted.')
-    return redirect_to_patient_tab(note['patient_id'], 'notes')
 
-@app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
-@login_required
-def add_goal(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    description = request.form.get('description', '').strip()
-    if description:
-        db = get_db()
-        db.execute('INSERT INTO goals (patient_id, description) VALUES (?, ?)', (patient_id, description))
-        db.commit()
-    return redirect_to_patient_tab(patient_id, 'info')
-
-@app.route('/goal/<int:goal_id>/toggle_status', methods=('POST',))
-@login_required
-def toggle_goal_status(goal_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
-    if goal:
-        new_status = 'achieved' if goal['status'] == 'active' else 'active'
-        db.execute('UPDATE goals SET status = ? WHERE id = ?', (new_status, goal_id))
-        db.commit()
-        return redirect_to_patient_tab(goal['patient_id'], 'info')
-    return "Goal not found", 404
-
-@app.route('/goal/<int:goal_id>/delete', methods=('POST',))
-@login_required
-def delete_goal(goal_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
-    if not goal:
-        return "Goal not found", 404
-    patient_id = goal['patient_id']
-    db.execute('DELETE FROM goals WHERE id = ?', (goal_id,))
-    db.commit()
-    return redirect_to_patient_tab(patient_id, 'info')
-
-@app.route('/goal/<int:goal_id>/edit', methods=('POST',))
-@login_required
-def edit_goal(goal_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    description = (request.form.get('description') or '').strip()
-    db = get_db()
-    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
-    if not goal:
-        return "Goal not found", 404
-    if description:
-        db.execute('UPDATE goals SET description = ? WHERE id = ?', (description, goal_id))
-        db.commit()
-    else:
-        flash('Goal description cannot be empty.')
-    return redirect_to_patient_tab(goal['patient_id'], 'info')
+    flash('Note updated successfully.')
+    return redirect(url_for('patient_detail', patient_id=note['patient_id']))
 
 @app.route('/patient/<int:patient_id>/add_file', methods=('POST',))
 @login_required
@@ -4731,1244 +4579,79 @@ def api_send_message():
 
     recipient_id = None
 
-    if current_user.role == 'patient':
-        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-        recipient_id = admin['id'] if admin else None
-    else:
-        recipient_id_raw = request.form.get('recipient_id')
-        if recipient_id_raw == 'all':
-            recipients = db.execute('''
-                SELECT u.id
-                FROM users u
-                JOIN patients p ON p.id = u.patient_id
-                WHERE u.role = 'patient'
-                  AND u.is_active = 1
-                  AND COALESCE(p.is_deleted, 0) = 0
-                ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
-                         p.name ASC
-            ''').fetchall()
-            for recipient in recipients:
-                db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
-                           (current_user.id, recipient['id'], content))
-            db.commit()
-            return jsonify({'status': 'success'})
-        try:
-            recipient_id = int(recipient_id_raw)
-        except (TypeError, ValueError):
-            recipient_id = None
-        if recipient_id is None:
-            return jsonify({'status': 'error', 'message': 'Recipient is required for admin messages.'}), 400
+    messages = db.execute('''
+        SELECT m.*, u.role as sender_role
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.sender_id = ? OR m.recipient_id = ?
+        ORDER BY m.timestamp ASC
+    ''', (current_user.id, current_user.id)).fetchall()
 
-    # Messages logic
-    admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-    messages = []
-    if admin:
-        # Mark messages from admin as read
-        db.execute('UPDATE messages SET is_read = 1 WHERE sender_id = ? AND recipient_id = ?', (admin['id'], current_user.id))
-        db.commit()
-
-        messages = db.execute('''
-            SELECT * FROM messages
-            WHERE (sender_id = ? AND recipient_id = ?)
-               OR (sender_id = ? AND recipient_id = ?)
-            ORDER BY timestamp ASC
-        ''', (current_user.id, admin['id'], admin['id'], current_user.id)).fetchall()
+    # Calculate debt
+    total_cost = db.execute('SELECT SUM(cost) as total FROM appointments WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
+    total_paid = db.execute('SELECT SUM(amount) as total FROM receipts WHERE patient_id = ?', (patient_id,)).fetchone()['total'] or 0
+    balance = total_cost - total_paid
 
     return render_template('dashboard.html', patient=patient, appointments=appointments, receipts=receipts, files=files, balance=balance, messages=messages)
+
+@app.route('/messages')
+@login_required
+def messages():
+    if current_user.role != 'admin':
+        return redirect(url_for('dashboard'))
+
+    db = get_db()
+
+    # Fetch all patients who have messages
+    patients_with_messages = db.execute('''
+        SELECT DISTINCT p.id, p.name
+        FROM patients p
+        JOIN users u ON u.patient_id = p.id
+        JOIN messages m ON m.sender_id = u.id OR m.recipient_id = u.id
+    ''').fetchall()
+
+    selected_patient_id = request.args.get('patient_id', type=int)
+    messages = []
+
+    if selected_patient_id:
+        user = db.execute('SELECT id FROM users WHERE patient_id = ?', (selected_patient_id,)).fetchone()
+        if user:
+            messages = db.execute('''
+                SELECT m.*, u.role as sender_role
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.sender_id = ? OR m.recipient_id = ?
+                ORDER BY m.timestamp ASC
+            ''', (user['id'], user['id'])).fetchall()
+
+    return render_template('messages.html', patients=patients_with_messages, messages=messages, selected_patient_id=selected_patient_id)
 
 @app.route('/contact_admin', methods=('POST',))
 @login_required
 def contact_admin():
-    if current_user.role != 'patient':
-        return "Unauthorized", 403
-
     content = request.form['content']
-    if content:
-        db = get_db()
-        admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
-        recipient_id = admin['id'] if admin else None
 
-        db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
-                   (current_user.id, recipient_id, content))
-        db.commit()
-        # flash('Message sent to your therapist.') # Removed to behave more like chat
+    if current_user.role == 'patient':
+        if content:
+            db = get_db()
+            admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
+            recipient_id = admin['id'] if admin else None
 
-    return redirect(url_for('patient_home'))
-
-
-@app.route('/groups/sessions/<int:session_id>/delete', methods=['POST'])
-@login_required
-def delete_group_session(session_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    existing = db.execute('SELECT id, group_id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
-    if not existing:
-        flash('Group session not found.')
-        return redirect(url_for('groups_dashboard'))
-
-    db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
-    db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
-    db.commit()
-    flash('Group session deleted.')
-    return redirect(url_for('group_detail', group_id=int(existing['group_id'])))
-
-
-@app.route('/api/groups/sessions/<int:session_id>/delete', methods=['POST'])
-@login_required
-def api_delete_group_session(session_id):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    existing = db.execute('SELECT id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
-    if not existing:
-        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
-
-    db.execute('DELETE FROM group_session_attendance WHERE session_id = ?', (session_id,))
-    db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-
-@app.route('/api/groups/sessions/<int:session_id>/link_supervision', methods=['POST'])
-@login_required
-def api_link_group_session_supervision(session_id):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    session_row = db.execute('SELECT id, group_id FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
-    if not session_row:
-        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
-
-    sup_id_raw = (request.form.get('supervision_id') or '').strip()
-    if not sup_id_raw:
-        db.execute('UPDATE group_sessions SET supervision_id = NULL WHERE id = ?', (session_id,))
-        db.commit()
-        return jsonify({'status': 'success'})
-
-    try:
-        sup_id = int(sup_id_raw)
-    except ValueError:
-        return jsonify({'status': 'error', 'message': 'Invalid supervision id.'}), 400
-
-    supervision_row = db.execute(
-        'SELECT id FROM supervisions WHERE id = ? AND group_id = ?',
-        (sup_id, int(session_row['group_id']))
-    ).fetchone()
-    if not supervision_row:
-        return jsonify({'status': 'error', 'message': 'Supervision record not found for this group.'}), 404
-
-    db.execute('UPDATE group_sessions SET supervision_id = ? WHERE id = ?', (sup_id, session_id))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-
-# ---------------------------------------------------------------------------
-# Google Calendar OAuth routes
-# ---------------------------------------------------------------------------
-
-
-@app.route('/api/google_calendar/status')
-@login_required
-def api_google_calendar_status():
-    try:
-        is_connected = gcal.is_connected(get_db())
-        return jsonify({'connected': is_connected})
-    except Exception as e:
-        return jsonify({'connected': False, 'error': str(e)})
-
-
-@app.route('/admin/google-calendar/status')
-@login_required
-def google_calendar_status():
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    if not gcal:
-        return jsonify({'connected': False, 'reason': 'Google libraries not installed.'})
-    connected = gcal.is_connected(db)
-    calendars = gcal.list_calendars(db) if connected else []
-    calendar_id = gcal.get_calendar_id(db) if connected else None
-    return jsonify({
-        'connected': connected,
-        'google_libs': gcal.GOOGLE_LIBS_AVAILABLE,
-        'client_configured': gcal._client_secrets_available() if gcal else False,
-        'calendar_id': calendar_id,
-        'calendars': calendars,
-    })
-
-
-@app.route('/admin/google-calendar/connect')
-@login_required
-def google_calendar_connect():
-    if current_user.role != 'admin':
-        flash('Unauthorized.')
-        return redirect(url_for('admin_profile'))
-    if not gcal:
-        flash('Google API libraries are not installed. Run: pip install google-auth-oauthlib google-api-python-client')
-        return redirect(url_for('admin_profile'))
-    if not gcal._client_secrets_available():
-        flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
-        return redirect(url_for('admin_profile'))
-    try:
-        auth_url, state, code_verifier = gcal.get_authorization_url()
-        session['gcal_oauth_state'] = state
-        if code_verifier:
-            session['gcal_code_verifier'] = code_verifier
-        return redirect(auth_url)
-    except Exception as exc:
-        flash(escape(f'Failed to initiate Google Calendar connection: {exc}'))
-        return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/google-calendar/callback')
-@login_required
-def google_calendar_callback():
-    if current_user.role != 'admin':
-        flash('Unauthorized.')
-        return redirect(url_for('admin_profile'))
-    code = request.args.get('code')
-    state = request.args.get('state')
-    stored_state = session.pop('gcal_oauth_state', None)
-    if not code:
-        flash('Google authorisation was cancelled or failed.')
-        return redirect(url_for('admin_profile'))
-    if stored_state and state != stored_state:
-        flash('OAuth state mismatch – please try connecting again.')
-        return redirect(url_for('admin_profile'))
-    try:
-        code_verifier = session.pop('gcal_code_verifier', None)
-        creds = gcal.exchange_code_for_tokens(code, state, code_verifier=code_verifier)
-        db = get_db()
-        calendar_id = request.args.get('calendar_id', 'primary')
-        gcal.save_credentials(db, creds, calendar_id=calendar_id)
-        flash('Google Calendar connected successfully!')
-    except Exception as exc:
-        flash(escape(f'Failed to complete Google Calendar connection: {exc}'))
-    return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/google-calendar/disconnect', methods=['POST'])
-@login_required
-def google_calendar_disconnect():
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    if gcal:
-        gcal.delete_credentials(db)
-    flash('Google Calendar disconnected.')
-    return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/google-calendar/set-calendar', methods=['POST'])
-@login_required
-def google_calendar_set_calendar():
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    calendar_id = (request.form.get('calendar_id') or 'primary').strip()
-    db = get_db()
-    if gcal and gcal.is_connected(db):
-        creds = gcal.load_credentials(db)
-        if creds:
-            gcal.save_credentials(db, creds, calendar_id=calendar_id)
-            return jsonify({'status': 'success', 'calendar_id': calendar_id})
-    return jsonify({'status': 'error', 'message': 'Not connected to Google Calendar'}), 400
-
-
-# ---------------------------------------------------------------------------
-# Google Docs helper
-# ---------------------------------------------------------------------------
-
-def _pull_gdoc_notes(db, patient):
-    """
-    Read the linked Google Doc, parse session blocks, and upsert into the
-    notes table.  Returns (synced_count, error_string_or_None).
-
-    - [note:new] blocks  → INSERT; carry forward mood/appearance/checklist
-      from most recent existing note (or blank); stamp doc with [note:id=N].
-    - [note:id=N] blocks → UPDATE content if it has changed.
-    """
-    if not gdocs:
-        return 0, 'google_docs module not available'
-    creds = gcal.load_credentials(db) if gcal else None
-    if not creds:
-        return 0, 'Not connected to Google'
-    creds = gcal._refresh_and_save(db, creds)
-
-    doc_id = patient['gdoc_id']
-    try:
-        full_text = gdocs.read_doc_text(creds, doc_id)
-    except Exception as exc:
-        return 0, str(exc)
-
-    parsed = gdocs.parse_doc_into_notes(full_text)
-
-    # Carry-forward values from the most recent existing DB note
-    prev = db.execute(
-        'SELECT mood_summary, patient_appearance, behavior_checklist '
-        'FROM notes WHERE patient_id = ? ORDER BY note_date DESC, id DESC LIMIT 1',
-        (patient['id'],)
-    ).fetchone()
-    carry = {
-        'mood_summary':       (prev['mood_summary']       if prev else '') or '',
-        'patient_appearance': (prev['patient_appearance'] if prev else '') or '',
-        'behavior_checklist': (prev['behavior_checklist'] if prev else '') or '',
-    }
-
-    synced = 0
-    for item in parsed:
-        if item['note_tag'] == 'new':
-            row = db.execute(
-                'INSERT INTO notes '
-                '(patient_id, note_date, session_number, content, '
-                ' mood_summary, patient_appearance, behavior_checklist) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (patient['id'], item['note_date'], item['session_number'],
-                 item['content'],
-                 carry['mood_summary'], carry['patient_appearance'],
-                 carry['behavior_checklist'])
-            )
-            new_id = row.lastrowid
+            db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                       (current_user.id, recipient_id, content))
             db.commit()
-            try:
-                gdocs.stamp_note_id_in_doc(creds, doc_id, new_id)
-            except Exception:
-                pass
-            synced += 1
-        elif isinstance(item['note_tag'], int):
-            note_id = item['note_tag']
-            existing = db.execute(
-                'SELECT id, content FROM notes WHERE id = ? AND patient_id = ?',
-                (note_id, patient['id'])
-            ).fetchone()
-            if existing and existing['content'] != item['content']:
-                db.execute('UPDATE notes SET content = ? WHERE id = ?',
-                           (item['content'], note_id))
+            flash('Message sent to your therapist.')
+        return redirect(url_for('dashboard'))
+    elif current_user.role == 'admin':
+        patient_id = request.form.get('patient_id')
+        if content and patient_id:
+            db = get_db()
+            patient_user = db.execute("SELECT id FROM users WHERE patient_id = ?", (patient_id,)).fetchone()
+            if patient_user:
+                db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                           (current_user.id, patient_user['id'], content))
                 db.commit()
-                synced += 1
-
-    return synced, None
-
-
-# ---------------------------------------------------------------------------
-# Google Docs routes
-# ---------------------------------------------------------------------------
-
-@app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
-@login_required
-def link_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    if not gdocs:
-        return jsonify({'error': 'google_docs module not available'}), 500
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    if not gcal:
-        return jsonify({'error': 'Google libraries not installed'}), 500
-    creds = gcal.load_credentials(db)
-    if not creds:
-        return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
-    creds = gcal._refresh_and_save(db, creds)
-    try:
-        doc_id = gdocs.create_patient_doc(creds, patient['name'])
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-
-    # Optionally register a Drive Watch webhook
-    webhook_url = (request.form.get('webhook_url') or '').strip()
-    channel_id, expiry = None, None
-    if webhook_url:
-        try:
-            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
-        except Exception:
-            pass  # webhook is optional; manual sync still works
-
-    db.execute(
-        'UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
-        (doc_id, channel_id, expiry, patient_id)
-    )
-    db.commit()
-    return jsonify({
-        'status':  'ok',
-        'doc_id':  doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-    })
-
-
-@app.route('/patient/<int:patient_id>/attach-gdoc', methods=['POST'])
-@login_required
-def attach_gdoc(patient_id):
-    """Link an existing Google Doc to a patient by URL or document ID."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    doc_url = request.form.get('doc_url', '').strip()
-    if not doc_url:
-        return jsonify({'error': 'No document URL provided'}), 400
-    import re as _re
-    m = _re.search(r'/document/d/([a-zA-Z0-9_-]+)', doc_url)
-    doc_id = m.group(1) if m else doc_url.strip()
-    if not doc_id:
-        return jsonify({'error': 'Invalid document URL or ID'}), 400
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    db.execute('UPDATE patients SET gdoc_id = ? WHERE id = ?', (doc_id, patient_id))
-    db.commit()
-    return jsonify({
-        'status': 'ok',
-        'doc_id': doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-    })
-
-
-@app.route('/patient/<int:patient_id>/detach-gdoc', methods=['POST'])
-@login_required
-def detach_gdoc(patient_id):
-    """Unlink the Google Doc from a patient (does not delete the doc itself)."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    db.execute(
-        'UPDATE patients SET gdoc_id = NULL, gdoc_watch_channel = NULL, gdoc_watch_expiry = NULL WHERE id = ?',
-        (patient_id,)
-    )
-    db.commit()
-    return jsonify({'status': 'ok'})
-
-
-@app.route('/patient/<int:patient_id>/open-gdoc')
-@login_required
-def open_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return 'Unauthorized', 403
-    db = get_db()
-    patient = db.execute('SELECT gdoc_id FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient or not patient['gdoc_id']:
-        flash('No Google Doc linked for this patient.')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
-    return redirect(f'https://docs.google.com/document/d/{patient["gdoc_id"]}/edit')
-
-
-@app.route('/patient/<int:patient_id>/sync-from-gdoc', methods=['POST'])
-@login_required
-def sync_from_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    if not gdocs:
-        return jsonify({'error': 'google_docs module not available'}), 500
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient or not patient['gdoc_id']:
-        return jsonify({'error': 'No Google Doc linked'}), 400
-    count, err = _pull_gdoc_notes(db, patient)
-    if err:
-        return jsonify({'error': err}), 500
-    return jsonify({'status': 'ok', 'synced': count})
-
-
-@app.route('/api/gdoc/webhook', methods=['POST'])
-@csrf.exempt
-def gdoc_webhook():
-    channel_id = request.headers.get('X-Goog-Channel-ID')
-    if not channel_id:
-        return '', 200
-    db = get_db()
-    patient = db.execute(
-        'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
-    ).fetchone()
-    if patient and patient['gdoc_id'] and gdocs:
-        try:
-            _pull_gdoc_notes(db, patient)
-        except Exception:
-            pass
-    return '', 200
-
-
-@app.route('/admin/profile', methods=['GET', 'POST'])
-@login_required
-def admin_profile():
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
-    if admin is None:
-        return "Admin not found", 404
-
-    if request.method == 'POST':
-        display_name = (request.form.get('display_name') or '').strip() or admin['username']
-        email = (request.form.get('email') or '').strip() or None
-        phone = (request.form.get('phone') or '').strip() or None
-        id_number = (request.form.get('id_number') or '').strip() or None
-        birth_date = request.form.get('birth_date') or None
-
-        db.execute('''
-            UPDATE users
-            SET display_name = ?, email = ?, phone = ?, id_number = ?, birth_date = ?
-            WHERE id = ?
-        ''', (display_name, email, phone, id_number, birth_date, current_user.id))
-        db.commit()
-        flash('Admin profile updated.')
-        return redirect(url_for('admin_profile'))
-
-    backup_files = list_encrypted_backups()
-    pending_secret = session.get('pending_totp_secret')
-    totp_uri = _admin_totp_uri(admin, pending_secret) if pending_secret else None
-    return render_template(
-        'admin_profile.html',
-        admin=admin,
-        backup_files=backup_files,
-        pending_totp_secret=pending_secret,
-        totp_uri=totp_uri,
-        totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
-    )
-
-
-@app.route('/admin/setup_authenticator', methods=['POST'])
-@login_required
-def setup_authenticator():
-    if current_user.role != 'admin':
-        return 'Unauthorized', 403
-
-    db = get_db()
-    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
-    if not admin:
-        return 'Admin not found', 404
-
-    action = (request.form.get('action') or '').strip().lower()
-    if action == 'start':
-        session['pending_totp_secret'] = pyotp.random_base32()
-        flash('Authenticator setup started. Scan the QR code and verify with a code.')
-        return redirect(url_for('admin_profile'))
-
-    if action == 'disable':
-        db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?', (current_user.id,))
-        db.commit()
-        session.pop('pending_totp_secret', None)
-        flash('Authenticator login has been disabled.')
-        return redirect(url_for('admin_profile'))
-
-    if action == 'verify':
-        pending_secret = session.get('pending_totp_secret')
-        otp_code = (request.form.get('otp_code') or '').strip()
-        if not pending_secret:
-            flash('Start setup first, then verify your code.')
-            return redirect(url_for('admin_profile'))
-        if not _verify_totp_code(pending_secret, otp_code):
-            flash('Invalid authenticator code. Please try again.')
-            return redirect(url_for('admin_profile'))
-
-        db.execute('UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?', (pending_secret, current_user.id))
-        db.commit()
-        session.pop('pending_totp_secret', None)
-        flash('Authenticator has been enabled for admin login.')
-        return redirect(url_for('admin_profile'))
-
-    flash('Invalid authenticator action.')
-    return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/change_password', methods=['POST'])
-@login_required
-def admin_change_password():
-    if current_user.role != 'admin':
-        return 'Unauthorized', 403
-
-    db = get_db()
-    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
-    if not admin:
-        return 'Admin not found', 404
-
-    current_password = (request.form.get('current_password') or '').strip()
-    new_password = (request.form.get('new_password') or '').strip()
-    confirm_password = (request.form.get('confirm_password') or '').strip()
-    otp_code = (request.form.get('otp_code') or '').strip()
-
-    if not check_password_hash(admin['password_hash'], current_password):
-        flash('Current password is incorrect.')
-        return redirect(url_for('admin_profile'))
-
-    if len(new_password) < 5:
-        flash('New password must include at least 5 characters.')
-        return redirect(url_for('admin_profile'))
-
-    if new_password != confirm_password:
-        flash('New password confirmation does not match.')
-        return redirect(url_for('admin_profile'))
-
-    if not admin['totp_enabled'] or not admin['totp_secret']:
-        flash('Enable authenticator first to change the admin password.')
-        return redirect(url_for('admin_profile'))
-
-    if not _verify_totp_code(admin['totp_secret'], otp_code):
-        flash('Invalid authenticator code. Password was not changed.')
-        return redirect(url_for('admin_profile'))
-
-    db.execute(
-        'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
-        (generate_password_hash(new_password), current_user.id)
-    )
-    db.commit()
-    flash('Admin password updated successfully.')
-    return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/backup_now', methods=['POST'])
-@login_required
-def backup_now():
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    database = app.config.get('DATABASE', DATABASE)
-    try:
-        backup_path = perform_encrypted_backup(database)
-        flash(escape(f'Encrypted backup created: {backup_path}'))
-    except Exception as exc:
-        flash(escape(f'Backup failed: {exc}'))
-    return redirect(url_for('admin_profile'))
-
-
-@app.route('/admin/restore_backup', methods=['POST'])
-@login_required
-def restore_backup_now():
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    selected_backup = (request.form.get('backup_file') or '').strip() or None
-    database = app.config.get('DATABASE', DATABASE)
-
-    try:
-        restored_from, safety_copy = perform_encrypted_restore(database, selected_backup)
-        flash(escape(f'Restore completed from: {restored_from}. Safety copy created: {safety_copy}'))
-    except Exception as exc:
-        flash(escape(f'Restore failed: {exc}'))
-    return redirect(url_for('admin_profile'))
-
-@app.route('/patient/<int:patient_id>/convert', methods=('POST',))
-@login_required
-def convert_patient(patient_id):
-
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-
-    start_date = request.form.get('start_date', '').strip()
-    time = request.form.get('time', '').strip()
-    duration = request.form.get('duration', 60)
-    interval = request.form.get('interval', 1)
-    cost = request.form.get('cost', 0)
-    meeting_type = request.form.get('meeting_type', 'in-person')
-    meeting_link = request.form.get('meeting_link', '')
-
-    # Validate required fields
-    if not start_date or not time:
-        flash('Start date and time are required!', 'error')
-        return redirect_to_patient_tab(patient_id, 'info')
-
-    # Validate date and time formats
-    try:
-        datetime.fromisoformat(start_date)
-        datetime.strptime(time, '%H:%M')
-    except ValueError as e:
-        flash(escape(f'Invalid date or time format: {str(e)}'), 'error')
-        return redirect_to_patient_tab(patient_id, 'info')
-
-    # Convert types
-    try:
-        duration = int(duration)
-        interval = int(interval)
-        cost = float(cost) if cost else 0
-    except (ValueError, TypeError):
-        flash('Invalid duration, interval, or cost value!', 'error')
-        return redirect_to_patient_tab(patient_id, 'info')
-
-    # Get recurrence limit
-    limit_type = request.form.get('recurrence_limit_type')
-    recurrence_end_date = None
-    recurrence_count = None
-    
-    if limit_type == 'date':
-        recurrence_end_date = request.form.get('recurrence_end_date', '').strip()
-        if recurrence_end_date:
-            try:
-                datetime.fromisoformat(recurrence_end_date)
-            except ValueError:
-                flash('Invalid recurrence end date!', 'error')
-                return redirect_to_patient_tab(patient_id, 'info')
-    elif limit_type == 'count':
-        try:
-            recurrence_count = int(request.form.get('recurrence_count', 12))
-            if recurrence_count <= 0:
-                recurrence_count = 12
-        except ValueError:
-            recurrence_count = 12
-
-    # Get checked days (multiple values)
-    days_list = request.form.getlist('days')
-    days_str = ','.join(str(d) for d in days_list if d.strip().isdigit()) if days_list else None
-
-    try:
-        # Update patient status
-        db.execute("UPDATE patients SET status = 'ongoing' WHERE id = ?", (patient_id,))
-
-        # Create recurring appointment
-        db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes, 
-                       is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, 
-                                             recurrence_end_date, recurrence_count, recurrence_group_id)
-                                            VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)''',
-                   (patient_id, start_date, time, cost, duration, interval, days_str, 
-                                        meeting_type, meeting_link, recurrence_end_date, recurrence_count, build_recurrence_group_id()))
-
-        # Log the action
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if patient:
-            details = f"Patient {patient['name']} converted to ongoing status with recurring appointment starting {start_date} at {time}."
-            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', 
-                       (patient_id, 'convert', details))
-
-        db.commit()
-        flash('Patient converted to ongoing successfully with recurring appointments.', 'success')
-    except sqlite3.IntegrityError as e:
-        db.rollback()
-        flash(escape(f'Database error: {str(e)}'), 'error')
-    except Exception as e:
-        db.rollback()
-        flash(escape(f'Error converting patient: {str(e)}'), 'error')
-
-    return redirect_to_patient_tab(patient_id, 'info')
-
-@app.route('/patient/<int:patient_id>/delete', methods=('POST',))
-@login_required
-def delete_patient(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return "Patient not found", 404
-
-    db.execute('''
-        UPDATE patients
-        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, status = 'archived'
-        WHERE id = ?
-    ''', (patient_id,))
-    db.execute('UPDATE users SET is_active = 0 WHERE patient_id = ?', (patient_id,))
-    db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-               (patient_id, 'delete', f"Patient {patient['name']} marked as deleted."))
-    db.commit()
-    flash('Patient moved to deleted records.')
-    return redirect(url_for('crm_dashboard', status='all'))
-
-@app.route('/admin/profile/name', methods=('POST',))
-@login_required
-def update_admin_profile_name():
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    new_name = request.form.get('display_name', '').strip()
-    if not new_name:
-        flash('Admin name is required.')
-        return redirect(request.referrer or url_for('crm_dashboard'))
-
-    db = get_db()
-    db.execute('UPDATE users SET display_name = ? WHERE id = ?', (new_name, current_user.id))
-    db.commit()
-    flash('Admin display name updated.')
-    return redirect(request.referrer or url_for('crm_dashboard'))
-
-def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
-    occ_date = parse_date_safe(occurrence_date_raw)
-    if not occ_date:
-        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-    new_day = parse_date_safe(booking_date)
-    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-    new_end_dt = new_start_dt + timedelta(minutes=duration)
-    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
-    if conflict:
-        return jsonify({'status': 'error', 'message': conflict}), 409
-    existing_excluded = appt['excluded_dates'] or ''
-    excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-    if occ_date.isoformat() not in excluded_list:
-        excluded_list.append(occ_date.isoformat())
-    # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
-    # exclude it from the series too so the moved standalone is the only event on that day.
-    if new_day and new_day.isoformat() != occ_date.isoformat():
-        series_days = parse_recurrence_days(appt)
-        series_base = parse_date_safe(appt['appointment_date'])
-        series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
-        if (custom_weekday(new_day) in series_days
-                and series_base and new_day >= series_base
-                and (not series_end or new_day <= series_end)
-                and new_day.isoformat() not in excluded_list):
-            excluded_list.append(new_day.isoformat())
-    db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-               (','.join(excluded_list), appointment_id))
-    db.execute('''
-        INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes,
-         is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
-    ''', (appt['patient_id'], new_day.isoformat(),
-          parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          meeting_type, meeting_link or None, meeting_platform or None,
-          meeting_title or None, save_to_google))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id):
-    occ_date = parse_date_safe(occurrence_date_raw)
-    if not occ_date:
-        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-
-    affects_series = False
-    inherited_end = None
-    cutoff = (occ_date - timedelta(days=1)).isoformat()
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-
-        row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
-        if row_end and (inherited_end is None or row_end > inherited_end):
-            inherited_end = row_end
-
-        if row_base >= occ_date:
-            affects_series = True
-            db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-            continue
-
-        row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
-        if row_occurs_on_cutoff:
-            affects_series = True
-            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
-
-    if not affects_series:
-        return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
-
-    new_day = parse_date_safe(booking_date)
-    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-    new_end_dt = new_start_dt + timedelta(minutes=duration)
-    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
-    if conflict:
-        db.rollback()
-        return jsonify({'status': 'error', 'message': conflict}), 409
-    # Use the new date's weekday for the new series so occurrences land on the new day.
-    rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-    rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
-    rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
-    db.execute('''
-        INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes,
-         is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-         meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (appt['patient_id'], new_day.isoformat(),
-          parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          rec_days, rec_interval, rec_end,
-          meeting_type, meeting_link or None, meeting_platform or None,
-          meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
-    new_day = parse_date_safe(booking_date)
-    occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
-    delta_days = (new_day - occ_date).days if new_day and occ_date else 0
-    new_rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-        shifted_day = row_base + timedelta(days=delta_days)
-        shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        shifted_end = shifted_start + timedelta(minutes=duration)
-        conflict_message = has_time_conflict(
-            db,
-            shifted_day,
-            shifted_start,
-            shifted_end,
-            exclude_appointment_id=row['id']
-        )
-        if conflict_message:
-            return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-        shifted_day = row_base + timedelta(days=delta_days)
-        db.execute('''
-            UPDATE appointments
-            SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-                meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-                meeting_title = ?, save_to_google = ?, recurrence_days = ?
-            WHERE id = ?
-        ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, new_rec_days, row['id']))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-
-@app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
-@login_required
-def api_calendar_appointment_update(appointment_id):
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if not appt:
-        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
-
-    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    scope = request.form.get('scope', 'all').strip()
-    occurrence_date_raw = request.form.get('occurrence_date', '').strip()
-    booking_date = request.form.get('date', '').strip()
-    booking_time = request.form.get('time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    meeting_type = request.form.get('meeting_type', (appt['meeting_type'] or 'in-person')).strip() or 'in-person'
-    meeting_link = request.form.get('meeting_link', '').strip()
-    meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_title = request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-
-    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    duration = int(appt['duration_minutes'] or 60)
-    parsed_start = parse_time_safe(booking_time)
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
-
-    is_recurring = int(appt['is_recurring'] or 0) == 1
-    recurrence_group_id = None
-    related_rows = [appt]
-    if is_recurring:
-        recurrence_group_id = ensure_recurrence_group_id(db, appt)
-        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-        if recurrence_group_id:
-            related_rows = db.execute(
-                'SELECT * FROM appointments WHERE recurrence_group_id = ? ORDER BY appointment_date ASC, id ASC',
-                (recurrence_group_id,)
-            ).fetchall()
-
-    # --- Scope: this occurrence only ---
-    if is_recurring and scope == 'one':
-        return _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-
-    # --- Scope: this and all upcoming ---
-    if is_recurring and scope == 'upcoming':
-        return _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        base_date = parse_date_safe(appt['appointment_date'])
-        if base_date and occ_date <= base_date:
-            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-        else:
-            new_end = (occ_date - timedelta(days=1)).isoformat()
-            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
-                       (new_end, appointment_id))
-
-        # Delete / truncate all OTHER rows in the same recurrence group that generate
-        # occurrences on or after occ_date so they don't remain as orphaned future rows.
-        recurrence_group_id_upd = appt['recurrence_group_id'] if 'recurrence_group_id' in appt.keys() else None
-        if recurrence_group_id_upd:
-            other_rows = db.execute(
-                'SELECT * FROM appointments WHERE recurrence_group_id = ? AND id != ? ORDER BY appointment_date ASC',
-                (recurrence_group_id_upd, appointment_id)
-            ).fetchall()
-            for row in other_rows:
-                row_base = parse_date_safe(row['appointment_date'])
-                if not row_base:
-                    continue
-                if row_base >= occ_date:
-                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                else:
-                    row_occs = recurring_occurrences_between(row, occ_date, occ_date)
-                    if row_occs:
-                        cutoff = (occ_date - timedelta(days=1)).isoformat()
-                        db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
-                                   (cutoff, row['id']))
-
-        new_day = parse_date_safe(booking_date)
-        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        new_end_dt = new_start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
-        if conflict:
-            db.rollback()
-            return jsonify({'status': 'error', 'message': conflict}), 409
-        # Use the new date's weekday for the new series so occurrences land on the new day.
-        rec_days = str(custom_weekday(new_day)) if new_day else (
-            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-        )
-        rec_interval = appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else None
-        rec_end = appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else None
-        # Only create a new recurring row if there is not already a row for the new_day
-        existing_row = db.execute('''
-            SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND is_recurring = 1
-        ''', (appt['patient_id'], new_day.isoformat())).fetchone()
-        if not existing_row:
-            db.execute('''
-                INSERT INTO appointments
-                (patient_id, appointment_date, appointment_time, duration_minutes,
-                 is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-                 meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-                VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (appt['patient_id'], new_day.isoformat(),
-                  parse_time_safe(booking_time).strftime('%H:%M'), duration,
-                  rec_days, rec_interval, rec_end,
-                  meeting_type, meeting_link or None, meeting_platform or None,
-                  meeting_title or None, save_to_google, appt['recurrence_group_id'] or build_recurrence_group_id()))
-        db.commit()
-        return jsonify({'status': 'success'})
-
-    # --- Default / scope='all': update the record directly ---
-    day_obj = parse_date_safe(booking_date)
-    start_dt = combine_dt(day_obj, parse_time_safe(booking_time).strftime('%H:%M'))
-    end_dt = start_dt + timedelta(minutes=duration)
-    conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=appointment_id)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    # For recurring appointments, update recurrence_days to match the new date's weekday
-    # so the entire series shifts to the new day rather than still generating old-weekday occurrences.
-    new_rec_days = str(custom_weekday(day_obj)) if (is_recurring and day_obj) else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-    db.execute('''
-        UPDATE appointments
-        SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-            meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-            meeting_title = ?, save_to_google = ?, recurrence_days = ?
-        WHERE id = ?
-    ''', (booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None,
-          save_to_google, new_rec_days, appointment_id))
-    db.commit()
-    return jsonify({'status': 'success'})
-
-
-@app.route('/api/groups/sessions/<int:session_id>/update', methods=['POST'])
-@login_required
-def api_update_group_session(session_id):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    existing = db.execute('SELECT * FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
-    if not existing:
-        return jsonify({'status': 'error', 'message': 'Group session not found.'}), 404
-
-    session_date = (request.form.get('session_date') or '').strip()
-    session_time = (request.form.get('session_time') or '').strip()
-    end_time_raw = (request.form.get('end_time') or '').strip()
-    title = (request.form.get('title') or '').strip()
-    facilitator = (request.form.get('facilitator') or '').strip()
-    meeting_type = (request.form.get('meeting_type') or 'in-person').strip() or 'in-person'
-    meeting_link = (request.form.get('meeting_link') or '').strip()
-    apply_scope = (request.form.get('apply_scope') or 'single').strip().lower()
-
-    parsed_date = parse_date_safe(session_date)
-    parsed_time = parse_time_safe(session_time)
-    parsed_end = parse_time_safe(end_time_raw)
-    if not parsed_date or not parsed_time:
-        return jsonify({'status': 'error', 'message': 'Valid date and start time are required.'}), 400
-
-    duration = int(existing['duration_minutes'] or 60)
-    if parsed_end:
-        start_minutes = parsed_time.hour * 60 + parsed_time.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        if end_minutes > start_minutes:
-            duration = end_minutes - start_minutes
-
-    existing_date = parse_date_safe(existing['session_date'])
-    if not existing_date:
-        return jsonify({'status': 'error', 'message': 'Stored session date is invalid.'}), 500
-
-    apply_future = apply_scope == 'future' and existing['series_id']
-    target_rows = [existing]
-    if apply_future:
-        target_rows = db.execute('''
-            SELECT *
-            FROM group_sessions
-            WHERE series_id = ? AND session_date >= ?
-            ORDER BY session_date ASC, session_time ASC
-        ''', (existing['series_id'], existing['session_date'])).fetchall()
-
-    day_delta = (parsed_date - existing_date).days
-    for row in target_rows:
-        row_date = parse_date_safe(row['session_date'])
-        if not row_date:
-            return jsonify({'status': 'error', 'message': 'Existing recurrence row has invalid date.'}), 500
-        updated_date = row_date + timedelta(days=day_delta) if apply_future else parsed_date
-        start_dt = datetime.combine(updated_date, parsed_time)
-        end_dt = start_dt + timedelta(minutes=duration)
-        conflict_message = has_time_conflict(
-            db,
-            updated_date,
-            start_dt,
-            end_dt,
-            exclude_group_session_id=int(row['id'])
-        )
-        if conflict_message:
-            return jsonify({'status': 'error', 'message': f"{conflict_message} ({updated_date.isoformat()})"}), 409
-
-    update_data = []
-    for row in target_rows:
-        row_date = parse_date_safe(row['session_date'])
-        updated_date = row_date + timedelta(days=day_delta) if apply_future else parsed_date
-        update_data.append((
-            updated_date.isoformat(),
-            parsed_time.strftime('%H:%M'),
-            duration,
-            title or None,
-            facilitator or None,
-            meeting_type,
-            meeting_link or None,
-            row['id']
-        ))
-
-    if update_data:
-        db.executemany('''
-            UPDATE group_sessions
-            SET session_date = ?, session_time = ?, duration_minutes = ?,
-                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
-            WHERE id = ?
-        ''', update_data)
-
-    if apply_future and existing['series_id']:
-        db.execute('''
-            UPDATE group_session_series
-            SET start_date = ?, start_time = ?, duration_minutes = ?,
-                title = ?, facilitator = ?, meeting_type = ?, meeting_link = ?
-            WHERE id = ?
-        ''', (
-            parsed_date.isoformat(),
-            parsed_time.strftime('%H:%M'),
-            duration,
-            title or None,
-            facilitator or None,
-            meeting_type,
-            meeting_link or None,
-            existing['series_id']
-        ))
-
-    db.commit()
-    return jsonify({'status': 'success'})
-
-@app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
-@login_required
-def update_patient_info(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    background = request.form.get('background')
-    treatment_info = request.form.get('treatment_info')
-    intake_data = intake_data_from_request(request.form)
-    serialized_intake = json.dumps(intake_data, ensure_ascii=False, indent=2) if intake_data is not None else None
-    serialized_assessment = serialize_intake_assessment(intake_data) if intake_data is not None else None
-
-    db = get_db()
-    if background is None or treatment_info is None:
-        existing = db.execute('SELECT background, treatment_info FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if existing is not None:
-            if background is None:
-                background = existing['background'] or ''
-            if treatment_info is None:
-                treatment_info = existing['treatment_info'] or ''
-    background = background or ''
-    treatment_info = treatment_info or ''
-
-    if intake_data is None:
-        db.execute('UPDATE patients SET background = ?, treatment_info = ? WHERE id = ?',
-                   (background, treatment_info, patient_id))
-    else:
-        db.execute('''
-            UPDATE patients
-            SET background = ?, treatment_info = ?, intake_assessment = ?, intake_questionnaire = ?
-            WHERE id = ?
-        ''', (background, treatment_info, serialized_assessment or None, serialized_intake or None, patient_id))
-    db.commit()
-    flash('Patient information updated.')
-    return redirect_to_patient_tab(patient_id, 'info')
-
-
-@app.route('/patient/<int:patient_id>/intake_docx', methods=('GET',))
-@login_required
-def export_patient_intake_docx(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    patient = db.execute('SELECT id, name, intake_questionnaire, intake_assessment FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if patient is None:
-        return "Patient not found", 404
-
-    intake_data = parse_intake_questionnaire(patient['intake_questionnaire'], patient['intake_assessment'])
-    if not intake_data:
-        flash('No intake form data found for export.')
-        return redirect_to_patient_tab(patient_id, 'intake')
-
-    language = (request.args.get('lang') or 'en').strip().lower()
-    if language not in {'en', 'he'}:
-        language = 'en'
-
-    document = build_intake_docx(patient['name'], intake_data, language=language)
-    safe_name = secure_filename(patient['name'] or f'patient_{patient_id}')
-    if not safe_name:
-        safe_name = f'patient_{patient_id}'
-    output_name = f'intake_{safe_name}.docx'
-    buffer = BytesIO()
-    document.save(buffer)
-    buffer.seek(0)
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name=output_name,
-        mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    )
-
-
-@app.route('/patient/<int:patient_id>/generate_background', methods=('POST',))
-@login_required
-def generate_patient_background(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if patient is None:
-        return "Patient not found", 404
-
-    background = build_patient_background_from_notes(db, patient_id, patient['name'])
-    db.execute('UPDATE patients SET background = ? WHERE id = ?', (background, patient_id))
-    db.commit()
-    flash('AI background generated.')
-    return redirect_to_patient_tab(patient_id, 'info')
+        return redirect(url_for('messages', patient_id=patient_id))
 
 @app.route('/patient/<int:patient_id>/edit', methods=('GET', 'POST'))
 @login_required
@@ -6233,77 +4916,96 @@ def add_appointment(patient_id):
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
-
-@app.route('/export_ics/<int:appointment_id>')
+@app.route('/api/slots', methods=['GET'])
 @login_required
-def export_ics(appointment_id):
+def get_slots():
     db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if not appt:
-        return "Not found", 404
 
-    # Security check: only allow admin or the patient who owns the appointment
-    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
+    if current_user.role == 'admin':
+        # Admin sees all slots, with patient names
+        slots = db.execute('''
+            SELECT s.id, s.start_time, s.end_time, s.status, s.patient_id, p.name as patient_name
+            FROM slots s
+            LEFT JOIN patients p ON s.patient_id = p.id
+        ''').fetchall()
+    else:
+        # Patient sees open slots and their own booked slots
+        slots = db.execute('''
+            SELECT id, start_time, end_time, status, patient_id
+            FROM slots
+            WHERE status = 'open' OR patient_id = ?
+        ''', (current_user.patient_id,)).fetchall()
+
+    events = []
+    for slot in slots:
+        event = {
+            'id': slot['id'],
+            'start': slot['start_time'],
+            'end': slot['end_time']
+        }
+
+        if current_user.role == 'admin':
+            if slot['status'] == 'booked':
+                event['title'] = f"Booked: {slot['patient_name']}"
+                event['color'] = '#dc3545' # Red for booked
+            else:
+                event['title'] = 'Open'
+                event['color'] = '#28a745' # Green for open
+        else:
+            if slot['status'] == 'booked' and slot['patient_id'] == current_user.patient_id:
+                event['title'] = 'My Appointment'
+                event['color'] = '#007bff' # Blue for their own
+            else:
+                event['title'] = 'Open'
+                event['color'] = '#28a745'
+
+        events.append(event)
+
+    import json
+    return json.dumps(events), 200, {'Content-Type': 'application/json'}
+
+@app.route('/api/slots', methods=['POST'])
+@login_required
+def create_slot():
+    if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    import uuid
-    from datetime import datetime, timedelta
-
-    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time'].zfill(5)}")
-    end_datetime = start_datetime + timedelta(minutes=appt['duration_minutes'] or 60)
-
-    dtstart = start_datetime.strftime("%Y%m%dT%H%M%S")
-    dtend = end_datetime.strftime("%Y%m%dT%H%M%S")
-    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
-    ical_content = f"""BEGIN:VCALENDAR\r
-VERSION:2.0\r
-PRODID:-//Private Clinic CRM//EN\r
-BEGIN:VEVENT\r
-UID:{uuid.uuid4()}@clinic\r
-DTSTAMP:{dtstamp}\r
-DTSTART:{dtstart}\r
-DTEND:{dtend}\r
-SUMMARY:Therapy Session\r
-DESCRIPTION:Therapy session\r
-"""
-    if appt['meeting_link']:
-        ical_content += f"URL:{appt['meeting_link']}\r\n"
-        ical_content += f"LOCATION:{appt['meeting_link']}\r\n"
-    elif appt['meeting_type'] == 'in-person':
-        ical_content += "LOCATION:Clinic\r\n"
-
-    ical_content += """END:VEVENT\r
-END:VCALENDAR\r
-"""
-
-    from flask import make_response
-    response = make_response(ical_content)
-    response.headers["Content-Disposition"] = f"attachment; filename=appointment_{appointment_id}.ics"
-    response.headers["Content-type"] = "text/calendar"
-    return response
-
-@app.route('/appointment/<int:appointment_id>/ical')
-@login_required
-def export_ical(appointment_id):
-    return redirect(url_for('export_ics', appointment_id=appointment_id))
-
-@app.route('/api/notifications')
-@login_required
-def get_notifications():
-    if current_user.role != 'admin':
-        return jsonify([])
+    data = request.json
+    start_time = data.get('start')
+    end_time = data.get('end')
 
     db = get_db()
-    notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
+    db.execute('INSERT INTO slots (start_time, end_time) VALUES (?, ?)', (start_time, end_time))
+    db.commit()
+    return "Slot created", 201
 
-    if notifications:
-        notification_ids = [n['id'] for n in notifications]
-        placeholders = ','.join(['?'] * len(notification_ids))
-        db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', notification_ids)
-        db.commit()
+@app.route('/api/slots/<int:slot_id>/book', methods=['POST'])
+@login_required
+def book_slot(slot_id):
+    if current_user.role != 'patient':
+        return "Unauthorized", 403
 
-    return jsonify([dict(n) for n in notifications])
+    db = get_db()
+    slot = db.execute('SELECT * FROM slots WHERE id = ?', (slot_id,)).fetchone()
+
+    if not slot or slot['status'] != 'open':
+        return "Slot not available", 400
+
+    db.execute('UPDATE slots SET status = ?, patient_id = ? WHERE id = ?',
+               ('booked', current_user.patient_id, slot_id))
+    db.commit()
+    return "Slot booked", 200
+
+@app.route('/api/slots/<int:slot_id>', methods=['DELETE'])
+@login_required
+def delete_slot(slot_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('DELETE FROM slots WHERE id = ?', (slot_id,))
+    db.commit()
+    return "Slot deleted", 200
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required

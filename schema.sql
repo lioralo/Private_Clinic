@@ -19,10 +19,9 @@ CREATE TABLE IF NOT EXISTS patients (
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
-    appointment_id INTEGER,
-    session_number TEXT,
-    note_date DATE,
-    needs_review BOOLEAN DEFAULT 0,
+    session_number INTEGER,
+    patient_appearance TEXT,
+    key_topics TEXT,
     content TEXT NOT NULL,
     content_hebrew TEXT,
     patient_appearance TEXT,
@@ -39,10 +38,11 @@ CREATE TABLE IF NOT EXISTS notes (
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
-    treatment_id INTEGER,
+    note_id INTEGER,
     filename TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients (id)
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (note_id) REFERENCES notes (id)
 );
 
 CREATE TABLE IF NOT EXISTS receipts (
@@ -94,6 +94,16 @@ CREATE TABLE IF NOT EXISTS appointments (
     recurrence_group_id TEXT,
     missed_reason TEXT,
     save_to_google BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
+CREATE TABLE IF NOT EXISTS slots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open', -- 'open', 'booked'
+    patient_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
