@@ -4,12 +4,3 @@ Flask-Login
 werkzeug
 email_validator
 pyotp
-python-docx
-psutil
-cryptography
-gunicorn
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-python-dotenv

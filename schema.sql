@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS users (
     birth_date DATE,
     patient_id INTEGER,
     is_active BOOLEAN DEFAULT 1,
+    otp_secret TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );

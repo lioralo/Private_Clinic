@@ -97,9 +97,18 @@
                                 placeholder="••••••••" 
                                 required>
                         </div>
-
-                        <button type="submit" class="btn btn-primary btn-lg btn-signin w-100">
-                            {{ t('Sign In') }} <i class="bi bi-arrow-right ms-2"></i>
+                    </div>
+                    <div class="mb-4" id="otp-field">
+                        <label for="otp_token" class="form-label text-uppercase smallest fw-bold tracking-wider">2FA Token (Admin Only)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-check"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 ps-0" id="otp_token" name="otp_token" placeholder="6-digit code">
+                        </div>
+                        <div class="form-text smallest text-muted mt-1">Leave blank if you are a patient.</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3">
+                            Sign In <i class="bi bi-arrow-right ms-2"></i>
                         </button>
                     </div>
                     {% endif %}

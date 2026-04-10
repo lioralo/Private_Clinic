@@ -1,34 +1,7 @@
 import os
 import sqlite3
-import socket
-import ast
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-# OAUTHLIB_INSECURE_TRANSPORT=1 in .env allows OAuth over plain HTTP in local dev.
-# Never set this in production — the production .env does not include it.
-import hashlib
-import threading
-from io import BytesIO
-import shutil
-import secrets
-import zipfile
-from collections import Counter, defaultdict
-from pathlib import Path
-from urllib.parse import quote
-try:
-    import google_calendar as gcal
-except ImportError:
-    gcal = None
-try:
-    import google_docs as gdocs
-except ImportError:
-    gdocs = None
-from markupsafe import escape
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file, json
+import pyotp
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -1577,8 +1550,40 @@ def init_db():
             db.cursor().executescript(f.read())
         db.commit()
 
-        _run_db_migrations(db)
-        _seed_admin_user(db)
+        # Migrate existing users table to add otp_secret if it doesn't exist
+        try:
+            db.execute("ALTER TABLE users ADD COLUMN otp_secret TEXT")
+            db.commit()
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
+        # Check if admin exists
+        admin = db.execute("SELECT * FROM users WHERE role = 'admin'").fetchone()
+        if not admin:
+            print("Creating default admin user...")
+            hashed_pw = generate_password_hash('admin')
+            # Generate a 16-character base32 secret for TOTP
+            otp_secret = pyotp.random_base32()
+            db.execute("INSERT INTO users (username, password_hash, role, otp_secret) VALUES (?, ?, ?, ?)",
+                       ('admin', hashed_pw, 'admin', otp_secret))
+            db.commit()
+            print("Admin user created (username: admin, password: admin).")
+            print("=" * 60)
+            print(f"Admin 2FA Secret: {otp_secret}")
+            totp_uri = pyotp.totp.TOTP(otp_secret).provisioning_uri(name='admin', issuer_name='Private Clinic')
+            print(f"Admin 2FA URI (use this in an Authenticator app, or copy the secret): {totp_uri}")
+            print("=" * 60)
+        else:
+            if not admin['otp_secret']:
+                print("Generating 2FA secret for existing admin user...")
+                otp_secret = pyotp.random_base32()
+                db.execute("UPDATE users SET otp_secret = ? WHERE id = ?", (otp_secret, admin['id']))
+                db.commit()
+                print("=" * 60)
+                print(f"Admin 2FA Secret: {otp_secret}")
+                totp_uri = pyotp.totp.TOTP(otp_secret).provisioning_uri(name=admin['username'], issuer_name='Private Clinic')
+                print(f"Admin 2FA URI (use this in an Authenticator app, or copy the secret): {totp_uri}")
+                print("=" * 60)
 
         print(f"Initialized the database at {database}.")
 
@@ -3409,12 +3414,7 @@ def login():
 
         username = request.form['username']
         password = request.form['password']
-
-        client_ip = request.remote_addr or ''
-        if not app.config.get('TESTING') and _is_login_rate_limited(client_ip):
-            flash('Too many failed login attempts. Please try again in 15 minutes.')
-            return render_template('login.html')
-
+        otp_token = request.form.get('otp_token')
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
@@ -3429,21 +3429,26 @@ def login():
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
 
-            _clear_failed_logins(client_ip)
+            if user['role'] == 'admin':
+                if not otp_token:
+                    flash('2FA token is required for admin login')
+                    return render_template('login.html')
 
-            # REQUIRE 2FA for all admin accounts in PRODUCTION
-            # IN TESTING: Allow bypass for admin logins
-            if user['role'] == 'admin' and not app.config.get('TESTING'):
-                # Ensure admin has TOTP configured
-                if not user['totp_enabled'] or not user['totp_secret']:
-                    return _login_redirect_for_user(user)
-                
-                session['pending_2fa_user_id'] = int(user['id'])
-                session['pending_2fa_username'] = user['username']
-                flash('Two-factor authentication required. Check your authenticator app.')
-                return render_template('login.html', requires_otp=True, pending_username=user['username'])
+                if user['otp_secret']:
+                    totp = pyotp.TOTP(user['otp_secret'])
+                    if not totp.verify(otp_token):
+                        flash('Invalid 2FA token')
+                        return render_template('login.html')
+                else:
+                    flash('Admin account is missing 2FA configuration')
+                    return render_template('login.html')
 
-            return _login_redirect_for_user(user)
+            user_obj = User(user['id'], user['username'], user['role'], user['patient_id'])
+            login_user(user_obj)
+            if user['role'] == 'admin':
+                return redirect(url_for('patients'))
+            else:
+                return redirect(url_for('dashboard'))
         else:
             if not app.config.get('TESTING'):
                 _record_failed_login(client_ip)
