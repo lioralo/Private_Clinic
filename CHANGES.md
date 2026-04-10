@@ -1802,6 +1802,9 @@ Fixed multiple issues with ongoing patient crashes, color coding, calendar refre
 6. `templates/manage_slots.html` - Unified booking modal + calendar refresh
 7. `CHANGES.md` - Comprehensive documentation
 
+### 2025-04-09
+- Added missing `/api/google_calendar/status` endpoint to handle status checks with exception handling.
+- Added comprehensive unit tests in `test_app.py` for `/api/google_calendar/status` (connected, disconnected, exception) utilizing `unittest.mock.patch`.
 ## Session 34
 
 **Date:** April 5, 2026

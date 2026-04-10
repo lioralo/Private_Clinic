@@ -8583,6 +8583,17 @@ def api_link_group_session_supervision(session_id):
 # Google Calendar OAuth routes
 # ---------------------------------------------------------------------------
 
+
+@app.route('/api/google_calendar/status')
+@login_required
+def api_google_calendar_status():
+    try:
+        is_connected = gcal.is_connected(get_db())
+        return jsonify({'connected': is_connected})
+    except Exception as e:
+        return jsonify({'connected': False, 'error': str(e)})
+
+
 @app.route('/admin/google-calendar/status')
 @login_required
 def google_calendar_status():
