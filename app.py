@@ -27,6 +27,7 @@ try:
     import google_docs as gdocs
 except ImportError:
     gdocs = None
+from markupsafe import escape
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -3697,7 +3698,7 @@ def toggle_self_booking(patient_id):
     new_value = 0 if int(patient['can_self_schedule'] or 0) == 1 else 1
     db.execute('UPDATE patients SET can_self_schedule = ? WHERE id = ?', (new_value, patient_id))
     db.commit()
-    flash(f"Self-booking {'enabled' if new_value == 1 else 'disabled'} for {patient['name']}.")
+    flash(escape(f"Self-booking {'enabled' if new_value == 1 else 'disabled'} for {patient['name']}."))
     return redirect_to_patient_tab(patient_id, 'info')
 
 
@@ -5888,7 +5889,7 @@ def add_group_session(group_id):
         end_at = start_at + timedelta(minutes=duration)
         conflict_message = has_time_conflict(db, date_item, start_at, end_at)
         if conflict_message:
-            flash(f'{conflict_message} ({date_item.isoformat()})')
+            flash(escape(f'{conflict_message} ({date_item.isoformat()})'))
             return redirect(url_for('group_detail', group_id=group_id))
 
     series_id = None
@@ -5936,7 +5937,7 @@ def add_group_session(group_id):
 
     db.commit()
     if series_id:
-        flash(f'Group recurrence added ({len(recurrence_dates)} sessions).')
+        flash(escape(f'Group recurrence added ({len(recurrence_dates)} sessions).'))
     else:
         flash('Group session added.')
     destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
@@ -7287,9 +7288,9 @@ def add_file(patient_id):
 
                 db.commit()
                 if notes_review > 0:
-                    flash(f'DOCX parsed. {notes_created} notes created, {notes_review} marked for review.')
+                    flash(escape(f'DOCX parsed. {notes_created} notes created, {notes_review} marked for review.'))
                 else:
-                    flash(f'DOCX parsed successfully. {notes_created} notes created.')
+                    flash(escape(f'DOCX parsed successfully. {notes_created} notes created.'))
             except Exception as e:
                 print(f"Error parsing DOCX: {e}")
                 flash('Error parsing DOCX file.')
@@ -7563,10 +7564,10 @@ def seed_data():
         flash('Example patients created: Maya Cohen (ongoing), Daniel Levy (candidate), Noa Shapiro (waiting), Eran Mizrahi (archived). Credentials: username = maya / daniel / noa, password = patient123', 'success')
     except sqlite3.IntegrityError as e:
         db.rollback()
-        flash(f'Sample data already exists or an error occurred: {str(e)}', 'error')
+        flash(escape(f'Sample data already exists or an error occurred: {str(e)}'), 'error')
     except Exception as e:
         db.rollback()
-        flash(f'Error seeding data: {str(e)}', 'error')
+        flash(escape(f'Error seeding data: {str(e)}'), 'error')
 
     return redirect(url_for('patients'))
 
@@ -7617,7 +7618,7 @@ def import_calendar():
                      appt.get('cost', 0), appt.get('duration_minutes', 60)))
                 count += 1
             db.commit()
-            flash(f'Successfully imported {count} appointments.')
+            flash(escape(f'Successfully imported {count} appointments.'))
         except Exception as e:
             print("Import error:", e)
             flash('Error parsing JSON file.')
@@ -7801,7 +7802,7 @@ def import_patient_history(patient_id):
                     receipts_added += 1
 
             db.commit()
-            flash(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.')
+            flash(escape(f'History imported: {appointments_added} appointments, {notes_added} notes, {receipts_added} receipts added.'))
         except Exception as e:
             print("Import error:", e)
             flash('Error parsing JSON file.')
@@ -8183,7 +8184,7 @@ def google_calendar_connect():
             session['gcal_code_verifier'] = code_verifier
         return redirect(auth_url)
     except Exception as exc:
-        flash(f'Failed to initiate Google Calendar connection: {exc}')
+        flash(escape(f'Failed to initiate Google Calendar connection: {exc}'))
         return redirect(url_for('admin_profile'))
 
 
@@ -8210,7 +8211,7 @@ def google_calendar_callback():
         gcal.save_credentials(db, creds, calendar_id=calendar_id)
         flash('Google Calendar connected successfully!')
     except Exception as exc:
-        flash(f'Failed to complete Google Calendar connection: {exc}')
+        flash(escape(f'Failed to complete Google Calendar connection: {exc}'))
     return redirect(url_for('admin_profile'))
 
 
@@ -8594,9 +8595,9 @@ def backup_now():
     database = app.config.get('DATABASE', DATABASE)
     try:
         backup_path = perform_encrypted_backup(database)
-        flash(f'Encrypted backup created: {backup_path}')
+        flash(escape(f'Encrypted backup created: {backup_path}'))
     except Exception as exc:
-        flash(f'Backup failed: {exc}')
+        flash(escape(f'Backup failed: {exc}'))
     return redirect(url_for('admin_profile'))
 
 
@@ -8611,9 +8612,9 @@ def restore_backup_now():
 
     try:
         restored_from, safety_copy = perform_encrypted_restore(database, selected_backup)
-        flash(f'Restore completed from: {restored_from}. Safety copy created: {safety_copy}')
+        flash(escape(f'Restore completed from: {restored_from}. Safety copy created: {safety_copy}'))
     except Exception as exc:
-        flash(f'Restore failed: {exc}')
+        flash(escape(f'Restore failed: {exc}'))
     return redirect(url_for('admin_profile'))
 
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
@@ -8643,7 +8644,7 @@ def convert_patient(patient_id):
         datetime.fromisoformat(start_date)
         datetime.strptime(time, '%H:%M')
     except ValueError as e:
-        flash(f'Invalid date or time format: {str(e)}', 'error')
+        flash(escape(f'Invalid date or time format: {str(e)}'), 'error')
         return redirect_to_patient_tab(patient_id, 'info')
 
     # Convert types
@@ -8704,10 +8705,10 @@ def convert_patient(patient_id):
         flash('Patient converted to ongoing successfully with recurring appointments.', 'success')
     except sqlite3.IntegrityError as e:
         db.rollback()
-        flash(f'Database error: {str(e)}', 'error')
+        flash(escape(f'Database error: {str(e)}'), 'error')
     except Exception as e:
         db.rollback()
-        flash(f'Error converting patient: {str(e)}', 'error')
+        flash(escape(f'Error converting patient: {str(e)}'), 'error')
 
     return redirect_to_patient_tab(patient_id, 'info')
 
@@ -9283,7 +9284,7 @@ def toggle_access(patient_id):
         new_status = not user['is_active']
         db.execute('UPDATE users SET is_active = ? WHERE id = ?', (new_status, user['id']))
         db.commit()
-        flash(f"Access {'enabled' if new_status else 'disabled'}.")
+        flash(escape(f"Access {'enabled' if new_status else 'disabled'}."))
     else:
         flash('No user account found for this patient.')
 
@@ -9399,9 +9400,9 @@ def add_appointment(patient_id):
         appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
         flash(appt_msg)
     except sqlite3.IntegrityError as e:
-        flash(f'Error adding appointment: {str(e)}', 'error')
+        flash(escape(f'Error adding appointment: {str(e)}'), 'error')
     except Exception as e:
-        flash(f'Unexpected error: {str(e)}', 'error')
+        flash(escape(f'Unexpected error: {str(e)}'), 'error')
 
     return redirect(url_for('patient_detail', patient_id=patient_id))
 
