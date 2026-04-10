@@ -837,10 +837,15 @@ def perform_routine_encrypted_backup(db_path):
 
 
 def list_encrypted_backups():
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    backups = sorted(backup_root.glob('clinic_*.db.enc'), reverse=True)
-    return [path.name for path in backups]
+    backup_dir = 'archive/backups'
+    if not os.path.exists(backup_dir):
+        return []
+    backups = []
+    for f in os.listdir(backup_dir):
+        if f.endswith('.enc'):
+            path = os.path.join(backup_dir, f)
+            backups.append({'name': f, 'size': os.path.getsize(path), 'date': datetime.fromtimestamp(os.path.getmtime(path))})
+    return sorted(backups, key=lambda x: x['date'], reverse=True)
 
 
 def perform_encrypted_restore(db_path, backup_filename=None):
