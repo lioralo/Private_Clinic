@@ -1,0 +1,77 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h4 class="mb-0 text-primary fw-bold">
+                    <i class="bi bi-calendar-week me-2"></i>Weekly Agenda
+                </h4>
+                <div class="btn-group">
+                    <a href="{{ url_for('agenda', week_offset=week_offset-1) }}" class="btn btn-outline-primary rounded-start-pill">
+                        <i class="bi bi-chevron-left"></i> Previous
+                    </a>
+                    <span class="btn btn-outline-primary disabled border-start-0 border-end-0 text-dark fw-bold">
+                        {{ week_start }} - {{ week_end }}
+                    </span>
+                    <a href="{{ url_for('agenda', week_offset=week_offset+1) }}" class="btn btn-outline-primary rounded-end-pill">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th style="width: 10%;">Time</th>
+                                {% for day in days %}
+                                    <th style="width: 12.8%;">
+                                        <div class="fw-bold">{{ day.name }}</div>
+                                        <div class="small text-muted">{{ day.date }}</div>
+                                    </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Generates time slots from 08:00 to 20:00 -->
+                            {% for hour in range(8, 21) %}
+                                <tr>
+                                    <td class="text-center fw-bold text-muted bg-light">{{ "%02d:00" | format(hour) }}</td>
+                                    {% for day in days %}
+                                        <td class="p-1 position-relative" style="height: 60px; vertical-align: top;">
+                                            <!-- Check for appointments in this slot -->
+                                            {% for appt in day.appointments %}
+                                                {% if appt.hour == hour %}
+                                                    <div class="p-1 mb-1 rounded small border
+                                                        {% if appt.type == 'one-time' %}bg-info bg-opacity-10 border-info text-info-emphasis
+                                                        {% else %}bg-success bg-opacity-10 border-success text-success-emphasis{% endif %}">
+                                                        <div class="fw-bold text-truncate">{{ appt.patient_name }}</div>
+                                                        <div class="smallest">{{ appt.time }}</div>
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 d-flex gap-3">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-info bg-opacity-10 border border-info rounded p-2 me-2" style="width: 20px; height: 20px;"></div>
+                        <span class="small text-muted">One-time Appointment</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="bg-success bg-opacity-10 border border-success rounded p-2 me-2" style="width: 20px; height: 20px;"></div>
+                        <span class="small text-muted">Recurring Schedule (Weekly)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

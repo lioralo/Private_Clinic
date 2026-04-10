@@ -1,0 +1,162 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Balance / Debt Card (Reduced Prominence) -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2 text-primary"></i>Financial Overview</h5>
+            </div>
+            <div class="card-body p-4 border-top">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="mb-0 text-muted small">Current outstanding balance</p>
+                    </div>
+                    <div>
+                         {% if balance > 0 %}
+                            <span class="fs-4 text-danger fw-bold">${{ "%.2f"|format(balance) }}</span>
+                         {% elif balance < 0 %}
+                            <span class="fs-4 text-success fw-bold">-${{ "%.2f"|format(balance|abs) }}</span>
+                         {% else %}
+                            <span class="fs-4 text-success fw-bold">$0.00</span>
+                         {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Appointments Section -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-primary"></i>My Appointments</h5>
+                <span class="badge bg-light text-primary border rounded-pill">{{ appointments|length }} Sessions</span>
+            </div>
+            <div class="card-body p-4">
+                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
+                    {% for appt in appointments %}
+                        <div class="list-group-item px-4 py-3 d-flex justify-content-between align-items-center bg-white">
+                            <div>
+                                <span class="fw-bold d-block text-dark">{{ appt['appointment_date'] }}</span>
+                                <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
+                                <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="py-5 text-center text-muted">
+                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
+                            <p class="small mb-0">No therapy sessions scheduled.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Documents & Files -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Receipts</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="list-group list-group-flush border rounded-3">
+                            {% for receipt in receipts %}
+                                <div class="list-group-item py-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="fw-bold text-success">${{ "%.2f"|format(receipt['amount']) }}</span>
+                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
+                                    </div>
+                                    <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
+                                    <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
+                                </div>
+                            {% else %}
+                                <div class="p-4 text-center text-muted smallest">No receipts.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100 border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-0">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-files me-2 text-primary"></i>Shared Files</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="list-group list-group-flush border rounded-3">
+                            {% for file in files %}
+                                <div class="list-group-item py-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-file-earmark-pdf-fill text-danger fs-5 me-2"></i>
+                                        <div class="overflow-hidden">
+                                            <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark fw-medium text-truncate d-block">{{ file['filename'] }}</a>
+                                            <span class="text-muted smallest opacity-75">{{ file['created_at'].split(' ')[0] }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="p-4 text-center text-muted smallest">No shared files.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Messaging / Chat Interface -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 600px;">
+            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Messages</h5>
+            </div>
+            <div class="card-body p-0 d-flex flex-column bg-light">
+                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
+                    {% for msg in messages %}
+                        <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%;">
+                             <div class="d-flex justify-content-between align-items-start mb-1">
+                                <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
+                                    {% if msg.sender_id == current_user.id %}You{% else %}Therapist{% endif %}
+                                </strong>
+                                <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
+                            </div>
+                            <div class="message-content text-dark small" style="white-space: pre-wrap;">{{ msg.content }}</div>
+                        </div>
+                    {% else %}
+                         <div class="text-center py-5 mt-5">
+                            <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
+                            <p class="text-muted small">No messages yet. Start a conversation.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="p-3 bg-white border-top">
+                    <form method="post" action="{{ url_for('contact_admin') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Type your message..." required style="resize: none;"></textarea>
+                            <button type="submit" class="btn btn-primary fw-bold px-3">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-scroll to bottom of chat
+    var chatHistory = document.getElementById('chatHistory');
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+</script>
+
+<style>
+.tracking-wider { letter-spacing: 0.05em; }
+.smallest { font-size: 0.7rem; }
+</style>
+{% endblock %}

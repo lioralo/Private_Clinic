@@ -67,15 +67,36 @@
 
 <div class="dashboard-grid">
     {% for patient in patients %}
-        <div class="card patient-card patient-card-clickable {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate{% elif patient['status'] == 'ongoing' %}patient-status-ongoing{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}patient-status-waiting{% else %}patient-status-archived{% endif %}" data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}">
-            <div class="card-body p-4 patient-card-body">
-                <div class="patient-meta-row">
-                    <div class="patient-avatar text-primary">
-                        <i class="bi bi-person-fill fs-4"></i>
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm patient-card position-relative">
+                {% if patient['unread_count'] > 0 %}
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light p-2">
+                        <span class="visually-hidden">unread messages</span>
+                        <i class="bi bi-chat-dots-fill"></i>
+                    </span>
+                {% endif %}
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary mb-3">
+                            <i class="bi bi-person-fill fs-4"></i>
+                        </div>
+                        <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                            {{ patient['status']|capitalize }}
+                        </span>
                     </div>
-                    <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
-                        {% if patient['status'] == 'ongoing' and patient['has_recurring'] %}
-                            <span class="badge bg-success-subtle text-success border">{{ t('Recurring') }}</span>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h5 class="card-title fw-bold mb-0">{{ patient['name'] }}</h5>
+                        {% if patient['unread_count'] > 0 %}
+                            <span class="badge bg-danger rounded-pill">{{ patient['unread_count'] }} new msg</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-muted small mb-3">ID: #{{ patient['id'] }}</p>
+                    
+                    <div class="mb-4">
+                        {% if patient['email'] %}
+                            <div class="d-flex align-items-center mb-1 text-muted small">
+                                <i class="bi bi-envelope me-2"></i> {{ patient['email'] }}
+                            </div>
                         {% endif %}
                         {% if patient['status'] == 'candidate' and patient['needs_followup_decision'] %}
                             <span class="badge bg-warning text-dark">{{ t('Decision Needed') }}</span>

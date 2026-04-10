@@ -41,1237 +41,107 @@
             </div>
         </div>
 
-        <!-- Tabbed Navigation -->
-        <ul class="nav nav-tabs mb-4 border-0 flex-nowrap patient-tabs-scroll" id="patientTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active fw-bold text-dark border-0 rounded-0 py-3 px-4" id="info-tab" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="true"><i class="bi bi-info-circle me-2"></i>{{ t('Summary') }}</button>
-            </li>
-            {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="intake-tab" data-bs-toggle="tab" data-bs-target="#intake" type="button" role="tab" aria-controls="intake" aria-selected="false"><i class="bi bi-clipboard2-pulse me-2"></i>{{ 'Intake Evaluation' if lang == 'en' else 'הערכת אינטייק' }}</button>
-            </li>
-            {% endif %}
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="notes-tab" data-bs-toggle="tab" data-bs-target="#notes" type="button" role="tab" aria-controls="notes" aria-selected="false"><i class="bi bi-journal-text me-2"></i>{{ t('Treatment Log') }}</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="billing-tab" data-bs-toggle="tab" data-bs-target="#billing" type="button" role="tab" aria-controls="billing" aria-selected="false"><i class="bi bi-receipt me-2"></i>{{ t('Billing') }}</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab" aria-controls="messages" aria-selected="false"><i class="bi bi-chat-dots me-2"></i>{{ t('Messages') }}{% if unread_messages_count %} <span id="messagesUnreadBadge" class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link fw-bold text-dark border-0 rounded-0 py-3 px-4" id="supervision-tab" data-bs-toggle="tab" data-bs-target="#supervision" type="button" role="tab" aria-controls="supervision" aria-selected="false"><i class="bi bi-shield-check me-2"></i>{{ 'Supervision' if lang == 'en' else 'הדרכה' }}{% if supervisions %} <span class="badge bg-secondary-subtle text-secondary border ms-1">{{ supervisions|length }}</span>{% endif %}</button>
-            </li>
-        </ul>
-
-        <div class="tab-content mobile-edit-lock" id="patientTabsContent">
-            <!-- SUMMARY TAB -->
-            <div class="tab-pane fade show active" id="info" role="tabpanel" aria-labelledby="info-tab">
-                <div class="row">
-                    <div class="col-lg-7">
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
-                            <div class="card-body p-4 bg-light bg-opacity-10">
-                                <div class="row g-4">
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Email') }}</small>
-                                            <div class="fw-medium text-dark mb-2">{{ patient['email'] or 'Not provided' }}</div>
-                                            {% if patient['email'] %}
-                                                <a href="mailto:{{ patient['email'] }}?subject=Therapy Session Follow-up" class="btn btn-sm btn-outline-primary d-block w-100">
-                                                    <i class="bi bi-envelope me-1"></i>{{ t('Send Email') }}
-                                                </a>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Phone') }}</small>
-                                            <div class="fw-medium text-dark mb-2">{{ patient['phone'] or 'Not provided' }}</div>
-                                            {% if patient['phone'] %}
-                                                {%- set _ph = patient['phone']|replace('-','')|replace(' ','')|replace('(','')|replace(')','')|replace('+','') -%}
-                                                {%- if _ph.startswith('972') -%}{%- set _wa = _ph -%}
-                                                {%- elif _ph.startswith('0') -%}{%- set _wa = '972' + _ph[1:] -%}
-                                                {%- else -%}{%- set _wa = '972' + _ph -%}{%- endif -%}
-                                                <a href="https://wa.me/{{ _wa }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-success d-block w-100">
-                                                    <i class="bi bi-whatsapp me-1"></i>{{ t('WhatsApp') }}
-                                                </a>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('Date of Birth') }}</small>
-                                            <div class="fw-medium text-dark mb-2">{{ patient['birth_date'] or 'Not provided' }}</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white rounded-3 shadow-sm border">
-                                            <small class="text-muted d-block text-uppercase fw-bold mb-1 smallest">{{ t('ID Number') }}</small>
-                                            <div class="fw-medium text-dark mb-2">{{ patient['id_number'] or 'Not provided' }}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Background Info Section -->
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
-                            <div class="card-header bg-white py-3 border-0">
-                                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-person-lines-fill me-2"></i>{{ t('Background') }}</h5>
-                            </div>
-                            <div class="card-body p-4">
-                                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="border rounded-3 p-3 bg-light mb-3" id="backgroundPreview">
-                                        <div class="small text-muted">{{ patient['background'] or 'No background added yet.' }}</div>
-                                    </div>
-                                    <button type="button" class="btn btn-sm btn-outline-primary px-4 fw-bold rounded-pill" data-bs-toggle="collapse" data-bs-target="#backgroundEditor">
-                                        {{ t('Edit') }}
-                                    </button>
-                                    <div class="collapse mt-3" id="backgroundEditor">
-                                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-                                            <button type="submit" formaction="{{ url_for('generate_patient_background', patient_id=patient['id']) }}" formmethod="post" class="btn btn-sm btn-outline-secondary px-3 fw-bold rounded-pill">
-                                                {{ t('Generate AI Background') }}
-                                            </button>
-                                            <span class="small text-muted">{{ t('AI-generated summary based on meeting logs.') }}</span>
-                                        </div>
-                                        <textarea name="background" class="form-control mb-2" rows="8" placeholder="{{ t('Enter clinical history...') }}">{{ patient['background'] or '' }}</textarea>
-                                        <button type="submit" class="btn btn-sm btn-primary px-4 fw-bold rounded-pill">{{ t('Update Background') }}</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
-                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-bullseye me-2"></i>{{ t('Therapy Goals') }}</h5>
-                                <span class="badge bg-primary-subtle text-primary border">{{ goals|length }}</span>
-                            </div>
-                            <div class="card-body p-4">
-                                <div class="list-group list-group-flush border rounded-3 mb-3">
-                                    {% for goal in goals %}
-                                    <div class="list-group-item px-3 py-2">
-                                        <div class="d-flex justify-content-between align-items-start gap-2">
-                                            <div class="flex-grow-1">
-                                                <span class="small {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</span>
-                                                {% if goal['status'] == 'achieved' %}
-                                                <span class="badge bg-success-subtle text-success border ms-1 small">{{ t('Achieved') }}</span>
-                                                {% else %}
-                                                <span class="badge bg-primary-subtle text-primary border ms-1 small">{{ t('Active') }}</span>
-                                                {% endif %}
-                                            </div>
-                                            <div class="d-flex gap-1 flex-shrink-0">
-                                                <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <button type="submit" class="btn btn-xs btn-outline-secondary py-0 px-2" title="{{ 'Mark Active' if goal['status'] == 'achieved' else 'Mark Achieved' }}" style="font-size:.75rem">
-                                                        <i class="bi {% if goal['status'] == 'achieved' %}bi-arrow-counterclockwise{% else %}bi-check2-circle{% endif %}"></i>
-                                                    </button>
-                                                </form>
-                                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:.75rem" data-bs-toggle="collapse" data-bs-target="#editGoal{{ goal['id'] }}" title="{{ t('Edit') }}">
-                                                    <i class="bi bi-pencil"></i>
-                                                </button>
-                                                <form method="post" action="{{ url_for('delete_goal', goal_id=goal['id']) }}" onsubmit="return confirm('Delete this goal?')">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem" title="{{ t('Delete') }}">
-                                                        <i class="bi bi-trash3"></i>
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </div>
-                                        <div class="collapse mt-2" id="editGoal{{ goal['id'] }}">
-                                            <form method="post" action="{{ url_for('edit_goal', goal_id=goal['id']) }}" class="d-flex gap-2">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <input type="text" name="description" class="form-control form-control-sm" value="{{ goal['description'] }}" required>
-                                                <button type="submit" class="btn btn-sm btn-primary px-3">{{ t('Save') }}</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                    {% else %}
-                                    <div class="list-group-item small text-muted py-3 text-center">No goals set yet.</div>
-                                    {% endfor %}
-                                </div>
-                                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex gap-2">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="text" name="description" class="form-control form-control-sm" placeholder="{{ t('New goal...') }}" required>
-                                    <button type="submit" class="btn btn-sm btn-primary px-3 flex-shrink-0"><i class="bi bi-plus-lg me-1"></i>{{ t('Add') }}</button>
-                                </form>
-                            </div>
-                        </div>
-
-                        <div class="card border-0 shadow-sm rounded-4 mb-4">
-                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-people me-2"></i>Group Participation</h5>
-                                <span class="badge bg-primary-subtle text-primary border">Arrived Counter: {{ group_arrived_count }}</span>
-                            </div>
-                            <div class="card-body p-4">
-                                <div class="small text-uppercase text-muted mb-2">Group Membership Periods</div>
-                                <div class="list-group list-group-flush border rounded-3 mb-3">
-                                    {% for row in group_membership_rows %}
-                                    <div class="list-group-item">
-                                        <div class="small fw-semibold mb-1">{{ row['group_name'] }}</div>
-                                        <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="return_patient_id" value="{{ patient['id'] }}">
-                                            <div class="col-md-5">
-                                                <label class="form-label smallest mb-1">Joined</label>
-                                                <input type="date" class="form-control form-control-sm" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" required>
-                                            </div>
-                                            <div class="col-md-5">
-                                                <label class="form-label smallest mb-1">Left</label>
-                                                <input type="date" class="form-control form-control-sm" name="left_date" value="{{ (row['left_at'] or '')[:10] }}">
-                                            </div>
-                                            <div class="col-md-2 d-flex align-items-end">
-                                                <button class="btn btn-sm btn-outline-secondary w-100" type="submit">Save</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                    {% else %}
-                                    <div class="list-group-item small text-muted">No group memberships recorded.</div>
-                                    {% endfor %}
-                                </div>
-
-                                <div class="small text-uppercase text-muted mb-2">Group Meeting Attendance</div>
-                                <div class="accordion" id="patientGroupAttendanceAccordion">
-                                    {% for row in group_attendance_rows %}
-                                    {% set collapse_id = 'groupAttendance' ~ loop.index %}
-                                    <div class="accordion-item border mb-2 rounded-3 overflow-hidden">
-                                        <h2 class="accordion-header" id="{{ collapse_id }}Head">
-                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}Body">
-                                                <span class="fw-semibold me-2">{{ row['group_name'] }}</span>
-                                                <span class="text-muted small">{{ row['session_date'] }} {{ row['session_time'] }}</span>
-                                                <span class="badge ms-2 {% if row['attendance_status'] == 'present' %}bg-success{% elif row['attendance_status'] == 'missed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ row['attendance_status'] or 'pending' }}</span>
-                                            </button>
-                                        </h2>
-                                        <div id="{{ collapse_id }}Body" class="accordion-collapse collapse" data-bs-parent="#patientGroupAttendanceAccordion">
-                                            <div class="accordion-body">
-                                                <form method="post" action="{{ url_for('update_patient_group_attendance', patient_id=patient['id'], session_id=row['session_id']) }}" class="row g-2">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="active_tab" value="info">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label smallest mb-1">Attendance</label>
-                                                        <select class="form-select form-select-sm" name="attendance_status">
-                                                            <option value="pending" {% if row['attendance_status'] == 'pending' %}selected{% endif %}>Pending</option>
-                                                            <option value="present" {% if row['attendance_status'] == 'present' %}selected{% endif %}>Arrived</option>
-                                                            <option value="missed" {% if row['attendance_status'] == 'missed' %}selected{% endif %}>Missed</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-8">
-                                                        <label class="form-label smallest mb-1">Group Summary (whole meeting)</label>
-                                                        <input type="text" class="form-control form-control-sm" name="session_summary" value="{{ row['session_summary'] or '' }}" placeholder="What happened in this group meeting">
-                                                    </div>
-                                                    <div class="col-md-5">
-                                                        <label class="form-label smallest mb-1">Missed reason</label>
-                                                        <input type="text" class="form-control form-control-sm" name="absence_reason" value="{{ row['absence_reason'] or '' }}" placeholder="Reason if missed">
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label smallest mb-1 d-block">Notified correctly</label>
-                                                        <input type="checkbox" class="form-check-input mt-2" name="notified_on_time" {% if row['notified_on_time'] %}checked{% endif %}>
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label smallest mb-1">Private note</label>
-                                                        <input type="text" class="form-control form-control-sm" name="attendance_note" value="{{ row['attendance_note'] or '' }}" placeholder="Private attendance note">
-                                                    </div>
-                                                    <div class="col-12 text-end">
-                                                        <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill">Update From Patient Card</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {% else %}
-                                    <div class="text-muted small">No group attendance records yet.</div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-
-                        {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
-                        <div class="card border-0 shadow-sm rounded-4 mb-4" id="intakeEvaluationFormBlock">
-                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                                <h5 class="fw-bold mb-0 text-primary">
-                                    <i class="bi bi-clipboard2-pulse me-2"></i>{{ 'טופס אינטייק להערכה' if lang == 'he' else 'Intake Evaluation Form' }}
-                                </h5>
-                                <form method="get" action="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="d-flex align-items-center gap-2 flex-wrap">
-                                    <label for="exportIntakeLang" class="small text-muted mb-0">{{ 'שפת המסמך' if lang == 'he' else 'Document language' }}</label>
-                                    <select id="exportIntakeLang" name="lang" class="form-select form-select-sm" style="width:auto; min-width: 120px;">
-                                        <option value="en" {% if lang != 'he' %}selected{% endif %}>English</option>
-                                        <option value="he" {% if lang == 'he' %}selected{% endif %}>עברית</option>
-                                    </select>
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">
-                                        <i class="bi bi-file-earmark-word me-1"></i>{{ 'ייצוא DOCX' if lang == 'he' else 'Export DOCX' }}
-                                    </button>
-                                </form>
-                            </div>
-                            <div class="card-body p-4">
-                                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
-                                    <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
-                                    <input type="hidden" name="active_tab" value="intake">
-
-                                    {% set appearance_fit_values = intake_form_data.get('appearance_fit', '').replace(', ', ',').split(',') %}
-                                    {% set appearance_ordered_values = intake_form_data.get('appearance_ordered', '').replace(', ', ',').split(',') %}
-                                    {% set behavior_values = intake_form_data.get('behavior_normal', '').replace(', ', ',').split(',') %}
-                                    {% set speech_values = intake_form_data.get('speech_style', '').replace(', ', ',').split(',') %}
-                                    {% set mood_values = intake_form_data.get('mood', '').replace(', ', ',').split(',') %}
-                                    {% set affect_match_values = intake_form_data.get('affect_match', '').replace(', ', ',').split(',') %}
-                                    {% set affect_state_values = intake_form_data.get('affect_state', '').replace(', ', ',').split(',') %}
-                                    {% set thinking_normal_values = intake_form_data.get('thinking_normal', '').replace(', ', ',').split(',') %}
-                                    {% set thinking_rate_values = intake_form_data.get('thinking_rate', '').replace(', ', ',').split(',') %}
-                                    {% set thinking_sequence_values = intake_form_data.get('thinking_sequence', '').replace(', ', ',').split(',') %}
-                                    {% set thinking_content_values = intake_form_data.get('thinking_content', '').replace(', ', ',').split(',') %}
-                                    {% set referral_target_values = intake_form_data.get('referral_target', '').replace(', ', ',').split(',') %}
-
-                                    <ul class="nav nav-pills intake-nav mb-3" role="tablist">
-                                        <li class="nav-item"><button class="nav-link active" type="button" data-bs-toggle="pill" data-bs-target="#intake-pre">{{ 'מקדים' if lang == 'he' else 'Prelim' }}</button></li>
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-background">{{ 'רקע' if lang == 'he' else 'Background' }}</button></li>
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-admin">{{ 'אדמיניסטרטיבי' if lang == 'he' else 'Administrative' }}</button></li>
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-medical">{{ 'רפואי' if lang == 'he' else 'Medical' }}</button></li>
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-mental">{{ 'סטטוס מנטלי' if lang == 'he' else 'Mental Status' }}</button></li>
-                                        {% if patient['patient_type'] == 'diagnosee' %}
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-diagnostic">{{ 'אבחון פסיכודיאגנוסטי' if lang == 'he' else 'Diagnostic Profile' }}</button></li>
-                                        {% endif %}
-                                        <li class="nav-item"><button class="nav-link" type="button" data-bs-toggle="pill" data-bs-target="#intake-plan">{{ 'החלטות טיפול' if lang == 'he' else 'Treatment Plan' }}</button></li>
-                                    </ul>
-
-                                    <div class="tab-content border rounded-3 p-3 bg-light">
-                                        <div class="tab-pane fade show active" id="intake-pre">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרטים מקדימים' if lang == 'he' else 'Preliminary Details' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'מקום הפגישה' if lang == 'he' else 'Meeting Location' }}</label>
-                                                    <select class="form-select" id="intakeMeetingLocation" name="intake_meeting_location">
-                                                        <option value="" {% if not intake_form_data.get('meeting_location') %}selected{% endif %}>{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="מרפאה" {% if intake_form_data.get('meeting_location') == 'מרפאה' %}selected{% endif %}>{{ 'מרפאה' if lang == 'he' else 'Clinic' }}</option>
-                                                        <option value="טלפונית" {% if intake_form_data.get('meeting_location') == 'טלפונית' %}selected{% endif %}>{{ 'טלפונית' if lang == 'he' else 'Phone' }}</option>
-                                                        <option value="אחר" {% if intake_form_data.get('meeting_location') == 'אחר' %}selected{% endif %}>{{ 'אחר' if lang == 'he' else 'Elsewhere' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6" id="intakeMeetingLocationSpecifyWrap">
-                                                    <label class="form-label fw-bold small">{{ 'אם אחר, פרט' if lang == 'he' else 'If Elsewhere, Specify' }}</label>
-                                                    <input class="form-control" id="intakeMeetingLocationSpecify" name="intake_meeting_location_specify" value="{{ intake_form_data.get('meeting_location_specify', '') }}">
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="form-label fw-bold small">{{ 'זמן הפגישה' if lang == 'he' else 'Meeting Time' }}</label>
-                                                    <input class="form-control" type="time" name="intake_meeting_time" value="{{ intake_form_data.get('meeting_time', '') }}">
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="form-label fw-bold small">{{ 'משך' if lang == 'he' else 'Duration' }}</label>
-                                                    <input class="form-control" name="intake_meeting_duration" value="{{ intake_form_data.get('meeting_duration', '') }}" placeholder="{{ 'למשל 50 דקות' if lang == 'he' else 'e.g. 50 min' }}">
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'מי מעביר' if lang == 'he' else 'Conducted By' }}</label>
-                                                    <input class="form-control" name="intake_meeting_conductor" value="{{ intake_form_data.get('meeting_conductor', '') }}">
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-background">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'רקע והפניה' if lang == 'he' else 'Background and Referral' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'תלונה עיקרית' if lang == 'he' else 'Main Complaint' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_main_complaint">{{ intake_form_data.get('main_complaint', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'היסטוריה של הבעיה ומחלה נוכחית' if lang == 'he' else 'Problem History / Current Illness' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_problem_history">{{ intake_form_data.get('problem_history', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'אנמנזה מוקדמת (התפתחותית/משפחתית/חברתית/חינוכית/תעסוקתית/רומנטית)' if lang == 'he' else 'Early Anamnesis (developmental/family/social/educational/occupational/romantic)' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_early_anamnesis">{{ intake_form_data.get('early_anamnesis', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'כיצד הופנה המטופל' if lang == 'he' else 'Referral Source' }}</label>
-                                                    <input class="form-control" name="intake_referral_source" value="{{ intake_form_data.get('referral_source', '') }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'תאריך ההפניה' if lang == 'he' else 'Referral Date' }}</label>
-                                                    <input class="form-control" type="date" name="intake_referral_date" value="{{ intake_form_data.get('referral_date', '') }}">
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-admin">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרטים אדמיניסטרטיביים' if lang == 'he' else 'Administrative Details' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'מצב משפחתי' if lang == 'he' else 'Family Status' }}</label>
-                                                    <input class="form-control" name="intake_family_status" value="{{ intake_form_data.get('family_status', '') }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'אפוטרופסות' if lang == 'he' else 'Guardian Status' }}</label>
-                                                    <select class="form-select" name="intake_guardian_status">
-                                                        {% set guardian_value = intake_form_data.get('guardian_status', '') %}
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['לא', 'קטין', 'לגופו', 'לרכושו', 'כללי', 'לא ידוע'] %}
-                                                        <option value="{{ opt }}" {% if guardian_value == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'לא':'No','קטין':'Minor','לגופו':'Personal','לרכושו':'Property','כללי':'General','לא ידוע':'Unknown'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-12" id="intakeGuardianSpecifyWrap">
-                                                    <label class="form-label fw-bold small">{{ 'אם יש אפוטרופסות, על ידי מי' if lang == 'he' else 'Guardian Details' }}</label>
-                                                    <input class="form-control" name="intake_guardian_by_whom" value="{{ intake_form_data.get('guardian_by_whom', '') }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'עם מי גר' if lang == 'he' else 'Living Arrangement' }}</label>
-                                                    {% set living_value = intake_form_data.get('living_with', '') %}
-                                                    <select class="form-select" name="intake_living_with">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['הורים','רק אם','רק אב','בני משפחה אחרים','אומנה','מוסד','לבד','אחר'] %}
-                                                        <option value="{{ opt }}" {% if living_value == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'הורים':'Parents','רק אם':'Mother only','רק אב':'Father only','בני משפחה אחרים':'Other family','אומנה':'Foster care','מוסד':'Institution','לבד':'Alone','אחר':'Other'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6" id="intakeLivingWithOtherWrap">
-                                                    <label class="form-label fw-bold small">{{ 'אם אחר, פרט' if lang == 'he' else 'If Other, Specify' }}</label>
-                                                    <input class="form-control" name="intake_living_with_other" value="{{ intake_form_data.get('living_with_other', '') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'סטטוס נכות' if lang == 'he' else 'Disability Status' }}</label>
-                                                    {% set disability_value = intake_form_data.get('disability_status', '') %}
-                                                    <select class="form-select" id="intakeDisabilityStatus" name="intake_disability_status">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if disability_value == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if disability_value == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                        <option value="לא ידוע" {% if disability_value == 'לא ידוע' %}selected{% endif %}>{{ 'לא ידוע' if lang == 'he' else 'Unknown' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4" id="intakeDisabilityPercentWrap">
-                                                    <label class="form-label fw-bold small">{{ 'אחוזי נכות' if lang == 'he' else 'Disability Percent' }}</label>
-                                                    <input class="form-control" id="intakeDisabilityPercent" name="intake_disability_percent" value="{{ intake_form_data.get('disability_percent', '') }}" placeholder="%">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'רמת סיכון לפגיעה עצמית' if lang == 'he' else 'Self-harm Risk Level' }}</label>
-                                                    {% set self_harm_level = intake_form_data.get('self_harm_level', '') %}
-                                                    <select class="form-select" id="intakeSelfHarmLevel" name="intake_self_harm_level">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['ניסיון שנעצר לאחר מעשה','ניסיון שנעצר על ידי אחר לפני','ניסיון שנעצר בעצמו לפני','תוכנית עם כוונה','תוכנית ללא כוונה','כוונה ללא תוכנית','מחשבות קונקרטיות','מחשבות תיאורטיות','מחשבות מזדמנות','לא היה'] %}
-                                                        <option value="{{ opt }}" {% if self_harm_level == opt %}selected{% endif %}>{{ opt if lang == 'he' else {
-                                                            'ניסיון שנעצר לאחר מעשה':'Attempt interrupted after act',
-                                                            'ניסיון שנעצר על ידי אחר לפני':'Attempt interrupted by other (before act)',
-                                                            'ניסיון שנעצר בעצמו לפני':'Self-interrupted attempt (before act)',
-                                                            'תוכנית עם כוונה':'Plan with intent',
-                                                            'תוכנית ללא כוונה':'Plan without intent',
-                                                            'כוונה ללא תוכנית':'Intent without plan',
-                                                            'מחשבות קונקרטיות':'Concrete thoughts',
-                                                            'מחשבות תיאורטיות':'Theoretical thoughts',
-                                                            'מחשבות מזדמנות':'Occasional thoughts',
-                                                            'לא היה':'None'
-                                                        }[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'מתי לאחרונה' if lang == 'he' else 'Most Recent Event' }}</label>
-                                                    <input class="form-control" id="intakeSelfHarmRecent" name="intake_self_harm_recent" value="{{ intake_form_data.get('self_harm_recent', '') }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'כמה מקרים בעבר' if lang == 'he' else 'Past Incidents Count' }}</label>
-                                                    <input class="form-control" id="intakeSelfHarmCount" name="intake_self_harm_count" value="{{ intake_form_data.get('self_harm_count', '') }}">
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'טיפולים כפויים בעבר' if lang == 'he' else 'Forced Treatment History' }}</label>
-                                                    {% set forced_treatment = intake_form_data.get('forced_treatment', '') %}
-                                                    <select class="form-select" name="intake_forced_treatment">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="לא" {% if forced_treatment == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                        <option value="באשפוז" {% if forced_treatment == 'באשפוז' %}selected{% endif %}>{{ 'באשפוז' if lang == 'he' else 'Inpatient' }}</option>
-                                                        <option value="במרפאה" {% if forced_treatment == 'במרפאה' %}selected{% endif %}>{{ 'במרפאה' if lang == 'he' else 'Outpatient clinic' }}</option>
-                                                        <option value="באשפוז ובמרפאה" {% if forced_treatment == 'באשפוז ובמרפאה' %}selected{% endif %}>{{ 'באשפוז ובמרפאה' if lang == 'he' else 'Inpatient and outpatient' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'שימוש בסמים' if lang == 'he' else 'Substance Use' }}</label>
-                                                    <textarea class="form-control" rows="2" name="intake_substance_use">{{ intake_form_data.get('substance_use', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'קנאביס רפואי' if lang == 'he' else 'Medical Cannabis' }}</label>
-                                                    <textarea class="form-control" rows="2" name="intake_medical_cannabis">{{ intake_form_data.get('medical_cannabis', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'שימוש באלכוהול' if lang == 'he' else 'Alcohol Use' }}</label>
-                                                    <textarea class="form-control" rows="2" name="intake_alcohol_use">{{ intake_form_data.get('alcohol_use', '') }}</textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-medical">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'רקע רפואי' if lang == 'he' else 'Medical Background' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'מחלות רקע' if lang == 'he' else 'Medical Background Conditions' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_medical_conditions">{{ intake_form_data.get('medical_conditions', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'מחלות נפשיות, אבחון, טיפול ואשפוז' if lang == 'he' else 'Psychiatric Conditions, Diagnosis, Treatment, Hospitalization' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_psychiatric_conditions">{{ intake_form_data.get('psychiatric_conditions', '') }}</textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-mental">
-                                            <div class="row g-3">
-                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'הופעה' if lang == 'he' else 'Appearance' }}</h6></div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'תואמת' if lang == 'he' else 'Congruent' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_fit" value="כן" id="appearanceFitYes" {% if 'כן' in appearance_fit_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="appearanceFitYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
-                                                        </div>
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_fit" value="לא" id="appearanceFitNo" {% if 'לא' in appearance_fit_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="appearanceFitNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הופעה - הערה' if lang == 'he' else 'Appearance Note' }}</label><input class="form-control" name="intake_appearance_fit_note" value="{{ intake_form_data.get('appearance_fit_note', '') }}"></div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מסודרת' if lang == 'he' else 'Ordered' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_ordered" value="כן" id="appearanceOrderedYes" {% if 'כן' in appearance_ordered_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="appearanceOrderedYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
-                                                        </div>
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_appearance_ordered" value="לא" id="appearanceOrderedNo" {% if 'לא' in appearance_ordered_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="appearanceOrderedNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מסודרות/מוזנחת' if lang == 'he' else 'Ordering Note' }}</label><input class="form-control" name="intake_appearance_ordered_note" value="{{ intake_form_data.get('appearance_ordered_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'שיתוף פעולה' if lang == 'he' else 'Cooperation' }}</label>
-                                                    {% set cooperation = intake_form_data.get('cooperation', '') %}
-                                                    <select class="form-select" name="intake_cooperation">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if cooperation == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if cooperation == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות על שיתוף פעולה' if lang == 'he' else 'Cooperation Note' }}</label><input class="form-control" name="intake_cooperation_note" value="{{ intake_form_data.get('cooperation_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'קשר עין' if lang == 'he' else 'Eye Contact' }}</label>
-                                                    {% set eye_contact = intake_form_data.get('eye_contact', '') %}
-                                                    <select class="form-select" name="intake_eye_contact">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['כן','מנסה ומצליח','מנסה ולא מצליח','לא מנסה','נמנע'] %}
-                                                        <option value="{{ opt }}" {% if eye_contact == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'כן':'Yes','מנסה ומצליח':'Attempts and succeeds','מנסה ולא מצליח':'Attempts and fails','לא מנסה':'Does not attempt','נמנע':'Avoidant'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות קשר עין' if lang == 'he' else 'Eye Contact Note' }}</label><input class="form-control" name="intake_eye_contact_note" value="{{ intake_form_data.get('eye_contact_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'התנהגות' if lang == 'he' else 'Behavior' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקינה','לא תקינה'] %}
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_behavior_normal" value="{{ opt }}" id="behaviorNormal{{ loop.index }}" {% if opt in behavior_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="behaviorNormal{{ loop.index }}">{{ opt if lang == 'he' else {'תקינה':'Normal','לא תקינה':'Not normal'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות התנהגות' if lang == 'he' else 'Behavior Note' }}</label><input class="form-control" name="intake_behavior_note" value="{{ intake_form_data.get('behavior_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'דיבור' if lang == 'he' else 'Speech' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['מהיר','איטי','לא ברור','שפה דלה','שפה עשירה','שפה טכנית'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_speech_style" value="{{ opt }}" id="speechStyle{{ loop.index }}" {% if opt in speech_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="speechStyle{{ loop.index }}">{{ opt if lang == 'he' else {'מהיר':'Fast','איטי':'Slow','לא ברור':'Unclear','שפה דלה':'Poor language','שפה עשירה':'Rich language','שפה טכנית':'Technical language'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות דיבור' if lang == 'he' else 'Speech Note' }}</label><input class="form-control" name="intake_speech_note" value="{{ intake_form_data.get('speech_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'מצב רוח' if lang == 'he' else 'Mood' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקין','חרדתי','דיכאון','אאופורי','מצומצם','תוקפני','שטוח','מגוון','מעורבב'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_mood" value="{{ opt }}" id="moodVal{{ loop.index }}" {% if opt in mood_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="moodVal{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-8"><label class="form-label fw-bold small">{{ 'הערות מצב רוח' if lang == 'he' else 'Mood Note' }}</label><input class="form-control" name="intake_mood_note" value="{{ intake_form_data.get('mood_note', '') }}"></div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט תואם מצב רוח' if lang == 'he' else 'Affect Congruent with Mood' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_affect_match" value="כן" id="affectMatchYes" {% if 'כן' in affect_match_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="affectMatchYes">{{ 'כן' if lang == 'he' else 'Yes' }}</label>
-                                                        </div>
-                                                        <div class="form-check form-check-inline">
-                                                            <input class="form-check-input" type="checkbox" name="intake_affect_match" value="לא" id="affectMatchNo" {% if 'לא' in affect_match_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="affectMatchNo">{{ 'לא' if lang == 'he' else 'No' }}</label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'אפקט - מצב' if lang == 'he' else 'Affect State' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקין','חרדתי','דיכאון','אאופורי','מצומצם','תוקפני','שטוח','מגוון','מעורבב'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_affect_state" value="{{ opt }}" id="affectState{{ loop.index }}" {% if opt in affect_state_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="affectState{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','חרדתי':'Anxious','דיכאון':'Depressed','אאופורי':'Euphoric','מצומצם':'Constricted','תוקפני':'Aggressive','שטוח':'Flat','מגוון':'Varied','מעורבב':'Mixed'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'הערות אפקט' if lang == 'he' else 'Affect Note' }}</label><input class="form-control" name="intake_affect_note" value="{{ intake_form_data.get('affect_note', '') }}"></div>
-
-                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'חשיבה' if lang == 'he' else 'Thinking' }}</h6></div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'חשיבה תקינה' if lang == 'he' else 'Thinking Normal' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['כן','לא','מופחתת'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_normal" value="{{ opt }}" id="thinkingNormal{{ loop.index }}" {% if opt in thinking_normal_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="thinkingNormal{{ loop.index }}">{{ opt if lang == 'he' else {'כן':'Yes','לא':'No','מופחתת':'Reduced'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'קצב חשיבה' if lang == 'he' else 'Thinking Rate' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקין','מהיר','איטי','מעורבב'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_rate" value="{{ opt }}" id="thinkingRate{{ loop.index }}" {% if opt in thinking_rate_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="thinkingRate{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','מהיר':'Fast','איטי':'Slow','מעורבב':'Mixed'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'רצף חשיבה' if lang == 'he' else 'Thinking Sequence' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקין','משיקני','פרסרטיבי','קוהרנטי','תקוע','אסוציאטיבי'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_sequence" value="{{ opt }}" id="thinkingSeq{{ loop.index }}" {% if opt in thinking_sequence_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="thinkingSeq{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','משיקני':'Tangential','פרסרטיבי':'Perseverative','קוהרנטי':'Coherent','תקוע':'Blocked','אסוציאטיבי':'Associative'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תוכן חשיבה' if lang == 'he' else 'Thinking Content' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['תקין','אובססיבי','פובי','חרדתי','דיכאוני','קונקרטי','אבסטרקטי'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_thinking_content" value="{{ opt }}" id="thinkingContent{{ loop.index }}" {% if opt in thinking_content_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="thinkingContent{{ loop.index }}">{{ opt if lang == 'he' else {'תקין':'Normal','אובססיבי':'Obsessive','פובי':'Phobic','חרדתי':'Anxious','דיכאוני':'Depressive','קונקרטי':'Concrete','אבסטרקטי':'Abstract'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-
-                                                <div class="col-12"><h6 class="small text-uppercase text-primary fw-bold mb-1">{{ 'תפיסה' if lang == 'he' else 'Perception' }}</h6></div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תפיסה תקינה' if lang == 'he' else 'Perception Normal' }}</label>
-                                                    {% set perception_normal = intake_form_data.get('perception_normal', '') %}
-                                                    <select class="form-select" name="intake_perception_normal">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if perception_normal == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if perception_normal == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'תפיסה לא תקינה' if lang == 'he' else 'Perception Abnormal' }}</label>
-                                                    {% set perception_abnormal = intake_form_data.get('perception_abnormal', '') %}
-                                                    <select class="form-select" name="intake_perception_abnormal">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['אילוזיות','דה פרסונליזציה','דה ריאליזציה','הלוצינציות','דלוזיות'] %}
-                                                        <option value="{{ opt }}" {% if perception_abnormal == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'אילוזיות':'Illusions','דה פרסונליזציה':'Depersonalization','דה ריאליזציה':'Derealization','הלוצינציות':'Hallucinations','דלוזיות':'Delusions'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'בוחן מציאות' if lang == 'he' else 'Reality Testing' }}</label>
-                                                    {% set reality_testing = intake_form_data.get('reality_testing', '') %}
-                                                    <select class="form-select" name="intake_reality_testing">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['תקין','מעורער','מפורק'] %}
-                                                        <option value="{{ opt }}" {% if reality_testing == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Intact','מעורער':'Impaired','מפורק':'Severely impaired'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3"><label class="form-label fw-bold small">{{ 'בוחן שיפוט' if lang == 'he' else 'Judgment' }}</label>
-                                                    {% set judgment = intake_form_data.get('judgment', '') %}
-                                                    <select class="form-select" name="intake_judgment">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['תקין','מעורער','מפורק'] %}
-                                                        <option value="{{ opt }}" {% if judgment == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'תקין':'Intact','מעורער':'Impaired','מפורק':'Severely impaired'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'תובנה עצמית' if lang == 'he' else 'Self Insight' }}</label>
-                                                    {% set self_insight = intake_form_data.get('self_insight', '') %}
-                                                    <select class="form-select" name="intake_self_insight">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['מלאה','חלקית פנימית','חלקית חיצונית','לקויה'] %}
-                                                        <option value="{{ opt }}" {% if self_insight == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'מלאה':'Full','חלקית פנימית':'Partial internal','חלקית חיצונית':'Partial external','לקויה':'Poor'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'התמצאות' if lang == 'he' else 'Orientation' }}</label>
-                                                    {% set orientation = intake_form_data.get('orientation', '') %}
-                                                    <select class="form-select" name="intake_orientation">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="תקינה" {% if orientation == 'תקינה' %}selected{% endif %}>{{ 'תקינה' if lang == 'he' else 'Intact' }}</option>
-                                                        <option value="לא תקינה בזמן ובמקום" {% if orientation == 'לא תקינה בזמן ובמקום' %}selected{% endif %}>{{ 'לא תקינה בזמן ובמקום' if lang == 'he' else 'Impaired in time/place' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4"><label class="form-label fw-bold small">{{ 'זיכרון' if lang == 'he' else 'Memory' }}</label>
-                                                    {% set memory = intake_form_data.get('memory', '') %}
-                                                    <select class="form-select" name="intake_memory">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="תקין" {% if memory == 'תקין' %}selected{% endif %}>{{ 'תקין' if lang == 'he' else 'Normal' }}</option>
-                                                        <option value="פגיעה טווח קצר" {% if memory == 'פגיעה טווח קצר' %}selected{% endif %}>{{ 'פגיעה טווח קצר' if lang == 'he' else 'Short-term impairment' }}</option>
-                                                        <option value="פגיעה טווח ארוך" {% if memory == 'פגיעה טווח ארוך' %}selected{% endif %}>{{ 'פגיעה טווח ארוך' if lang == 'he' else 'Long-term impairment' }}</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-diagnostic">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'פרופיל אבחוני' if lang == 'he' else 'Diagnostic Profile' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'שאלת ההפניה האבחונית' if lang == 'he' else 'Diagnostic referral question' }}</label>
-                                                    <textarea class="form-control" rows="3" name="intake_diag_referral_question">{{ intake_form_data.get('diag_referral_question', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'סוללת מבחנים' if lang == 'he' else 'Test battery (tests + dates)' }}</label>
-                                                    <textarea class="form-control" rows="3" name="intake_diag_test_battery">{{ intake_form_data.get('diag_test_battery', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'תצפיות במהלך אבחון' if lang == 'he' else 'Observations during assessment' }}</label>
-                                                    <textarea class="form-control" rows="3" name="intake_diag_observations">{{ intake_form_data.get('diag_observations', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'אבחנה מבדלת' if lang == 'he' else 'Differential diagnosis' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_diag_differential">{{ intake_form_data.get('diag_differential', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'התרשמות קלינית' if lang == 'he' else 'Clinical impression' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_diag_impression">{{ intake_form_data.get('diag_impression', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'המלצות' if lang == 'he' else 'Recommendations' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_diag_recommendations">{{ intake_form_data.get('diag_recommendations', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'תוכנית המשך' if lang == 'he' else 'Follow-up plan' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_diag_followup_plan">{{ intake_form_data.get('diag_followup_plan', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <label class="form-label fw-bold small">{{ 'סיכום אבחוני סופי' if lang == 'he' else 'Final diagnostic summary' }}</label>
-                                                    <textarea class="form-control" rows="4" name="intake_diag_final_summary">{{ intake_form_data.get('diag_final_summary', '') }}</textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="tab-pane fade" id="intake-plan">
-                                            <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'תוכנית טיפול והפניה' if lang == 'he' else 'Treatment Plan and Referral' }}</h6>
-                                            <div class="row g-3">
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'הפניה' if lang == 'he' else 'Referral Target' }}</label>
-                                                    <div class="border rounded-3 p-2 bg-white">
-                                                        {% for opt in ['לא מופנה','פסיכיאטר','פסיכולוג','ספק חוץ','עובדת סוציאלית','רופא משפחה','רופא אחר','סל שיקום','מיון פסיכיאטרי'] %}
-                                                        <div class="form-check">
-                                                            <input class="form-check-input" type="checkbox" name="intake_referral_target" value="{{ opt }}" id="referralTarget{{ loop.index }}" {% if opt in referral_target_values %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="referralTarget{{ loop.index }}">{{ opt if lang == 'he' else {'לא מופנה':'No referral','פסיכיאטר':'Psychiatrist','פסיכולוג':'Psychologist','ספק חוץ':'External provider','עובדת סוציאלית':'Social worker','רופא משפחה':'Family physician','רופא אחר':'Other physician','סל שיקום':'Rehabilitation basket','מיון פסיכיאטרי':'Psychiatric ER'}[opt] }}</label>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label fw-bold small">{{ 'הסכמת המטופל' if lang == 'he' else 'Patient Consent' }}</label>
-                                                    {% set patient_consent = intake_form_data.get('patient_consent', '') %}
-                                                    <select class="form-select" name="intake_patient_consent">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        <option value="כן" {% if patient_consent == 'כן' %}selected{% endif %}>{{ 'כן' if lang == 'he' else 'Yes' }}</option>
-                                                        <option value="לא" {% if patient_consent == 'לא' %}selected{% endif %}>{{ 'לא' if lang == 'he' else 'No' }}</option>
-                                                        <option value="חלקית" {% if patient_consent == 'חלקית' %}selected{% endif %}>{{ 'חלקית' if lang == 'he' else 'Partial' }}</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-12" id="intakeReferralDetailsWrap">
-                                                    <label class="form-label fw-bold small">{{ 'פירוט מטרות ההפניה' if lang == 'he' else 'Referral Details and Goals' }}</label>
-                                                    <textarea class="form-control" rows="3" name="intake_referral_details">{{ intake_form_data.get('referral_details', '') }}</textarea>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'גישה טיפולית' if lang == 'he' else 'Treatment Approach' }}</label>
-                                                    {% set treatment_approach = intake_form_data.get('treatment_approach', '') %}
-                                                    <select class="form-select" name="intake_treatment_approach">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['דינמית','CBT','מענה טלפוני','מענה קצר מועד','קבוצה','הדרכת הורים','אחר'] %}
-                                                        <option value="{{ opt }}" {% if treatment_approach == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'דינמית':'Dynamic','CBT':'CBT','מענה טלפוני':'Phone support','מענה קצר מועד':'Short-term support','קבוצה':'Group','הדרכת הורים':'Parent guidance','אחר':'Other'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'תדירות מפגשים' if lang == 'he' else 'Meeting Frequency' }}</label>
-                                                    <input class="form-control" name="intake_treatment_frequency" value="{{ intake_form_data.get('treatment_frequency', '') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <label class="form-label fw-bold small">{{ 'זמן משוער לטיפול' if lang == 'he' else 'Estimated Duration' }}</label>
-                                                    {% set estimated_duration = intake_form_data.get('treatment_estimated_duration', '') %}
-                                                    <select class="form-select" name="intake_treatment_estimated_duration">
-                                                        <option value="">{{ 'בחר' if lang == 'he' else 'Select' }}</option>
-                                                        {% for opt in ['חודש','שלושה חודשים','חצי שנה','שנה','יותר'] %}
-                                                        <option value="{{ opt }}" {% if estimated_duration == opt %}selected{% endif %}>{{ opt if lang == 'he' else {'חודש':'1 month','שלושה חודשים':'3 months','חצי שנה':'6 months','שנה':'1 year','יותר':'More'}[opt] }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-3 d-flex justify-content-end">
-                                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
-                                            <i class="bi bi-save me-1"></i>{{ 'שמירת אינטייק' if lang == 'he' else 'Save Intake Form' }}
-                                        </button>
-                                    </div>
-                                </form>
-
-                                {% if patient['patient_type'] == 'diagnosee' %}
-                                <hr class="my-4">
-                                <h6 class="small text-uppercase text-primary fw-bold mb-3">{{ 'מסמכי אבחון' if lang == 'he' else 'Diagnostic Documents' }}</h6>
-                                <form method="post" action="{{ url_for('add_diagnosis_document', patient_id=patient['id']) }}" enctype="multipart/form-data" class="row g-3 mb-3">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-bold small">{{ 'סוג מסמך' if lang == 'he' else 'Document type' }}</label>
-                                        <select class="form-select" name="category">
-                                            <option value="test_document">{{ 'מסמך אבחון' if lang == 'he' else 'Diagnostic document' }}</option>
-                                            <option value="final_result">{{ 'תוצאה סופית' if lang == 'he' else 'Final result' }}</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-bold small">{{ 'כותרת' if lang == 'he' else 'Title' }}</label>
-                                        <input class="form-control" name="title" placeholder="{{ 'לדוגמה: WAIS-IV' if lang == 'he' else 'Example: WAIS-IV' }}">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-bold small">{{ 'קובץ' if lang == 'he' else 'File' }}</label>
-                                        <input class="form-control" type="file" name="diagnosis_file" required>
-                                    </div>
-                                    <div class="col-md-9">
-                                        <label class="form-label fw-bold small">{{ 'הערות' if lang == 'he' else 'Notes' }}</label>
-                                        <input class="form-control" name="notes" placeholder="{{ 'מידע נוסף על המסמך' if lang == 'he' else 'Optional context for this file' }}">
-                                    </div>
-                                    <div class="col-md-3 d-grid align-items-end">
-                                        <button type="submit" class="btn btn-outline-primary rounded-pill mt-md-4"><i class="bi bi-upload me-1"></i>{{ 'העלאה' if lang == 'he' else 'Upload' }}</button>
-                                    </div>
-                                </form>
-
-                                <div class="list-group list-group-flush border rounded-3">
-                                    {% for doc in diagnosis_documents %}
-                                    <div class="list-group-item py-3 d-flex justify-content-between align-items-start gap-3">
-                                        <div>
-                                            <div class="fw-semibold">{{ doc['title'] or doc['original_filename'] }}</div>
-                                            <div class="small text-muted">
-                                                {% if doc['category'] == 'final_result' %}
-                                                {{ 'תוצאה סופית' if lang == 'he' else 'Final result' }}
-                                                {% else %}
-                                                {{ 'מסמך אבחון' if lang == 'he' else 'Diagnostic document' }}
-                                                {% endif %}
-                                                · {{ doc['created_at'][:16] if doc['created_at'] else '' }}
-                                            </div>
-                                            {% if doc['notes'] %}<div class="small mt-1">{{ doc['notes'] }}</div>{% endif %}
-                                        </div>
-                                        <div class="d-flex gap-2">
-                                            <a class="btn btn-sm btn-outline-primary rounded-pill" href="{{ url_for('download_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}">{{ 'פתיחה' if lang == 'he' else 'Open' }}</a>
-                                            <form method="post" action="{{ url_for('delete_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}" onsubmit="return confirm('{{ 'למחוק מסמך זה?' if lang == 'he' else 'Delete this document?' }}')">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button class="btn btn-sm btn-outline-danger rounded-pill" type="submit">{{ 'מחיקה' if lang == 'he' else 'Delete' }}</button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                    {% else %}
-                                    <div class="list-group-item text-muted small">{{ 'עדיין אין מסמכי אבחון.' if lang == 'he' else 'No diagnostic documents yet.' }}</div>
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <div class="col-lg-5">
-                        <!-- Portal Access -->
-                        <div class="card border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden mb-4">
-                            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
-                                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>{{ t('Portal Access') }}</h5>
-                            </div>
-                            <div class="card-body p-4">
-                                {% if user %}
-                                    <div class="p-3 mb-3 rounded-3 {% if user['is_active'] %}bg-success{% else %}bg-warning{% endif %} bg-opacity-10 border border-{% if user['is_active'] %}success{% else %}warning{% endif %} border-opacity-25 d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <span class="badge {% if user['is_active'] %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">{% if user['is_active'] %}ACTIVE{% else %}DISABLED{% endif %}</span>
-                                            <span class="fw-bold">@{{ user['username'] }}</span>
-                                        </div>
-                                        <form method="post" action="{{ url_for('toggle_access', patient_id=patient['id']) }}">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm {% if user['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill px-3">
-                                                {% if user['is_active'] %}{{ t('Disable') }}{% else %}{{ t('Enable') }}{% endif %}
-                                            </button>
-                                        </form>
-                                    </div>
-                                {% endif %}
-
-                                <form method="post" action="{{ url_for('manage_access', patient_id=patient['id']) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="mb-3">
-                                        <input type="text" name="username" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="{{ t('Username') }}" required value="{{ user['username'] if user else '' }}">
-                                    </div>
-                                    <div class="mb-3">
-                                        <input type="password" name="password" class="form-control form-control-sm bg-secondary bg-opacity-25 border-0 text-white" placeholder="{{ t('Password') }}" required>
-                                    </div>
-                                    <button type="submit" class="btn btn-info w-100 btn-sm fw-bold rounded-pill">{% if user %}{{ t('Update Access') }}{% else %}{{ t('Grant Access') }}{% endif %}</button>
-                                </form>
-                            </div>
-                        </div>
-
-                        <!-- Resources Section -->
-                        <div class="card mb-4 border-0 shadow-sm rounded-4">
-                            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>{{ t('Resources') }}</h5>
-                                <span class="badge bg-primary-subtle text-primary border">{{ assigned_resources|length }}</span>
-                            </div>
-                            <div class="card-body p-4">
-                                <div class="list-group list-group-flush border rounded-3 mb-3">
-                                    {% for res in assigned_resources %}
-                                    <div class="list-group-item px-3 py-2 d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <div class="small fw-semibold">{{ res['title'] }}</div>
-                                            {% if res['url'] %}
-                                            <a href="{{ res['url'] }}" target="_blank" rel="noopener noreferrer" class="small text-primary text-decoration-none text-truncate d-block" style="max-width:180px">{{ res['url'] }}</a>
-                                            {% endif %}
-                                        </div>
-                                        <form method="post" action="{{ url_for('unassign_resource', patient_id=patient['id'], resource_id=res['id']) }}" onsubmit="return confirm('Unassign this resource?')">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem" title="{{ t('Unassign') }}"><i class="bi bi-x-lg"></i></button>
-                                        </form>
-                                    </div>
-                                    {% else %}
-                                    <div class="list-group-item small text-muted py-3 text-center">No resources assigned.</div>
-                                    {% endfor %}
-                                </div>
-                                {% if all_resources %}
-                                <form method="post" action="{{ url_for('assign_resource', patient_id=patient['id']) }}" class="d-flex gap-2">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <select name="resource_id" class="form-select form-select-sm">
-                                        <option value="">— Assign resource —</option>
-                                        {% for r in all_resources %}
-                                        <option value="{{ r['id'] }}">{{ r['title'] }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <button type="submit" class="btn btn-sm btn-primary px-3 flex-shrink-0"><i class="bi bi-plus-lg"></i></button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <!-- Files Section -->
-                        <div class="card mb-4 border-0 shadow-sm rounded-4">
-                            <div class="card-header bg-white py-3 border-0">
-                                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-medical me-2 text-primary"></i>{{ t('Medical Files') }}</h5>
-                            </div>
-                            <div class="card-body p-4">
-                                <form method="post" action="{{ url_for('add_file', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="input-group input-group-sm">
-                                        <input type="file" name="file" class="form-control rounded-start-3" required>
-                                        <button class="btn btn-primary px-3 fw-bold rounded-end-pill" type="submit">{{ t('Upload') }}</button>
-                                    </div>
-                                </form>
-
-                                <h6 class="smallest text-uppercase fw-bold text-muted mb-2">{{ t('Import Patient History (JSON)') }}</h6>
-                                <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="input-group input-group-sm">
-                                        <input type="file" name="file" class="form-control rounded-start-3" accept=".json" required>
-                                        <button class="btn btn-secondary px-3 fw-bold rounded-end-pill" type="submit">{{ t('Import') }}</button>
-                                    </div>
-                                </form>
-                                <div class="list-group list-group-flush border rounded-3 overflow-hidden">
-                                    {% for file in files %}
-                                        <div class="list-group-item px-3 py-2 bg-transparent d-flex align-items-center border-bottom">
-                                            <i class="bi bi-file-earmark-text text-primary me-2"></i>
-                                            <a href="{{ url_for('download_file', name=file['filename']) }}" target="_blank" class="text-decoration-none text-dark small text-truncate">{{ file['filename'] }}</a>
-                                        </div>
-                                    {% else %}
-                                        <div class="py-3 text-center text-muted small">{{ t('No documents found.') }}</div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <!-- Appointments Management -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
             </div>
-
-            {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
-            <div class="tab-pane fade" id="intake" role="tabpanel" aria-labelledby="intake-tab">
-                <div id="intakeFormHost"></div>
-            </div>
-            {% endif %}
-
-            <!-- TREATMENT LOG TAB -->
-            <div class="tab-pane fade" id="notes" role="tabpanel" aria-labelledby="notes-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>{{ t('Treatment Log') }}</h5>
-                    </div>
-                    <div class="card-body p-4">
-
-                        {# ── Google Docs panel ─────────────────────────────────────── #}
-                        {% if patient.gdoc_id %}
-                        <div class="alert alert-success py-2 mb-2" role="alert" id="gdocLinkedPanel">
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
-                                <i class="bi bi-file-earmark-text-fill fs-5"></i>
-                                <span class="fw-semibold">Google Doc linked</span>
-                                <a href="{{ url_for('open_gdoc', patient_id=patient.id) }}" target="_blank" class="btn btn-sm btn-outline-success">Open Doc</a>
-                                <button class="btn btn-sm btn-outline-primary" id="gdocSyncBtn" onclick="syncFromGdoc({{ patient.id }})">Sync Now</button>
-                                <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="showGdocChangePanel()"><i class="bi bi-arrow-repeat me-1"></i>Change Doc</button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="detachGdoc({{ patient.id }})" title="Unlink this Google Doc (doc is not deleted)"><i class="bi bi-scissors me-1"></i>Disconnect</button>
+            <div class="card-body p-4">
+                <ul class="nav nav-tabs mb-3" id="apptTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active small fw-bold" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button" role="tab">One-Time</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link small fw-bold" id="recurring-tab" data-bs-toggle="tab" data-bs-target="#recurring" type="button" role="tab">Recurring Schedule</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="apptTabContent">
+                    <div class="tab-pane fade show active" id="single" role="tabpanel">
+                        <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="col-md-4">
+                                <label class="form-label smallest text-uppercase fw-bold">Date</label>
+                                <input type="date" name="date" class="form-control" required>
                             </div>
-                        </div>
-                        <div class="alert alert-light border py-2 mb-4 d-none" id="gdocChangePanel" role="alert">
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <i class="bi bi-link-45deg text-muted"></i>
-                                <span class="text-muted small">Attach a different doc:</span>
-                                <input type="text" id="gdocAttachUrl" class="form-control form-control-sm" placeholder="Paste Google Doc URL" style="min-width:260px;">
-                                <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})"><i class="bi bi-link-45deg me-1"></i>Attach</button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="hideGdocChangePanel()">Cancel</button>
+                            <div class="col-md-3">
+                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
+                                <input type="time" name="time" class="form-control" required>
                             </div>
-                        </div>
-                        {% else %}
-                        <div class="alert alert-light border py-2 mb-4" role="alert">
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
-                                <i class="bi bi-file-earmark-text fs-5 text-muted"></i>
-                                <span class="text-muted small">No Google Doc linked yet.</span>
-                                <button class="btn btn-sm btn-outline-secondary" id="gdocLinkBtn" onclick="linkGdoc({{ patient.id }})">
-                                    <i class="bi bi-plus-circle me-1"></i>Create &amp; Link Google Doc
-                                </button>
-                                <div class="d-flex align-items-center gap-2 ms-auto flex-wrap">
-                                    <input type="text" id="gdocAttachUrl" class="form-control form-control-sm"
-                                        placeholder="Paste existing Google Doc URL" style="min-width:260px;">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="attachGdoc({{ patient.id }})"><i class="bi bi-link-45deg me-1"></i>Attach</button>
-                                </div>
+                            <div class="col-md-3">
+                                <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
+                                <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
                             </div>
-                        </div>
-                        {% endif %}
+                            <div class="col-md-2">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
+                            </div>
+                        </form>
 
-                        <div class="mb-4">
-                            <h6 class="text-uppercase smallest text-muted mb-3">Last Meeting Record</h6>
-                            {% if latest_note %}
-                                <div class="border rounded-4 p-3 bg-light">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <h6 class="mb-0 fw-bold text-dark">
-                                            Meeting #{{ latest_note['session_number'] or 'N/A' }} - {{ latest_note['note_date'] or latest_note['created_at'][:10] }}
-                                        </h6>
-                                        <span class="small text-muted">Created: {{ latest_note['created_at'] }}</span>
+                        <div class="appointments-list">
+                            {% for appt in appointments %}
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
+                                    <div>
+                                        <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
+                                        <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
+                                        <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
                                     </div>
-                                    <div class="small text-dark mb-2">{{ latest_note['content'] }}</div>
-                                    <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#latestBehaviorAppearance">
-                                        Behavior & Appearance
-                                    </button>
-                                    <div class="collapse mt-2" id="latestBehaviorAppearance">
-                                        <div class="border rounded-3 p-3 bg-white">
-                                            <div class="small mb-2"><strong>Appearance:</strong> {{ latest_note['patient_appearance'] or 'Not recorded' }}</div>
-                                            <div class="small mb-2"><strong>Mood:</strong> {{ latest_note['mood_summary'] or 'Not recorded' }}</div>
-                                            <div class="small mb-2"><strong>Behavior Notes:</strong> {{ latest_note['behavior_notes'] or 'Not recorded' }}</div>
-                                            <div class="small">
-                                                <strong>Behavior Checklist:</strong>
-                                                {% if latest_note['behavior_checklist'] %}
-                                                    {% for tag in latest_note['behavior_checklist'].split(',') %}
-                                                        {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
-                                                    {% endfor %}
-                                                {% else %}
-                                                    Not recorded
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
+                                    </form>
                                 </div>
                             {% else %}
                                 <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small">No meeting has been recorded yet.</p>
+                                    <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
                                 </div>
-                            {% endif %}
+                            {% endfor %}
                         </div>
+                    </div>
 
-                        <div class="mb-4">
-                            <h6 class="text-uppercase smallest text-muted mb-3">Treatment Log</h6>
-                            <form method="post" action="{{ url_for('import_patient_history', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-white rounded-4 border">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <label class="form-label smallest text-uppercase fw-bold text-primary mb-2">Import treatment log (JSON)</label>
-                                <div class="input-group input-group-sm">
-                                    <input type="file" name="file" class="form-control" accept=".json" required>
-                                    <button class="btn btn-secondary fw-bold" type="submit">{{ t('Import') }}</button>
-                                </div>
-                            </form>
-                            <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="mb-4 p-3 bg-light rounded-4 border treatment-log-form">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-2">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Meeting #') }}</label>
-                                        <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_session_number }}">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Date') }}</label>
-                                        <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_note_date }}">
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">{{ t('Content') }}</label>
-                                        <textarea name="content" class="form-control border-0 shadow-sm" rows="5" placeholder="{{ t('Note content...') }}" required></textarea>
-                                    </div>
-                                    <div class="col-md-12">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Appearance overview</label>
-                                        <input type="text" name="patient_appearance" class="form-control form-control-sm border-0 shadow-sm" placeholder="General appearance notes" value="{{ latest_behavior['patient_appearance'] }}">
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior checklist</label>
-                                        <div class="row g-2">
-                                            {% for item in behavior_options %}
-                                            <div class="col-md-3 col-6">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_new_{{ loop.index }}" {% if item in latest_behavior['behavior_checklist'] %}checked{% endif %}>
-                                                    <label class="form-check-label small" for="behavior_new_{{ loop.index }}">{{ item }}</label>
-                                                </div>
-                                            </div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Mood summary</label>
-                                        <input type="text" name="mood_summary" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short mood summary" value="{{ latest_behavior['mood_summary'] }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Behavior notes</label>
-                                        <input type="text" name="behavior_notes" class="form-control form-control-sm border-0 shadow-sm" placeholder="Short behavior note" value="{{ latest_behavior['behavior_notes'] }}">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Meeting missed?</label>
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" name="is_missed_meeting" id="newIsMissedMeeting">
-                                            <label class="form-check-label small" for="newIsMissedMeeting">Mark as missed meeting</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-9">
-                                        <label class="form-label smallest text-uppercase fw-bold text-primary">Reason for missing</label>
-                                        <input type="text" name="missed_reason" class="form-control form-control-sm border-0 shadow-sm" placeholder="Patient did not arrive because...">
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <input type="file" name="files" class="form-control form-control-sm w-50" multiple>
-                                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold">{{ t('Post Treatment Log') }}</button>
-                                </div>
-                            </form>
-                        </div>
+                    <div class="tab-pane fade" id="recurring" role="tabpanel">
+                         <form method="post" action="{{ url_for('add_schedule', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="col-md-6">
+                                <label class="form-label smallest text-uppercase fw-bold">Day of Week</label>
+                                <select name="day" class="form-select" required>
+                                    <option value="0">Monday</option>
+                                    <option value="1">Tuesday</option>
+                                    <option value="2">Wednesday</option>
+                                    <option value="3">Thursday</option>
+                                    <option value="4">Friday</option>
+                                    <option value="5">Saturday</option>
+                                    <option value="6">Sunday</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
+                                <input type="time" name="time" class="form-control" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label d-none d-md-block">&nbsp;</label>
+                                <button type="submit" class="btn btn-success w-100 fw-bold">Set</button>
+                            </div>
+                        </form>
 
-                        <div class="notes-timeline">
-                            {% for note in notes %}
-                                {% set note_title_date = note['note_date'] or note['created_at'][:10] %}
-                                <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
-                                    <button class="btn btn-link text-decoration-none p-0 fw-bold text-dark w-100 text-start" type="button" data-bs-toggle="collapse" data-bs-target="#meetingContent{{ note['id'] }}">
-                                        Meeting #{{ note['session_number'] or 'N/A' }} - {{ note_title_date }}
-                                    </button>
-
-                                    <div class="collapse mt-3" id="meetingContent{{ note['id'] }}">
-                                        <div class="small text-dark mb-2">{{ note['content'] }}</div>
-                                        {% if note['is_missed_meeting'] %}
-                                        <div class="alert alert-warning small py-2 mb-2">
-                                            <strong>Missed meeting.</strong>
-                                            {% if note['missed_reason'] %} Reason: {{ note['missed_reason'] }}{% endif %}
-                                        </div>
-                                        {% endif %}
-                                        <button class="btn btn-sm btn-outline-primary rounded-pill mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#behaviorAppearance{{ note['id'] }}">
-                                            Behavior & Appearance
-                                        </button>
-                                        <div class="collapse mb-3" id="behaviorAppearance{{ note['id'] }}">
-                                            <div class="border rounded-3 p-3 bg-light">
-                                                <div class="small mb-1"><strong>Appearance:</strong> {{ note['patient_appearance'] or 'Not recorded' }}</div>
-                                                <div class="small mb-1"><strong>Mood:</strong> {{ note['mood_summary'] or 'Not recorded' }}</div>
-                                                <div class="small mb-1"><strong>Behavior Notes:</strong> {{ note['behavior_notes'] or 'Not recorded' }}</div>
-                                                <div class="small">
-                                                    <strong>Behavior Checklist:</strong>
-                                                    {% if note['behavior_checklist'] %}
-                                                        {% for tag in note['behavior_checklist'].split(',') %}
-                                                            {% if tag.strip() %}<span class="badge bg-light text-dark border me-1">{{ tag.strip() }}</span>{% endif %}
-                                                        {% endfor %}
-                                                    {% else %}
-                                                        Not recorded
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="small text-muted mb-2">Edited at: {{ note['updated_at'] or 'Not edited yet' }}</div>
-                                        <div class="d-flex gap-2">
-                                            <button class="btn btn-sm btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#editNote{{ note['id'] }}">{{ t('Edit') }}</button>
-                                            <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('Delete this meeting log?');">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">Delete</button>
-                                            </form>
-                                        </div>
-                                        <div class="collapse mt-3" id="editNote{{ note['id'] }}">
-                                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="p-3 border rounded-3 bg-light note-edit-form">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <div class="row g-2">
-                                                    <div class="col-md-2">
-                                                        <label class="form-label smallest">Meeting #</label>
-                                                        <input type="number" name="session_number" class="form-control form-control-sm" value="{{ note['session_number'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label smallest">Date</label>
-                                                        <input type="date" name="note_date" class="form-control form-control-sm" value="{{ note['note_date'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label smallest">Appearance overview</label>
-                                                        <input type="text" name="patient_appearance" class="form-control form-control-sm" value="{{ note['patient_appearance'] or '' }}">
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label smallest">Behavior checklist</label>
-                                                        <div class="row g-2">
-                                                            {% set note_checks = (note['behavior_checklist'] or '').split(',') %}
-                                                            {% for item in behavior_options %}
-                                                            <div class="col-md-3 col-6">
-                                                                <div class="form-check">
-                                                                    <input class="form-check-input" type="checkbox" name="behavior_flags" value="{{ item }}" id="behavior_edit_{{ note['id'] }}_{{ loop.index }}" {% if item in note_checks %}checked{% endif %}>
-                                                                    <label class="form-check-label small" for="behavior_edit_{{ note['id'] }}_{{ loop.index }}">{{ item }}</label>
-                                                                </div>
-                                                            </div>
-                                                            {% endfor %}
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label smallest">Mood summary</label>
-                                                        <input type="text" name="mood_summary" class="form-control form-control-sm" value="{{ note['mood_summary'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label smallest">Behavior notes</label>
-                                                        <input type="text" name="behavior_notes" class="form-control form-control-sm" value="{{ note['behavior_notes'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label smallest">Meeting missed?</label>
-                                                        <div class="form-check mt-1">
-                                                            <input class="form-check-input" type="checkbox" name="is_missed_meeting" id="missed_note_{{ note['id'] }}" {% if note['is_missed_meeting'] %}checked{% endif %}>
-                                                            <label class="form-check-label small" for="missed_note_{{ note['id'] }}">Yes</label>
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-md-9">
-                                                        <label class="form-label smallest">Reason for missing</label>
-                                                        <input type="text" name="missed_reason" class="form-control form-control-sm" value="{{ note['missed_reason'] or '' }}" placeholder="Optional reason">
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label smallest">Content</label>
-                                                        <textarea name="content" class="form-control form-control-sm" rows="6" required>{{ note['content'] or '' }}</textarea>
-                                                    </div>
-                                                </div>
-                                                <button type="submit" class="btn btn-sm btn-primary mt-2 rounded-pill px-3">Save changes</button>
-                                            </form>
-                                        </div>
+                        <div class="schedules-list">
+                            {% for sch in schedules %}
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
+                                    <div>
+                                        <span class="fw-bold text-dark">
+                                            {% set days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                                            {{ days[sch['day_of_week']] }}s
+                                        </span>
+                                        <span class="text-muted ms-2 small">@ {{ sch['appointment_time'] }}</span>
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 rounded-pill small fw-normal">Weekly</span>
                                     </div>
+                                    <form method="post" action="{{ url_for('delete_schedule', schedule_id=sch['id']) }}" onsubmit="return confirm('Remove recurring schedule?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
+                                    </form>
                                 </div>
                             {% else %}
                                 <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small">{{ t('No clinical history recorded.') }}</p>
+                                    <p class="text-muted mb-0 small"><i class="bi bi-arrow-repeat me-1"></i>No recurring schedule set.</p>
                                 </div>
                             {% endfor %}
                         </div>
@@ -1411,10 +281,77 @@
         </div>
     </div>
 
-    <div class="col-xl-3 order-1 order-xl-2">
-        <div class="card border-0 shadow-sm rounded-4 patient-actions-panel">
-            <div class="card-header bg-white border-0">
-                <h6 class="mb-0 text-primary fw-bold"><i class="bi bi-lightning-charge me-2"></i>{{ t('Quick Actions') }}</h6>
+    <div class="col-lg-5">
+        <!-- Messaging / Chat Interface for Admin -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 500px;">
+            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chat</h5>
+            </div>
+            <div class="card-body p-0 d-flex flex-column bg-light">
+                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
+                    {% if user %}
+                        {% for msg in messages %}
+                            <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%; position: relative;">
+                                 <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
+                                        {% if msg.sender_id == current_user.id %}You (Admin){% else %}Patient{% endif %}
+                                    </strong>
+                                    <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
+                                </div>
+
+                                <div class="message-content text-dark small" id="msg-content-{{ msg.id }}" style="white-space: pre-wrap;">{{ msg.content }}</div>
+
+                                {% if msg.sender_id == current_user.id %}
+                                    <div class="text-end mt-1">
+                                        <button class="btn btn-link p-0 text-muted smallest text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#edit-msg-{{ msg.id }}">
+                                            Edit
+                                        </button>
+                                    </div>
+                                    <div class="collapse mt-2" id="edit-msg-{{ msg.id }}">
+                                        <form method="post" action="{{ url_for('edit_message', message_id=msg.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <textarea name="content" class="form-control form-control-sm mb-2" rows="2">{{ msg.content }}</textarea>
+                                            <button type="submit" class="btn btn-primary btn-sm w-100">Update</button>
+                                        </form>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                             <div class="text-center py-5 mt-5">
+                                <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
+                                <p class="text-muted small">No conversation history.</p>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted small p-4 text-center">
+                            <div>
+                                <i class="bi bi-person-slash fs-1 opacity-25 d-block mb-3"></i>
+                                Patient has no active account.<br>Enable access to start chatting.
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if user %}
+                <div class="p-3 bg-white border-top">
+                    <form method="post" action="{{ url_for('send_message', patient_id=patient['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="input-group">
+                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Message patient..." required style="resize: none;"></textarea>
+                            <button type="submit" class="btn btn-primary fw-bold px-3">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Access Management Card -->
+        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden">
+            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
             </div>
             <div class="card-body d-grid gap-2">
                 {% if patient['status'] == 'candidate' %}
@@ -1493,117 +430,13 @@
     </div>
 </div>
 
-{% if patient['status'] == 'candidate' %}
-<div class="modal fade" id="convertModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content border-0 shadow rounded-4">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title fw-bold text-primary">{{ t('Convert to Ongoing') }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body p-4">
-        <form id="convertForm" method="POST" action="{{ url_for('convert_patient', patient_id=patient['id']) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Start Date') }}</label>
-                    <input type="date" name="start_date" id="start_date" class="form-control" required>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Time') }}</label>
-                    <select name="time" class="form-select" required>
-                        {% for h in range(8, 22) %}
-                            <option value="{{ '%02d' % h }}:00">{{ '%02d' % h }}:00</option>
-                            <option value="{{ '%02d' % h }}:30">{{ '%02d' % h }}:30</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Duration (Minutes)') }}</label>
-                    <select name="duration" class="form-select" required>
-                        <option value="30">30 minutes</option>
-                        <option value="60" selected>60 minutes</option>
-                        <option value="90">90 minutes</option>
-                        <option value="120">120 minutes</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Cost') }}</label>
-                    <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00" value="0">
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence Interval') }}</label>
-                <select name="interval" class="form-select">
-                    <option value="1" selected>{{ t('Every Week') }}</option>
-                    <option value="2">{{ t('Every 2 Weeks') }}</option>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence Days') }}</label>
-                <div class="p-3 bg-light rounded-2">
-                    <div class="row g-2">
-                        <div class="col-auto">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="days" value="0" id="day_sunday">
-                                <label class="form-check-label" for="day_sunday">{{ t('Sunday') }}</label>
-                            </div>
-                        </div>
-                        <div class="col-auto">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="days" value="1" id="day_monday" checked>
-                                <label class="form-check-label" for="day_monday">{{ t('Monday') }}</label>
-                            </div>
-                        </div>
-                        <div class="col-auto">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="days" value="2" id="day_tuesday">
-                                <label class="form-check-label" for="day_tuesday">{{ t('Tuesday') }}</label>
-                            </div>
-                        </div>
-                        <div class="col-auto">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="days" value="3" id="day_wednesday">
-                                <label class="form-check-label" for="day_wednesday">{{ t('Wednesday') }}</label>
-                            </div>
-                        </div>
-                        <div class="col-auto">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="days" value="4" id="day_thursday">
-                                <label class="form-check-label" for="day_thursday">{{ t('Thursday') }}</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label smallest text-uppercase fw-bold text-muted">{{ t('Recurrence End Limit') }}</label>
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitDate" value="date">
-                    <label class="form-check-label" for="limitDate">{{ t('Until Date') }}</label>
-                    <input type="date" name="recurrence_end_date" id="recurrence_end_date" class="form-control form-control-sm mt-1">
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="recurrence_limit_type" id="limitCount" value="count" checked>
-                    <label class="form-check-label" for="limitCount">{{ t('Number of Sessions') }}</label>
-                    <input type="number" name="recurrence_count" id="recurrence_count" class="form-control form-control-sm mt-1" value="12" min="1">
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold mt-3">{{ t('Save & Convert') }}</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
+<script>
+    // Auto-scroll to bottom of chat
+    var chatHistory = document.getElementById('chatHistory');
+    if(chatHistory) {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+</script>
 
 <style>
 .note-item { transition: transform 0.2s; border-left-width: 5px !important; }
