@@ -715,6 +715,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const recurringInfo = payload.is_recurring
             ? `<div class="alert alert-info py-1 px-2 small mb-2">${I18N.recurringMeeting}</div>`
             : '';
+        const scopeHtml = '';
         const patientLinkHtml = (isAdmin && payload.patient_id)
             ? `<div class="mb-2"><a class="btn btn-sm btn-outline-secondary" href="/patient/${payload.patient_id}?tab=appointments" target="_blank" rel="noopener noreferrer">${I18N.openPatientProfile}</a></div>`
             : '';
@@ -822,63 +823,74 @@ document.addEventListener('DOMContentLoaded', function() {
 
         function submitAppointmentEdit(scopeChoice) {
             const selectedType = document.getElementById('editMeetingType').value;
-            const scope = scopeChoice || 'all';
-            const body = new URLSearchParams({
-                date: document.getElementById('editMeetingDate').value,
-                time: document.getElementById('editMeetingTime').value,
-                end_time: document.getElementById('editMeetingEndTime').value,
-                meeting_type: selectedType,
-                meeting_link: document.getElementById('editMeetingLink').value || '',
-                meeting_title: document.getElementById('editMeetingTitle').value || '',
-                save_to_google: (document.getElementById('saveToGoogleCheck') && document.getElementById('saveToGoogleCheck').checked) ? '1' : '0',
-                meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : ''),
-                scope: scope,
-                occurrence_date: occurrenceDate
-            });
-            fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: body.toString()
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'success') {
-                    actionModal.hide();
-                    loadSnapshot();
-                    loadBookingManagement();
-                } else {
-                    showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
-                }
-            }).catch(() => {
-                showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
-            });
-        }
-
-        modalConfirmBtn.onclick = function() {
+            const getEditBody = (scope) => {
+                return new URLSearchParams({
+                    date: document.getElementById('editMeetingDate').value,
+                    time: document.getElementById('editMeetingTime').value,
+                    end_time: document.getElementById('editMeetingEndTime').value,
+                    meeting_type: selectedType,
+                    meeting_link: document.getElementById('editMeetingLink').value || '',
+                    meeting_title: document.getElementById('editMeetingTitle').value || '',
+                    save_to_google: '0',
+                    meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : ''),
+                    scope: scope,
+                    occurrence_date: occurrenceDate
+                });
+            };
             if (payload.is_recurring) {
-                modalRoot.addEventListener('hidden.bs.modal', function onModalHidden() {
-                    modalRoot.removeEventListener('hidden.bs.modal', onModalHidden);
-                    showScopeModal({
-                        title: I18N.editRecurringTitle,
-                        message: I18N.editRecurringApplyScope,
-                        options: [
-                            { value: 'one', label: I18N.editOneOccurrence },
-                            { value: 'upcoming', label: I18N.editThisAndUpcoming },
-                            { value: 'all', label: I18N.editAllOccurrences }
-                        ],
-                        confirmText: {{ t('Save')|tojson }},
-                        confirmClass: 'btn-primary'
-                    }).then(scope => {
-                        if (!scope) return;
-                        submitAppointmentEdit(scope);
+                showScopeModal({
+                    title: I18N.editRecurringTitle,
+                    message: I18N.editRecurringApplyScope,
+                    options: [
+                        { value: 'one', label: I18N.editOneOccurrence },
+                        { value: 'upcoming', label: I18N.editThisAndUpcoming },
+                        { value: 'all', label: I18N.editAllOccurrences }
+                    ],
+                    confirmText: I18N.saveLabel || 'Save',
+                    confirmClass: 'btn-primary'
+                }).then(scope => {
+                    if (!scope) return;
+                    const body = getEditBody(scope);
+                    fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: body.toString()
+                    }).then(r => r.json()).then(data => {
+                        if (data.status === 'success') {
+                            actionModal.hide();
+                            loadSnapshot();
+                            loadBookingManagement();
+                        } else {
+                            showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
+                        }
+                    }).catch(() => {
+                        showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
                     });
                 });
-                actionModal.hide();
-                return;
+            } else {
+                const body = getEditBody('all');
+                fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: body.toString()
+                }).then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        actionModal.hide();
+                        loadSnapshot();
+                        loadBookingManagement();
+                    } else {
+                        showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
+                    }
+                }).catch(() => {
+                    showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
+                });
             }
-
-            submitAppointmentEdit('all');
         };
     }
 

@@ -9415,8 +9415,69 @@ def api_calendar_appointment_update(appointment_id):
     if is_recurring and scope == 'upcoming':
         return _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
 
-    if is_recurring and scope == 'all':
-        return _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
+        occ_date = parse_date_safe(occurrence_date_raw)
+        if not occ_date:
+            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
+        base_date = parse_date_safe(appt['appointment_date'])
+        if base_date and occ_date <= base_date:
+            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+        else:
+            new_end = (occ_date - timedelta(days=1)).isoformat()
+            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
+                       (new_end, appointment_id))
+
+        # Delete / truncate all OTHER rows in the same recurrence group that generate
+        # occurrences on or after occ_date so they don't remain as orphaned future rows.
+        recurrence_group_id_upd = appt['recurrence_group_id'] if 'recurrence_group_id' in appt.keys() else None
+        if recurrence_group_id_upd:
+            other_rows = db.execute(
+                'SELECT * FROM appointments WHERE recurrence_group_id = ? AND id != ? ORDER BY appointment_date ASC',
+                (recurrence_group_id_upd, appointment_id)
+            ).fetchall()
+            for row in other_rows:
+                row_base = parse_date_safe(row['appointment_date'])
+                if not row_base:
+                    continue
+                if row_base >= occ_date:
+                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
+                else:
+                    row_occs = recurring_occurrences_between(row, occ_date, occ_date)
+                    if row_occs:
+                        cutoff = (occ_date - timedelta(days=1)).isoformat()
+                        db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?',
+                                   (cutoff, row['id']))
+
+        new_day = parse_date_safe(booking_date)
+        new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
+        new_end_dt = new_start_dt + timedelta(minutes=duration)
+        conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
+        if conflict:
+            db.rollback()
+            return jsonify({'status': 'error', 'message': conflict}), 409
+        # Use the new date's weekday for the new series so occurrences land on the new day.
+        rec_days = str(custom_weekday(new_day)) if new_day else (
+            appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
+        )
+        rec_interval = appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else None
+        rec_end = appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else None
+        # Only create a new recurring row if there is not already a row for the new_day
+        existing_row = db.execute('''
+            SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND is_recurring = 1
+        ''', (appt['patient_id'], new_day.isoformat())).fetchone()
+        if not existing_row:
+            db.execute('''
+                INSERT INTO appointments
+                (patient_id, appointment_date, appointment_time, duration_minutes,
+                 is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+                 meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
+                VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (appt['patient_id'], new_day.isoformat(),
+                  parse_time_safe(booking_time).strftime('%H:%M'), duration,
+                  rec_days, rec_interval, rec_end,
+                  meeting_type, meeting_link or None, meeting_platform or None,
+                  meeting_title or None, save_to_google, appt['recurrence_group_id'] or build_recurrence_group_id()))
+        db.commit()
+        return jsonify({'status': 'success'})
 
     # --- Default / scope='all': update the record directly ---
     day_obj = parse_date_safe(booking_date)
