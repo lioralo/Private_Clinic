@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import socket
-import json
 import ast
 try:
     from dotenv import load_dotenv
@@ -27,7 +26,7 @@ try:
     import google_docs as gdocs
 except ImportError:
     gdocs = None
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file, json
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -1891,7 +1890,7 @@ def parse_intake_questionnaire(raw_value, fallback_assessment=None):
             normalized = normalize_intake_payload(parsed)
             if normalized:
                 return normalized
-        except (json.JSONDecodeError, TypeError):
+        except (ValueError, TypeError):
             pass
 
         # Some legacy records were stored as Python dict strings.
