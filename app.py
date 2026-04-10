@@ -4243,21 +4243,37 @@ def import_patient_history(patient_id):
                 appt_id_map = {}
                 # Sort appointments by date and time
                 sorted_appts = sorted(data.get('appointments', []), key=lambda x: (x.get('appointment_date', ''), x.get('appointment_time', '')))
+
+                # Pre-fetch existing appointments for this patient
+                existing_appts_query = db.execute(
+                    'SELECT id, appointment_date, appointment_time FROM appointments WHERE patient_id = ?',
+                    (patient_id,)
+                ).fetchall()
+
+                existing_appts_dict = {
+                    (row['appointment_date'], row['appointment_time']): row['id']
+                    for row in existing_appts_query
+                }
+
                 for appt in sorted_appts:
+                    appt_date = appt.get('appointment_date')
+                    appt_time = appt.get('appointment_time')
+
                     # Check for existing
-                    existing = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ?',
-                        (patient_id, appt.get('appointment_date'), appt.get('appointment_time'))).fetchone()
-                    if not existing:
+                    existing_id = existing_appts_dict.get((appt_date, appt_time))
+
+                    if not existing_id:
                         cursor = db.execute('''INSERT INTO appointments
                             (patient_id, appointment_date, appointment_time, cost, duration_minutes, is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, status, recurrence_end_date, recurrence_count)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                            (patient_id, appt.get('appointment_date'), appt.get('appointment_time'), appt.get('cost'), appt.get('duration_minutes'),
+                            (patient_id, appt_date, appt_time, appt.get('cost'), appt.get('duration_minutes'),
                              appt.get('is_recurring'), appt.get('recurrence_interval'), appt.get('recurrence_days'), appt.get('meeting_type'),
                              appt.get('meeting_link'), appt.get('status'), appt.get('recurrence_end_date'), appt.get('recurrence_count')))
                         appt_id_map[appt.get('id')] = cursor.lastrowid
+                        existing_appts_dict[(appt_date, appt_time)] = cursor.lastrowid
                         appointments_added += 1
                     else:
-                        appt_id_map[appt.get('id')] = existing['id']
+                        appt_id_map[appt.get('id')] = existing_id
 
                 # Import notes sorted by date and meeting number.
                 sorted_notes = sorted(
