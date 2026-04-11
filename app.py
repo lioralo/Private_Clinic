@@ -7,6 +7,10 @@ from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
+from collections import defaultdict
+from datetime import timedelta
+import threading
+from pathlib import Path
 
 app = Flask(__name__)
 app.jinja_env.add_extension('jinja2.ext.do')
@@ -190,15 +194,19 @@ def rjust_filter(s, width, fillchar=' '):
 @app.template_filter('from_iso_date')
 def from_iso_date(value):
     try:
-        return datetime.fromisoformat(value).date()
-    except (ValueError, TypeError):
+        if value is None:
+            return value
+        return datetime.datetime.fromisoformat(value).date()
+    except (ValueError, TypeError, AttributeError):
         return value
 
 @app.template_filter('from_iso_datetime')
 def from_iso_datetime(value):
     try:
-        return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    except (ValueError, TypeError):
+        if value is None:
+            return value
+        return datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except (ValueError, TypeError, AttributeError):
         return value
 
 @app.template_filter('strftime')

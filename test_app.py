@@ -12,6 +12,48 @@ from flask import g
 from unittest.mock import patch
 from app import app, init_db, get_db
 
+
+from datetime import date, datetime, timezone
+from app import from_iso_date, from_iso_datetime, strftime_filter, date_filter
+
+class TemplateFilterTests(unittest.TestCase):
+    def test_from_iso_date_valid(self):
+        self.assertEqual(from_iso_date('2023-10-25'), date(2023, 10, 25))
+
+    def test_from_iso_date_invalid(self):
+        self.assertEqual(from_iso_date('invalid-date'), 'invalid-date')
+        self.assertEqual(from_iso_date(None), None)
+
+    def test_from_iso_datetime_valid_no_tz(self):
+        self.assertEqual(
+            from_iso_datetime('2023-10-25T14:30:00'),
+            datetime(2023, 10, 25, 14, 30, 0)
+        )
+
+    def test_from_iso_datetime_valid_with_z(self):
+        self.assertEqual(
+            from_iso_datetime('2023-10-25T14:30:00Z'),
+            datetime(2023, 10, 25, 14, 30, 0, tzinfo=timezone.utc)
+        )
+
+    def test_from_iso_datetime_invalid(self):
+        self.assertEqual(from_iso_datetime('invalid-datetime'), 'invalid-datetime')
+        self.assertEqual(from_iso_datetime(None), None)
+
+    def test_strftime_filter_valid(self):
+        dt = datetime(2023, 10, 25, 14, 30, 0)
+        self.assertEqual(strftime_filter(dt, '%Y-%m-%d %H:%M:%S'), '2023-10-25 14:30:00')
+
+    def test_strftime_filter_invalid(self):
+        self.assertEqual(strftime_filter('not-a-datetime', '%Y-%m-%d'), 'not-a-datetime')
+
+    def test_date_filter_valid(self):
+        dt = datetime(2023, 10, 25, 14, 30, 0)
+        self.assertEqual(date_filter(dt), date(2023, 10, 25))
+
+    def test_date_filter_invalid(self):
+        self.assertEqual(date_filter('not-a-datetime'), 'not-a-datetime')
+
 class ClinicTestCase(unittest.TestCase):
 
     def setUp(self):
