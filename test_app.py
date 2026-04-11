@@ -10,7 +10,8 @@ import sqlite3
 import pyotp
 from flask import g
 from unittest.mock import patch
-from app import app, init_db, get_db
+from app import app, init_db, get_db, parse_intake_questionnaire
+from flask import json
 
 class ClinicTestCase(unittest.TestCase):
 
@@ -2513,6 +2514,37 @@ class ClinicTestCase(unittest.TestCase):
                 backup_db.BACKUP_DIR = original_backup_dir
 
         os.unlink(db_path)
+
+
+class TestParseIntakeQuestionnaire(unittest.TestCase):
+    def test_empty_input(self):
+        self.assertEqual(parse_intake_questionnaire(None), {})
+        self.assertEqual(parse_intake_questionnaire(''), {})
+
+    def test_valid_json(self):
+        raw_json = json.dumps({"main_complaint": "Headache", "meeting_duration": 60})
+        result = parse_intake_questionnaire(raw_json)
+        self.assertEqual(result.get("main_complaint"), "Headache")
+        self.assertEqual(result.get("meeting_duration"), "60")
+
+    def test_legacy_python_dict_string(self):
+        # some legacy records used strings representing python dicts
+        legacy_str = "{'main_complaint': 'Toothache', 'meeting_duration': 30}"
+        result = parse_intake_questionnaire(legacy_str)
+        self.assertEqual(result.get("main_complaint"), "Toothache")
+        self.assertEqual(result.get("meeting_duration"), "30")
+
+    def test_legacy_text(self):
+        # Fallback to parse_legacy_intake_text
+        legacy_text = "Fever and chills"
+        result = parse_intake_questionnaire(legacy_text)
+        self.assertEqual(result.get("main_complaint"), "Fever and chills")
+
+    def test_fallback_assessment(self):
+        # When raw_value is invalid or empty, use fallback_assessment
+        fallback = "Pain in left arm"
+        result = parse_intake_questionnaire(None, fallback_assessment=fallback)
+        self.assertEqual(result.get("main_complaint"), "Pain in left arm")
 
 if __name__ == '__main__':
     unittest.main()

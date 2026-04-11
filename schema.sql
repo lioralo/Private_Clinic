@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
     session_number INTEGER,
-    patient_appearance TEXT,
     key_topics TEXT,
     content TEXT NOT NULL,
     content_hebrew TEXT,

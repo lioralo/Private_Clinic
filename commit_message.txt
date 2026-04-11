@@ -1,0 +1,5 @@
+🧪 Add missing tests for `parse_intake_questionnaire`
+
+🎯 **What:** Tested and achieved 100% coverage on the missing `parse_intake_questionnaire` logic from `app.py`. Added testing environment fixes: resolved a database migration error by removing duplicated `patient_appearance` in `schema.sql` and missing python package imports in `app.py`. Moved the TestParseIntakeQuestionnaire class above the `__main__` block to be compliant with code review comments.
+📊 **Coverage:** Covered edge case behavior `fallback_assessment`, legacy string representations, text parsing (`parse_legacy_intake_text`), empty entries, and standard JSON formats.
+✨ **Result:** Solid test coverage ensures robust validation and regression-catching of the intake parser function.
