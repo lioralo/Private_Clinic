@@ -267,6 +267,15 @@ HEBREW_TRANSLATIONS = {
     "Candidates": "מועמדים",
     "Waiting": "ממתינים",
     "Archived": "בארכיון",
+    "Deleted": "מחוק",
+    "Deleted Patients": "מטופלים מחוקים",
+    "View Deleted": "הצג מחוק",
+    "Delete Patient": "מחק מטופל",
+    "Deletion Reason": "סיבת המחיקה",
+    "Please provide a reason for deleting this patient": "אנא ציין סיבה למחיקת המטופל",
+    "Confirm Delete": "אשר מחיקה",
+    "Mark as Deleted": "סמן כמחוק",
+    "Patient deleted successfully.": "המטופל נמחק בהצלחה.",
     "Manage Slots": "ניהול יומן",
     "Add Patient": "הוספת מטופל",
     "Messages": "הודעות",
@@ -1116,6 +1125,10 @@ def _run_db_migrations(db):
         pass
     try:
         db.execute("ALTER TABLE patients ADD COLUMN deleted_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN deleted_reason TEXT")
     except sqlite3.OperationalError:
         pass
     try:
@@ -2667,6 +2680,8 @@ def crm_dashboard():
     include_group_raw = request.args.get('include_group', saved_filters.get('include_group', 'false'))
     include_group = include_group_raw == 'true'
     treatment_method = request.args.get('treatment_method', saved_filters.get('treatment_method', 'all')).strip()
+    show_deleted_raw = request.args.get('show_deleted', saved_filters.get('show_deleted', 'false'))
+    show_deleted = show_deleted_raw == 'true'
 
     if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
         status = 'all'
@@ -2681,7 +2696,8 @@ def crm_dashboard():
         'q': search_query,
         'sort': sort_by,
         'include_group': 'true' if include_group else 'false',
-        'treatment_method': treatment_method
+        'treatment_method': treatment_method,
+        'show_deleted': 'true' if show_deleted else 'false'
     }
     
     patient_type = clinic_type
@@ -2691,7 +2707,47 @@ def crm_dashboard():
     ).fetchall()
     treatment_method_labels = [row['label'] for row in treatment_method_options]
 
-    patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
+    # Get patients - if showing deleted, only show deleted; otherwise show active patients
+    if show_deleted:
+        # Show only deleted patients with optional search and filtering
+        select_clause = '''
+            SELECT p.*,
+            (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
+            0 AS unread_messages,
+            0 AS needs_followup_decision,
+            (
+                SELECT GROUP_CONCAT(g.name, ', ')
+                FROM group_members gm
+                JOIN groups g ON g.id = gm.group_id
+                WHERE gm.patient_id = p.id
+                  AND gm.left_at IS NULL
+                  AND COALESCE(g.is_active, 1) = 1
+            ) AS group_names,
+            (
+                SELECT GROUP_CONCAT(COALESCE(gm.role, 'member'), ', ')
+                FROM group_members gm
+                JOIN groups g ON g.id = gm.group_id
+                WHERE gm.patient_id = p.id
+                  AND gm.left_at IS NULL
+                  AND COALESCE(g.is_active, 1) = 1
+            ) AS group_roles
+            FROM patients p
+            WHERE COALESCE(p.is_deleted, 0) = 1
+        '''
+        where_clause = ""
+        params = []
+        
+        if search_query:
+            where_clause += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, "")) LIKE ? OR LOWER(COALESCE(p.phone, "")) LIKE ?)'
+            like_value = f"%{search_query.lower()}%"
+            params.extend([like_value, like_value, like_value])
+        
+        order_clause = ' ORDER BY p.deleted_at DESC, p.name ASC'
+        final_query = f"{select_clause}{where_clause}{order_clause}"
+        patients = db.execute(final_query, tuple(params)).fetchall()
+    else:
+        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
+    
     counts_row = db.execute('''
         SELECT
             COUNT(*) AS all_count,
@@ -2699,13 +2755,20 @@ def crm_dashboard():
             SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS candidate_waiting_count,
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_count
         FROM patients
-        WHERE COALESCE(is_deleted, 0) = 0
+        WHERE COALESCE(is_deleted, 0) = 0 AND status != 'archived'
     ''').fetchone()
+    
+    # Get deleted patients count
+    deleted_count_row = db.execute('''
+        SELECT COUNT(*) AS deleted_count FROM patients WHERE COALESCE(is_deleted, 0) = 1
+    ''').fetchone()
+    
     counts = {
         'all': counts_row['all_count'] or 0,
         'ongoing': counts_row['ongoing_count'] or 0,
         'candidate_waiting': counts_row['candidate_waiting_count'] or 0,
-        'archived': counts_row['archived_count'] or 0
+        'archived': counts_row['archived_count'] or 0,
+        'deleted': deleted_count_row['deleted_count'] or 0
     }
     
     # Get today's appointments
@@ -2737,7 +2800,8 @@ def crm_dashboard():
                            treatment_method=treatment_method,
                            treatment_method_options=treatment_method_labels,
                            today_appointments=today_appointments,
-                           avg_wait_time=avg_wait_time)
+                           avg_wait_time=avg_wait_time,
+                           show_deleted=show_deleted)
 
 
 def _get_dashboard_today_appointments(db, today):
@@ -2767,14 +2831,15 @@ def _get_dashboard_week_appointments(db, today, week_end):
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
     ''', (today.isoformat(), week_end.isoformat())).fetchall()
 
-def _get_dashboard_patient_counts(db):
-    counts_row = db.execute('''
+def _get_dashboard_patient_counts(db, include_deleted=False):
+    where_clause = '' if include_deleted else 'WHERE COALESCE(is_deleted, 0) = 0'
+    counts_row = db.execute(f'''
         SELECT
             COUNT(*) AS total,
             SUM(CASE WHEN status = 'ongoing' THEN 1 ELSE 0 END) AS ongoing,
             SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS waiting,
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived
-        FROM patients WHERE COALESCE(is_deleted, 0) = 0
+        FROM patients {where_clause}
     ''').fetchone()
     return {
         'total':   counts_row['total']   or 0,
@@ -3477,13 +3542,15 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+
 @app.route('/patients')
 @login_required
 def patients():
     if current_user.role != 'admin':
         return redirect(url_for('patient_home'))
     status = request.args.get('status', 'all')
-    return redirect(url_for('crm_dashboard', status=status))
+    show_deleted = request.args.get('show_deleted', '0') == '1'
+    return redirect(url_for('crm_dashboard', status=status, show_deleted='1' if show_deleted else None))
 
 @app.route('/add_patient', methods=('GET', 'POST'))
 @login_required
@@ -3653,17 +3720,20 @@ def _get_patient_behavior_info(notes):
         }
     return behavior_options, latest_behavior
 
+
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
     if current_user.role != 'admin':
-         # Patients can only see their own profile? No, this view is the Admin view of the patient.
-         # The patient dashboard is separate.
-         flash('Access denied.')
-         return redirect(url_for('patient_home'))
+        flash('Access denied.')
+        return redirect(url_for('patient_home'))
 
     db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    show_deleted = request.args.get('show_deleted', '0') == '1'
+    if show_deleted:
+        patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    else:
+        patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if patient is None:
         return "Patient not found", 404
 
@@ -9177,17 +9247,23 @@ def delete_patient(patient_id):
     if not patient:
         return "Patient not found", 404
 
+    # Get deletion reason from request
+    deletion_reason = request.form.get('deletion_reason', '').strip()
+    if not deletion_reason:
+        flash('Deletion reason is required.', 'error')
+        return redirect(request.referrer or url_for('crm_dashboard', status='all'))
+
     db.execute('''
         UPDATE patients
-        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, status = 'archived'
+        SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP, deleted_reason = ?, status = 'archived'
         WHERE id = ?
-    ''', (patient_id,))
+    ''', (deletion_reason, patient_id))
     db.execute('UPDATE users SET is_active = 0 WHERE patient_id = ?', (patient_id,))
     db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-               (patient_id, 'delete', f"Patient {patient['name']} marked as deleted."))
+               (patient_id, 'delete', f"Patient {patient['name']} marked as deleted. Reason: {deletion_reason}"))
     db.commit()
-    flash('Patient moved to deleted records.')
-    return redirect(url_for('crm_dashboard', status='all'))
+    flash(f'Patient "{patient["name"]}" moved to deleted records.')
+    return redirect(request.referrer or url_for('crm_dashboard', status='all'))
 
 @app.route('/admin/profile/name', methods=('POST',))
 @login_required
