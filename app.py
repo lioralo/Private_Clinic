@@ -1,12 +1,17 @@
 import os
 import sqlite3
 import pyotp
-from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, session
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
+from datetime import timedelta
+from collections import defaultdict
+import threading
+from pathlib import Path
+from flask import json
 
 app = Flask(__name__)
 app.jinja_env.add_extension('jinja2.ext.do')
@@ -1905,11 +1910,21 @@ def parse_intake_questionnaire(raw_value, fallback_assessment=None):
         raw_text = str(raw_value).strip()
         if raw_text.startswith('{') and raw_text.endswith('}'):
             try:
+                # Prevent DoS from deeply nested structures in ast.literal_eval
+                depth = 0
+                for char in raw_text:
+                    if char in '{[(':
+                        depth += 1
+                        if depth > 100:
+                            raise ValueError("Too deeply nested")
+                    elif char in '}])':
+                        depth -= 1
+
                 literal = ast.literal_eval(raw_text)
                 normalized = normalize_intake_payload(literal)
                 if normalized:
                     return normalized
-            except (ValueError, SyntaxError):
+            except (ValueError, SyntaxError, MemoryError, RecursionError):
                 pass
 
         legacy_from_questionnaire = parse_legacy_intake_text(raw_value)

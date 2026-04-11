@@ -2,7 +2,7 @@ import unittest
 import tempfile
 import os
 import pyotp
-from app import app, get_db
+from app import app, get_db, parse_intake_questionnaire
 
 class SecurityTestCase(unittest.TestCase):
 
@@ -195,6 +195,18 @@ class SecurityTestCase(unittest.TestCase):
         # Test the DB bypass / file mapping mechanism safely resolving the file instead of allowing traversal
         rv = self.client.get('/uploads/../../../../../../../etc/passwd')
         self.assertEqual(rv.status_code, 404)
+
+    def test_intake_questionnaire_ast_dos(self):
+        # Create a deeply nested dictionary string that would normally crash ast.literal_eval
+        # or cause SyntaxError: too many nested parentheses / MemoryError
+        nested_dict_str = "{" * 200 + "}" * 200
+
+        # Test that it safely handles it without crashing
+        result = parse_intake_questionnaire(nested_dict_str)
+
+        # Because fallback parse_legacy_intake_text treats the whole unparsed string as main_complaint
+        self.assertIn('main_complaint', result)
+        self.assertEqual(result['main_complaint'], nested_dict_str)
 
 if __name__ == '__main__':
     unittest.main()
