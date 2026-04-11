@@ -76,10 +76,6 @@ def _record_failed_login(ip):
     with _failed_login_lock:
         _failed_login_attempts[ip].append(datetime.now())
 
-def _clear_failed_logins(ip):
-    with _failed_login_lock:
-        _failed_login_attempts.pop(ip, None)
-
 
 def ensure_runtime_paths():
     db_path = Path(app.config.get('DATABASE', DATABASE))
