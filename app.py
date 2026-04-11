@@ -7,6 +7,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import datetime
+from pathlib import Path
 
 app = Flask(__name__)
 app.jinja_env.add_extension('jinja2.ext.do')
@@ -28,28 +29,6 @@ ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff
 def _allowed_upload(filename, allowed_set):
     ext = os.path.splitext(filename)[1].lower()
     return bool(ext) and ext in allowed_set
-
-# ── Login rate limiting ───────────────────────────────────────────────────────
-_failed_login_attempts = defaultdict(list)  # ip -> [datetime, ...]
-_failed_login_lock = threading.Lock()
-_LOGIN_MAX_ATTEMPTS = 10
-_LOGIN_LOCKOUT_WINDOW = timedelta(minutes=15)
-
-def _is_login_rate_limited(ip):
-    cutoff = datetime.now() - _LOGIN_LOCKOUT_WINDOW
-    with _failed_login_lock:
-        attempts = _failed_login_attempts[ip]
-        attempts[:] = [t for t in attempts if t > cutoff]
-        return len(attempts) >= _LOGIN_MAX_ATTEMPTS
-
-def _record_failed_login(ip):
-    with _failed_login_lock:
-        _failed_login_attempts[ip].append(datetime.now())
-
-def _clear_failed_logins(ip):
-    with _failed_login_lock:
-        _failed_login_attempts.pop(ip, None)
-
 
 def ensure_runtime_paths():
     db_path = Path(app.config.get('DATABASE', DATABASE))
@@ -3446,8 +3425,6 @@ def login():
             else:
                 return redirect(url_for('dashboard'))
         else:
-            if not app.config.get('TESTING'):
-                _record_failed_login(client_ip)
             flash('Invalid username or password')
 
     if pending_user_id:

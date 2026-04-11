@@ -2,6 +2,18 @@
 
 ---
 
+## Session 35
+
+**Date:** 2026-04-11 17:30
+
+**Objective:** Cleaned up unused `_is_login_rate_limited` function.
+
+**Changes:**
+- Removed unused dead rate-limiting code (`_is_login_rate_limited`, `_record_failed_login`, `_clear_failed_logins`, and the related variables) from `app.py`.
+- Removed `_record_failed_login(client_ip)` execution inside `login` route.
+
+---
+
 ## Session 34
 
 **Date:** 2026-04-09 08:10
