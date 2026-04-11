@@ -10,6 +10,11 @@ import sqlite3
 import pyotp
 from flask import g
 from unittest.mock import patch
+import os
+
+# Set default admin password for tests before importing app
+os.environ['DEFAULT_ADMIN_PASSWORD'] = 'Flo@tingind4'
+
 from app import app, init_db, get_db
 
 class ClinicTestCase(unittest.TestCase):

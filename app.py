@@ -1501,17 +1501,27 @@ def _run_db_migrations(db):
 
 def _seed_admin_user(db):
     """Seed the default admin user and handle legacy migrations."""
+    import secrets
+
+    # Generate a random password if a default is not provided in the environment
+    env_password = os.environ.get('DEFAULT_ADMIN_PASSWORD')
+    default_password = env_password if env_password else secrets.token_urlsafe(16)
+
     # Check if admin exists
     admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
     if not admin:
         print("Creating default admin user...")
-        hashed_pw = generate_password_hash('Flo@tingind4')
+        hashed_pw = generate_password_hash(default_password)
+        force_change = 0 if env_password else 1
         db.execute(
             "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
-            ('lioraloni', hashed_pw, 'admin', 0)
+            ('lioraloni', hashed_pw, 'admin', force_change)
         )
         db.commit()
-        print("Admin user created (username: lioraloni).")
+        if not env_password:
+            print(f"Admin user created (username: lioraloni, temporary password: {default_password}). PLEASE CHANGE IMMEDIATELY.")
+        else:
+            print("Admin user created (username: lioraloni).")
         admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
 
     # One-time migration from legacy default admin credentials.
@@ -1519,17 +1529,22 @@ def _seed_admin_user(db):
     if legacy_admin:
         collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
         if not collision:
+            hashed_pw = generate_password_hash(default_password)
+            force_change = 0 if env_password else 1
             db.execute(
                 '''
                 UPDATE users
                 SET username = ?, password_hash = ?, force_password_change = ?
                 WHERE id = ?
                 ''',
-                ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
+                ('lioraloni', hashed_pw, force_change, legacy_admin['id'])
             )
             db.commit()
             admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
-            print('Legacy admin account migrated to lioraloni.')
+            if not env_password:
+                print(f"Legacy admin account migrated to lioraloni. Temporary password reset to: {default_password}. PLEASE CHANGE IMMEDIATELY.")
+            else:
+                print('Legacy admin account migrated to lioraloni.')
 
     if admin and not admin['display_name']:
         db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
