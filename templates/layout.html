@@ -58,23 +58,25 @@
                         </li>
                     {% endif %}
 
-                    {% if current_user.role == 'patient' %}
+                    {% if current_user.is_authenticated and current_user.role == 'patient' %}
                     <ul class="navbar-nav me-auto">
                         <li class="nav-item"><a class="nav-link fw-medium active" href="{{ url_for('dashboard') }}">My Dashboard</a></li>
                     </ul>
-                    <div class="d-flex align-items-center gap-2">
                     {% endif %}
 
-                        <div class="dropdown">
-                            <button class="btn btn-primary dropdown-toggle border-0 py-1 d-flex align-items-center text-white-50" type="button" data-bs-toggle="dropdown">
-                                <i class="bi bi-person-circle fs-5 me-2 text-white"></i>
-                                <span class="small fw-bold text-white">{{ current_user.username }}</span>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg rounded-3 mt-2">
-                                <li><a class="dropdown-item py-2 small fw-medium" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right me-2 opacity-50"></i>Log Out</a></li>
-                            </ul>
-                        </div>
+                </ul>
+                {% if current_user.is_authenticated %}
+                <div class="d-flex align-items-center gap-2">
+                    <div class="dropdown">
+                        <button class="btn btn-primary dropdown-toggle border-0 py-1 d-flex align-items-center text-white-50" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle fs-5 me-2 text-white"></i>
+                            <span class="small fw-bold text-white">{{ current_user.username }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg rounded-3 mt-2">
+                            <li><a class="dropdown-item py-2 small fw-medium" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right me-2 opacity-50"></i>Log Out</a></li>
+                        </ul>
                     </div>
+                </div>
                 {% endif %}
             </div>
         </div>

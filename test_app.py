@@ -2469,6 +2469,25 @@ class ClinicTestCase(unittest.TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 302)
         mock_init_db.assert_called_once()
+    def test_routine_backup_guard_exception(self):
+        """Test that routine_backup_guard logs an exception if the backup fails."""
+        import app as app_module
+        with patch('app.perform_routine_encrypted_backup') as mock_backup, \
+             patch('app.os.path.getmtime') as mock_getmtime, \
+             patch('app.os.path.exists') as mock_exists, \
+             patch.dict(app_module.app.config, {'TESTING': False, 'DATABASE': 'test.db'}):
+
+            mock_exists.return_value = True
+            import time
+            mock_getmtime.return_value = time.time() - 86401 # > 24 hours ago
+            mock_backup.side_effect = Exception("Simulated backup failure")
+
+            with patch.object(app_module.app.logger, 'exception') as mock_logger_exception:
+                with app_module.app.test_request_context('/'):
+                    app_module.routine_backup_guard()
+
+                mock_logger_exception.assert_called_once_with('Routine encrypted backup failed')
+
     def test_backup_database_error_path(self):
         import backup_db
         from unittest.mock import patch
