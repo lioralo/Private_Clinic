@@ -1969,22 +1969,6 @@ def intake_multi_select_fields():
     }
 
 
-def intake_data_from_request(form):
-    if not any(key.startswith('intake_') for key in form.keys()):
-        return None
-    data = {}
-    multi_fields = intake_multi_select_fields()
-    for key in intake_form_fields():
-        field_name = f'intake_{key}'
-        if key in multi_fields:
-            values = [value.strip() for value in form.getlist(field_name) if value and value.strip()]
-            data[key] = ', '.join(values)
-        else:
-            raw = form.get(field_name, '')
-            data[key] = (raw or '').strip()
-    return data
-
-
 def serialize_intake_assessment(data):
     main_complaint = data.get('main_complaint', '')
     problem_history = data.get('problem_history', '')
