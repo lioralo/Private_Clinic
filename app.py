@@ -8316,7 +8316,10 @@ def download_file(name):
     # For now, allow admin and the patient who owns the file.
     # But finding the owner of a file from filename is hard if filenames aren't unique or mapped.
     # The 'files' table maps filename to patient_id.
-    name = secure_filename(name)
+    safe_name = secure_filename(name)
+    if safe_name != name:
+        return "Invalid filename", 400
+    name = safe_name
 
     db = get_db()
     file_record = db.execute('SELECT patient_id, treatment_id FROM files WHERE filename = ?', (name,)).fetchone()
