@@ -332,9 +332,9 @@
                                 <span class="text-muted small"> &mdash; </span>
                                 {% endif %}
                                 <span class="small">
-                                    {% if ev['action'] == 'cancel_request' %}<i class="bi bi-x-circle text-danger me-1"></i>{{ t('Cancellation request') }}
+                                    {% if ev['action'] in ['cancel_request', 'patient-cancel-request'] %}<i class="bi bi-x-circle text-danger me-1"></i>{{ t('Cancellation request') }}
                                     {% elif ev['action'] == 'delete' %}<i class="bi bi-trash text-danger me-1"></i>{{ t('Appointment deleted') }}
-                                    {% elif ev['action'] == 'booking_access_request' %}<i class="bi bi-calendar-plus text-primary me-1"></i>{{ t('Booking access requested') }}
+                                    {% elif ev['action'] in ['booking_access_request', 'patient-booking-request'] %}<i class="bi bi-calendar-plus text-primary me-1"></i>{{ t('Booking access requested') }}
                                     {% elif ev['action'] == 'status_converted' %}<i class="bi bi-arrow-up-circle text-success me-1"></i>{{ t('Converted to ongoing') }}
                                     {% else %}<i class="bi bi-dot me-1"></i>{{ ev['action'] }}
                                     {% endif %}

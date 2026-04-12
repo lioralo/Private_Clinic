@@ -221,6 +221,17 @@ class AutoRunner:
             if not self.is_port_in_use(port):
                 return port
         raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_tries - 1}")
+
+    def wait_for_port(self, port, host="127.0.0.1", timeout=10):
+        """Wait until a TCP port starts listening."""
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.is_port_in_use(port, host=host):
+                return True
+            if self.app_process and self.app_process.poll() is not None:
+                return False
+            time.sleep(0.2)
+        return False
     
     def run_app(self):
         """Start the Flask application"""
@@ -251,6 +262,10 @@ class AutoRunner:
                 env=env
             )
             self.log("✓ Application started (PID: {})".format(self.app_process.pid), level="SUCCESS")
+            if self.wait_for_port(port):
+                self.log(f"Application is reachable at http://127.0.0.1:{port}", level="SUCCESS")
+            else:
+                self.log("Application process started but port did not open within 10 seconds.", level="WARNING")
             
             # Wait for the process to complete
             self.app_process.wait()
@@ -279,6 +294,8 @@ class AutoRunner:
         if run:
             if not self.run_app():
                 return False
+        else:
+            self.log("Run phase skipped (--test-only). No web server was started.", level="WARNING")
         
         return True
 

@@ -3205,7 +3205,7 @@ def request_cancel_appointment(appointment_id):
         current_user.patient_id,
         admin_message,
         patient_ack,
-        audit_action='patient-cancel-request',
+        audit_action='cancel_request',
         audit_details=admin_message
     )
     db.commit()
@@ -3256,7 +3256,7 @@ def request_booking_access():
         current_user.patient_id,
         admin_message,
         patient_ack,
-        audit_action='patient-booking-request',
+        audit_action='booking_access_request',
         audit_details=admin_message
     )
     db.commit()
