@@ -8,7 +8,7 @@
 <div class="flex justify-between items-start flex-wrap gap-3 mb-6">
     <div>
         <h2 class="text-2xl font-bold text-teal-900 font-headline flex items-center gap-2 mb-1">
-            <span class="material-symbols-outlined ms-fill text-[28px]">dashboard</span>{{ t('Clinic Dashboard') }}
+            <i class="bi bi-speedometer2 text-[28px]"></i>{{ t('Clinic Dashboard') }}
         </h2>
         <p class="text-slate-500 text-sm mb-0">
             {{ t('Today is') }} <strong class="text-teal-800">{{ today.strftime('%A, %B %-d, %Y') }}</strong>
@@ -53,7 +53,7 @@
 {# ── Alert banners ────────────────────────────────────────── #}
 {% if followup_patients %}
 <div class="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 mb-4 text-sm font-medium">
-    <span class="material-symbols-outlined text-amber-600 ms-fill flex-shrink-0" style="font-size:20px">warning</span>
+    <i class="bi bi-exclamation-triangle-fill text-amber-600 flex-shrink-0" style="font-size:20px"></i>
     <div>
         <strong>{{ followup_patients|length }} {{ t('patient(s) need a follow-up decision') }}</strong>
         &mdash; {{ t('their intake appointment has passed but no next step was taken.') }}
