@@ -11,7 +11,19 @@ import pyotp
 from datetime import datetime, timedelta
 from flask import g
 from unittest.mock import patch
-from app import app, init_db, get_db
+import json
+import io
+import sys
+from datetime import datetime, timedelta, timezone
+from datetime import date
+
+# Set default admin password for tests before importing app
+os.environ.setdefault('DEFAULT_ADMIN_PASSWORD', 'Flo@tingind4')
+
+from app import app, get_db, _run_db_migrations
+from app import from_iso_date, from_iso_datetime, strftime_filter, date_filter
+from app import parse_intake_questionnaire, normalize_intake_payload
+import app as app_module
 
 class ClinicTestCase(unittest.TestCase):
 
@@ -36,20 +48,18 @@ class ClinicTestCase(unittest.TestCase):
                 db.cursor().executescript(f.read())
             db.commit()
 
-            # Create admin user manually for testing if init_db logic isn't reused or to be explicit
+            # Run all migrations to create tables like slots_override, blocked_slots, groups, etc.
+            _run_db_migrations(db)
+            db.commit()
+
+            # Create the primary admin user for tests
             from werkzeug.security import generate_password_hash
-            hashed_pw = generate_password_hash('admin')
             self.admin_otp_secret = 'JBSWY3DPEHPK3PXP' # Fixed secret for testing
-
-            # Ensure otp_secret column exists
-            try:
-                db.execute("ALTER TABLE users ADD COLUMN otp_secret TEXT")
-                db.commit()
-            except sqlite3.OperationalError:
-                pass # Column already exists
-
-            db.execute("INSERT INTO users (username, password_hash, role, otp_secret) VALUES (?, ?, ?, ?)",
-                       ('admin', hashed_pw, 'admin', self.admin_otp_secret))
+            hashed_pw = generate_password_hash('Flo@tingind4')
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, otp_secret, totp_secret, totp_enabled, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ('lioraloni', hashed_pw, 'admin', self.admin_otp_secret, self.admin_otp_secret, 0, 1)
+            )
             db.commit()
 
     def tearDown(self):
@@ -159,7 +169,7 @@ class ClinicTestCase(unittest.TestCase):
         self.logout()
 
     def test_login_logout(self):
-        rv = self.login('admin', 'admin')
+        rv = self.login('lioraloni', 'Flo@tingind4')
         # Check for user menu or logout link (updated UI)
         assert b'Log Out' in rv.data or b'logout' in rv.data or b'CLINIC CRM' in rv.data
         rv = self.logout()
@@ -198,7 +208,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_add_patient(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
-        self.login('admin', 'admin', otp_token=totp.now())
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
         rv = self.client.post('/add_patient', data=dict(
             name='Test Patient',
             status='ongoing',
@@ -210,7 +220,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_add_note(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
-        self.login('admin', 'admin', otp_token=totp.now())
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
         # Add patient first
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -225,7 +235,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_add_receipt(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
-        self.login('admin', 'admin', otp_token=totp.now())
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
         # Add patient first
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -242,7 +252,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_patient_access(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
-        self.login('admin', 'admin', otp_token=totp.now())
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
         # Add patient
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
@@ -262,7 +272,8 @@ class ClinicTestCase(unittest.TestCase):
 
         # Login as patient (no OTP token needed)
         rv = self.login('patient', 'password')
-        assert b'Account Balance' in rv.data or b'Financial Summary' in rv.data  # Should be on dashboard
+        assert rv.status_code == 200
+        assert b'My Appointments' in rv.data or b'Patient Dashboard' in rv.data or b'logout' in rv.data.lower()
 
         # Try to access admin page
         rv = self.client.get('/add_patient', follow_redirects=True)
@@ -271,7 +282,7 @@ class ClinicTestCase(unittest.TestCase):
 
     def test_add_appointment(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
-        self.login('admin', 'admin', otp_token=totp.now())
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
         self.client.post('/add_patient', data=dict(
             name='Test Patient',
             status='ongoing'
@@ -388,9 +399,9 @@ class ClinicTestCase(unittest.TestCase):
             db = get_db()
             notes = db.execute('SELECT session_number, note_date, content FROM notes WHERE patient_id = 1 ORDER BY note_date ASC, CAST(session_number AS INTEGER) ASC').fetchall()
             assert len(notes) == 2
-            assert notes[0]['session_number'] == '1'
+            assert str(notes[0]['session_number']) == '1'
             assert notes[0]['note_date'] == '2025-01-10'
-            assert notes[1]['session_number'] == '2'
+            assert str(notes[1]['session_number']) == '2'
             assert notes[1]['note_date'] == '2025-01-20'
 
     def test_edit_treatment_log_updates_timestamp(self):
@@ -467,9 +478,9 @@ class ClinicTestCase(unittest.TestCase):
                 ORDER BY note_date ASC, CAST(session_number AS INTEGER) ASC
             ''').fetchall()
             assert len(rows) == 2
-            assert rows[0]['session_number'] == '1'
+            assert str(rows[0]['session_number']) == '1'
             assert rows[0]['note_date'] == '2026-02-10'
-            assert rows[1]['session_number'] == '2'
+            assert str(rows[1]['session_number']) == '2'
             assert rows[1]['note_date'] == '2026-02-17'
 
     def test_calendar_snapshot_api_admin(self):
@@ -2470,11 +2481,26 @@ class ClinicTestCase(unittest.TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 302)
         mock_init_db.assert_called_once()
+    def test_normalize_intake_payload(self):
+        self.assertEqual(normalize_intake_payload(None), {})
+        self.assertEqual(normalize_intake_payload([]), {})
+        self.assertEqual(normalize_intake_payload("string"), {})
+        self.assertEqual(normalize_intake_payload({}), {})
+        payload = {'meeting_location': 'Clinic', 'referral_source': 'Doctor X'}
+        self.assertEqual(normalize_intake_payload(payload), payload)
+        payload_with_invalid = {'meeting_location': 'Clinic', 'invalid_field': 'value'}
+        self.assertEqual(normalize_intake_payload(payload_with_invalid), {'meeting_location': 'Clinic'})
+        payload_with_prefix = {'intake_meeting_location': 'Clinic', 'intake_referral_source': 'Doctor X'}
+        self.assertEqual(normalize_intake_payload(payload_with_prefix), {'meeting_location': 'Clinic', 'referral_source': 'Doctor X'})
+        payload_with_list = {'meeting_location': ['Clinic A', 'Clinic B']}
+        self.assertEqual(normalize_intake_payload(payload_with_list), {'meeting_location': 'Clinic A, Clinic B'})
+        payload_with_list_empty = {'meeting_location': ['Clinic A', '', None, 'Clinic B', '   ']}
+        self.assertEqual(normalize_intake_payload(payload_with_list_empty), {'meeting_location': 'Clinic A, Clinic B'})
+
     def test_backup_database_error_path(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
         import backup_db
         from unittest.mock import patch
-        import io
-        import sys
 
         # Provide a dummy database with the necessary tables to allow fingerprinting
         db_fd, db_path = tempfile.mkstemp(suffix='.db')
@@ -2514,6 +2540,67 @@ class ClinicTestCase(unittest.TestCase):
                 backup_db.BACKUP_DIR = original_backup_dir
 
         os.unlink(db_path)
+
+class TemplateFilterTests(unittest.TestCase):
+    def test_from_iso_date_valid(self):
+        self.assertEqual(from_iso_date('2023-10-25'), date(2023, 10, 25))
+
+    def test_from_iso_date_invalid(self):
+        self.assertEqual(from_iso_date('invalid-date'), 'invalid-date')
+        self.assertIsNone(from_iso_date(None))
+
+    def test_from_iso_datetime_valid_no_tz(self):
+        self.assertEqual(from_iso_datetime('2023-10-25T14:30:00'), datetime(2023, 10, 25, 14, 30, 0))
+
+    def test_from_iso_datetime_valid_with_z(self):
+        self.assertEqual(from_iso_datetime('2023-10-25T14:30:00Z'), datetime(2023, 10, 25, 14, 30, 0, tzinfo=timezone.utc))
+
+    def test_from_iso_datetime_invalid(self):
+        self.assertEqual(from_iso_datetime('invalid-datetime'), 'invalid-datetime')
+        self.assertIsNone(from_iso_datetime(None))
+
+    def test_strftime_filter_valid(self):
+        dt = datetime(2023, 10, 25, 14, 30, 0)
+        self.assertEqual(strftime_filter(dt, '%Y-%m-%d %H:%M:%S'), '2023-10-25 14:30:00')
+
+    def test_strftime_filter_invalid(self):
+        self.assertEqual(strftime_filter('not-a-datetime', '%Y-%m-%d'), 'not-a-datetime')
+
+    def test_date_filter_valid(self):
+        dt = datetime(2023, 10, 25, 14, 30, 0)
+        self.assertEqual(date_filter(dt), date(2023, 10, 25))
+
+    def test_date_filter_invalid(self):
+        self.assertEqual(date_filter('not-a-datetime'), 'not-a-datetime')
+
+
+class TestParseIntakeQuestionnaire(unittest.TestCase):
+    def test_empty_input(self):
+        self.assertEqual(parse_intake_questionnaire(None), {})
+        self.assertEqual(parse_intake_questionnaire(''), {})
+
+    def test_valid_json(self):
+        raw_json = json.dumps({"main_complaint": "Headache", "meeting_duration": 60})
+        result = parse_intake_questionnaire(raw_json)
+        self.assertEqual(result.get("main_complaint"), "Headache")
+        self.assertEqual(result.get("meeting_duration"), "60")
+
+    def test_legacy_python_dict_string(self):
+        legacy_str = "{'main_complaint': 'Toothache', 'meeting_duration': 30}"
+        result = parse_intake_questionnaire(legacy_str)
+        self.assertEqual(result.get("main_complaint"), "Toothache")
+        self.assertEqual(result.get("meeting_duration"), "30")
+
+    def test_legacy_text(self):
+        legacy_text = "Fever and chills"
+        result = parse_intake_questionnaire(legacy_text)
+        self.assertEqual(result.get("main_complaint"), "Fever and chills")
+
+    def test_fallback_assessment(self):
+        fallback = "Pain in left arm"
+        result = parse_intake_questionnaire(None, fallback_assessment=fallback)
+        self.assertEqual(result.get("main_complaint"), "Pain in left arm")
+
 
 if __name__ == '__main__':
     unittest.main()

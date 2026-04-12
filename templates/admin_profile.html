@@ -140,7 +140,7 @@
                             <label class="form-label fw-bold small">{{ t('Backup File') }}</label>
                             <select class="form-select" name="backup_file" {% if not backup_files %}disabled{% endif %}>
                                 {% for backup_file in backup_files %}
-                                <option value="{{ backup_file.name }}">{{ backup_file.name }} - {{ (backup_file.stat().st_size / 1024)|round(1) }} KB</option>
+                                    <option value="{{ backup_file['name'] }}">{{ backup_file['name'] }} - {{ (backup_file['size'] / 1024)|round(1) }} KB</option>
                                 {% else %}
                                 <option value="">{{ t('No encrypted backups found') }}</option>
                                 {% endfor %}

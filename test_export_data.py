@@ -1,6 +1,10 @@
 import unittest
+import os
+import sys
 from datetime import datetime, date
 from decimal import Decimal
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
 from export_data import json_serializer
 
 class TestExportData(unittest.TestCase):
