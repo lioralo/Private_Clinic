@@ -1,30 +1,30 @@
 :root {
-    /* Design system — design_code palette */
-    --primary-color:    #003633;
-    --primary-dark:     #134e4a;
+    /* Design system — updated palette */
+    --primary-color:    #5676b6;
+    --primary-dark:     #3b5a9a;
     --primary-soft:     #b5ede7;
     --accent-color:     #f59e0b;
-    --secondary-color:  #4e6260;
-    --background-color: #f2f4f6;
+    --secondary-color:  #6c7792;
+    --background-color: #f7f9fb;
     --surface-color:    rgba(255, 255, 255, 0.92);
     --surface-strong:   #ffffff;
     --text-color:       #191c1e;
-    --muted-color:      #4e6260;
+    --muted-color:      #6c7792;
     --border-color:     #bfc8c6;
-    --shadow-soft:      0 4px 24px rgba(0, 54, 51, 0.08);
+    --shadow-soft:      0 4px 24px rgba(86, 118, 182, 0.08);
     --textbox-min-height:    7.5rem;
     --textbox-min-height-sm: 6rem;
     --input-min-height:      2.55rem;
 
-    /* Bootstrap variable overrides → new teal palette */
-    --bs-primary:        #003633;
-    --bs-primary-rgb:    0, 54, 51;
-    --bs-secondary:      #4e6260;
-    --bs-secondary-rgb:  78, 98, 96;
+    /* Bootstrap variable overrides → new blue palette */
+    --bs-primary:        #5676b6;
+    --bs-primary-rgb:    86, 118, 182;
+    --bs-secondary:      #6c7792;
+    --bs-secondary-rgb:  108, 119, 146;
     --bs-success:        #0f766e;
     --bs-success-rgb:    15, 118, 110;
-    --bs-link-color:     #003633;
-    --bs-link-hover-color: #134e4a;
+    --bs-link-color:     #5676b6;
+    --bs-link-hover-color: #3b5a9a;
 }
 
 html[data-density="compact"] {
@@ -41,7 +41,7 @@ html[data-density="large"] {
 
 body {
     font-family: 'Inter', 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-color: #f2f4f6;
+    background-color: #f7f9fb;
     color: var(--text-color);
     -webkit-font-smoothing: antialiased;
     font-feature-settings: "kern" 1;

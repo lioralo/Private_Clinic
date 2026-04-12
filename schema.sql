@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS notes (
     key_topics TEXT,
     content TEXT NOT NULL,
     content_hebrew TEXT,
-    patient_appearance TEXT,
     behavior_checklist TEXT,
     mood_summary TEXT,
     behavior_notes TEXT,

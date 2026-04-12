@@ -33,9 +33,16 @@
                     <h4 class="mb-2 text-primary fw-bold">
                         <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
                     </h4>
-                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% else %}bg-secondary{% endif %} rounded-pill px-3">
-                        {{ t(patient['status']|capitalize) }}
+                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% elif patient['is_deleted'] %}bg-danger{% else %}bg-secondary{% endif %} rounded-pill px-3">
+                        {{ t(patient['status']|capitalize) }}{% if patient['is_deleted'] %} (Deleted){% endif %}
                     </span>
+                    {% if patient['is_deleted'] %}
+                    <div class="alert alert-danger mt-3">
+                        <strong>Deleted Patient</strong><br>
+                        <span>Reason: {{ patient['deleted_reason'] or 'N/A' }}</span><br>
+                        <span>Deleted at: {{ patient['deleted_at'] or 'N/A' }}</span>
+                    </div>
+                    {% endif %}
                     {% if patient['patient_type'] == 'initial-intake' %}
                     <span class="badge bg-warning text-dark rounded-pill px-3 ms-1 border border-warning-subtle">
                         <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake

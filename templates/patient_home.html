@@ -2,42 +2,46 @@
 
 {% block content %}
 {% if preview_mode %}
-<div class="alert alert-warning border-0 shadow-sm mb-3">
-    <i class="bi bi-eye me-2"></i>{{ t('Admin portal preview mode for patient') }} #{{ preview_patient_id }}.
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center gap-2 text-amber-900 text-sm">
+    <span class="material-symbols-outlined text-amber-600 ms-fill">visibility</span>
+    {{ t('Admin portal preview mode for patient') }} #{{ preview_patient_id }}.
 </div>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-center mb-4 gap-3 flex-wrap">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
     <div>
-        <h2 class="mb-0 text-primary fw-bold">
-            <i class="bi bi-house-heart-fill me-2"></i>{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}
-        </h2>
-        <p class="text-muted small mb-0 mt-1">{{ t('Here is your current status') }}</p>
+        <h1 class="text-3xl font-extrabold text-primary tracking-tight">{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}</h1>
+        <p class="text-slate-500 mt-1">{{ t('Here is your current status') }}</p>
     </div>
     {% if patient['can_self_schedule'] %}
-    <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
-        <i class="bi bi-calendar3 me-1"></i>{{ t('Weekly Calendar') }}
+    <a href="{{ url_for('weekly_calendar') }}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-all">
+        <span class="material-symbols-outlined ms-fill" style="font-size:18px">calendar_today</span>
+        {{ t('Schedule Appointment') }}
     </a>
     {% else %}
-    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" disabled title="{{ t('Self-booking is disabled') }}">
-        <i class="bi bi-lock me-1"></i>{{ t('Weekly Calendar Locked') }}
+    <button type="button" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-200 text-slate-500 font-semibold rounded-xl cursor-not-allowed" disabled title="{{ t('Self-booking is disabled') }}">
+        <span class="material-symbols-outlined ms-fill" style="font-size:18px">lock</span>
+        {{ t('Calendar Locked') }}
     </button>
     {% endif %}
 </div>
 
 {% if upcoming and upcoming|length > 0 %}
-<div class="alert alert-primary border-0 shadow-sm mb-4 d-flex justify-content-between align-items-center gap-2 flex-wrap">
-    <div>
-        <i class="bi bi-alarm me-2"></i>
-        {{ t('Next meeting:') }} <strong>{{ upcoming[0]['appointment_date'] }}</strong> <strong>{{ upcoming[0]['appointment_time'] }}</strong>
+<div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between gap-2 flex-wrap">
+    <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-blue-600 ms-fill">alarm</span>
+        <div>
+            <div class="text-sm font-medium text-blue-900">{{ t('Next meeting:') }}</div>
+            <div class="text-lg font-bold text-blue-900">{{ upcoming[0]['appointment_date'] }} {{ upcoming[0]['appointment_time'] }}</div>
+        </div>
     </div>
     {% if upcoming[0]['is_recurring'] %}
-    <span class="badge bg-primary-subtle text-primary border">{{ t('Recurring') }}</span>
+    <span class="px-3 py-1 bg-primary text-white text-xs font-semibold rounded-full">{{ t('Recurring') }}</span>
     {% endif %}
 </div>
 {% endif %}
 
-<div class="row g-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm rounded-4 h-100">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">

@@ -134,6 +134,51 @@
                 </form>
             </div>
         </div>
+
+        <!-- Delete Patient Section -->
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden mt-4 border-start border-danger border-5">
+            <div class="card-body p-4">
+                <h5 class="fw-bold text-danger mb-2">
+                    <i class="bi bi-exclamation-triangle me-2"></i>{{ t('Delete Patient') }}
+                </h5>
+                <p class="text-muted small mb-3">{{ 'Permanently mark this patient as deleted. They will be hidden from normal views and archived from the patient count.' if lang == 'en' else 'סמן מטופל זה כמחוק בעד. הוא יהיה מוסתר מהתצוגות הרגילות יצא מספר המטופלים.' }}</p>
+                
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#deletePatientModal">
+                    <i class="bi bi-trash-fill me-2"></i>{{ t('Mark as Deleted') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Patient Modal -->
+<div class="modal fade" id="deletePatientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-danger text-white border-0">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>{{ t('Confirm Delete') }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{{ url_for('delete_patient', patient_id=patient['id']) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="text-danger fw-bold mb-3">{{ t('Please provide a reason for deleting this patient') }}</p>
+                    <div class="mb-3">
+                        <label for="deletion_reason" class="form-label text-uppercase smallest fw-bold">{{ t('Deletion Reason') }} <span class="text-danger">*</span></label>
+                        <textarea class="form-control rounded-2" name="deletion_reason" id="deletion_reason" rows="4" placeholder="{{ 'e.g., Patient moved, No longer seeking treatment, etc.' if lang == 'en' else 'למשל: מטופל עבר, לא מחפש טיפול יותר, וכו.' }}" required></textarea>
+                        <small class="text-muted d-block mt-2">{{ 'This reason will be recorded in the audit log for future reference.' if lang == 'en' else 'סיבה זו תירשם בדוח הביקורת עבור הפניות עתידיות.' }}</small>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 gap-2">
+                    <button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                    <button type="submit" class="btn btn-danger rounded-pill fw-bold">
+                        <i class="bi bi-trash-fill me-2"></i>{{ t('Mark as Deleted') }}
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
