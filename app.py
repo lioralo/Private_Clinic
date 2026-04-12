@@ -266,6 +266,14 @@ HEBREW_TRANSLATIONS = {
     "Reset Test Patients": "איפוס מטופלי בדיקה",
     "Type RESET to confirm test-patient reset.": "הקלד RESET כדי לאשר איפוס מטופלי בדיקה.",
     "Test patients reset successfully: one per core type/track with sample treatment methods.": "מטופלי הבדיקה אופסו בהצלחה: אחד לכל סוג/מסלול מרכזי עם שיטות טיפול לדוגמה.",
+    "Manage clinic member records.": "ניהול רשומות חברי הקליניקה.",
+    "Needs scheduling": "דורש תיאום",
+    "View toggle": "מתג תצוגה",
+    "Google Docs": "Google Docs",
+    "Google Doc URL": "קישור Google Doc",
+    "New Activity": "פעילות חדשה",
+    "Just now": "כרגע",
+    "Portal preview was removed from this workflow.": "תצוגת הפורטל הוסרה מתהליך העבודה הזה.",
 
     "All Patients": "כל המטופלים",
     "Candidates & Waiting": "מועמדים וממתינים",
@@ -3840,51 +3848,8 @@ def delete_patient_encounter_log(patient_id, log_id):
 def admin_portal_preview(patient_id):
     if current_user.role != 'admin':
         return 'Unauthorized', 403
-
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
-    if patient is None:
-        return 'Patient not found', 404
-
-    patient_user = db.execute('SELECT * FROM users WHERE patient_id = ? AND role = "patient"', (patient_id,)).fetchone()
-    upcoming = build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=10)
-    assigned_resources = db.execute('''
-        SELECT r.*
-        FROM resources r
-        JOIN patient_resources pr ON r.id = pr.resource_id
-        WHERE pr.patient_id = ?
-        ORDER BY pr.assigned_at DESC
-    ''', (patient_id,)).fetchall()
-    receipts = db.execute('''
-        SELECT *
-        FROM receipts
-        WHERE patient_id = ?
-        ORDER BY created_at DESC
-    ''', (patient_id,)).fetchall()
-
-    messages = []
-    if patient_user:
-        messages = db.execute('''
-            SELECT m.*, u.username as sender_name
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            WHERE (m.sender_id = ? AND m.recipient_id = ?)
-               OR (m.sender_id = ? AND m.recipient_id = ?)
-            ORDER BY m.timestamp ASC
-            LIMIT 20
-        ''', (current_user.id, patient_user['id'], patient_user['id'], current_user.id)).fetchall()
-
-    return render_template(
-        'patient_home.html',
-        patient=patient,
-        upcoming=upcoming,
-        messages=messages,
-        assigned_resources=assigned_resources,
-        receipts=receipts,
-        preview_mode=True,
-        preview_patient_id=patient_id,
-        unread_messages=0
-    )
+    flash('Portal preview was removed from this workflow.', 'info')
+    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 
 def redirect_to_patient_tab(patient_id, default_tab='info'):

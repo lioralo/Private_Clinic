@@ -45,9 +45,6 @@
         <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">
             <i class="bi bi-download me-1"></i>{{ t('Export History') }}
         </a>
-        <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">
-            <i class="bi bi-eye me-1"></i>{{ t('Portal Preview') }}
-        </a>
     </div>
 </div>
 
@@ -130,7 +127,7 @@
 
         <div class="card border-0 shadow-sm">
             <div class="card-header">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>Google Docs</h5>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>{{ t('Google Docs') }}</h5>
             </div>
             <div class="card-body">
                 <div class="d-flex flex-wrap gap-2 mb-3">
@@ -157,7 +154,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <label class="form-label">{{ t('Attach Existing Google Doc') }}</label>
                     <div class="d-flex flex-column flex-md-row gap-2">
-                        <input type="text" name="doc_url" class="form-control" placeholder="https://docs.google.com/document/d/..." required>
+                        <input type="text" name="doc_url" class="form-control" placeholder="{{ t('Google Doc URL') }}" required>
                         <button type="submit" class="btn btn-outline-primary rounded-pill px-4">{{ t('Attach') }}</button>
                     </div>
                 </form>
@@ -246,7 +243,7 @@
                                 <div class="modal-content">
                                     <div class="modal-header">
                                         <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
                                     </div>
                                     <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
                                         <div class="modal-body">

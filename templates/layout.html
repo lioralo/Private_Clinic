@@ -316,7 +316,7 @@
         <h5 class="offcanvas-title fw-bold" id="messagesOffcanvasLabel">
                         <i class="bi bi-chat-dots-fill me-2" style="font-size:18px;vertical-align:middle"></i> {{ t('Messages') }}
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="{{ t('Close') }}"></button>
       </div>
       <div class="offcanvas-body d-flex flex-column">
         {% if current_user.role == 'admin' %}
@@ -596,9 +596,9 @@
                                     <div class="toast show border-primary" role="alert" aria-live="assertive" aria-atomic="true">
                                         <div class="toast-header bg-primary text-white">
                                             <i class="bi bi-bell-fill me-2"></i>
-                                            <strong class="me-auto">New Activity</strong>
-                                            <small class="text-white-50">Just now</small>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+                                            <strong class="me-auto">{{ t('New Activity') }}</strong>
+                                            <small class="text-white-50">{{ t('Just now') }}</small>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="{{ t('Close') }}"></button>
                                         </div>
                                         <div class="toast-body bg-light">
                                             ${notification.message}
