@@ -30,9 +30,8 @@
                             <label for="status" class="form-label text-uppercase smallest fw-bold">Status</label>
                             <select class="form-select" name="status" id="status" required>
                                 <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
-                                <option value="candidate" {% if patient['status'] == 'candidate' %}selected{% endif %}>Candidate</option>
+                                <option value="candidate" {% if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] %}selected{% endif %}>Candidate</option>
                                 <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
-                                <option value="waiting for scheduling" {% if patient['status'] == 'waiting for scheduling' %}selected{% endif %}>Waiting for Scheduling</option>
                             </select>
                         </div>
 
@@ -72,45 +71,36 @@
                             </div>
                         </div>
 
+                        <input type="hidden" name="patient_type" id="patientTypeHidden" value="{{ patient['patient_type'] or 'private' }}">
+
                         <div class="col-md-12">
                             <label class="form-label text-uppercase smallest fw-bold">Patient Type</label>
                             <div class="d-flex gap-3 mt-1">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typePrivate" value="private"
-                                        {% if not patient['patient_type'] or patient['patient_type'] == 'private' %}checked{% endif %}>
+                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typePrivate" value="private"
+                                        {% if not patient['patient_type'] or patient['patient_type'] in ['private', 'group', 'initial-intake', 'diagnosee'] %}checked{% endif %}>
                                     <label class="form-check-label" for="typePrivate">
                                         <i class="bi bi-person me-1"></i>Private
                                     </label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeResidency" value="residency"
+                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typeResidency" value="residency"
                                         {% if patient['patient_type'] == 'residency' %}checked{% endif %}>
                                     <label class="form-check-label" for="typeResidency">
                                         <i class="bi bi-mortarboard me-1"></i>Residency
                                     </label>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeGroup" value="group"
-                                        {% if patient['patient_type'] == 'group' %}checked{% endif %}>
-                                    <label class="form-check-label" for="typeGroup">
-                                        <i class="bi bi-people-fill me-1"></i>Group
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeInitialIntake" value="initial-intake"
-                                        {% if patient['patient_type'] == 'initial-intake' %}checked{% endif %}>
-                                    <label class="form-check-label" for="typeInitialIntake">
-                                        <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeDiagnosee" value="diagnosee"
-                                        {% if patient['patient_type'] == 'diagnosee' %}checked{% endif %}>
-                                    <label class="form-check-label" for="typeDiagnosee">
-                                        <i class="bi bi-clipboard2-check me-1"></i>Diagnosee
-                                    </label>
-                                </div>
                             </div>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label for="treatmentTrack" class="form-label text-uppercase smallest fw-bold">Treatment Track</label>
+                            <select class="form-select" id="treatmentTrack" name="treatment_track">
+                                <option value="standard" {% if patient['patient_type'] not in ['group', 'initial-intake', 'diagnosee'] %}selected{% endif %}>Standard Treatment</option>
+                                <option value="group" {% if patient['patient_type'] == 'group' %}selected{% endif %}>Group</option>
+                                <option value="initial-intake" {% if patient['patient_type'] == 'initial-intake' %}selected{% endif %}>Initial Intake</option>
+                                <option value="diagnosee" {% if patient['patient_type'] == 'diagnosee' %}selected{% endif %}>Diagnosee</option>
+                            </select>
                         </div>
 
                         {% if treatment_method_options %}
@@ -184,7 +174,23 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Intake details are managed in the dedicated intake tab in patient profile.
+    const statusInput = document.getElementById('status');
+    const hiddenType = document.getElementById('patientTypeHidden');
+    const trackInput = document.getElementById('treatmentTrack');
+    const baseInputs = document.querySelectorAll('input[name="patient_type_base"]');
+
+    function syncPatientType() {
+        const baseType = document.querySelector('input[name="patient_type_base"]:checked')?.value || 'private';
+        const track = trackInput.value;
+        hiddenType.value = track === 'group' ? 'group' : (track === 'initial-intake' ? 'initial-intake' : (track === 'diagnosee' ? 'diagnosee' : baseType));
+        if (track !== 'standard') {
+            statusInput.value = 'candidate';
+        }
+    }
+
+    baseInputs.forEach((input) => input.addEventListener('change', syncPatientType));
+    trackInput.addEventListener('change', syncPatientType);
+    syncPatientType();
 });
 </script>
 {% endblock %}

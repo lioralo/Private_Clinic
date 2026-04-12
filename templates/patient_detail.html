@@ -1,481 +1,565 @@
 {% extends 'layout.html' %}
 
+{% block page_title %}{{ patient['name'] }}{% endblock %}
+
 {% block content %}
-<div class="row">
-    <div class="col-lg-7">
-        <!-- Analytics & Progress Charts -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-graph-up me-2 text-primary"></i>Therapeutic Insights</h5>
-            </div>
-            <div class="card-body p-4">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-3 border">
-                            <h6 class="text-center smallest text-uppercase fw-bold text-muted mb-3">Session Frequency (Last 6 Months)</h6>
-                            <canvas id="sessionChart" height="200"></canvas>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="bg-light p-3 rounded-3 border">
-                            <h6 class="text-center smallest text-uppercase fw-bold text-muted mb-3">Key Topics Frequency</h6>
-                            <canvas id="topicsChart" height="200"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
+{% set intake_enabled = patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
+{% set canonical_status = 'candidate' if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else patient['status'] %}
+
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+            <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+                <i class="bi bi-arrow-left me-1"></i>{{ t('Patients') }}
+            </a>
+            <span class="badge {% if canonical_status == 'ongoing' %}bg-success{% elif canonical_status == 'candidate' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 py-2">
+                {{ t(canonical_status|capitalize) }}
+            </span>
+            {% if patient['patient_type'] == 'residency' %}
+            <span class="badge crm-type-badge crm-type-residency rounded-pill px-3 py-2">{{ t('Residency') }}</span>
+            {% elif patient['patient_type'] == 'group' %}
+            <span class="badge crm-type-badge crm-type-group rounded-pill px-3 py-2">{{ t('Group') }}</span>
+            {% else %}
+            <span class="badge crm-type-badge crm-type-private rounded-pill px-3 py-2">{{ t('Private') }}</span>
+            {% endif %}
+            {% if patient['patient_type'] == 'initial-intake' %}
+            <span class="badge crm-type-badge crm-type-intake rounded-pill px-3 py-2">{{ t('Initial Intake') }}</span>
+            {% elif patient['patient_type'] == 'diagnosee' %}
+            <span class="badge crm-type-badge crm-type-diagnosee rounded-pill px-3 py-2">{{ t('Diagnosee') }}</span>
+            {% endif %}
+            {% if patient['treatment_method'] %}
+            <span class="badge crm-method-badge rounded-pill px-3 py-2">{{ patient['treatment_method'] }}</span>
+            {% endif %}
         </div>
+        <h1 class="text-3xl font-extrabold text-primary tracking-tight mb-1">{{ patient['name'] }}</h1>
+        <p class="text-slate-500 mb-0">
+            {{ t('Patient ID') }} #{{ patient['id'] }}
+            {% if patient['email'] %}<span class="mx-2">•</span>{{ patient['email'] }}{% endif %}
+            {% if patient['phone'] %}<span class="mx-2">•</span>{{ patient['phone'] }}{% endif %}
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill">
+            <i class="bi bi-pencil-square me-1"></i>{{ t('Edit') }}
+        </a>
+        <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">
+            <i class="bi bi-download me-1"></i>{{ t('Export History') }}
+        </a>
+        <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">
+            <i class="bi bi-eye me-1"></i>{{ t('Portal Preview') }}
+        </a>
+    </div>
+</div>
 
-        <!-- Patient Summary Card -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="card-header bg-white py-3 border-0 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-                <div>
-                    <h4 class="mb-2 text-primary fw-bold">
-                        <i class="bi bi-person-circle me-2"></i>{{ patient['name'] }}
-                    </h4>
-                    <span class="badge {% if patient['status'] == 'ongoing' %}bg-success{% elif patient['status'] == 'candidate' %}bg-warning text-dark{% elif patient['status'] in ['waiting for scheduling', 'waiting'] %}bg-info text-white{% elif patient['is_deleted'] %}bg-danger{% else %}bg-secondary{% endif %} rounded-pill px-3">
-                        {{ t(patient['status']|capitalize) }}{% if patient['is_deleted'] %} (Deleted){% endif %}
-                    </span>
-                    {% if patient['is_deleted'] %}
-                    <div class="alert alert-danger mt-3">
-                        <strong>Deleted Patient</strong><br>
-                        <span>Reason: {{ patient['deleted_reason'] or 'N/A' }}</span><br>
-                        <span>Deleted at: {{ patient['deleted_at'] or 'N/A' }}</span>
-                    </div>
-                    {% endif %}
-                    {% if patient['patient_type'] == 'initial-intake' %}
-                    <span class="badge bg-warning text-dark rounded-pill px-3 ms-1 border border-warning-subtle">
-                        <i class="bi bi-clipboard2-pulse me-1"></i>Initial Intake
-                    </span>
-                    {% elif patient['patient_type'] == 'diagnosee' %}
-                    <span class="badge rounded-pill px-3 ms-1 border" style="background:#0b7285;color:#fff;">
-                        <i class="bi bi-clipboard2-check me-1"></i>{{ 'Diagnosee' if lang == 'en' else 'מאובחן' }}
-                    </span>
-                    {% endif %}
-                    {% if patient['patient_type'] == 'residency' %}
-                    <span class="badge bg-purple rounded-pill px-3 ms-1" style="background:#7c3aed!important;">
-                        <i class="bi bi-mortarboard me-1"></i>Residency
-                    </span>
-                    {% elif patient['patient_type'] not in ['initial-intake', 'diagnosee'] %}
-                    <span class="badge bg-light text-dark rounded-pill px-3 ms-1 border">
-                        <i class="bi bi-person me-1"></i>Private
-                    </span>
-                    {% endif %}
-                </div>
-                <div class="text-muted smallest">
-                    {{ t('ID:') }} #{{ patient['id'] }}
-                </div>
+<div class="d-flex flex-wrap gap-2 mb-4">
+    <span id="notes-tab" class="d-none" aria-hidden="true"></span>
+    <span id="billing-tab" class="d-none" aria-hidden="true"></span>
+    <span id="messages-tab" class="d-none" aria-hidden="true"></span>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='info') }}" class="btn rounded-pill {% if active_tab == 'info' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Overview') }}</a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='notes') }}" class="btn rounded-pill {% if active_tab == 'notes' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Meeting Log') }}</a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='billing') }}" class="btn rounded-pill {% if active_tab == 'billing' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Billing') }}</a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="btn rounded-pill {% if active_tab == 'messages' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+        {{ t('Messages') }}{% if unread_messages_count %} <span class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='supervision') }}" class="btn rounded-pill {% if active_tab == 'supervision' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Supervision') }}</a>
+    {% if intake_enabled %}
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake') }}" class="btn rounded-pill {% if active_tab == 'intake' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Intake') }}</a>
+    {% endif %}
+</div>
+
+<div class="row g-4 patient-detail-grid">
+    <div class="col-xl-8">
+        {% if active_tab == 'info' %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2 text-primary"></i>{{ t('Overview') }}</h5>
             </div>
-        </div>
-
-        <!-- Appointments Management -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>Appointments</h5>
-            </div>
-            <div class="card-body p-4">
-                <ul class="nav nav-tabs mb-3" id="apptTab" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active small fw-bold" id="single-tab" data-bs-toggle="tab" data-bs-target="#single" type="button" role="tab">One-Time</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link small fw-bold" id="recurring-tab" data-bs-toggle="tab" data-bs-target="#recurring" type="button" role="tab">Recurring Schedule</button>
-                    </li>
-                </ul>
-                <div class="tab-content" id="apptTabContent">
-                    <div class="tab-pane fade show active" id="single" role="tabpanel">
-                        <form method="post" action="{{ url_for('add_appointment', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-md-4">
-                                <label class="form-label smallest text-uppercase fw-bold">Date</label>
-                                <input type="date" name="date" class="form-control" required>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
-                                <input type="time" name="time" class="form-control" required>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label smallest text-uppercase fw-bold">Cost ($)</label>
-                                <input type="number" step="0.01" name="cost" class="form-control" placeholder="0.00">
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label d-none d-md-block">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
-                            </div>
-                        </form>
-
-                        <div class="appointments-list">
-                            {% for appt in appointments %}
-                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
-                                    <div>
-                                        <span class="fw-bold text-dark">{{ appt['appointment_date'] }}</span>
-                                        <span class="text-muted ms-2 small">@ {{ appt['appointment_time'] }}</span>
-                                        <span class="badge bg-light text-primary border ms-2 rounded-pill small fw-normal">${{ "%.2f"|format(appt['cost']) }}</span>
-                                    </div>
-                                    <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('Remove appointment?');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
-                                    </form>
-                                </div>
-                            {% else %}
-                                <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small"><i class="bi bi-info-circle me-1"></i>No appointments found.</p>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-        <!-- Treatment Notes Section -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 id="notes-tab" class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
-            </div>
-            <div class="card-body p-4">
-                <button type="button" class="btn btn-primary mb-4 w-100 fw-bold rounded-pill" data-bs-toggle="modal" data-bs-target="#addNoteModal">
-                    <i class="bi bi-plus-lg me-1"></i> Add Clinical Note
-                </button>
-
-                <div class="notes-timeline">
-                    {% for note in notes %}
-                        <div class="note-item border-start border-4 border-primary bg-white shadow-sm rounded-end mb-3 p-3 position-relative">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="badge bg-light text-primary border rounded-pill">Session {{ note['session_number'] or 'N/A' }}</div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 smallest border-0" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">
-                                    <i class="bi bi-pencil"></i> Edit
-                                </button>
-                            </div>
-
-                            <div class="text-dark mb-3">{{ note['content'] }}</div>
-
-                            {% if note['patient_appearance'] or note['key_topics'] %}
-                                <div class="bg-light p-2 rounded-3 mb-3 small border">
-                                    {% if note['patient_appearance'] %}
-                                        <div class="mb-1"><strong>Appearance/Demeanor:</strong> {{ note['patient_appearance'] }}</div>
-                                    {% endif %}
-                                    {% if note['key_topics'] %}
-                                        <div><strong>Key Topics:</strong> <span class="badge bg-secondary rounded-pill px-2">{{ note['key_topics'] }}</span></div>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-
-                            <div class="text-muted smaller d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-clock me-1"></i> {{ note['created_at'] }}</span>
-                            </div>
-
-                            <!-- Edit Note Modal -->
-                            <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-lg">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">Edit Clinical Note</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}">
-                                            <div class="modal-body">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <div class="row g-3">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label smallest text-uppercase fw-bold">Session Number</label>
-                                                        <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-8">
-                                                        <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
-                                                        <input type="text" name="key_topics" class="form-control" placeholder="e.g. Anxiety, Career" value="{{ note['key_topics'] or '' }}">
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label smallest text-uppercase fw-bold">Patient Appearance</label>
-                                                        <input type="text" name="patient_appearance" class="form-control" placeholder="e.g. Tired, Anxious, Well-groomed" value="{{ note['patient_appearance'] or '' }}">
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label smallest text-uppercase fw-bold">Note Content</label>
-                                                        <textarea name="content" class="form-control" rows="5" required>{{ note['content'] }}</textarea>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                <button type="submit" class="btn btn-primary">Save changes</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% for sup in supervisions %}
-                        <div class="border rounded-4 p-3 mb-3 bg-white shadow-sm">
-                            <div class="d-flex justify-content-between align-items-start gap-3">
-                                <div class="flex-grow-1">
-                                    <div class="fw-semibold mb-1">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &nbsp;·&nbsp; {{ sup['supervisor_name'] }}{% endif %}</div>
-                                    <div class="small text-dark" style="white-space:pre-wrap;">{{ sup['content'] }}</div>
-                                </div>
-                                <form method="post" action="{{ url_for('delete_patient_supervision', patient_id=patient['id'], sup_id=sup['id']) }}" onsubmit="return confirm('{{ 'Delete this supervision record?' if lang == 'en' else 'למחוק רשומת הדרכה זו?' }}')">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="text-muted small text-center py-5">{{ 'No supervision records yet.' if lang == 'en' else 'אין עדיין רשומות הדרכה.' }}</div>
-                        {% endfor %}
-                    {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- MESSAGES TAB -->
-            <div class="tab-pane fade" id="messages" role="tabpanel" aria-labelledby="messages-tab">
-                <div class="card mb-4 border-0 shadow-sm rounded-4">
-                    <div class="card-header bg-white py-3 border-0">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots me-2 text-primary"></i>{{ t('Internal Chat') }}</h5>
-                    </div>
-                    <div class="card-body p-4">
-                        <div class="chat-history mb-3 p-3 bg-light rounded-4" style="max-height: 400px; overflow-y: auto;">
-                            {% for msg in messages %}
-                                <div class="mb-3 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
-                                    <div class="smallest text-muted mb-1">
-                                        {% if msg['sender_id'] == current_user.id %}You{% else %}{{ msg['sender_name'] or patient['name'] }}{% endif %}
-                                    </div>
-                                    <div class="d-inline-block p-3 rounded-4 shadow-sm {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-white text-dark{% endif %}" style="max-width: 85%; word-break: break-word;">
-                                        {{ msg['content'] }}
-                                    </div>
-                                    <small class="text-muted d-block mt-1 smallest">{{ msg['timestamp'] }}</small>
-                                </div>
-                            {% else %}
-                                <div class="text-center py-5 text-muted small">{{ t('No messages yet.') }}</div>
-                            {% endfor %}
-                        </div>
-                        <form method="post" action="{{ url_for('admin_reply_message', patient_id=patient['id']) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="input-group bg-white rounded-pill shadow-sm p-1">
-                                <input type="text" name="content" class="form-control border-0 px-3" placeholder="{{ t('Type a message...') }}" required>
-                                <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-send-fill"></i></button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Add Note Modal -->
-        <div class="modal fade" id="addNoteModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title fw-bold text-primary"><i class="bi bi-journal-plus me-2"></i>New Clinical Note</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data">
-                        <div class="modal-body">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label smallest text-uppercase fw-bold">Session Number</label>
-                                    <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_session_number }}">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label smallest text-uppercase fw-bold">Note Date</label>
-                                    <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_note_date }}">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
-                                    <input type="text" name="key_topics" class="form-control" placeholder="e.g. Anxiety, Career">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label smallest text-uppercase fw-bold">Patient Appearance & Demeanor</label>
-                                    <input type="text" name="patient_appearance" class="form-control" placeholder="e.g. Tired, Anxious, Well-groomed">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label smallest text-uppercase fw-bold">Main Content</label>
-                                    <textarea name="content" class="form-control bg-light" rows="5" required placeholder="Enter clinical observations and notes..."></textarea>
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label smallest text-uppercase fw-bold">Attach File (Optional)</label>
-                                    <input type="file" name="file" class="form-control">
-                                    <small class="text-muted smallest">Linked files will sync with the patient's main file storage.</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer border-top-0">
-                            <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Save Note</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="card mb-4 border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white py-3 border-0">
-                <h5 id="billing-tab" class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Billing</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3 mb-4">
+            <div class="card-body">
+                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-md-4">
-                        <label class="form-label smallest text-uppercase fw-bold">Amount</label>
-                        <input type="number" step="0.01" name="amount" class="form-control" placeholder="0.00" required>
+                    <input type="hidden" name="active_tab" value="info">
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Background') }}</label>
+                        <textarea name="background" class="form-control" rows="6">{{ patient['background'] or '' }}</textarea>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label smallest text-uppercase fw-bold">Description</label>
-                        <input type="text" name="description" class="form-control" placeholder="Receipt description">
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Treatment Info') }}</label>
+                        <textarea name="treatment_info" class="form-control" rows="6">{{ patient['treatment_info'] or '' }}</textarea>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label d-none d-md-block">&nbsp;</label>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save') }}</button>
                     </div>
                 </form>
+            </div>
+        </div>
 
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex flex-column flex-md-row gap-2 mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="description" class="form-control" placeholder="{{ t('Add a treatment goal') }}" required>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Add') }}</button>
+                </form>
                 <div class="d-grid gap-2">
-                    {% for receipt in receipts %}
-                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded-3 border">
+                    {% for goal in goals %}
+                    <div class="border rounded-4 p-3 bg-light-subtle d-flex flex-column flex-md-row justify-content-between gap-3">
                         <div>
-                            <div class="fw-bold text-dark">{{ receipt['description'] or 'Receipt' }}</div>
-                            <div class="small text-muted">{{ receipt['created_at'] }}</div>
+                            <div class="fw-semibold {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
+                            <div class="small text-muted mt-1">{{ t(goal['status']|capitalize) }}</div>
                         </div>
-                        <div class="badge bg-light text-primary border rounded-pill">${{ receipt['amount'] }}</div>
+                        <div class="d-flex gap-2">
+                            <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Toggle') }}</button>
+                            </form>
+                            <form method="post" action="{{ url_for('delete_goal', goal_id=goal['id']) }}" onsubmit="return confirm('{{ t('Delete goal?') }}');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                            </form>
+                        </div>
                     </div>
                     {% else %}
-                    <div class="text-center py-4 bg-light rounded-3">
-                        <p class="text-muted mb-0 small"><i class="bi bi-receipt me-1"></i>No receipts yet.</p>
-                    </div>
+                    <div class="text-muted small">{{ t('No goals added yet.') }}</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="col-lg-5">
-        <!-- Messaging / Chat Interface for Admin -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 500px;">
-            <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 id="messages-tab" class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chat</h5>
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>Google Docs</h5>
             </div>
-            <div class="card-body p-0 d-flex flex-column bg-light">
-                <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    {% if patient['gdoc_id'] %}
+                    <a href="{{ url_for('open_gdoc', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open Doc') }}
+                    </a>
+                    <form method="post" action="{{ url_for('sync_from_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync Notes') }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('detach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger rounded-pill"><i class="bi bi-link-45deg me-1"></i>{{ t('Detach') }}</button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{{ url_for('link_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form" data-open-doc="true">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-primary rounded-pill"><i class="bi bi-plus-circle me-1"></i>{{ t('Create Doc') }}</button>
+                    </form>
+                    {% endif %}
+                </div>
+                <form method="post" action="{{ url_for('attach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form" data-open-doc="true">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label class="form-label">{{ t('Attach Existing Google Doc') }}</label>
+                    <div class="d-flex flex-column flex-md-row gap-2">
+                        <input type="text" name="doc_url" class="form-control" placeholder="https://docs.google.com/document/d/..." required>
+                        <button type="submit" class="btn btn-outline-primary rounded-pill px-4">{{ t('Attach') }}</button>
+                    </div>
+                </form>
+                <div class="small text-muted mt-3">
+                    {% if patient['gdoc_id'] %}
+                    {{ t('Linked document ID') }}: {{ patient['gdoc_id'] }}
+                    {% else %}
+                    {{ t('No Google Doc linked yet.') }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% elif active_tab == 'notes' %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>{{ t('Add Meeting Log') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_note', patient_id=patient['id']) }}" enctype="multipart/form-data" class="row g-3 treatment-log-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-3">
+                        <label class="form-label">{{ t('Session Number') }}</label>
+                        <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_session_number }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">{{ t('Date') }}</label>
+                        <input type="date" name="note_date" class="form-control" value="{{ suggested_note_date }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">{{ t('Key Topics') }}</label>
+                        <input type="text" name="key_topics" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Appearance / Demeanor') }}</label>
+                        <input type="text" name="patient_appearance" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Meeting Log') }}</label>
+                        <textarea name="content" class="form-control" rows="8" required></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Attach File') }}</label>
+                        <input type="file" name="file" class="form-control">
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Log') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>{{ t('Meeting Logs') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-3">
+                {% for note in notes %}
+                <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+                        <div>
+                            <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                            <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                            <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% if note['key_topics'] %}
+                    <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
+                    {% endif %}
+                    {% if note['patient_appearance'] %}
+                    <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
+                    {% endif %}
+                    <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
+                </div>
+
+                <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
+                                <div class="modal-body">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">{{ t('Session Number') }}</label>
+                                            <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">{{ t('Date') }}</label>
+                                            <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ t('Appearance') }}</label>
+                                            <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">{{ t('Meeting Log') }}</label>
+                                            <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                                    <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-muted small">{{ t('No meeting logs yet.') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-event me-2 text-primary"></i>{{ t('Appointments') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                {% for appt in appointments %}
+                <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <div class="fw-semibold">{{ appt['appointment_date'] }} {{ appt['appointment_time'] }}</div>
+                        <div class="small text-muted">
+                            {{ appt['meeting_type'] or t('In-person') }}
+                            {% if appt['cost'] %}<span class="mx-2">•</span>${{ '%.2f'|format(appt['cost']) }}{% endif %}
+                            {% if appt['status'] %}<span class="mx-2">•</span>{{ appt['status'] }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('{{ t('Delete appointment?') }}');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="text-muted small">{{ t('No appointments found.') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% elif active_tab == 'billing' %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Add Billing Item') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label">{{ t('Amount') }}</label>
+                        <input type="number" step="0.01" name="amount" class="form-control" required>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">{{ t('Description') }}</label>
+                        <input type="text" name="description" class="form-control">
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Add') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>{{ t('Billing History') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                {% for receipt in receipts %}
+                <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                    <div>
+                        <div class="fw-semibold">{{ receipt['description'] or t('Receipt') }}</div>
+                        <div class="small text-muted">{{ receipt['created_at'] }}</div>
+                    </div>
+                    <span class="badge bg-white text-primary border rounded-pill px-3 py-2">${{ receipt['amount'] }}</span>
+                </div>
+                {% else %}
+                <div class="text-muted small">{{ t('No receipts yet.') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% elif active_tab == 'messages' %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots me-2 text-primary"></i>{{ t('Messages') }}</h5>
+            </div>
+            <div class="card-body">
+                <div class="patient-message-thread border rounded-4 p-3 bg-light-subtle mb-3">
                     {% if user %}
                         {% for msg in messages %}
-                            <div class="chat-message mb-3 p-3 rounded-3 shadow-sm {% if msg.sender_id == current_user.id %}bg-primary bg-opacity-10 align-self-end ms-5{% else %}bg-white align-self-start me-5{% endif %}" style="max-width: 85%; position: relative;">
-                                 <div class="d-flex justify-content-between align-items-start mb-1">
-                                    <strong class="small {% if msg.sender_id == current_user.id %}text-primary{% else %}text-dark{% endif %}">
-                                        {% if msg.sender_id == current_user.id %}You (Admin){% else %}Patient{% endif %}
-                                    </strong>
-                                    <span class="smallest text-muted ms-2">{{ msg.timestamp }}</span>
-                                </div>
-
-                                <div class="message-content text-dark small" id="msg-content-{{ msg.id }}" style="white-space: pre-wrap;">{{ msg.content }}</div>
-
-                                {% if msg.sender_id == current_user.id %}
-                                    <div class="text-end mt-1">
-                                        <button class="btn btn-link p-0 text-muted smallest text-decoration-none" type="button" data-bs-toggle="collapse" data-bs-target="#edit-msg-{{ msg.id }}">
-                                            Edit
-                                        </button>
-                                    </div>
-                                    <div class="collapse mt-2" id="edit-msg-{{ msg.id }}">
-                                        <form method="post" action="{{ url_for('edit_message', message_id=msg.id) }}">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <textarea name="content" class="form-control form-control-sm mb-2" rows="2">{{ msg.content }}</textarea>
-                                            <button type="submit" class="btn btn-primary btn-sm w-100">Update</button>
-                                        </form>
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% else %}
-                             <div class="text-center py-5 mt-5">
-                                <i class="bi bi-chat-square-text fs-1 text-muted opacity-25 mb-3"></i>
-                                <p class="text-muted small">No conversation history.</p>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="d-flex align-items-center justify-content-center h-100 text-muted small p-4 text-center">
-                            <div>
-                                <i class="bi bi-person-slash fs-1 opacity-25 d-block mb-3"></i>
-                                Patient has no active account.<br>Enable access to start chatting.
+                        <div class="mb-3 {% if msg['sender_id'] == current_user.id %}text-end{% endif %}">
+                            <div class="small text-muted mb-1">{% if msg['sender_id'] == current_user.id %}{{ t('You') }}{% else %}{{ patient['name'] }}{% endif %} · {{ msg['timestamp'] }}</div>
+                            <div class="d-inline-block px-3 py-2 rounded-4 shadow-sm {% if msg['sender_id'] == current_user.id %}bg-primary text-white{% else %}bg-white{% endif %}" style="max-width: 100%; white-space: pre-wrap; word-break: break-word;">
+                                {{ msg['content'] }}
                             </div>
                         </div>
+                        {% else %}
+                        <div class="text-muted small">{{ t('No messages yet.') }}</div>
+                        {% endfor %}
+                    {% else %}
+                    <div class="text-muted small">{{ t('Patient has no portal account yet.') }}</div>
                     {% endif %}
                 </div>
 
                 {% if user %}
-                <div class="p-3 bg-white border-top">
-                    <form method="post" action="{{ url_for('send_message', patient_id=patient['id']) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="input-group">
-                            <textarea name="content" class="form-control bg-light border-0" rows="2" placeholder="Message patient..." required style="resize: none;"></textarea>
-                            <button type="submit" class="btn btn-primary fw-bold px-3">
-                                <i class="bi bi-send-fill"></i>
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                <form method="post" action="{{ url_for('send_message', patient_id=patient['id']) }}" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-12">
+                        <label class="form-label">{{ t('New Message') }}</label>
+                        <textarea name="content" class="form-control" rows="5" required></textarea>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4"><i class="bi bi-send-fill me-1"></i>{{ t('Send') }}</button>
+                    </div>
+                </form>
                 {% endif %}
             </div>
         </div>
 
-        <!-- Access Management Card -->
-        <div class="card mb-4 border-0 shadow-sm rounded-4 bg-dark text-white overflow-hidden">
-            <div class="card-header bg-transparent py-3 border-0 border-bottom border-secondary border-opacity-25">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-info"></i>Portal Access</h5>
+        {% elif active_tab == 'supervision' %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-person-workspace me-2 text-primary"></i>{{ t('Add Supervision Record') }}</h5>
             </div>
-            <div class="card-body d-grid gap-2">
-                {% if patient['status'] == 'candidate' %}
-                <button type="button" class="btn btn-sm btn-success rounded-pill" data-bs-toggle="modal" data-bs-target="#convertModal">
-                    <i class="bi bi-arrow-right-circle me-1"></i>{{ t('Convert to Ongoing') }}
-                </button>
-                {% endif %}
-                <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
-                    <i class="bi bi-pencil-square me-1"></i>{{ t('Edit') }}
-                </a>
-                <a href="{{ url_for('export_patient_history', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">
-                    <i class="bi bi-download me-1"></i>{{ t('Export History') }}
-                </a>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_patient_supervision', patient_id=patient['id']) }}" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label">{{ t('Date') }}</label>
+                        <input type="date" name="supervision_date" class="form-control" required>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">{{ t('Supervisor') }}</label>
+                        <input type="text" name="supervisor_name" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Content') }}</label>
+                        <textarea name="content" class="form-control" rows="7" required></textarea>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save') }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>{{ t('Supervision History') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-3">
+                {% for sup in supervisions %}
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-2">
+                        <div>
+                            <div class="fw-semibold">{{ sup['supervision_date'] }}</div>
+                            {% if sup['supervisor_name'] %}<div class="small text-muted">{{ sup['supervisor_name'] }}</div>{% endif %}
+                        </div>
+                        <form method="post" action="{{ url_for('delete_patient_supervision', patient_id=patient['id'], sup_id=sup['id']) }}" onsubmit="return confirm('{{ t('Delete supervision record?') }}');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                        </form>
+                    </div>
+                    <div style="white-space: pre-wrap;">{{ sup['content'] }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">{{ t('No supervision records yet.') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% elif active_tab == 'intake' and intake_enabled %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Intake Form') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="active_tab" value="intake">
+                    <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
+                    <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Main Complaint') }}</label>
+                        <textarea name="intake_main_complaint" class="form-control" rows="4">{{ intake_form_data.get('main_complaint', '') }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Problem History') }}</label>
+                        <textarea name="intake_problem_history" class="form-control" rows="5">{{ intake_form_data.get('problem_history', '') }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">{{ t('Meeting Location') }}</label>
+                        <input type="text" name="intake_meeting_location" class="form-control" value="{{ intake_form_data.get('meeting_location', '') }}">
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end justify-content-md-end gap-2">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Intake') }}</button>
+                        <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">DOCX</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-folder2-open me-2 text-primary"></i>{{ t('Diagnostic Documents') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_diagnosis_document', patient_id=patient['id']) }}" enctype="multipart/form-data" class="row g-3 mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label">{{ t('Category') }}</label>
+                        <select name="category" class="form-select">
+                            <option value="test_document">{{ t('Test Document') }}</option>
+                            <option value="final_result">{{ t('Final Result') }}</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label">{{ t('Title') }}</label>
+                        <input type="text" name="title" class="form-control">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('Notes') }}</label>
+                        <textarea name="notes" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">{{ t('File') }}</label>
+                        <input type="file" name="diagnosis_file" class="form-control" required>
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Upload') }}</button>
+                    </div>
+                </form>
+
+                <div class="d-grid gap-2">
+                    {% for doc in diagnosis_documents %}
+                    <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                        <div>
+                            <div class="fw-semibold">{{ doc['title'] or doc['original_filename'] }}</div>
+                            <div class="small text-muted">{{ doc['category'] }} · {{ doc['created_at'] }}</div>
+                            {% if doc['notes'] %}<div class="small mt-1">{{ doc['notes'] }}</div>{% endif %}
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('download_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Download') }}</a>
+                            <form method="post" action="{{ url_for('delete_diagnosis_document', patient_id=patient['id'], doc_id=doc['id']) }}" onsubmit="return confirm('{{ t('Delete document?') }}');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-muted small">{{ t('No diagnostic documents uploaded yet.') }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card border-0 shadow-sm patient-actions-panel">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-sliders2 me-2 text-primary"></i>{{ t('Actions') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-3">
                 <form method="post" action="{{ url_for('toggle_self_booking', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="active_tab" value="info">
-                    <button type="submit" class="btn btn-sm {% if patient['can_self_schedule'] %}btn-outline-danger{% else %}btn-outline-success{% endif %} rounded-pill w-100">
+                    <input type="hidden" name="active_tab" value="{{ active_tab }}">
+                    <button type="submit" class="btn {% if patient['can_self_schedule'] %}btn-outline-danger{% else %}btn-outline-success{% endif %} rounded-pill w-100">
                         <i class="bi {% if patient['can_self_schedule'] %}bi-lock-fill{% else %}bi-unlock-fill{% endif %} me-1"></i>
-                        {% if patient['can_self_schedule'] %}
-                        {{ 'Disable Self-Booking' if lang == 'en' else 'כבה קביעה עצמית' }}
-                        {% else %}
-                        {{ 'Enable Self-Booking' if lang == 'en' else 'הפעל קביעה עצמית' }}
-                        {% endif %}
+                        {% if patient['can_self_schedule'] %}{{ t('Disable Self-Booking') }}{% else %}{{ t('Enable Self-Booking') }}{% endif %}
                     </button>
                 </form>
-                {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
-                <button class="btn btn-sm btn-outline-warning rounded-pill" type="button" data-bs-toggle="tab" data-bs-target="#intake">
-                    <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
-                </button>
-                {% else %}
+
+                {% if not intake_enabled %}
                 <form method="post" action="{{ url_for('enable_intake_tab', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-sm btn-outline-warning rounded-pill w-100">
-                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Enable Intake Tab' if lang == 'en' else 'הפעלת לשונית אינטייק' }}
+                    <button type="submit" class="btn btn-outline-warning rounded-pill w-100">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Enable Intake Tab') }}
                     </button>
                 </form>
                 {% endif %}
-                <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-outline-info rounded-pill w-100" title="{{ t('View and book available appointment slots') }}">
-                    <i class="bi bi-calendar-check me-1"></i>{{ 'Book Appointment' if lang == 'en' else 'זמן פגישה' }}
-                </a>
-                <a href="{{ url_for('admin_portal_preview', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-dark rounded-pill w-100" title="{{ t('Preview what this patient sees in their portal') }}">
-                    <i class="bi bi-eye me-1"></i>{{ 'Portal Preview' if lang == 'en' else 'תצוגת פורטל' }}
-                </a>
-                <div class="border rounded-3 p-2 bg-light bg-opacity-50 mt-1">
-                    <div class="small fw-bold text-primary mb-2">
-                        <i class="bi bi-lightning-charge me-1"></i>{{ 'Quick Book Time' if lang == 'en' else 'קביעה מהירה' }}
-                    </div>
+
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-lightning-charge me-1"></i>{{ t('Quick Book') }}</div>
                     <form method="post" action="{{ url_for('quick_book_patient_appointment', patient_id=patient['id']) }}" class="d-grid gap-2">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="active_tab" value="info">
+                        <input type="hidden" name="active_tab" value="{{ active_tab }}">
                         <input type="date" name="date" class="form-control form-control-sm" required>
                         <div class="row g-2">
-                            <div class="col-6">
-                                <input type="time" name="time" class="form-control form-control-sm" required step="900">
-                            </div>
-                            <div class="col-6">
-                                <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
-                            </div>
+                            <div class="col-6"><input type="time" name="time" class="form-control form-control-sm" required step="900"></div>
+                            <div class="col-6"><input type="time" name="end_time" class="form-control form-control-sm" required step="900"></div>
                         </div>
                         <select name="meeting_type" class="form-select form-select-sm">
                             <option value="in-person">{{ t('In-person') }}</option>
@@ -483,116 +567,50 @@
                             <option value="google-meet">Google Meet</option>
                         </select>
                         <select name="recurrence_mode" class="form-select form-select-sm">
-                            <option value="auto">{{ 'Auto (by patient type)' if lang == 'en' else 'אוטומטי (לפי סוג מטופל)' }}</option>
-                            <option value="one-time">{{ 'One-time meeting' if lang == 'en' else 'פגישה חד-פעמית' }}</option>
-                            <option value="recurring">{{ 'Recurring weekly meeting' if lang == 'en' else 'פגישה שבועית חוזרת' }}</option>
+                            <option value="auto">{{ t('Auto') }}</option>
+                            <option value="one-time">{{ t('One-time meeting') }}</option>
+                            <option value="recurring">{{ t('Recurring weekly meeting') }}</option>
                         </select>
                         <input type="text" name="meeting_title" class="form-control form-control-sm" placeholder="{{ t('Meeting title (optional)') }}">
-                        <button type="submit" class="btn btn-sm btn-primary rounded-pill">{{ 'Book Now' if lang == 'en' else 'קבע עכשיו' }}</button>
+                        <button type="submit" class="btn btn-primary btn-sm rounded-pill">{{ t('Book Now') }}</button>
                     </form>
                 </div>
 
-                {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
-                <div class="border rounded-3 p-3 bg-light bg-opacity-50 mt-1">
-                    <div id="intake-tab" class="small fw-bold text-warning mb-2">
-                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
-                    </div>
-                    <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="d-grid gap-2">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="active_tab" value="intake">
-                        <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
-                        <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
-                        <textarea name="intake_main_complaint" class="form-control" rows="3" placeholder="Main complaint">{{ intake_form_data.get('main_complaint', '') }}</textarea>
-                        <textarea name="intake_problem_history" class="form-control" rows="4" placeholder="Problem history">{{ intake_form_data.get('problem_history', '') }}</textarea>
-                        <input type="text" name="intake_meeting_location" class="form-control" value="{{ intake_form_data.get('meeting_location', '') }}" placeholder="Meeting location">
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-sm btn-warning rounded-pill">{{ 'Save Intake' if lang == 'en' else 'שמירת אינטייק' }}</button>
-                            <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">DOCX</a>
-                        </div>
-                    </form>
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-person-badge me-1"></i>{{ t('Portal Access') }}</div>
+                    {% if user %}
+                    <div class="small text-muted mb-2">{{ t('Username') }}: {{ user['username'] }}</div>
+                    {% else %}
+                    <div class="small text-muted">{{ t('No patient portal account yet.') }}</div>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    // Auto-scroll to bottom of chat
-    var chatHistory = document.getElementById('chatHistory');
-    if(chatHistory) {
-        chatHistory.scrollTop = chatHistory.scrollHeight;
-    }
-</script>
-
-<style>
-.note-item { transition: transform 0.2s; border-left-width: 5px !important; }
-.note-item:hover { transform: translateX(5px); }
-.smallest { font-size: 0.7rem; }
-.nav-tabs .nav-link.active { border-bottom: 3px solid #0d6efd !important; color: #0d6efd !important; }
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Session Frequency Chart
-    const ctxSession = document.getElementById('sessionChart');
-    if (ctxSession) {
-        new Chart(ctxSession, {
-            type: 'bar',
-            data: {
-                labels: {{ chart_data['session_labels']|safe }},
-                datasets: [{
-                    label: 'Sessions',
-                    data: {{ chart_data['session_data']|safe }},
-                    backgroundColor: 'rgba(13, 110, 253, 0.5)',
-                    borderColor: 'rgba(13, 110, 253, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    }
-                },
-                plugins: {
-                    legend: { display: false }
-                }
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.gdoc-json-form').forEach(function (form) {
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            const formData = new FormData(form);
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': formData.get('csrf_token') || '' }
+            });
+            const payload = await response.json().catch(function () { return { error: 'Request failed' }; });
+            if (!response.ok || payload.error) {
+                window.alert(payload.error || 'Request failed');
+                return;
             }
-        });
-    }
-
-    // Key Topics Frequency Chart
-    const ctxTopics = document.getElementById('topicsChart');
-    if (ctxTopics) {
-        new Chart(ctxTopics, {
-            type: 'doughnut',
-            data: {
-                labels: {{ chart_data['topic_labels']|safe }},
-                datasets: [{
-                    label: 'Frequency',
-                    data: {{ chart_data['topic_data']|safe }},
-                    backgroundColor: [
-                        'rgba(13, 110, 253, 0.7)',
-                        'rgba(25, 135, 84, 0.7)',
-                        'rgba(220, 53, 69, 0.7)',
-                        'rgba(255, 193, 7, 0.7)',
-                        'rgba(13, 202, 240, 0.7)',
-                        'rgba(111, 66, 193, 0.7)'
-                    ]
-                }]
-            },
-            options: {
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: { boxWidth: 12, font: { size: 10 } }
-                    }
-                }
+            if (form.dataset.openDoc === 'true' && payload.doc_url) {
+                window.open(payload.doc_url, '_blank', 'noopener');
             }
+            window.location.reload();
         });
-    }
+    });
 });
 </script>
 {% endblock %}

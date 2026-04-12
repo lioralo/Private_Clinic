@@ -26,7 +26,6 @@
                             <select class="form-select" name="status" id="status" required>
                                 <option value="ongoing">{{ t('Ongoing') }}</option>
                                 <option value="candidate">{{ t('Candidate') }}</option>
-                                <option value="waiting for scheduling">{{ t('Waiting for Scheduling') }}</option>
                                 <option value="archived">{{ t('Archived') }}</option>
                             </select>
                         </div>
@@ -57,40 +56,35 @@
                             <input type="text" class="form-control" name="id_number" id="id_number" placeholder="{{ t('ID Number') }}" maxlength="20">
                         </div>
 
+                        <input type="hidden" name="patient_type" id="patientTypeHidden" value="private">
+
                         <div class="col-md-12">
                             <label class="form-label text-uppercase smallest fw-bold">{{ t('Patient Type') }}</label>
                             <div class="d-flex gap-3 mt-1">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typePrivate" value="private" checked>
+                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typePrivate" value="private" checked>
                                     <label class="form-check-label" for="typePrivate">
                                         <i class="bi bi-person me-1"></i>{{ t('Private') }}
                                     </label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeResidency" value="residency">
+                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typeResidency" value="residency">
                                     <label class="form-check-label" for="typeResidency">
                                         <i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}
                                     </label>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeGroup" value="group">
-                                    <label class="form-check-label" for="typeGroup">
-                                        <i class="bi bi-people-fill me-1"></i>{{ t('Group') }}
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeInitialIntake" value="initial-intake">
-                                    <label class="form-check-label" for="typeInitialIntake">
-                                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Initial Intake') }}
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type" id="typeDiagnosee" value="diagnosee">
-                                    <label class="form-check-label" for="typeDiagnosee">
-                                        <i class="bi bi-clipboard2-check me-1"></i>{{ t('Diagnosee') }}
-                                    </label>
-                                </div>
                             </div>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label for="treatmentTrack" class="form-label text-uppercase smallest fw-bold">{{ t('Treatment Track') }}</label>
+                            <select class="form-select" id="treatmentTrack" name="treatment_track">
+                                <option value="standard">{{ t('Standard Treatment') }}</option>
+                                <option value="group">{{ t('Group') }}</option>
+                                <option value="initial-intake">{{ t('Initial Intake') }}</option>
+                                <option value="diagnosee">{{ t('Diagnosee') }}</option>
+                            </select>
+                            <div class="form-text">{{ t('Group, intake, and diagnosee now live under the treatment track while billing remains private or residency.') }}</div>
                         </div>
 
                         {% if treatment_method_options %}
@@ -122,12 +116,23 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const typeInputs = document.querySelectorAll('input[name="patient_type"]');
-    typeInputs.forEach((input) => input.addEventListener('change', function () {
-        if (input.checked && (input.value === 'initial-intake' || input.value === 'diagnosee')) {
-            document.getElementById('status').value = 'candidate';
+    const statusInput = document.getElementById('status');
+    const hiddenType = document.getElementById('patientTypeHidden');
+    const trackInput = document.getElementById('treatmentTrack');
+    const baseInputs = document.querySelectorAll('input[name="patient_type_base"]');
+
+    function syncPatientType() {
+        const baseType = document.querySelector('input[name="patient_type_base"]:checked')?.value || 'private';
+        const track = trackInput.value;
+        hiddenType.value = track === 'group' ? 'group' : (track === 'initial-intake' ? 'initial-intake' : (track === 'diagnosee' ? 'diagnosee' : baseType));
+        if (track !== 'standard') {
+            statusInput.value = 'candidate';
         }
-    }));
+    }
+
+    baseInputs.forEach((input) => input.addEventListener('change', syncPatientType));
+    trackInput.addEventListener('change', syncPatientType);
+    syncPatientType();
 });
 </script>
 {% endblock %}

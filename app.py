@@ -1198,6 +1198,7 @@ def _run_db_migrations(db):
         db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
     except sqlite3.OperationalError:
         pass
+    db.execute("UPDATE patients SET status = 'candidate' WHERE status IN ('waiting', 'waiting for scheduling')")
     try:
         db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
     except sqlite3.OperationalError:
@@ -2487,7 +2488,7 @@ def _get_patients_where_clause(status, patient_type, search_query, include_group
     where_query = ""
     params = []
 
-    if status in ['candidate', 'waiting for scheduling', 'waiting']:
+    if status in LEGACY_WAITING_STATUSES:
         where_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
     elif status != 'all':
         where_query += ' AND p.status = ?'
@@ -2530,6 +2531,18 @@ def _get_patients_order_clause(sort_by):
     return " ORDER BY " + order_map.get(sort_by, order_map['status_priority'])
 
 
+LEGACY_WAITING_STATUSES = {'candidate', 'waiting', 'waiting for scheduling'}
+
+
+def _normalize_patient_status(status):
+    normalized = (status or 'candidate').strip().lower()
+    if normalized in LEGACY_WAITING_STATUSES:
+        return 'candidate'
+    if normalized in {'ongoing', 'archived'}:
+        return normalized
+    return 'candidate'
+
+
 def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
     select_clause = _get_patients_select_clause(admin_user_id)
     where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
@@ -2557,7 +2570,8 @@ def crm_dashboard():
     show_deleted_raw = request.args.get('show_deleted', saved_filters.get('show_deleted', 'false'))
     show_deleted = show_deleted_raw == 'true'
 
-    if status not in {'all', 'ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'}:
+    status = _normalize_patient_status(status) if status != 'all' else 'all'
+    if status not in {'all', 'ongoing', 'candidate', 'archived'}:
         status = 'all'
     if clinic_type not in {'all', 'private', 'residency', 'group'}:
         clinic_type = 'all'
@@ -2629,7 +2643,7 @@ def crm_dashboard():
             SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS candidate_waiting_count,
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_count
         FROM patients
-        WHERE COALESCE(is_deleted, 0) = 0 AND status != 'archived'
+        WHERE COALESCE(is_deleted, 0) = 0
     ''').fetchone()
     
     # Get deleted patients count
@@ -2753,7 +2767,7 @@ def _get_dashboard_waiting_patients(db):
     return db.execute('''
         SELECT p.id, p.name, p.created_at
         FROM patients p
-        WHERE p.status IN ('waiting', 'waiting for scheduling')
+                WHERE p.status IN ('candidate', 'waiting', 'waiting for scheduling')
           AND COALESCE(p.is_deleted, 0) = 0
           AND NOT EXISTS (
               SELECT 1 FROM appointments a WHERE a.patient_id = p.id
@@ -3427,7 +3441,7 @@ def add_patient():
 
     if request.method == 'POST':
         name = request.form['name']
-        status = request.form['status']
+        status = _normalize_patient_status(request.form['status'])
         email = request.form.get('email')
         phone = request.form.get('phone')
         birth_date = request.form.get('birth_date') or None
@@ -7890,7 +7904,7 @@ def _seed_waiting_patient(db, admin_id, today):
            VALUES (?, ?, ?, ?, ?, ?)""",
         (
             'Noa Shapiro',
-            'waiting for scheduling',
+            'candidate',
             'noa.shapiro@example.com',
             '054-3456789',
             'Early 40s, presenting with grief and adjustment difficulties following loss of parent. '
@@ -8002,7 +8016,7 @@ def seed_data():
         _seed_archived_patient(db, today)
 
         db.commit()
-        flash('Example patients created: Maya Cohen (ongoing), Daniel Levy (candidate), Noa Shapiro (waiting), Eran Mizrahi (archived). Credentials: username = maya / daniel / noa, password = patient123', 'success')
+        flash('Example patients created: Maya Cohen (ongoing), Daniel Levy (candidate), Noa Shapiro (candidate), Eran Mizrahi (archived). Credentials: username = maya / daniel / noa, password = patient123', 'success')
     except sqlite3.IntegrityError as e:
         db.rollback()
         flash(f'Sample data already exists or an error occurred: {str(e)}', 'error')
@@ -8279,8 +8293,8 @@ def _get_admin_messages(db):
         params.append(patient_type)
 
     if status_filter in ('ongoing', 'candidate', 'waiting', 'waiting for scheduling', 'archived'):
-        if status_filter == 'waiting':
-            filters.append("p.status IN ('waiting', 'waiting for scheduling')")
+        if status_filter in LEGACY_WAITING_STATUSES:
+            filters.append("p.status IN ('candidate', 'waiting', 'waiting for scheduling')")
         else:
             filters.append('LOWER(p.status) = ?')
             params.append(status_filter)
@@ -9588,7 +9602,7 @@ def edit_patient(patient_id):
 
     if request.method == 'POST':
         name = request.form['name']
-        status = request.form['status']
+        status = _normalize_patient_status(request.form['status'])
         email = request.form.get('email')
         phone = request.form.get('phone')
         birth_date = request.form.get('birth_date') or None

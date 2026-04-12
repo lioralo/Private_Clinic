@@ -14,7 +14,7 @@
     </a>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
     <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
         <div class="flex justify-between items-start">
             <span class="text-slate-500 text-sm font-medium">{{ t('Total Patients') }}</span>
@@ -127,7 +127,7 @@
     </a>
     <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
         <div class="crm-summary-mini {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}active{% endif %}">
-            <span class="crm-summary-label">{{ t('Waiting') }}</span>
+            <span class="crm-summary-label">{{ t('Candidate') }}</span>
             <span class="crm-summary-value">{{ counts['candidate_waiting'] }}</span>
         </div>
     </a>
@@ -174,7 +174,7 @@
                     {% if status == 'all' %}
                         {{ t('All Patients') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% elif status in ['candidate', 'waiting for scheduling', 'waiting'] %}
-                        {{ t('Candidates & Waiting') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
+                        {{ t('Candidates') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% else %}
                         {{ t(status|capitalize) }} {{ t('Patients') }} <span class="text-muted fw-normal small">({{ patients|length }})</span>
                     {% endif %}
@@ -277,7 +277,7 @@
                     {% elif patient['status'] == 'archived' %}
                     <span class="crm-status-dot crm-status-archived"></span>
                     {% endif %}
-                    <span class="small">{{ t(patient['status']|capitalize) }}</span>
+                    <span class="small">{{ t('Candidate') if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else t(patient['status']|capitalize) }}</span>
                 </td>
                 <td>
                     {% if patient['patient_type'] == 'residency' %}
@@ -319,7 +319,7 @@
 </div>
 
 {# ─── CARDS VIEW ─── #}
-<div id="crmCardsView" class="crm-cards-grid mb-4" style="display:none" id="cardsBody">
+<div id="crmCardsView" class="crm-cards-grid mb-4" style="display:none">
     {% for patient in patients %}
     <div class="crm-patient-card patient-card-clickable
         {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate
@@ -341,7 +341,7 @@
                 {% elif patient['status'] == 'archived' %}
                 <span class="crm-status-dot crm-status-archived"></span>
                 {% endif %}
-                <span class="small text-muted">{{ t(patient['status']|capitalize) }}</span>
+                <span class="small text-muted">{{ t('Candidate') if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else t(patient['status']|capitalize) }}</span>
                 {% if patient['patient_type'] == 'residency' %}
                 <span class="badge crm-type-badge crm-type-residency"><i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}</span>
                 {% elif patient['patient_type'] == 'group' %}

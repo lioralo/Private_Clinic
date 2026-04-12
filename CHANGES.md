@@ -2,6 +2,58 @@
 
 ---
 
+## Session 35
+
+**Date:** 2026-04-12
+
+**Objective:** Complete dashboard/CRM redesign adjustments, normalize patient lifecycle rules, repair patient detail experience, and finalize admin shell/mobile behavior.
+
+**Release Summary:**
+
+1. **Dashboard Simplification + Collapsible Panels**
+- Removed the top-level all-patients metric from the admin dashboard summary strip.
+- Converted major dashboard cards into collapsible sections using semantic details/summary containers.
+- Adjusted panel/card sizing to reduce visual width and improve readability.
+
+2. **Status Normalization (Waiting -> Candidate)**
+- Added canonical status normalization so waiting and waiting for scheduling are treated as candidate.
+- Applied normalization in create/edit flows and CRM/dashboard filtering logic.
+- Added migration-time data normalization to convert legacy waiting records to candidate.
+
+3. **Patient Type/Treatment Track Flow Update**
+- Updated add/edit patient forms to keep billing type as private/residency.
+- Moved group/initial-intake/diagnosee selection into treatment-track behavior while preserving existing logic paths.
+- Kept intake-related behavior active for intake/diagnosee tracks.
+
+4. **CRM + Table/Filter Behavior Corrections**
+- Updated CRM labels and status rendering to consistently show candidate.
+- Fixed duplicate-id issue in cards container markup that could affect view/filter behavior.
+- Refined summary cards layout sizing and responsive behavior.
+
+5. **Patient Detail Page Repair**
+- Rebuilt patient detail structure with stable tab-driven sections: overview, meeting logs, billing, messages, supervision, and intake (when enabled).
+- Restored Google Docs actions (create/attach/open/sync/detach) in-page.
+- Fixed messaging area layout so it no longer blocks page content on desktop/mobile.
+- Preserved legacy test anchors required by existing automated checks.
+
+6. **Admin Shell + Login/2FA UX**
+- Removed language switch action from top admin bar.
+- Made admin name/avatar in top bar clickable to profile.
+- Removed redundant admin entry from side menu.
+- Added mobile sidebar toggle/backdrop handling for non-fullscreen and mobile widths.
+- Kept admin 2FA flow as step-gated after username/password verification and removed legacy inline OTP field from initial login form.
+
+7. **Responsiveness and Styling**
+- Added dashboard fold styling and patient-detail overflow safeguards.
+- Improved mobile behavior for message thread, panel stacking, and header/sidebar interaction.
+
+8. **Validation**
+- Full automated tests passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 34
 
 **Date:** 2026-04-09 08:10

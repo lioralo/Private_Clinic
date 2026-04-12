@@ -29,6 +29,7 @@ import {
   CheckCircle2, 
   Info,
   ChevronLeft,
+  ChevronDown,
   Filter,
   ArrowUpDown,
   Eye,
@@ -159,10 +160,15 @@ const TopNav = ({ title }: { title: string }) => {
 // --- Screens ---
 
 const Dashboard = () => {
+  const [openSections, setOpenSections] = useState({
+    caseload: true,
+    candidates: true,
+    insights: true,
+  });
+
   const stats = [
-    { label: 'All Patients', value: '26', change: '+4 this month', color: 'text-primary' },
     { label: 'Ongoing', value: '11', change: null, color: 'text-primary' },
-    { label: 'Waiting', value: '04', change: null, color: 'text-primary' },
+    { label: 'Candidate', value: '04', change: null, color: 'text-primary' },
     { label: 'Archived', value: '11', change: null, color: 'text-primary' },
   ];
 
@@ -170,8 +176,12 @@ const Dashboard = () => {
     { name: 'Eleanor Vance', therapy: 'Psychodynamic Therapy', status: 'Ongoing', lastSession: '2d ago', image: 'https://picsum.photos/seed/eleanor/100/100' },
     { name: 'Marcus Thorne', therapy: 'Private Consultation', status: 'Ongoing', nextSession: 'Today, 14:00', image: 'https://picsum.photos/seed/marcus/100/100' },
     { name: 'Sienna Brooks', therapy: 'Behavioral Therapy', status: 'Archived', completed: 'Oct 2023', image: 'https://picsum.photos/seed/sienna/100/100' },
-    { name: 'David Chen', therapy: 'Initial Assessment', status: 'Waiting', assigned: '1h ago', image: 'https://picsum.photos/seed/david/100/100' },
+    { name: 'David Chen', therapy: 'Initial Assessment', status: 'Candidate', assigned: '1h ago', image: 'https://picsum.photos/seed/david/100/100' },
   ];
+
+  const toggleSection = (key: keyof typeof openSections) => {
+    setOpenSections((current) => ({ ...current, [key]: !current[key] }));
+  };
 
   return (
     <div className="space-y-10">
@@ -180,14 +190,14 @@ const Dashboard = () => {
         <p className="text-secondary text-lg font-medium opacity-80">You have 12 appointments scheduled for today across 3 locations.</p>
       </section>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {stats.map((stat, i) => (
           <motion.div 
             key={i}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-6 rounded-xl shadow-sm border border-slate-100"
+            className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 max-w-sm"
           >
             <span className="text-secondary font-semibold text-sm uppercase tracking-wider">{stat.label}</span>
             <div className="flex items-baseline gap-2 mt-1">
@@ -200,7 +210,7 @@ const Dashboard = () => {
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative w-full md:w-96 group">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" />
           <input 
@@ -221,64 +231,106 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {patients.map((patient, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 + i * 0.1 }}
-            className={cn(
-              "bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group cursor-pointer border border-slate-100",
-              patient.status === 'Archived' && "opacity-70"
-            )}
-          >
-            <div className={cn("h-2 w-full", patient.status === 'Archived' ? "bg-slate-300" : "bg-primary")}></div>
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <img src={patient.image} alt={patient.name} className="w-12 h-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
-                <span className={cn(
-                  "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                  patient.status === 'Ongoing' ? "bg-teal-50 text-teal-800 border-teal-100" :
-                  patient.status === 'Waiting' ? "bg-amber-50 text-amber-800 border-amber-100" :
-                  "bg-slate-50 text-slate-600 border-slate-200"
-                )}>
-                  {patient.status}
-                </span>
-              </div>
-              <h3 className="text-xl font-bold text-primary mb-1">{patient.name}</h3>
-              <p className="text-secondary text-sm font-medium mb-6">{patient.therapy}</p>
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                <div className="flex gap-2">
-                  {patient.status === 'Ongoing' && <History size={16} className="text-slate-400" />}
-                  {patient.status === 'Ongoing' && <FileText size={16} className="text-slate-400" />}
-                  {patient.status === 'Archived' && <Archive size={16} className="text-slate-400" />}
-                  {patient.status === 'Waiting' && <Clock size={16} className="text-slate-400" />}
-                </div>
-                <span className="text-xs text-slate-400 font-medium">
-                  {patient.lastSession || patient.nextSession || patient.completed || patient.assigned}
-                </span>
-              </div>
+      <div className="space-y-4">
+        <section className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <button onClick={() => toggleSection('caseload')} className="w-full px-5 py-4 flex items-center justify-between text-left">
+            <div>
+              <h2 className="text-lg font-bold text-primary">Caseload Snapshot</h2>
+              <p className="text-sm text-slate-500">Current active and recently changed cases.</p>
             </div>
-          </motion.div>
-        ))}
-        
-        <div className="lg:col-span-2 bg-primary text-white p-8 rounded-xl relative overflow-hidden flex flex-col justify-between shadow-lg">
-          <div className="relative z-10">
-            <h2 className="text-3xl font-bold mb-4">Clinical Insights</h2>
-            <p className="text-teal-100/80 max-w-md text-lg leading-relaxed mb-6">
-              Patient intake has increased by <span className="text-white font-bold">18%</span> this quarter. 
-              We recommend reviewing your group therapy session capacity.
-            </p>
-            <button className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 py-3 rounded-lg font-bold transition-colors">
-              View Full Report
-            </button>
-          </div>
+            <ChevronDown className={cn('text-slate-400 transition-transform', !openSections.caseload && '-rotate-90')} size={18} />
+          </button>
+          {openSections.caseload && (
+            <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {patients.slice(0, 3).map((patient, i) => (
+                <motion.div 
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.35 + i * 0.08 }}
+                  className={cn(
+                    'bg-slate-50 rounded-xl overflow-hidden transition-all group cursor-pointer border border-slate-100',
+                    patient.status === 'Archived' && 'opacity-70'
+                  )}
+                >
+                  <div className={cn('h-2 w-full', patient.status === 'Archived' ? 'bg-slate-300' : 'bg-primary')} />
+                  <div className="p-5">
+                    <div className="flex justify-between items-start mb-4 gap-3">
+                      <img src={patient.image} alt={patient.name} className="w-12 h-12 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                      <span className={cn(
+                        'px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border',
+                        patient.status === 'Ongoing' ? 'bg-teal-50 text-teal-800 border-teal-100' :
+                        patient.status === 'Candidate' ? 'bg-amber-50 text-amber-800 border-amber-100' :
+                        'bg-slate-50 text-slate-600 border-slate-200'
+                      )}>
+                        {patient.status}
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-primary mb-1">{patient.name}</h3>
+                    <p className="text-secondary text-sm font-medium mb-5">{patient.therapy}</p>
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                      <div className="flex gap-2">
+                        {patient.status === 'Ongoing' && <History size={16} className="text-slate-400" />}
+                        {patient.status === 'Ongoing' && <FileText size={16} className="text-slate-400" />}
+                        {patient.status === 'Archived' && <Archive size={16} className="text-slate-400" />}
+                        {patient.status === 'Candidate' && <Clock size={16} className="text-slate-400" />}
+                      </div>
+                      <span className="text-xs text-slate-400 font-medium">{patient.lastSession || patient.nextSession || patient.completed || patient.assigned}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <button onClick={() => toggleSection('candidates')} className="w-full px-5 py-4 flex items-center justify-between text-left">
+            <div>
+              <h2 className="text-lg font-bold text-primary">Candidate Queue</h2>
+              <p className="text-sm text-slate-500">People still awaiting the next clinical decision.</p>
+            </div>
+            <ChevronDown className={cn('text-slate-400 transition-transform', !openSections.candidates && '-rotate-90')} size={18} />
+          </button>
+          {openSections.candidates && (
+            <div className="px-5 pb-5">
+              {patients.filter((patient) => patient.status === 'Candidate').map((patient) => (
+                <div key={patient.name} className="flex items-center justify-between gap-4 rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3">
+                  <div>
+                    <div className="font-semibold text-slate-900">{patient.name}</div>
+                    <div className="text-sm text-slate-500">{patient.therapy}</div>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-700">{patient.assigned}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="bg-primary text-white rounded-xl relative overflow-hidden shadow-lg">
+          <button onClick={() => toggleSection('insights')} className="w-full px-6 py-5 flex items-center justify-between text-left relative z-10">
+            <div>
+              <h2 className="text-2xl font-bold">Clinical Insights</h2>
+              <p className="text-teal-100/80 text-sm mt-1">High-level operational patterns for the week.</p>
+            </div>
+            <ChevronDown className={cn('text-teal-200 transition-transform', !openSections.insights && '-rotate-90')} size={20} />
+          </button>
+          {openSections.insights && (
+            <div className="px-6 pb-6 relative z-10">
+              <p className="text-teal-100/80 max-w-2xl text-lg leading-relaxed mb-6">
+                Candidate intake has increased by <span className="text-white font-bold">18%</span> this quarter.
+                Review initial-assessment capacity before opening more recurring slots.
+              </p>
+              <button className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 py-3 rounded-lg font-bold transition-colors">
+                View Full Report
+              </button>
+            </div>
+          )}
           <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-white/5 rounded-full blur-3xl"></div>
           <div className="absolute right-8 top-8 w-16 h-16 bg-white/10 rounded-full border border-white/10 flex items-center justify-center">
             <ArrowRight size={32} className="text-teal-300" />
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
@@ -683,11 +735,11 @@ const AddPatient = () => {
 
 const PatientList = () => {
   const patients = [
-    { name: 'Sarah Jenkins', id: '#PX-9281', status: 'Active', email: 'sarah.j@email.com', phone: '+1 (555) 012-3456', lastVisit: 'Oct 12, 2023', image: 'https://picsum.photos/seed/sarah/100/100' },
-    { name: 'Arthur Miller', id: '#PX-8422', status: 'Inactive', email: 'arthur.m@email.com', phone: '+1 (555) 098-7654', lastVisit: 'Sep 28, 2023', image: 'https://picsum.photos/seed/arthur/100/100' },
-    { name: 'Marcus Reed', id: '#PX-7119', status: 'Active', email: 'm.reed@provider.net', phone: '+1 (555) 234-5678', lastVisit: 'Oct 05, 2023', image: 'https://picsum.photos/seed/marcus2/100/100' },
-    { name: 'Elena Rodriguez', id: '#PX-5541', status: 'Active', email: 'elena.rod@email.com', phone: '+1 (555) 876-5432', lastVisit: 'Oct 14, 2023', image: 'https://picsum.photos/seed/elena/100/100' },
-    { name: 'Kevin Thorne', id: '#PX-4420', status: 'Active', email: 'k.thorne@domain.com', phone: '+1 (555) 345-6789', lastVisit: 'Oct 10, 2023', image: 'https://picsum.photos/seed/kevin/100/100' },
+    { name: 'Sarah Jenkins', type: 'Private', status: 'Ongoing', email: 'sarah.j@email.com', phone: '+1 (555) 012-3456', lastVisit: 'Oct 12, 2023', image: 'https://picsum.photos/seed/sarah/100/100' },
+    { name: 'Arthur Miller', type: 'Residency', status: 'Candidate', email: 'arthur.m@email.com', phone: '+1 (555) 098-7654', lastVisit: 'Sep 28, 2023', image: 'https://picsum.photos/seed/arthur/100/100' },
+    { name: 'Elena Rodriguez', type: 'Group', status: 'Ongoing', email: 'elena.rod@email.com', phone: '+1 (555) 876-5432', lastVisit: 'Oct 14, 2023', image: 'https://picsum.photos/seed/elena/100/100' },
+    { name: 'Kevin Thorne', type: 'Initial Intake', status: 'Candidate', email: 'k.thorne@domain.com', phone: '+1 (555) 345-6789', lastVisit: 'Oct 10, 2023', image: 'https://picsum.photos/seed/kevin/100/100' },
+    { name: 'Nora Patel', type: 'Diagnosee', status: 'Archived', email: 'n.patel@domain.com', phone: '+1 (555) 765-1098', lastVisit: 'Aug 26, 2023', image: 'https://picsum.photos/seed/nora/100/100' },
   ];
 
   return (
@@ -703,11 +755,11 @@ const PatientList = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {[
-          { label: 'Total Patients', value: '1,284', change: '+12% this month', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Candidate', value: '2', change: 'Awaiting next step', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Appointments', value: '42', change: 'Scheduled today', icon: CalendarIcon, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'New Admissions', value: '15', change: 'In last 7 days', icon: UserPlus, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Treatment Types', value: '5', change: 'One sample per type', icon: UserPlus, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Avg. Wait Time', value: '18 min', change: '-5m from avg', icon: Clock, color: 'text-red-600', bg: 'bg-red-50' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
@@ -738,7 +790,7 @@ const PatientList = () => {
             </button>
           </div>
           <div className="flex items-center gap-2 text-slate-500 text-xs font-medium">
-            <span>Showing 1-10 of 1,284 patients</span>
+            <span>Showing 5 curated patient types</span>
             <div className="flex gap-1 ml-4">
               <button className="p-1 hover:bg-slate-50 rounded disabled:opacity-30"><ChevronLeft size={18} /></button>
               <button className="p-1 hover:bg-slate-50 rounded"><ChevronRight size={18} /></button>
@@ -747,10 +799,11 @@ const PatientList = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full min-w-[760px] text-left table-fixed">
             <thead>
               <tr className="bg-slate-50/50 text-slate-500 text-xs font-bold uppercase tracking-wider">
                 <th className="px-6 py-4">Patient Name</th>
+                <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Contact</th>
                 <th className="px-6 py-4">Last Visit</th>
@@ -765,14 +818,17 @@ const PatientList = () => {
                       <img src={patient.image} alt={patient.name} className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
                       <div>
                         <div className="font-bold text-slate-900 text-sm">{patient.name}</div>
-                        <div className="text-xs text-slate-400">ID: {patient.id}</div>
+                        <div className="text-xs text-slate-400">Focused example patient</div>
                       </div>
                     </div>
                   </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{patient.type}</td>
                   <td className="px-6 py-4">
                     <span className={cn(
                       "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                      patient.status === 'Active' ? "bg-green-100 text-green-800" : "bg-slate-100 text-slate-800"
+                      patient.status === 'Ongoing' ? "bg-green-100 text-green-800" :
+                      patient.status === 'Candidate' ? "bg-amber-100 text-amber-800" :
+                      "bg-slate-100 text-slate-800"
                     )}>
                       {patient.status}
                     </span>

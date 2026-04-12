@@ -29,13 +29,7 @@
 </div>
 
 {# ── Stats strip ─────────────────────────────────────────── #}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('All Patients') }}</span>
-        <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['total'] }}</span>
-        </div>
-    </div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
     <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Ongoing') }}</span>
         <div class="flex items-baseline gap-2 mt-1">
@@ -43,7 +37,7 @@
         </div>
     </div>
     <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Waiting') }}</span>
+        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Candidate') }}</span>
         <div class="flex items-baseline gap-2 mt-1">
             <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['waiting'] }}</span>
         </div>
@@ -75,11 +69,11 @@
     <div class="col-lg-7">
 
         {# Today's schedule #}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header dash-card-header">
+        <details class="card border-0 shadow-sm mb-4 dashboard-fold" open>
+            <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-clock-fill me-2 text-primary"></i>{{ t("Today's Schedule") }}</h6>
                 <span class="badge bg-primary rounded-pill">{{ today_appointments|length }}</span>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 {% if today_appointments %}
                 <ul class="list-group list-group-flush">
@@ -128,15 +122,15 @@
                 </div>
                 {% endif %}
             </div>
-        </div>
+        </details>
 
         {# This week #}
         {% if week_appointments %}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header dash-card-header">
+        <details class="card border-0 shadow-sm mb-4 dashboard-fold" open>
+            <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>{{ t('Coming This Week') }}</h6>
                 <span class="badge bg-secondary rounded-pill">{{ week_appointments|length }}</span>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% set ns = namespace(last_date='') %}
@@ -157,7 +151,7 @@
                     {% endfor %}
                 </ul>
             </div>
-        </div>
+        </details>
         {% endif %}
 
     </div>{# /left column #}
@@ -167,13 +161,13 @@
 
         {# Follow-up decisions needed #}
         {% if followup_patients %}
-        <div class="card border-0 shadow-sm mb-4" id="followupSection">
-            <div class="card-header dash-card-header dash-card-header-warning">
+        <details class="card border-0 shadow-sm mb-4 dashboard-fold" id="followupSection" open>
+            <summary class="card-header dash-card-header dash-card-header-warning">
                 <h6 class="mb-0 fw-bold text-warning-emphasis">
                     <i class="bi bi-exclamation-circle-fill me-2"></i>{{ t('Decision Needed') }}
                 </h6>
                 <span class="badge bg-warning text-dark rounded-pill">{{ followup_patients|length }}</span>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for p in followup_patients %}
@@ -191,16 +185,16 @@
                     {% endfor %}
                 </ul>
             </div>
-        </div>
+        </details>
         {% endif %}
 
         {# Waiting list — no upcoming appointment #}
         {% if waiting_patients %}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header dash-card-header">
-                <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>{{ t('Waiting — No Appointment') }}</h6>
+        <details class="card border-0 shadow-sm mb-4 dashboard-fold" open>
+            <summary class="card-header dash-card-header">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>{{ t('Candidates — No Appointment') }}</h6>
                 <span class="badge bg-warning text-dark rounded-pill">{{ waiting_patients|length }}</span>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for p in waiting_patients %}
@@ -216,18 +210,18 @@
                     {% endfor %}
                 </ul>
             </div>
-        </div>
+        </details>
         {% endif %}
 
         {# Missing recurring alert #}
         {% if missing_recurring %}
-        <div class="card border-0 shadow-sm mb-4 border-danger-subtle">
-            <div class="card-header dash-card-header dash-card-header-danger">
+        <details class="card border-0 shadow-sm mb-4 border-danger-subtle dashboard-fold" open>
+            <summary class="card-header dash-card-header dash-card-header-danger">
                 <h6 class="mb-0 fw-bold text-danger">
                     <i class="bi bi-arrow-repeat me-2"></i>{{ t('Ongoing — No Recurring Set') }}
                 </h6>
                 <span class="badge bg-danger rounded-pill">{{ missing_recurring|length }}</span>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for p in missing_recurring %}
@@ -240,14 +234,14 @@
                     {% endfor %}
                 </ul>
             </div>
-        </div>
+        </details>
         {% endif %}
 
         {# Quick actions #}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header dash-card-header">
+        <details class="card border-0 shadow-sm mb-4 dashboard-fold" open>
+            <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-lightning-fill me-2 text-primary"></i>{{ t('Quick Actions') }}</h6>
-            </div>
+            </summary>
             <div class="card-body d-grid gap-2 p-3">
                 <a href="{{ url_for('add_patient') }}" class="btn btn-outline-primary text-start">
                     <i class="bi bi-person-plus-fill me-2"></i>{{ t('Add New Patient') }}
@@ -268,7 +262,7 @@
                     <i class="bi bi-gear me-2"></i>{{ t('Settings & Profile') }}
                 </a>
             </div>
-        </div>
+        </details>
 
     </div>{# /right column #}
 
@@ -277,10 +271,10 @@
 {# ── Bottom row: Recent patients + Recent activity ────────── #}
 <div class="row g-4 mt-1">
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header dash-card-header">
+        <details class="card border-0 shadow-sm dashboard-fold" open>
+            <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ t('Recently Added Patients') }}</h6>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 {% if recent_patients %}
                 <ul class="list-group list-group-flush">
@@ -311,14 +305,14 @@
                 <div class="text-center py-4 text-muted small">{{ t('No patients yet.') }}</div>
                 {% endif %}
             </div>
-        </div>
+        </details>
     </div>
 
     <div class="col-md-6">
-        <div class="card border-0 shadow-sm">
-            <div class="card-header dash-card-header">
+        <details class="card border-0 shadow-sm dashboard-fold" open>
+            <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-activity me-2 text-primary"></i>{{ t('Recent Activity') }}</h6>
-            </div>
+            </summary>
             <div class="card-body p-0">
                 {% if recent_activity %}
                 <ul class="list-group list-group-flush">
@@ -351,7 +345,7 @@
                 <div class="text-center py-4 text-muted small">{{ t('No recent activity.') }}</div>
                 {% endif %}
             </div>
-        </div>
+        </details>
     </div>
 </div>
 

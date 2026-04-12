@@ -894,6 +894,26 @@ input.form-control[type="password"] {
     border-bottom-color: rgba(220, 53, 69, 0.2);
 }
 
+.dashboard-fold > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.dashboard-fold > summary::-webkit-details-marker {
+    display: none;
+}
+
+.dashboard-fold > summary::after {
+    content: "▾";
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-inline-start: auto;
+}
+
+.dashboard-fold:not([open]) > summary::after {
+    transform: rotate(-90deg);
+}
+
 /* Today's schedule items */
 .dash-schedule-item {
     display: flex;
@@ -1075,6 +1095,15 @@ footer {
     top: 88px;
 }
 
+.patient-detail-grid .card {
+    overflow: hidden;
+}
+
+.patient-message-thread {
+    max-height: 30rem;
+    overflow-y: auto;
+}
+
 .patient-actions-panel .btn {
     text-align: start;
 }
@@ -1086,6 +1115,10 @@ footer {
 
     .patient-actions-panel {
         position: static;
+    }
+
+    .patient-message-thread {
+        max-height: none;
     }
 
     .patient-actions-panel .card-body {
@@ -1131,6 +1164,10 @@ footer {
 
     .patient-actions-panel .card-body {
         grid-template-columns: 1fr;
+    }
+
+    .dashboard-fold > summary {
+        padding-inline-end: 2.5rem;
     }
 
     .mobile-readonly-banner {

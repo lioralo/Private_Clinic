@@ -117,9 +117,11 @@
 {# ── ADMIN: sidebar + main content ───────────────────────────── #}
 <div class="flex h-screen overflow-hidden">
 
+    <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden"></div>
+
     {# Sidebar #}
     <aside id="adminSidebar" class="h-screen w-64 flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 z-40 overflow-y-auto
-        fixed lg:static top-0 {% if lang == 'he' %}right-0{% else %}left-0{% endif %} -translate-x-full lg:translate-x-0 transition-transform duration-300">
+        fixed lg:static top-0 {% if lang == 'he' %}right-0 translate-x-full lg:translate-x-0{% else %}left-0 -translate-x-full lg:translate-x-0{% endif %} transition-transform duration-300">
 
         {# Brand #}
         <div class="flex items-center gap-3 mb-8 px-2 flex-shrink-0">
@@ -167,18 +169,8 @@
             <span>{{ t('Add Patient') }}</span>
         </a>
 
-        {# Bottom: Profile / Lang / Logout #}
+        {# Bottom: Logout #}
         <div class="mt-auto border-t border-slate-200 pt-4 space-y-1 flex-shrink-0">
-            <a href="{{ url_for('admin_profile') }}"
-               class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
-                <span class="material-symbols-outlined" style="font-size:18px">manage_accounts</span>
-                <span class="truncate">{{ current_user.display_name or current_user.username }}</span>
-            </a>
-            <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-               class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
-                <span class="material-symbols-outlined" style="font-size:18px">translate</span>
-                <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
-            </a>
             <a href="{{ url_for('logout') }}"
                class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
                 <span class="material-symbols-outlined" style="font-size:18px">logout</span>
@@ -191,26 +183,24 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {# Top Header #}
-        <header class="fixed top-0 right-0 left-64 bg-white/85 backdrop-blur-md z-30 flex justify-between items-center px-8 py-4 shadow-sm border-b border-slate-200">
+        <header class="fixed top-0 {% if lang == 'he' %}left-0 lg:right-64{% else %}right-0 lg:left-64{% endif %} bg-white/85 backdrop-blur-md z-30 flex justify-between items-center px-4 lg:px-8 py-4 shadow-sm border-b border-slate-200 gap-3">
             <div class="flex items-center gap-6">
+                <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}">
+                    <span class="material-symbols-outlined" style="font-size:20px">menu</span>
+                </button>
                 <h2 class="text-xl font-bold text-teal-900 tracking-tight">
                     {% block page_title %}{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni Clinic{% endif %}{% endblock %}
                 </h2>
             </div>
             <div class="flex items-center gap-4">
-                <div class="flex items-center gap-1">
-                    <button class="p-2 text-slate-500 hover:text-primary transition-colors">
-                        <span class="material-symbols-outlined" style="font-size:20px">translate</span>
-                    </button>
-                    <button class="p-2 text-slate-500 hover:text-primary transition-colors relative">
-                        <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
-                        {% if unread_count is defined and unread_count > 0 %}
-                        <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                        {% endif %}
-                    </button>
-                </div>
-                <div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
-                <div class="flex items-center gap-3">
+                <button class="p-2 text-slate-500 hover:text-primary transition-colors relative">
+                    <span class="material-symbols-outlined" style="font-size:20px">notifications</span>
+                    {% if unread_count is defined and unread_count > 0 %}
+                    <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                    {% endif %}
+                </button>
+                <div class="h-8 w-[1px] bg-slate-200 mx-1 lg:mx-2"></div>
+                <a href="{{ url_for('admin_profile') }}" class="flex items-center gap-3 text-decoration-none hover:opacity-80 transition-opacity">
                     <div class="text-right">
                         <p class="text-sm font-bold text-teal-900 leading-none">{{ current_user.display_name or current_user.username }}</p>
                         <p class="text-[10px] text-slate-500 font-medium">{% if lang == 'he' %}מנהל{% else %}Admin{% endif %}</p>
@@ -218,7 +208,7 @@
                     <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-white">
                         <span class="material-symbols-outlined ms-fill" style="font-size:16px">person</span>
                     </div>
-                </div>
+                </a>
             </div>
         </header>
 
@@ -350,8 +340,6 @@
                         <option value="all">All Types</option>
                         <option value="private">Private</option>
                         <option value="residency">Residency</option>
-                        <option value="initial-intake">Initial Intake</option>
-                        <option value="diagnosee">Diagnosee</option>
                         <option value="group">Group</option>
                     </select>
                 </div>
@@ -360,8 +348,6 @@
                         <option value="all">All Statuses</option>
                         <option value="ongoing">Ongoing</option>
                         <option value="candidate">Candidate</option>
-                        <option value="waiting">Waiting</option>
-                        <option value="waiting for scheduling">Waiting for Scheduling</option>
                         <option value="archived">Archived</option>
                     </select>
                 </div>
@@ -390,6 +376,9 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const sidebar = document.getElementById('adminSidebar');
+        const sidebarToggle = document.getElementById('adminSidebarToggle');
+        const sidebarBackdrop = document.getElementById('adminSidebarBackdrop');
         const offcanvas = document.getElementById('messagesOffcanvas');
         const isAdmin = {{ 'true' if current_user.role == 'admin' else 'false' }};
         const conversationSelect = document.getElementById('conversationSelect');
@@ -399,6 +388,39 @@
         const recipientInput = document.getElementById('messageRecipientId');
         let selectedConversation = null;
         let allConversations = [];
+
+        function toggleAdminSidebar(forceOpen) {
+            if (!sidebar || window.innerWidth >= 1024) return;
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : sidebar.classList.contains('hidden');
+            const openClass = {{ '"translate-x-0"' if lang == 'he' else '"translate-x-0"' }};
+            const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
+            sidebar.classList.toggle(openClass, shouldOpen);
+            sidebar.classList.toggle(closedClass, !shouldOpen);
+            if (sidebarBackdrop) {
+                sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
+            }
+            document.body.classList.toggle('overflow-hidden', shouldOpen);
+        }
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function () {
+                const isClosed = sidebar && (sidebar.classList.contains('-translate-x-full') || sidebar.classList.contains('translate-x-full'));
+                toggleAdminSidebar(isClosed);
+            });
+        }
+
+        if (sidebarBackdrop) {
+            sidebarBackdrop.addEventListener('click', function () {
+                toggleAdminSidebar(false);
+            });
+        }
+
+        window.addEventListener('resize', function () {
+            if (window.innerWidth >= 1024 && sidebarBackdrop) {
+                sidebarBackdrop.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        });
 
         if (offcanvas) {
             offcanvas.addEventListener('show.bs.offcanvas', function () {
