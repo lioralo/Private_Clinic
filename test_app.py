@@ -10,7 +10,7 @@ import sqlite3
 import pyotp
 from flask import g
 from unittest.mock import patch
-from app import app, init_db, get_db
+from app import app, init_db, get_db, normalize_intake_payload
 
 class ClinicTestCase(unittest.TestCase):
 
@@ -110,6 +110,47 @@ class ClinicTestCase(unittest.TestCase):
                 VALUES (?, ?, 'available', ?)
             ''', (date_iso, time_text, duration_minutes))
             db.commit()
+
+    def test_normalize_intake_payload(self):
+        # Non-dict payload
+        self.assertEqual(normalize_intake_payload(None), {})
+        self.assertEqual(normalize_intake_payload([]), {})
+        self.assertEqual(normalize_intake_payload("string"), {})
+
+        # Empty dict
+        self.assertEqual(normalize_intake_payload({}), {})
+
+        # Payload with valid fields
+        payload = {'meeting_location': 'Clinic', 'referral_source': 'Doctor X'}
+        self.assertEqual(normalize_intake_payload(payload), payload)
+
+        # Payload with invalid fields
+        payload_with_invalid = {'meeting_location': 'Clinic', 'invalid_field': 'value', 'unknown': 123}
+        self.assertEqual(normalize_intake_payload(payload_with_invalid), {'meeting_location': 'Clinic'})
+
+        # Payload with 'intake_' prefix
+        payload_with_prefix = {'intake_meeting_location': 'Clinic', 'intake_referral_source': 'Doctor X'}
+        self.assertEqual(normalize_intake_payload(payload_with_prefix), {'meeting_location': 'Clinic', 'referral_source': 'Doctor X'})
+
+        # Payload with 'intake_' prefix but invalid field name after prefix
+        payload_with_invalid_prefix = {'intake_meeting_location': 'Clinic', 'intake_invalid_field': 'value'}
+        self.assertEqual(normalize_intake_payload(payload_with_invalid_prefix), {'meeting_location': 'Clinic'})
+
+        # Payload with list values
+        payload_with_list = {'meeting_location': ['Clinic A', 'Clinic B']}
+        self.assertEqual(normalize_intake_payload(payload_with_list), {'meeting_location': 'Clinic A, Clinic B'})
+
+        # Payload with list values and empty/null items
+        payload_with_list_empty = {'meeting_location': ['Clinic A', '', None, 'Clinic B', '   ']}
+        self.assertEqual(normalize_intake_payload(payload_with_list_empty), {'meeting_location': 'Clinic A, Clinic B'})
+
+        # Payload with empty keys (should be skipped)
+        payload_with_empty_keys = {'': 'value1', None: 'value2', '   ': 'value3', 'meeting_location': 'Clinic'}
+        self.assertEqual(normalize_intake_payload(payload_with_empty_keys), {'meeting_location': 'Clinic'})
+
+        # Payload with non-string values
+        payload_with_non_string = {'meeting_location': 123, 'referral_source': None}
+        self.assertEqual(normalize_intake_payload(payload_with_non_string), {'meeting_location': '123', 'referral_source': ''})
 
     def test_api_treatment_method_options_get(self):
         # 1. Unauthenticated access should be blocked (redirects to login)
