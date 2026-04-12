@@ -774,6 +774,19 @@ input.form-control[type="password"] {
 }
 .crm-drag-handle:active { cursor: grabbing; }
 
+.app-shell,
+.app-shell p,
+.app-shell span,
+.app-shell td,
+.app-shell th,
+input,
+textarea,
+select,
+[contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
 /* ── CARDS view ────────────────────────────────────────── */
 .crm-cards-grid {
     display: grid;

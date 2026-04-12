@@ -261,6 +261,13 @@
                 <a href="{{ url_for('admin_profile') }}" class="btn btn-outline-secondary text-start">
                     <i class="bi bi-gear me-2"></i>{{ t('Settings & Profile') }}
                 </a>
+                <form method="post" action="{{ url_for('reset_test_patients') }}" onsubmit="return confirm('{{ t('This will replace current patient records with test data. Continue?') }}');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="confirm" value="RESET">
+                    <button type="submit" class="btn btn-outline-danger text-start w-100">
+                        <i class="bi bi-arrow-repeat me-2"></i>{{ t('Reset Test Patients') }}
+                    </button>
+                </form>
             </div>
         </details>
 

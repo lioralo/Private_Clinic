@@ -7,22 +7,15 @@
 
     <!-- Bootstrap CSS (forms, tabs, modals, offcanvas) -->
     {% if lang == 'he' %}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.rtl.min.css') }}">
     {% else %}
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
     {% endif %}
     <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
 
     <!-- Tailwind CSS (design system) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Google Fonts: Manrope + Inter + Assistant (Hebrew) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@300;400;500;600&family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Material Symbols Outlined -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script src="{{ url_for('static', filename='vendor/tailwind/tailwindcss.com.js') }}"></script>
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -70,8 +63,8 @@
                     "full": "9999px",
                 },
                 fontFamily: {
-                    "headline": ["Manrope", "Assistant", "sans-serif"],
-                    "body":     ["Inter", "Assistant", "sans-serif"],
+                    "headline": ["Segoe UI", "Arial", "sans-serif"],
+                    "body":     ["Segoe UI", "Arial", "sans-serif"],
                 },
             },
         },
@@ -169,8 +162,13 @@
             <span>{{ t('Add Patient') }}</span>
         </a>
 
-        {# Bottom: Logout #}
+        {# Bottom: language + logout #}
         <div class="mt-auto border-t border-slate-200 pt-4 space-y-1 flex-shrink-0">
+            <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
+               class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
+                <span class="material-symbols-outlined" style="font-size:18px">translate</span>
+                <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
+            </a>
             <a href="{{ url_for('logout') }}"
                class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
                 <span class="material-symbols-outlined" style="font-size:18px">logout</span>
@@ -317,7 +315,7 @@
 {% else %}
 </main>
 <footer class="py-6 border-t border-slate-200 text-center">
-    <span class="text-slate-500 text-sm">© 2026 Private Psychotherapy Clinic. Calm operations for modern care.</span>
+    <span class="text-slate-500 text-sm">{{ t('Private Psychotherapy Clinic') }}</span>
 </footer>
 {% endif %}
 
@@ -332,33 +330,33 @@
       <div class="offcanvas-body d-flex flex-column">
         {% if current_user.role == 'admin' %}
         <div class="mb-3 border rounded-3 p-2 bg-light">
-            <label for="conversationSearch" class="form-label small text-muted mb-1">Search Patient</label>
-            <input id="conversationSearch" class="form-control form-control-sm mb-2" placeholder="Type patient name...">
+            <label for="conversationSearch" class="form-label small text-muted mb-1">{{ t('Search Patient') }}</label>
+            <input id="conversationSearch" class="form-control form-control-sm mb-2" placeholder="{{ t('Type patient name...') }}">
             <div class="row g-2 mb-2">
                 <div class="col-6">
                     <select id="conversationTypeFilter" class="form-select form-select-sm">
-                        <option value="all">All Types</option>
-                        <option value="private">Private</option>
-                        <option value="residency">Residency</option>
-                        <option value="group">Group</option>
+                        <option value="all">{{ t('All Types') }}</option>
+                        <option value="private">{{ t('Private') }}</option>
+                        <option value="residency">{{ t('Residency') }}</option>
+                        <option value="group">{{ t('Group') }}</option>
                     </select>
                 </div>
                 <div class="col-6">
                     <select id="conversationStatusFilter" class="form-select form-select-sm">
-                        <option value="all">All Statuses</option>
-                        <option value="ongoing">Ongoing</option>
-                        <option value="candidate">Candidate</option>
-                        <option value="archived">Archived</option>
+                        <option value="all">{{ t('All Statuses') }}</option>
+                        <option value="ongoing">{{ t('Ongoing') }}</option>
+                        <option value="candidate">{{ t('Candidate') }}</option>
+                        <option value="archived">{{ t('Archived') }}</option>
                     </select>
                 </div>
             </div>
-            <label for="conversationSelect" class="form-label small text-muted mb-1">Patient Conversation</label>
+            <label for="conversationSelect" class="form-label small text-muted mb-1">{{ t('Patient Conversation') }}</label>
             <select id="conversationSelect" class="form-select form-select-sm"></select>
         </div>
         {% endif %}
         <div id="messagesContainer" class="flex-grow-1 overflow-auto mb-3 px-2">
             <div class="text-center py-5 text-muted small" id="messagesLoading">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div> Loading...
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div> {{ t('Loading...') }}
             </div>
         </div>
         <form id="sendMessageForm">
@@ -367,7 +365,7 @@
             <input type="hidden" id="messageRecipientId" value="">
             {% endif %}
             <div class="input-group">
-                <input type="text" id="messageContent" class="form-control" placeholder="Type a message..." required>
+                <input type="text" id="messageContent" class="form-control" placeholder="{{ t('Type a message...') }}" required>
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
             </div>
         </form>
@@ -391,9 +389,10 @@
 
         function toggleAdminSidebar(forceOpen) {
             if (!sidebar || window.innerWidth >= 1024) return;
-            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : sidebar.classList.contains('hidden');
-            const openClass = {{ '"translate-x-0"' if lang == 'he' else '"translate-x-0"' }};
             const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
+            const isClosed = sidebar.classList.contains(closedClass);
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isClosed;
+            const openClass = {{ '"translate-x-0"' if lang == 'he' else '"translate-x-0"' }};
             sidebar.classList.toggle(openClass, shouldOpen);
             sidebar.classList.toggle(closedClass, !shouldOpen);
             if (sidebarBackdrop) {
@@ -512,14 +511,14 @@
                             conversationSelect.innerHTML = '';
 
                             if (allConversations.length === 0) {
-                                conversationSelect.innerHTML = '<option value="">No patient conversations</option>';
+                                conversationSelect.innerHTML = '<option value="">{{ t('No patient conversations') }}</option>';
                             } else {
                                 allConversations.forEach((conv) => {
                                     const option = document.createElement('option');
                                     option.value = conv.user_id ? String(conv.user_id) : '';
                                     option.disabled = !conv.can_message;
-                                    const unread = conv.unread_count ? ` (${conv.unread_count} unread)` : '';
-                                    const locked = conv.can_message ? '' : ' (No patient login)';
+                                    const unread = conv.unread_count ? ` (${conv.unread_count} {{ t('unread') }})` : '';
+                                    const locked = conv.can_message ? '' : ' ({{ t('No patient login') }})';
                                     option.textContent = conv.patient_name + unread + locked;
                                     conversationSelect.appendChild(option);
                                 });
@@ -552,7 +551,7 @@
                     }
 
                     if (messages.length === 0) {
-                        container.innerHTML = '<div class="text-center py-4 text-muted small">No messages yet.</div>';
+                        container.innerHTML = '<div class="text-center py-4 text-muted small">{{ t('No messages yet.') }}</div>';
                         return;
                     }
 
@@ -560,7 +559,7 @@
                         const isMine = msg.sender_id === {{ current_user.id }};
                         const alignClass = isMine ? 'text-end' : 'text-start';
                         const bgClass = isMine ? 'bg-primary text-white' : 'bg-light border';
-                        const senderName = isMine ? 'You' : (msg.sender_name || 'System/Admin');
+                        const senderName = isMine ? '{{ t('You') }}' : (msg.sender_name || '{{ t('System/Admin') }}');
 
                         container.innerHTML += `
                             <div class="${alignClass} mb-3">
@@ -574,6 +573,12 @@
                     container.scrollTop = container.scrollHeight;
                 });
         }
+
+        document.querySelectorAll('[oncopy],[onpaste],[oncut]').forEach(function (node) {
+            node.removeAttribute('oncopy');
+            node.removeAttribute('onpaste');
+            node.removeAttribute('oncut');
+        });
     });
     </script>
     {% endif %}
@@ -582,9 +587,9 @@
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="notificationContainer"></div>
 
     <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <!-- FullCalendar JS -->
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+    <script src='{{ url_for('static', filename='vendor/fullcalendar/index.global.min.js') }}'></script>
 
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
     <script>

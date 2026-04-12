@@ -2,6 +2,52 @@
 
 ---
 
+## Session 36
+
+**Date:** 2026-04-12
+
+**Objective:** Reinstate language switching UX, add standalone encounter notes, improve sidebar responsiveness on smaller windows, strengthen restricted-network compatibility, and add test-patient reset tooling.
+
+**Release Summary:**
+
+1. **Language Switching Restored + Expanded**
+- Reintroduced the language-toggle control in the admin sidebar.
+- Localized additional system labels in the messages offcanvas and interaction text.
+- Added new Hebrew translation keys for the newly introduced UI strings.
+
+2. **Patient Encounter Notes (Side-by-Side with Treatment Logs)**
+- Added `patient_logs` storage (migration + schema support).
+- Added admin routes to add/delete encounter notes.
+- Updated patient detail notes tab to show treatment meeting logs and encounter notes side-by-side.
+- Encounter notes now support date, title, and free-form content for non-session interactions.
+
+3. **Sidebar Collapse Responsiveness Fix**
+- Fixed mobile/partial-width sidebar toggle state detection logic in the admin shell.
+- Sidebar now opens/closes reliably outside full-screen widths with backdrop state handling.
+
+4. **Test Patient Reset Utility**
+- Added admin-only `reset_test_patients` action to replace existing patient data with a compact test set.
+- Seeded set includes one patient per key status/type-track profile and sample treatment methods for verification workflows.
+
+5. **Restricted-Network Hardening (Fortinet-Friendly)**
+- Vendored key frontend assets locally under `static/vendor/`:
+  - Bootstrap CSS/RTL + JS bundle
+  - Bootstrap Icons + fonts
+  - FullCalendar JS
+  - Tailwind runtime script
+- Updated layout to load these local assets instead of external CDN links.
+
+6. **Copy/Paste Enablement**
+- Added explicit selectable-text CSS rules across app shell and form controls.
+- Added runtime cleanup for legacy inline clipboard-blocking attributes (`oncopy/onpaste/oncut`) to ensure copy/paste remains available.
+
+7. **Validation**
+- Full automated tests passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 35
 
 **Date:** 2026-04-12

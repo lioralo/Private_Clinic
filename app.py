@@ -238,6 +238,34 @@ HEBREW_TRANSLATIONS = {
     "ID:": "ת.ז:",
     "Total": "סה״כ",
     "View Profile": "הצג פרופיל",
+    "Private Psychotherapy Clinic": "קליניקה פרטית לפסיכותרפיה",
+    "Search Patient": "חיפוש מטופל",
+    "Type patient name...": "הקלד שם מטופל...",
+    "All Types": "כל הסוגים",
+    "All Statuses": "כל הסטטוסים",
+    "Patient Conversation": "שיחת מטופל",
+    "Loading...": "טוען...",
+    "Type a message...": "כתוב הודעה...",
+    "No patient conversations": "אין שיחות מטופלים",
+    "unread": "לא נקראו",
+    "No patient login": "אין התחברות מטופל",
+    "You": "אתה",
+    "System/Admin": "מערכת/מנהל",
+    "Encounter Notes": "הערות מפגש/מגע",
+    "Encounter Title": "כותרת מגע",
+    "Document any call, update, or non-session encounter.": "תעד כל שיחה, עדכון או מגע שאינו מפגש טיפולי.",
+    "Save Encounter": "שמור מגע",
+    "Encounter Note": "הערת מגע",
+    "Delete encounter note?": "למחוק הערת מגע?",
+    "No encounter notes yet.": "אין עדיין הערות מגע.",
+    "Encounter note content is required.": "נדרש תוכן עבור הערת המגע.",
+    "Encounter note added.": "הערת מגע נוספה.",
+    "Encounter note deleted.": "הערת מגע נמחקה.",
+    "Encounter note not found.": "הערת מגע לא נמצאה.",
+    "This will replace current patient records with test data. Continue?": "פעולה זו תחליף את רשומות המטופלים הנוכחיות בנתוני בדיקה. להמשיך?",
+    "Reset Test Patients": "איפוס מטופלי בדיקה",
+    "Type RESET to confirm test-patient reset.": "הקלד RESET כדי לאשר איפוס מטופלי בדיקה.",
+    "Test patients reset successfully: one per core type/track with sample treatment methods.": "מטופלי הבדיקה אופסו בהצלחה: אחד לכל סוג/מסלול מרכזי עם שיטות טיפול לדוגמה.",
 
     "All Patients": "כל המטופלים",
     "Candidates & Waiting": "מועמדים וממתינים",
@@ -1196,6 +1224,22 @@ def _run_db_migrations(db):
         pass
     try:
         db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS patient_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            encounter_date DATE,
+            title TEXT,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('CREATE INDEX IF NOT EXISTS idx_patient_logs_patient_date ON patient_logs(patient_id, encounter_date)')
     except sqlite3.OperationalError:
         pass
     db.execute("UPDATE patients SET status = 'candidate' WHERE status IN ('waiting', 'waiting for scheduling')")
@@ -3676,6 +3720,11 @@ def patient_detail(patient_id):
     user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
 
     notes = _get_patient_notes(db, patient_id)
+    patient_logs = db.execute(
+        '''SELECT * FROM patient_logs WHERE patient_id = ?
+           ORDER BY COALESCE(encounter_date, substr(created_at, 1, 10)) DESC, id DESC''',
+        (patient_id,)
+    ).fetchall()
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
@@ -3736,7 +3785,54 @@ def patient_detail(patient_id):
         (patient_id,)
     ).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
+
+
+@app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
+@login_required
+def add_patient_encounter_log(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    patient = db.execute('SELECT id FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
+    if not patient:
+        return 'Patient not found', 404
+
+    encounter_date = (request.form.get('encounter_date') or '').strip() or None
+    title = (request.form.get('title') or '').strip() or None
+    content = (request.form.get('content') or '').strip()
+
+    if not content:
+        flash('Encounter note content is required.', 'error')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='notes'))
+
+    db.execute(
+        'INSERT INTO patient_logs (patient_id, encounter_date, title, content) VALUES (?, ?, ?, ?)',
+        (patient_id, encounter_date, title, content)
+    )
+    db.commit()
+    flash('Encounter note added.', 'success')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='notes'))
+
+
+@app.route('/patient/<int:patient_id>/encounter-log/<int:log_id>/delete', methods=['POST'])
+@login_required
+def delete_patient_encounter_log(patient_id, log_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    deleted = db.execute(
+        'DELETE FROM patient_logs WHERE id = ? AND patient_id = ?',
+        (log_id, patient_id)
+    ).rowcount
+    db.commit()
+    if deleted:
+        flash('Encounter note deleted.', 'success')
+    else:
+        flash('Encounter note not found.', 'error')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='notes'))
 
 
 @app.route('/admin/patient/<int:patient_id>/portal_preview')
@@ -8025,6 +8121,91 @@ def seed_data():
         flash(f'Error seeding data: {str(e)}', 'error')
 
     return redirect(url_for('patients'))
+
+
+@app.route('/admin/reset_test_patients', methods=('POST',))
+@login_required
+def reset_test_patients():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    if (request.form.get('confirm') or '').strip().upper() != 'RESET':
+        flash('Type RESET to confirm test-patient reset.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+    init_db()
+    db = get_db()
+
+    # Clear patient-dependent data first to keep this utility deterministic.
+    for table in (
+        'patient_resources', 'diagnosis_documents', 'supervisions', 'goals', 'audit_logs',
+        'messages', 'appointments', 'receipts', 'files', 'notes', 'patient_logs'
+    ):
+        db.execute(f'DELETE FROM {table}')
+
+    db.execute("DELETE FROM users WHERE role = 'patient'")
+    db.execute('DELETE FROM patients')
+
+    treatment_options = [
+        row['label'] for row in db.execute(
+            'SELECT label FROM treatment_method_options ORDER BY display_order ASC, id ASC'
+        ).fetchall()
+    ]
+    if not treatment_options:
+        treatment_options = ['Psychodynamic', 'CBT', 'EFT', 'Management']
+
+    sample_specs = [
+        ('Neta Private', 'ongoing', 'private', treatment_options[0 % len(treatment_options)]),
+        ('Avi Residency', 'candidate', 'residency', treatment_options[1 % len(treatment_options)]),
+        ('Maya Group', 'ongoing', 'group', treatment_options[2 % len(treatment_options)]),
+        ('Roi Intake', 'candidate', 'initial-intake', treatment_options[3 % len(treatment_options)]),
+        ('Dana Diagnosee', 'archived', 'diagnosee', treatment_options[0 % len(treatment_options)]),
+    ]
+
+    for index, (name, status, patient_type, method) in enumerate(sample_specs, start=1):
+        has_intake = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
+        db.execute(
+            '''INSERT INTO patients (name, status, email, phone, patient_type, has_intake_tab, treatment_method, background)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                name,
+                status,
+                f'test{index}@example.com',
+                f'050-00000{index}',
+                patient_type,
+                has_intake,
+                method,
+                'Seeded sample record for layout and workflow checks.'
+            )
+        )
+        patient_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+        db.execute(
+            'INSERT INTO notes (patient_id, session_number, content, key_topics) VALUES (?, ?, ?, ?)',
+            (patient_id, str(index), 'Initial seeded treatment log entry.', 'seed,workflow')
+        )
+        db.execute(
+            'INSERT INTO patient_logs (patient_id, encounter_date, title, content) VALUES (?, ?, ?, ?)',
+            (patient_id, datetime.now().date().isoformat(), 'Seed Encounter', 'Seeded non-therapy encounter note.')
+        )
+
+        if patient_type != 'archived':
+            db.execute(
+                '''INSERT INTO appointments (patient_id, appointment_date, appointment_time, status, meeting_type, cost)
+                   VALUES (?, ?, ?, 'scheduled', 'in-person', 300)''',
+                (patient_id, (datetime.now().date() + timedelta(days=index)).isoformat(), '10:00')
+            )
+
+        if index <= 3:
+            username = f'test_patient_{index}'
+            db.execute(
+                'INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, ?, ?)',
+                (username, generate_password_hash('patient123'), 'patient', patient_id)
+            )
+
+    db.commit()
+    flash('Test patients reset successfully: one per core type/track with sample treatment methods.', 'success')
+    return redirect(url_for('crm_dashboard'))
 
 @app.route('/api/admin/import_calendar', methods=('POST',))
 @login_required

@@ -34,6 +34,16 @@ CREATE TABLE IF NOT EXISTS notes (
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
 
+CREATE TABLE IF NOT EXISTS patient_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER NOT NULL,
+    encounter_date DATE,
+    title TEXT,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id INTEGER NOT NULL,
