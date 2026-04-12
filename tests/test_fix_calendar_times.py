@@ -2,7 +2,10 @@ import unittest
 import tempfile
 import os
 import sqlite3
+import sys
 from app import init_db, app
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 import fix_calendar_times
 
 class FixCalendarTimesTestCase(unittest.TestCase):

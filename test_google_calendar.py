@@ -1,7 +1,10 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import sqlite3
+import os
+import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
 import google_calendar
 
 class TestGoogleCalendar(unittest.TestCase):

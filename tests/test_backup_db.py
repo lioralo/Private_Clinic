@@ -3,9 +3,11 @@ import os
 import sqlite3
 import tempfile
 import shutil
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 import backup_db
 from cryptography.fernet import Fernet
 

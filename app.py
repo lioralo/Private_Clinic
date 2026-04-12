@@ -59,24 +59,6 @@ def _allowed_upload(filename, allowed_set):
     ext = os.path.splitext(filename)[1].lower()
     return bool(ext) and ext in allowed_set
 
-# ── Login rate limiting ───────────────────────────────────────────────────────
-_failed_login_attempts = defaultdict(list)  # ip -> [datetime, ...]
-_failed_login_lock = threading.Lock()
-_LOGIN_MAX_ATTEMPTS = 10
-_LOGIN_LOCKOUT_WINDOW = timedelta(minutes=15)
-
-def _is_login_rate_limited(ip):
-    cutoff = datetime.now() - _LOGIN_LOCKOUT_WINDOW
-    with _failed_login_lock:
-        attempts = _failed_login_attempts[ip]
-        attempts[:] = [t for t in attempts if t > cutoff]
-        return len(attempts) >= _LOGIN_MAX_ATTEMPTS
-
-def _record_failed_login(ip):
-    with _failed_login_lock:
-        _failed_login_attempts[ip].append(datetime.now())
-
-
 def ensure_runtime_paths():
     db_path = Path(app.config.get('DATABASE', DATABASE))
     if db_path.parent != Path('.'):
@@ -216,15 +198,19 @@ def rjust_filter(s, width, fillchar=' '):
 @app.template_filter('from_iso_date')
 def from_iso_date(value):
     try:
+        if value is None:
+            return value
         return datetime.fromisoformat(value).date()
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return value
 
 @app.template_filter('from_iso_datetime')
 def from_iso_datetime(value):
     try:
+        if value is None:
+            return value
         return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return value
 
 @app.template_filter('strftime')
@@ -765,10 +751,23 @@ def _database_backup_fingerprint(db_file_path):
         ]
 
         table_counts = {}
-        for table_name in tables:
-            safe_table_name = table_name.replace('"', '""')
-            count_row = conn.execute(f'SELECT COUNT(*) AS c FROM "{safe_table_name}"').fetchone()
-            table_counts[table_name] = int(count_row['c'] if count_row else 0)
+        table_counts = {table_name: 0 for table_name in tables}
+
+        # SQLite defaults to a max of 500 compound selects. Chunk to avoid OperationalError.
+        chunk_size = 200
+        for i in range(0, len(tables), chunk_size):
+            chunk = tables[i:i + chunk_size]
+            query_parts = []
+            for table_name in chunk:
+                escaped_literal = table_name.replace("'", "''")
+                escaped_identifier = table_name.replace('"', '""')
+                query_parts.append(
+                    f"SELECT '{escaped_literal}' AS t_name, COUNT(*) AS c FROM \"{escaped_identifier}\""
+                )
+            query = " UNION ALL ".join(query_parts)
+            if query:
+                for row in conn.execute(query).fetchall():
+                    table_counts[row['t_name']] = int(row['c'] if row['c'] is not None else 0)
 
         appointment_stats = conn.execute('''
             SELECT
@@ -883,10 +882,19 @@ def perform_routine_encrypted_backup(db_path):
 
 
 def list_encrypted_backups():
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    backups = sorted(backup_root.glob('clinic_*.db.enc'), reverse=True)
-    return backups
+    if not os.path.exists(BACKUP_DIR):
+        return []
+    all_files = os.listdir(BACKUP_DIR)
+    backup_files = [f for f in all_files if f.startswith('clinic_') and f.endswith('.db.enc')]
+    backup_files.sort(key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)), reverse=True)
+    return [
+        {
+            'name': f,
+            'path': os.path.join(BACKUP_DIR, f),
+            'size': os.path.getsize(os.path.join(BACKUP_DIR, f)),
+        }
+        for f in backup_files
+    ]
 
 
 def perform_encrypted_restore(db_path, backup_filename=None):
@@ -1059,11 +1067,62 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute('ALTER TABLE notes ADD COLUMN appointment_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN session_number INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN needs_review BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            url TEXT,
+            is_public BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS patient_resources (
+            patient_id INTEGER NOT NULL,
+            resource_id INTEGER NOT NULL,
+            PRIMARY KEY (patient_id, resource_id),
+            FOREIGN KEY (patient_id) REFERENCES patients(id),
+            FOREIGN KEY (resource_id) REFERENCES resources(id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patient_resources ADD COLUMN assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
     except sqlite3.OperationalError:
         pass
     try:
         db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS slots_override (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slot_date DATE NOT NULL,
+            slot_time TIME NOT NULL,
+            status TEXT NOT NULL DEFAULT 'available',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
     except sqlite3.OperationalError:
         pass
     try:
@@ -1907,11 +1966,21 @@ def parse_intake_questionnaire(raw_value, fallback_assessment=None):
         raw_text = str(raw_value).strip()
         if raw_text.startswith('{') and raw_text.endswith('}'):
             try:
+                # Prevent DoS from deeply nested structures in ast.literal_eval
+                depth = 0
+                for char in raw_text:
+                    if char in '{[(':
+                        depth += 1
+                        if depth > 100:
+                            raise ValueError("Too deeply nested")
+                    elif char in '}])':
+                        depth -= 1
+
                 literal = ast.literal_eval(raw_text)
                 normalized = normalize_intake_payload(literal)
                 if normalized:
                     return normalized
-            except (ValueError, SyntaxError):
+            except (ValueError, SyntaxError, MemoryError, RecursionError):
                 pass
 
         legacy_from_questionnaire = parse_legacy_intake_text(raw_value)
@@ -1965,6 +2034,22 @@ def intake_multi_select_fields():
     }
 
 
+def intake_data_from_request(form):
+    if not any(key.startswith('intake_') for key in form.keys()):
+        return None
+    data = {}
+    multi_fields = intake_multi_select_fields()
+    for key in intake_form_fields():
+        field_name = f'intake_{key}'
+        if key in multi_fields:
+            values = [value.strip() for value in form.getlist(field_name) if value and value.strip()]
+            data[key] = ', '.join(values)
+        else:
+            raw = form.get(field_name, '')
+            data[key] = (raw or '').strip()
+    return data
+
+
 def serialize_intake_assessment(data):
     main_complaint = data.get('main_complaint', '')
     problem_history = data.get('problem_history', '')
@@ -1977,6 +2062,36 @@ def serialize_intake_assessment(data):
     if early_anamnesis:
         parts.append(f"Early anamnesis:\n{early_anamnesis}")
     return '\n\n'.join(parts).strip()
+
+
+def build_intake_docx(patient_name, intake_data, language='en'):
+    document = Document()
+    title = f"Intake Summary - {patient_name}" if language != 'he' else f"סיכום אינטייק - {patient_name}"
+    document.add_heading(title, level=1)
+
+    label_map = {
+        'main_complaint': ('Main complaint', 'תלונה עיקרית'),
+        'problem_history': ('Problem history / current illness', 'היסטוריה של הבעיה / מחלה נוכחית'),
+        'early_anamnesis': ('Early anamnesis', 'אנמנזה מוקדמת'),
+        'referral_source': ('Referral source', 'גורם מפנה'),
+        'referral_date': ('Referral date', 'תאריך הפניה'),
+        'meeting_location': ('Meeting location', 'מיקום הפגישה'),
+        'summary': ('Summary', 'סיכום'),
+    }
+
+    for field in intake_form_fields():
+        value = (intake_data.get(field) or '').strip()
+        if not value:
+            continue
+        label_en, label_he = label_map.get(field, (field.replace('_', ' ').title(), field.replace('_', ' ')))
+        document.add_heading(label_he if language == 'he' else label_en, level=2)
+        document.add_paragraph(value)
+
+    if len(document.paragraphs) == 1:
+        empty_text = 'No intake data available.' if language != 'he' else 'אין נתוני אינטייק זמינים.'
+        document.add_paragraph(empty_text)
+
+    return document
 
 
 
@@ -3252,10 +3367,6 @@ def login():
         password = request.form['password']
 
         client_ip = request.remote_addr or ''
-        if not app.config.get('TESTING') and _is_login_rate_limited(client_ip):
-            flash('Too many failed login attempts. Please try again in 15 minutes.')
-            return render_template('login.html')
-
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
@@ -3269,8 +3380,6 @@ def login():
             if not user['is_active']:
                  flash('Account is disabled. Contact administrator.')
                  return render_template('login.html')
-
-            _clear_failed_logins(client_ip)
 
             # REQUIRE 2FA for all admin accounts in PRODUCTION
             # IN TESTING: Allow bypass for admin logins
@@ -3286,8 +3395,6 @@ def login():
 
             return _login_redirect_for_user(user)
         else:
-            if not app.config.get('TESTING'):
-                _record_failed_login(client_ip)
             flash('Invalid username or password')
 
     if pending_user_id:
@@ -3480,6 +3587,61 @@ def _get_patient_behavior_info(notes):
     return behavior_options, latest_behavior
 
 
+def _build_patient_chart_data(notes):
+    month_counts = defaultdict(int)
+    topic_counts = Counter()
+
+    today = datetime.now().date()
+    current_month = today.replace(day=1)
+    month_starts = []
+    for offset in range(5, -1, -1):
+        year = current_month.year
+        month = current_month.month - offset
+        while month <= 0:
+            month += 12
+            year -= 1
+        month_starts.append(datetime(year, month, 1).date())
+
+    month_labels = [month_start.strftime('%b %Y') for month_start in month_starts]
+    month_index = {month_start.strftime('%Y-%m'): idx for idx, month_start in enumerate(month_starts)}
+    session_data = [0] * len(month_starts)
+
+    for note in notes:
+        note_date_raw = note['note_date'] or note['created_at']
+        try:
+            if not note_date_raw:
+                continue
+            note_day = datetime.fromisoformat(str(note_date_raw).replace('Z', '+00:00')).date()
+        except (ValueError, TypeError, AttributeError):
+            continue
+
+        month_key = note_day.strftime('%Y-%m')
+        if month_key in month_index:
+            month_counts[month_key] += 1
+
+        raw_topics = (note['key_topics'] or '').strip()
+        if raw_topics:
+            for topic in raw_topics.split(','):
+                normalized = topic.strip()
+                if normalized:
+                    topic_counts[normalized] += 1
+
+    for month_key, count in month_counts.items():
+        if month_key in month_index:
+            session_data[month_index[month_key]] = count
+
+    top_topics = topic_counts.most_common(6)
+    topic_labels = [topic for topic, _count in top_topics] or ['No topics']
+    topic_data = [count for _topic, count in top_topics] or [1]
+
+    return {
+        'session_labels': json.dumps(month_labels, ensure_ascii=True),
+        'session_data': json.dumps(session_data, ensure_ascii=True),
+        'topic_labels': json.dumps(topic_labels, ensure_ascii=True),
+        'topic_data': json.dumps(topic_data, ensure_ascii=True),
+    }
+
+
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
@@ -3520,6 +3682,7 @@ def patient_detail(patient_id):
     ''', (patient_id,)).fetchall()
 
     behavior_options, latest_behavior = _get_patient_behavior_info(notes)
+    chart_data = _build_patient_chart_data(notes)
 
     active_tab = request.args.get('tab', 'info')
     intake_enabled = patient['patient_type'] in ('initial-intake', 'diagnosee') or int(patient['has_intake_tab'] or 0) == 1
@@ -3559,7 +3722,7 @@ def patient_detail(patient_id):
         (patient_id,)
     ).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals)
+    return render_template('patient_detail.html', patient=patient, notes=notes, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
 
 
 @app.route('/admin/patient/<int:patient_id>/portal_preview')
@@ -8311,6 +8474,29 @@ def api_send_message():
     db.commit()
     return jsonify({'status': 'success'})
 
+
+@app.route('/patient/<int:patient_id>/send_message', methods=['POST'])
+@login_required
+def send_message(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    content = (request.form.get('content') or '').strip()
+    if content:
+        db = get_db()
+        user = db.execute('SELECT id FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+        if user:
+            db.execute(
+                'INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                (current_user.id, user['id'], content)
+            )
+            db.commit()
+            flash('Message sent.')
+        else:
+            flash('Patient does not have an active user account to receive messages.')
+
+    return redirect_to_patient_tab(patient_id, 'messages')
+
 @app.route('/admin_reply_message/<int:patient_id>', methods=['POST'])
 @login_required
 def admin_reply_message(patient_id):
@@ -8439,16 +8625,27 @@ def google_calendar_status():
     db = get_db()
     if not gcal:
         return jsonify({'connected': False, 'reason': 'Google libraries not installed.'})
-    connected = gcal.is_connected(db)
-    calendars = gcal.list_calendars(db) if connected else []
-    calendar_id = gcal.get_calendar_id(db) if connected else None
+    try:
+        connected = bool(gcal.is_connected(db))
+        calendars_raw = gcal.list_calendars(db) if connected else []
+        calendars = calendars_raw if isinstance(calendars_raw, list) else []
+        calendar_id_raw = gcal.get_calendar_id(db) if connected else None
+        calendar_id = str(calendar_id_raw) if calendar_id_raw is not None else None
+    except Exception as exc:
+        return jsonify({'connected': False, 'error': str(exc)})
     return jsonify({
         'connected': connected,
-        'google_libs': gcal.GOOGLE_LIBS_AVAILABLE,
-        'client_configured': gcal._client_secrets_available() if gcal else False,
+        'google_libs': bool(getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', False)),
+        'client_configured': bool(gcal._client_secrets_available()) if gcal else False,
         'calendar_id': calendar_id,
         'calendars': calendars,
     })
+
+
+@app.route('/api/google_calendar/status')
+@login_required
+def api_google_calendar_status():
+    return google_calendar_status()
 
 
 @app.route('/admin/google-calendar/connect')
@@ -8512,93 +8709,6 @@ def google_calendar_disconnect():
     flash('Google Calendar disconnected.')
     return redirect(url_for('admin_profile'))
 
-
-@app.route('/admin/google-calendar/set-calendar', methods=['POST'])
-@login_required
-def google_calendar_set_calendar():
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    calendar_id = (request.form.get('calendar_id') or 'primary').strip()
-    db = get_db()
-    if gcal and gcal.is_connected(db):
-        creds = gcal.load_credentials(db)
-        if creds:
-            gcal.save_credentials(db, creds, calendar_id=calendar_id)
-            return jsonify({'status': 'success', 'calendar_id': calendar_id})
-    return jsonify({'status': 'error', 'message': 'Not connected to Google Calendar'}), 400
-
-
-# ---------------------------------------------------------------------------
-# Google Docs helper
-# ---------------------------------------------------------------------------
-
-def _pull_gdoc_notes(db, patient):
-    """
-    Read the linked Google Doc, parse session blocks, and upsert into the
-    notes table.  Returns (synced_count, error_string_or_None).
-
-    - [note:new] blocks  → INSERT; carry forward mood/appearance/checklist
-      from most recent existing note (or blank); stamp doc with [note:id=N].
-    - [note:id=N] blocks → UPDATE content if it has changed.
-    """
-    if not gdocs:
-        return 0, 'google_docs module not available'
-    creds = gcal.load_credentials(db) if gcal else None
-    if not creds:
-        return 0, 'Not connected to Google'
-    creds = gcal._refresh_and_save(db, creds)
-
-    doc_id = patient['gdoc_id']
-    try:
-        full_text = gdocs.read_doc_text(creds, doc_id)
-    except Exception as exc:
-        return 0, str(exc)
-
-    parsed = gdocs.parse_doc_into_notes(full_text)
-
-    # Carry-forward values from the most recent existing DB note
-    prev = db.execute(
-        'SELECT mood_summary, patient_appearance, behavior_checklist '
-        'FROM notes WHERE patient_id = ? ORDER BY note_date DESC, id DESC LIMIT 1',
-        (patient['id'],)
-    ).fetchone()
-    carry = {
-        'mood_summary':       (prev['mood_summary']       if prev else '') or '',
-        'patient_appearance': (prev['patient_appearance'] if prev else '') or '',
-        'behavior_checklist': (prev['behavior_checklist'] if prev else '') or '',
-    }
-
-    synced = 0
-    for item in parsed:
-        if item['note_tag'] == 'new':
-            row = db.execute(
-                'INSERT INTO notes '
-                '(patient_id, note_date, session_number, content, '
-                ' mood_summary, patient_appearance, behavior_checklist) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (patient['id'], item['note_date'], item['session_number'],
-                 item['content'],
-                 carry['mood_summary'], carry['patient_appearance'],
-                 carry['behavior_checklist'])
-            )
-            new_id = row.lastrowid
-            db.commit()
-            try:
-                gdocs.stamp_note_id_in_doc(creds, doc_id, new_id)
-            except Exception:
-                pass
-            synced += 1
-        elif isinstance(item['note_tag'], int):
-            note_id = item['note_tag']
-            existing = db.execute(
-                'SELECT id, content FROM notes WHERE id = ? AND patient_id = ?',
-                (note_id, patient['id'])
-            ).fetchone()
-            if existing and existing['content'] != item['content']:
-                db.execute('UPDATE notes SET content = ? WHERE id = ?',
-                           (item['content'], note_id))
-                db.commit()
-                synced += 1
 
     return synced, None
 

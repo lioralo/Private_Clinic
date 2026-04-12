@@ -125,61 +125,13 @@
                         </div>
                     </div>
 
-                    <div class="tab-pane fade" id="recurring" role="tabpanel">
-                         <form method="post" action="{{ url_for('add_schedule', patient_id=patient['id']) }}" class="row g-3 mb-4 p-3 bg-light rounded-3 border">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-md-6">
-                                <label class="form-label smallest text-uppercase fw-bold">Day of Week</label>
-                                <select name="day" class="form-select" required>
-                                    <option value="0">Monday</option>
-                                    <option value="1">Tuesday</option>
-                                    <option value="2">Wednesday</option>
-                                    <option value="3">Thursday</option>
-                                    <option value="4">Friday</option>
-                                    <option value="5">Saturday</option>
-                                    <option value="6">Sunday</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label smallest text-uppercase fw-bold">Time</label>
-                                <input type="time" name="time" class="form-control" required>
-                            </div>
-                            <div class="col-md-2">
-                                <label class="form-label d-none d-md-block">&nbsp;</label>
-                                <button type="submit" class="btn btn-success w-100 fw-bold">Set</button>
-                            </div>
-                        </form>
-
-                        <div class="schedules-list">
-                            {% for sch in schedules %}
-                                <div class="d-flex justify-content-between align-items-center mb-2 p-3 border rounded-3 bg-white">
-                                    <div>
-                                        <span class="fw-bold text-dark">
-                                            {% set days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
-                                            {{ days[sch['day_of_week']] }}s
-                                        </span>
-                                        <span class="text-muted ms-2 small">@ {{ sch['appointment_time'] }}</span>
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-2 rounded-pill small fw-normal">Weekly</span>
-                                    </div>
-                                    <form method="post" action="{{ url_for('delete_schedule', schedule_id=sch['id']) }}" onsubmit="return confirm('Remove recurring schedule?');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2 lh-1"><i class="bi bi-trash-fill small"></i></button>
-                                    </form>
-                                </div>
-                            {% else %}
-                                <div class="text-center py-4 bg-light rounded-3">
-                                    <p class="text-muted mb-0 small"><i class="bi bi-arrow-repeat me-1"></i>No recurring schedule set.</p>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
                 </div>
             </div>
 
         <!-- Treatment Notes Section -->
         <div class="card mb-4 border-0 shadow-sm rounded-4">
             <div class="card-header bg-white py-3 border-0">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
+                <h5 id="notes-tab" class="mb-0 fw-bold"><i class="bi bi-journal-text me-2 text-primary"></i>Clinical Notes</h5>
             </div>
             <div class="card-body p-4">
                 <button type="button" class="btn btn-primary mb-4 w-100 fw-bold rounded-pill" data-bs-toggle="modal" data-bs-target="#addNoteModal">
@@ -268,6 +220,7 @@
                         {% else %}
                         <div class="text-muted small text-center py-5">{{ 'No supervision records yet.' if lang == 'en' else 'אין עדיין רשומות הדרכה.' }}</div>
                         {% endfor %}
+                    {% endfor %}
                     </div>
                 </div>
             </div>
@@ -320,9 +273,13 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label smallest text-uppercase fw-bold">Session Number</label>
-                                    <input type="number" name="session_number" class="form-control" placeholder="e.g. 1">
+                                    <input type="number" name="session_number" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_session_number }}">
                                 </div>
-                                <div class="col-md-8">
+                                <div class="col-md-4">
+                                    <label class="form-label smallest text-uppercase fw-bold">Note Date</label>
+                                    <input type="date" name="note_date" class="form-control form-control-sm border-0 shadow-sm" value="{{ suggested_note_date }}">
+                                </div>
+                                <div class="col-md-4">
                                     <label class="form-label smallest text-uppercase fw-bold">Key Topics</label>
                                     <input type="text" name="key_topics" class="form-control" placeholder="e.g. Anxiety, Career">
                                 </div>
@@ -349,13 +306,52 @@
                 </div>
             </div>
         </div>
+
+        <div class="card mb-4 border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0">
+                <h5 id="billing-tab" class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Billing</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3 mb-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label smallest text-uppercase fw-bold">Amount</label>
+                        <input type="number" step="0.01" name="amount" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label smallest text-uppercase fw-bold">Description</label>
+                        <input type="text" name="description" class="form-control" placeholder="Receipt description">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Add</button>
+                    </div>
+                </form>
+
+                <div class="d-grid gap-2">
+                    {% for receipt in receipts %}
+                    <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded-3 border">
+                        <div>
+                            <div class="fw-bold text-dark">{{ receipt['description'] or 'Receipt' }}</div>
+                            <div class="small text-muted">{{ receipt['created_at'] }}</div>
+                        </div>
+                        <div class="badge bg-light text-primary border rounded-pill">${{ receipt['amount'] }}</div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 bg-light rounded-3">
+                        <p class="text-muted mb-0 small"><i class="bi bi-receipt me-1"></i>No receipts yet.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="col-lg-5">
         <!-- Messaging / Chat Interface for Admin -->
         <div class="card mb-4 border-0 shadow-sm rounded-4 overflow-hidden sticky-lg-top" style="top: 100px; height: 500px;">
             <div class="card-header bg-primary text-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chat</h5>
+                <h5 id="messages-tab" class="mb-0 fw-bold"><i class="bi bi-chat-dots-fill me-2"></i>Patient Chat</h5>
             </div>
             <div class="card-body p-0 d-flex flex-column bg-light">
                 <div class="chat-history flex-grow-1 p-3 overflow-auto d-flex flex-column" id="chatHistory">
@@ -495,6 +491,27 @@
                         <button type="submit" class="btn btn-sm btn-primary rounded-pill">{{ 'Book Now' if lang == 'en' else 'קבע עכשיו' }}</button>
                     </form>
                 </div>
+
+                {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
+                <div class="border rounded-3 p-3 bg-light bg-opacity-50 mt-1">
+                    <div id="intake-tab" class="small fw-bold text-warning mb-2">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>{{ 'Intake Form' if lang == 'en' else 'טופס אינטייק' }}
+                    </div>
+                    <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="d-grid gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="active_tab" value="intake">
+                        <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
+                        <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
+                        <textarea name="intake_main_complaint" class="form-control" rows="3" placeholder="Main complaint">{{ intake_form_data.get('main_complaint', '') }}</textarea>
+                        <textarea name="intake_problem_history" class="form-control" rows="4" placeholder="Problem history">{{ intake_form_data.get('problem_history', '') }}</textarea>
+                        <input type="text" name="intake_meeting_location" class="form-control" value="{{ intake_form_data.get('meeting_location', '') }}" placeholder="Meeting location">
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-sm btn-warning rounded-pill">{{ 'Save Intake' if lang == 'en' else 'שמירת אינטייק' }}</button>
+                            <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">DOCX</a>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

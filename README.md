@@ -39,8 +39,10 @@ A web application to manage patients, treatment notes, files, and receipts for a
 - Clicking a group session in the calendar opens the matching group-session record directly.
 
 ## Recent Verification
-- Latest full regression run: `python test_app.py`
-- Latest reviewed result: `60` tests passed.
+- Latest full regression run:
+   - `python -m unittest discover -s tests -p 'test_*.py'`
+   - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+- Latest reviewed result: `128` tests passed.
 - Targeted review also confirmed:
    - group archive and full-delete flows,
    - member archive and patient-data delete flows,
@@ -64,7 +66,8 @@ A web application to manage patients, treatment notes, files, and receipts for a
 ## Testing
 Run the tests with:
 ```bash
-python test_app.py
+python -m unittest discover -s tests -p 'test_*.py'
+python -m unittest -v test_export_data test_import_clinic_data test_google_calendar
 ```
 
 ## Deploy Live
