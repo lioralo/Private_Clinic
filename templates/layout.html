@@ -108,12 +108,10 @@
         fixed lg:static top-0 {% if lang == 'he' %}right-0 translate-x-full lg:translate-x-0{% else %}left-0 -translate-x-full lg:translate-x-0{% endif %} transition-transform duration-300">
 
         {# Brand #}
-        <div class="flex items-center gap-3 mb-8 px-2 flex-shrink-0">
-            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="w-16 h-16 rounded-lg object-cover shadow-md">
-            <div class="min-w-0">
-                <h1 class="font-black text-teal-950 leading-none text-sm">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
-                <p class="text-[9px] text-slate-500 uppercase tracking-widest mt-1">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
-            </div>
+        <div class="flex flex-col items-center mb-8 pt-2 px-2 flex-shrink-0">
+            <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="w-full rounded-xl object-contain mb-3" style="max-height:110px">
+            <h1 class="font-black text-teal-950 text-sm text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
+            <p class="text-[9px] text-slate-500 uppercase tracking-widest mt-1 text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
         </div>
 
         {# Main Nav #}

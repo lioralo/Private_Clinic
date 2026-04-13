@@ -103,14 +103,14 @@
                 </h5>
                 <p class="text-muted small mb-0">{{ t('Search, narrow the roster, and sort it for the next action.') }}</p>
             </div>
-            <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#crmFiltersCollapse" aria-expanded="false" aria-controls="crmFiltersCollapse">
+            <button id="crmFilterToggle" class="btn btn-sm btn-outline-secondary rounded-pill" type="button" onclick="toggleCrmFilters()" aria-expanded="{% if search_query or clinic_type != 'all' or treatment_method != 'all' %}true{% else %}false{% endif %}" aria-controls="crmFiltersCollapse">
                 <i class="bi bi-funnel-fill"></i>
                 {% if search_query or clinic_type != 'all' or treatment_method != 'all' %}
                 <span class="badge bg-primary rounded-pill ms-1">!</span>
                 {% endif %}
             </button>
         </div>
-        <div class="collapse crm-filter-panel {% if search_query or clinic_type != 'all' or treatment_method != 'all' %}show{% endif %}" id="crmFiltersCollapse">
+        <div id="crmFiltersCollapse" class="crm-filter-panel{% if not (search_query or clinic_type != 'all' or treatment_method != 'all') %} crm-filter-hidden{% endif %}">
             <form method="get" action="{{ url_for('crm_dashboard') }}" class="crm-filter-grid mt-3">
                 <input type="hidden" name="status" value="{{ status }}">
                 <input type="hidden" name="include_group" value="{{ 'true' if include_group else 'false' }}">
@@ -159,7 +159,7 @@
 </div>
 
 {# ─── TABLE VIEW ─── #}
-<div id="crmTableView" class="crm-table-wrap mb-4" style="display:none">
+<div id="crmTableView" class="crm-table-wrap mb-4">
     <table class="table crm-table">
         <thead>
             <tr>
@@ -241,7 +241,7 @@
 </div>
 
 {# ─── CARDS VIEW ─── #}
-<div id="crmCardsView" class="crm-cards-grid mb-4" style="display:none">
+<div id="crmCardsView" class="crm-cards-grid mb-4" style="display:none"><!-- hidden by default; JS restores pref -->
     {% for patient in patients %}
     <div class="crm-patient-card patient-card-clickable
         {% if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['status'] == 'candidate' %}patient-status-candidate
@@ -297,6 +297,14 @@
 {% endif %}
 
 <script>
+// ── Filter toggle ────────────────────────────────────────
+function toggleCrmFilters() {
+    const panel = document.getElementById('crmFiltersCollapse');
+    const btn   = document.getElementById('crmFilterToggle');
+    const hidden = panel.classList.toggle('crm-filter-hidden');
+    btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+}
+
 // ── View toggle ──────────────────────────────────────────
 function setCrmView(mode) {
     const tableView = document.getElementById('crmTableView');
@@ -323,10 +331,10 @@ function setCrmView(mode) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Restore saved view preference
+    // Restore saved view preference; table is already visible so only switch if cards was saved
     let savedView = 'table';
     try { savedView = localStorage.getItem('crmView') || 'table'; } catch(e){}
-    setCrmView(savedView);
+    if (savedView !== 'table') { setCrmView(savedView); }
 
     // Click-to-navigate on rows/cards
     document.querySelectorAll('.patient-card-clickable').forEach(function (el) {

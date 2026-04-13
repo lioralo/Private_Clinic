@@ -613,6 +613,10 @@ input.form-control[type="password"] {
     border-top: 1px solid rgba(216, 225, 223, 0.9);
 }
 
+.crm-filter-hidden {
+    display: none !important;
+}
+
 .crm-patient-list {
     display: grid;
     gap: 0.65rem;
