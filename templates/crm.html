@@ -65,8 +65,11 @@
         <label class="form-check-label small text-muted" for="includeGroupToggle">{{ t('Include group-type patients') }}</label>
     </div>
     
-    <!-- Quick access to archived/deleted patients -->
+    <!-- Quick access to active/archived/deleted patients -->
     <div class="d-flex gap-2">
+        <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="btn btn-sm btn-outline-success rounded-pill">
+            <i class="bi bi-heart-pulse me-1"></i>{{ t('Active') }} ({{ counts['ongoing'] }})
+        </a>
         <a href="{{ url_for('crm_dashboard', status='archived') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
             <i class="bi bi-archive me-1"></i>{{ t('Archived') }} ({{ counts['archived'] }})
         </a>
