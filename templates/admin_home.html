@@ -28,26 +28,38 @@
     </div>
 </div>
 
-{# ── Stats strip ─────────────────────────────────────────── #}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
-    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Ongoing') }}</span>
-        <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['ongoing'] }}</span>
+{# ── Stats strip REMOVED - Now accessible via CRM dashboard buttons ─────────────────────── #}
+
+{# ── Quick Access Cards ──────────────────────────────────────── #}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-10">
+    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+        <i class="bi bi-archive text-primary" style="font-size:1.5rem"></i>
+        <div class="mt-2">
+            <div class="text-slate-500 text-sm font-semibold">{{ t('Archived') }}</div>
+            <div class="text-2xl font-bold text-primary mt-1">{{ counts['archived'] }}</div>
         </div>
-    </div>
-    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Candidate') }}</span>
-        <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['waiting'] }}</span>
+    </a>
+    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+        <i class="bi bi-trash text-danger" style="font-size:1.5rem"></i>
+        <div class="mt-2">
+            <div class="text-slate-500 text-sm font-semibold">{{ t('Deleted') }}</div>
+            <div class="text-2xl font-bold text-danger mt-1">{{ counts.get('deleted', 0) }}</div>
         </div>
-    </div>
-    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-        <span class="text-secondary font-semibold text-sm uppercase tracking-wider">{{ t('Archived') }}</span>
-        <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-4xl font-bold tracking-tighter text-primary">{{ counts['archived'] }}</span>
+    </a>
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+        <i class="bi bi-heart-fill text-success" style="font-size:1.5rem"></i>
+        <div class="mt-2">
+            <div class="text-slate-500 text-sm font-semibold">{{ t('Ongoing') }}</div>
+            <div class="text-2xl font-bold text-success mt-1">{{ counts['ongoing'] }}</div>
         </div>
-    </div>
+    </a>
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+        <i class="bi bi-hourglass-split text-warning" style="font-size:1.5rem"></i>
+        <div class="mt-2">
+            <div class="text-slate-500 text-sm font-semibold">{{ t('Candidates') }}</div>
+            <div class="text-2xl font-bold text-warning mt-1">{{ counts['waiting'] }}</div>
+        </div>
+    </a>
 </div>
 
 {# ── Alert banners ────────────────────────────────────────── #}

@@ -3,18 +3,31 @@
 {% block content %}
 <div class="login-container">
     <div class="login-wrapper">
-        <!-- Premium Gradient Background -->
+        <!-- Clean Light Background -->
         <div class="login-background"></div>
         
         <!-- Login Card -->
         <div class="login-card">
-            <!-- Logo & Branding -->
+            <!-- Logo & Branding - CENTERED & ENLARGED -->
             <div class="login-header">
                 <div class="logo-wrapper">
-                    <img src="{{ url_for('static', filename='Logo.png') }}" alt="Lior Aloni Clinic Logo" class="clinic-logo">
+                    <img src="{{ url_for('static', filename='Logo.png') }}" alt="Lior Aloni Clinic Logo" class="clinic-logo-large">
                 </div>
                 <h1 class="clinic-name">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
-                <p class="clinic-tagline">{% if lang == 'he' %}קליניק בריאות וטיפול{% else %}Health & Wellness Clinic{% endif %}</p>
+                <p class="clinic-tagline">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
+                
+                <!-- Language & Resources Switcher - Inline -->
+                <div class="login-controls">
+                    <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}" class="login-control-link" title="{{ 'עברית' if lang == 'en' else 'English' }}">
+                        <i class="bi bi-globe"></i>
+                        <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
+                    </a>
+                    <span class="control-divider">•</span>
+                    <a href="{{ url_for('public_resources') }}" class="login-control-link" title="Resources">
+                        <i class="bi bi-bookmark"></i>
+                        <span>{{ t('Resources') }}</span>
+                    </a>
+                </div>
             </div>
 
             <!-- Form Container -->
@@ -125,14 +138,14 @@
 </div>
 
 <style>
-/* Login Page Styles */
+/* ── LIGHT & CLEAN LOGIN PAGE ─────────────────────────────── */
 .login-container {
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 100vh;
     padding: 2rem 1rem;
-    background: linear-gradient(135deg, #003633 0%, #134e4a 50%, #0c3b37 100%);
+    background: linear-gradient(135deg, #f8f9fa 0%, #f0f4f8 50%, #eff2f5 100%);
     position: relative;
     overflow: hidden;
 }
@@ -144,8 +157,8 @@
     right: 0;
     bottom: 0;
     background: 
-        radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+        radial-gradient(circle at 20% 80%, rgba(86, 118, 182, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(86, 118, 182, 0.05) 0%, transparent 50%);
     pointer-events: none;
 }
 
@@ -153,60 +166,105 @@
     position: relative;
     z-index: 10;
     width: 100%;
-    max-width: 480px;
+    max-width: 500px;
 }
 
 .login-card {
     background: white;
-    border-radius: 24px;
-    box-shadow: 0 20px 60px rgba(0, 54, 51, 0.28), 0 0 80px rgba(0, 54, 51, 0.10);
+    border-radius: 28px;
+    box-shadow: 0 8px 48px rgba(86, 118, 182, 0.14), 0 0 60px rgba(86, 118, 182, 0.08);
     overflow: hidden;
 }
 
-/* Header Section */
+/* ── HEADER: LOGO + TITLE + CONTROLS ─────────────────────── */
 .login-header {
-    background: linear-gradient(135deg, #003633 0%, #134e4a 100%);
-    padding: 3rem 2rem 2.5rem;
+    background: white;
+    padding: 4rem 2.5rem 3rem;
     text-align: center;
-    color: white;
+    color: #003633;
 }
 
 .logo-wrapper {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    animation: slideDown 0.6s ease;
 }
 
-.clinic-logo {
-    height: 110px;
+.clinic-logo-large {
+    height: 200px;
     width: auto;
     object-fit: contain;
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+    filter: drop-shadow(0 2px 8px rgba(86, 118, 182, 0.15));
+    transition: transform 0.3s ease;
+}
+
+.clinic-logo-large:hover {
+    transform: scale(1.02);
 }
 
 .clinic-name {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 800;
-    margin: 0;
+    margin: 0 0 0.25rem 0;
     letter-spacing: -0.02em;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    color: #003633;
 }
 
 .clinic-tagline {
     font-size: 0.95rem;
     font-weight: 500;
-    margin: 0.5rem 0 0;
-    opacity: 0.95;
+    margin: 0 0 1.75rem 0;
+    color: #6c7792;
     letter-spacing: 0.02em;
 }
 
-/* Form Section */
+/* ── INLINE LANGUAGE + RESOURCES CONTROLS ────────────────── */
+.login-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.login-control-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f3f4f6;
+    border-radius: 8px;
+    color: #5676b6;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.login-control-link:hover {
+    background: #e5e7eb;
+    color: #3b5a9a;
+    transform: translateY(-1px);
+}
+
+.control-divider {
+    color: #d1d5db;
+    font-weight: 300;
+}
+
+.login-control-link i {
+    font-size: 1.05rem;
+}
+
+/* ── FORM SECTION ─────────────────────────────────────────── */
 .login-form-wrapper {
-    padding: 2.5rem 2rem;
+    padding: 3rem 2.5rem 2.5rem;
 }
 
 .login-form {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .form-section {
@@ -219,7 +277,7 @@
     font-size: 1.05rem;
     font-weight: 600;
     color: #003633;
-    margin: 0;
+    margin: 0 0 0.5rem 0;
     text-align: center;
 }
 
@@ -230,8 +288,8 @@
 }
 
 .form-label {
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 0.9rem;
+    font-weight: 700;
     color: #1f2937;
     margin-bottom: 0.25rem;
     display: flex;
@@ -239,8 +297,9 @@
 }
 
 .form-label i {
-    color: #003633;
-    font-size: 1.1rem;
+    color: #5676b6;
+    font-size: 1rem;
+    margin-right: 0.5rem;
 }
 
 .form-control {
@@ -254,9 +313,9 @@
 }
 
 .form-control:focus {
-    border-color: #003633;
+    border-color: #5676b6;
     background-color: white;
-    box-shadow: 0 0 0 3px rgba(0, 54, 51, 0.10);
+    box-shadow: 0 0 0 4px rgba(86, 118, 182, 0.10);
     outline: none;
 }
 
@@ -266,15 +325,17 @@
 }
 
 .form-control-lg {
-    height: 3.125rem;
-    font-size: 1.05rem;
+    height: 3rem;
+    font-size: 1rem;
+    padding: 0.875rem 1.25rem;
 }
 
 .authenticator-input {
-    font-size: 1.5rem;
-    letter-spacing: 0.2em;
+    font-size: 1.75rem;
+    letter-spacing: 0.3em;
     font-weight: 700;
     text-align: center;
+    font-family: 'Courier New', monospace;
 }
 
 .form-text {
@@ -283,14 +344,14 @@
     margin-top: 0.25rem;
 }
 
-/* Security Alert */
+/* ── SECURITY ALERT ──────────────────────────────────────── */
 .security-alert {
     display: flex;
     align-items: flex-start;
     gap: 1rem;
     padding: 1.25rem;
     background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-    border: 2px solid #d1fae5;
+    border: 2px solid #bbf7d0;
     border-radius: 16px;
     margin-bottom: 0.5rem;
 }
@@ -314,7 +375,7 @@
 
 .security-title {
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: #047857;
     margin: 0;
 }
@@ -325,39 +386,39 @@
     margin: 0.25rem 0 0;
 }
 
-/* Buttons */
-.btn-signin,
-.btn-verify {
-    background: linear-gradient(135deg, #003633 0%, #134e4a 100%);
+/* ── BUTTONS ─────────────────────────────────────────────── */
+.btn-primary {
+    background: linear-gradient(135deg, #5676b6 0%, #3b5a9a 100%);
     border: none;
     border-radius: 12px;
     font-weight: 700;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     transition: all 0.3s ease;
     padding: 0.875rem 1.5rem;
-    font-size: 1.05rem;
+    font-size: 1rem;
     color: white;
 }
 
-.btn-signin:hover,
-.btn-verify:hover {
+.btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 22px rgba(0, 54, 51, 0.35);
+    box-shadow: 0 12px 28px rgba(86, 118, 182, 0.35);
 }
 
 .btn-link {
-    color: #003633;
+    color: #5676b6;
     font-weight: 600;
     text-decoration: none;
     transition: all 0.2s ease;
+    background: transparent;
+    border: none;
 }
 
 .btn-link:hover {
-    color: #134e4a;
-    transform: translateX(-2px);
+    color: #3b5a9a;
+    text-decoration: underline;
 }
 
-/* Footer */
+/* ── FOOTER ──────────────────────────────────────────────── */
 .login-footer {
     border-top: 1px solid #e5e7eb;
     padding-top: 1.5rem;
@@ -367,24 +428,62 @@
 .footer-text {
     font-size: 0.95rem;
     color: #4b5563;
-    margin: 0;
+    margin: 0 0 0.75rem 0;
 }
 
 .footer-link {
-    color: #003633;
+    color: #5676b6;
     font-weight: 700;
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 .footer-link:hover {
-    color: #134e4a;
+    color: #3b5a9a;
     text-decoration: underline;
 }
 
 .security-info {
     font-size: 0.85rem;
     color: #6b7280;
+    margin: 0;
+}
+
+/* ── ANIMATIONS ──────────────────────────────────────────── */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+    .login-card {
+        border-radius: 20px;
+    }
+    
+    .login-header {
+        padding: 3rem 1.5rem 2rem;
+    }
+    
+    .clinic-logo-large {
+        height: 160px;
+    }
+    
+    .clinic-name {
+        font-size: 1.8rem;
+    }
+    
+    .login-form-wrapper {
+        padding: 2rem 1.5rem;
+    }
+}
+</style>
     margin: 0.75rem 0 0;
     display: flex;
     align-items: center;

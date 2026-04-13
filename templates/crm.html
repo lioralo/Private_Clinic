@@ -16,70 +16,6 @@
 </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
-    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-            <span class="text-slate-500 text-sm font-medium">{{ t('Total Patients') }}</span>
-            <div class="p-2 rounded-lg bg-blue-50 text-blue-600">
-                <i class="bi bi-people-fill" style="font-size:18px"></i>
-            </div>
-        </div>
-        <div class="mt-4">
-            <span class="text-2xl font-bold">{{ counts['all'] }}</span>
-        </div>
-    </div>
-    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-            <span class="text-slate-500 text-sm font-medium">{{ t('Appointments') }}</span>
-            <div class="p-2 rounded-lg bg-amber-50 text-amber-600">
-                <i class="bi bi-calendar3" style="font-size:18px"></i>
-            </div>
-        </div>
-        <div class="mt-4">
-            <span class="text-2xl font-bold">{{ today_appointments|length }}</span>
-            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('Scheduled today') }}</span>
-        </div>
-    </div>
-    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-            <span class="text-slate-500 text-sm font-medium">{{ t('New Admissions') }}</span>
-            <div class="p-2 rounded-lg bg-purple-50 text-purple-600">
-                <i class="bi bi-person-plus-fill" style="font-size:18px"></i>
-            </div>
-        </div>
-        <div class="mt-4">
-            <span class="text-2xl font-bold">{{ counts['new_this_week'] or 0 }}</span>
-            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('In last 7 days') }}</span>
-        </div>
-    </div>
-    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-            <span class="text-slate-500 text-sm font-medium">{{ t('Candidates & Waiting') }}</span>
-            <div class="p-2 rounded-lg bg-red-50 text-red-600">
-                <i class="bi bi-clock-history" style="font-size:18px"></i>
-            </div>
-        </div>
-        <div class="mt-4">
-            <span class="text-2xl font-bold">{{ counts['candidate_waiting'] }}</span>
-            <span class="text-xs ml-2 font-semibold text-slate-400">{{ t('Needs scheduling') }}</span>
-        </div>
-    </div>
-    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-        <div class="flex justify-between items-start">
-            <span class="text-slate-500 text-sm font-medium">{{ t('Deleted Patients') }}</span>
-            <div class="p-2 rounded-lg bg-gray-50 text-gray-600">
-                <i class="bi bi-arrow-counterclockwise" style="font-size:18px"></i>
-            </div>
-        </div>
-        <div class="mt-4">
-            <span class="text-2xl font-bold">{{ counts['deleted'] or 0 }}</span>
-            {% if counts['deleted'] > 0 %}
-            <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="text-xs mt-2 inline-block text-primary font-semibold hover:underline">{{ t('View Deleted') }}</a>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
 {% if reminders %}
 <div class="card border-0 shadow-sm mb-3" id="upcoming-reminders-section">
     <div class="card-header bg-warning-subtle border-0 py-2 px-3">
@@ -114,35 +50,8 @@
 </div>
 {% endif %}
 
-<div class="crm-summary-strip mb-3">
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
-        <div class="crm-summary-mini {% if status == 'all' %}active{% endif %}">
-            <span class="crm-summary-label">{{ t('All') }}</span>
-            <span class="crm-summary-value">{{ counts['all'] }}</span>
-        </div>
-    </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
-        <div class="crm-summary-mini {% if status == 'ongoing' %}active{% endif %}">
-            <span class="crm-summary-label">{{ t('Ongoing') }}</span>
-            <span class="crm-summary-value">{{ counts['ongoing'] }}</span>
-        </div>
-    </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
-        <div class="crm-summary-mini {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}active{% endif %}">
-            <span class="crm-summary-label">{{ t('Candidate') }}</span>
-            <span class="crm-summary-value">{{ counts['candidate_waiting'] }}</span>
-        </div>
-    </a>
-    <a class="text-decoration-none" href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method) }}">
-        <div class="crm-summary-mini {% if status == 'archived' %}active{% endif %}">
-            <span class="crm-summary-label">{{ t('Archived') }}</span>
-            <span class="crm-summary-value">{{ counts['archived'] }}</span>
-        </div>
-    </a>
-</div>
-
-{# include-group toggle #}
-<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+{# include-group toggle + archived/deleted access #}
+<div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
     <form method="get" action="{{ url_for('crm_dashboard') }}" id="includeGroupForm">
         <input type="hidden" name="status" value="{{ status }}">
         <input type="hidden" name="clinic_type" value="{{ clinic_type }}">
@@ -155,6 +64,17 @@
         <input class="form-check-input" type="checkbox" id="includeGroupToggle" {% if include_group %}checked{% endif %} onchange="document.getElementById('includeGroupForm').submit()">
         <label class="form-check-label small text-muted" for="includeGroupToggle">{{ t('Include group-type patients') }}</label>
     </div>
+    
+    <!-- Quick access to archived/deleted patients -->
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('crm_dashboard', status='archived') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+            <i class="bi bi-archive me-1"></i>{{ t('Archived') }} ({{ counts['archived'] }})
+        </a>
+        <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="btn btn-sm btn-outline-danger rounded-pill">
+            <i class="bi bi-trash me-1"></i>{{ t('Deleted') }} ({{ counts.get('deleted', 0) }})
+        </a>
+    </div>
+    
     {# view toggle #}
     <div class="ms-auto d-flex gap-1" role="group" aria-label="{{ t('View toggle') }}">
         <button class="btn btn-sm crm-view-btn" id="btnTableView" title="{{ t('Table view') }}" onclick="setCrmView('table')">
