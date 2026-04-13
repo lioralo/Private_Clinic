@@ -1898,6 +1898,30 @@ class ClinicTestCase(unittest.TestCase):
             finally:
                 app_module.BACKUP_DIR = original_backup_dir
 
+    def test_encrypted_backup_uses_artifact_snapshot_when_logs_change_mid_backup(self):
+        with open(self.app_log_path, 'w', encoding='utf-8') as handle:
+            handle.write('initial log line')
+
+        original_write_backup_bundle = app_module._write_backup_bundle
+
+        def mutate_live_log_then_write(bundle_path, db_path, artifact_root=None):
+            with open(self.app_log_path, 'a', encoding='utf-8') as handle:
+                handle.write('\nlate log line')
+            return original_write_backup_bundle(bundle_path, db_path, artifact_root)
+
+        with tempfile.TemporaryDirectory() as tmp_backup_dir:
+            original_backup_dir = app_module.BACKUP_DIR
+            app_module.BACKUP_DIR = tmp_backup_dir
+            try:
+                with patch('app._write_backup_bundle', side_effect=mutate_live_log_then_write):
+                    encrypted_path = app_module.perform_encrypted_backup(app.config['DATABASE'])
+
+                self.assertTrue(os.path.exists(encrypted_path))
+                backups = app_module.list_encrypted_backups()
+                self.assertEqual(len(backups), 1)
+            finally:
+                app_module.BACKUP_DIR = original_backup_dir
+
     def test_vacancy_create_supports_one_time_and_weekly(self):
         """Admin can create vacancy slots as one-time or weekly recurring."""
         self.login('lioraloni', 'Flo@tingind4')

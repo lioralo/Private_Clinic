@@ -126,8 +126,9 @@ def _artifact_backup_fingerprint(base_override=None):
     return fingerprint
 
 
-def _write_backup_bundle(bundle_path, db_path):
+def _write_backup_bundle(bundle_path, db_path, artifact_root=None):
     db_source = Path(db_path)
+    artifact_root = Path(artifact_root) if artifact_root else None
     manifest = {
         'version': 2,
         'created_at': datetime.now().isoformat(),
@@ -140,15 +141,20 @@ def _write_backup_bundle(bundle_path, db_path):
         bundle.write(db_source, arcname=f'database/{db_source.name}')
 
         for label, source_path in _resolve_backup_artifact_sources().items():
+            if artifact_root:
+                source_path = artifact_root / label
             if not source_path.exists():
                 continue
             if source_path.is_file():
                 bundle.write(source_path, arcname=f'artifacts/{label}')
                 continue
-            for child in sorted(source_path.rglob('*')):
-                if child.is_file():
-                    rel_path = child.relative_to(source_path).as_posix()
-                    bundle.write(child, arcname=f'artifacts/{label}/{rel_path}')
+            child_files = [child for child in sorted(source_path.rglob('*')) if child.is_file()]
+            if not child_files:
+                bundle.writestr(f'artifacts/{label}/', b'')
+                continue
+            for child in child_files:
+                rel_path = child.relative_to(source_path).as_posix()
+                bundle.write(child, arcname=f'artifacts/{label}/{rel_path}')
 
 
 def _is_encrypted_zip_backup(payload):
@@ -859,12 +865,14 @@ def perform_encrypted_backup(db_path):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     raw_backup_path = backup_root / f'clinic_{timestamp}.bundle'
     encrypted_path = backup_root / f'clinic_{timestamp}.db.enc'
+    artifact_snapshot_root = backup_root / f'.artifact_snapshot_{timestamp}'
     verify_dir = backup_root / f'.verify_{timestamp}'
 
     source_fingerprint = _database_backup_fingerprint(db_path)
-    source_artifact_fingerprint = _artifact_backup_fingerprint()
+    _backup_live_artifacts(artifact_snapshot_root)
+    source_artifact_fingerprint = _artifact_backup_fingerprint(artifact_snapshot_root)
 
-    _write_backup_bundle(raw_backup_path, db_path)
+    _write_backup_bundle(raw_backup_path, db_path, artifact_snapshot_root)
 
     from cryptography.fernet import Fernet
     cipher = Fernet(_get_or_create_backup_key())
@@ -896,10 +904,12 @@ def perform_encrypted_backup(db_path):
     except Exception as exc:
         encrypted_path.unlink(missing_ok=True)
         raw_backup_path.unlink(missing_ok=True)
+        shutil.rmtree(artifact_snapshot_root, ignore_errors=True)
         shutil.rmtree(verify_dir, ignore_errors=True)
         raise RuntimeError(f'Encrypted backup verification failed: {exc}')
 
     raw_backup_path.unlink(missing_ok=True)
+    shutil.rmtree(artifact_snapshot_root, ignore_errors=True)
     shutil.rmtree(verify_dir, ignore_errors=True)
     return str(encrypted_path)
 

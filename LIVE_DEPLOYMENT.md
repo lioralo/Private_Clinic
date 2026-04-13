@@ -112,6 +112,16 @@ git pull
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
+If you need to deploy the **current local checkout** directly to AWS before it is
+pushed to GitHub, use the bundle deploy helper. It preserves `./data` on the
+server, including `clinic.db`, uploads, patient logs, and encrypted backups:
+
+```bash
+bash scripts/deploy_local_bundle_to_aws.sh \
+  --ssh-target ubuntu@<server-ip> \
+  --ssh-key /path/to/private-clinic-key.pem
+```
+
 Restart services:
 
 ```bash
