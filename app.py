@@ -3,6 +3,7 @@ import sqlite3
 import socket
 import json
 import ast
+import importlib
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -19,14 +20,6 @@ import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import quote
-try:
-    import google_calendar as gcal
-except ImportError:
-    gcal = None
-try:
-    import google_docs as gdocs
-except ImportError:
-    gdocs = None
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -36,6 +29,19 @@ import re
 import pyotp
 from docx import Document
 from datetime import datetime, timedelta, timezone
+
+
+def _import_optional_module(*module_names):
+    for module_name in module_names:
+        try:
+            return importlib.import_module(module_name)
+        except ImportError:
+            continue
+    return None
+
+
+gcal = _import_optional_module('google_calendar', 'scripts.google_calendar')
+gdocs = _import_optional_module('google_docs', 'scripts.google_docs')
 
 
 app = Flask(__name__)
@@ -7264,11 +7270,7 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
     db.commit()
 
     # Sync to Google Calendar if save_to_google flag is set and admin is connected
-    try:
-        import google_calendar as gcal_module
-        gcal_ref = gcal_module
-    except ImportError:
-        gcal_ref = None
+    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
 
     if save_to_google and gcal_ref and patient_id:
         new_appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',

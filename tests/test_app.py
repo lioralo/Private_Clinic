@@ -2473,6 +2473,13 @@ class ClinicTestCase(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         self.assertFalse(data['connected'])
         self.assertEqual(data['error'], 'Test Error')
+
+    def test_google_modules_load_from_scripts_directory(self):
+        self.assertIsNotNone(app_module.gcal)
+        self.assertIsNotNone(app_module.gdocs)
+        self.assertTrue(hasattr(app_module.gcal, 'GOOGLE_LIBS_AVAILABLE'))
+        self.assertTrue(hasattr(app_module.gdocs, 'GDOCS_LIBS_AVAILABLE'))
+
     @patch('app.get_db')
     @patch('app.init_db')
     def test_index_db_error(self, mock_init_db, mock_get_db):
