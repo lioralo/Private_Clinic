@@ -211,29 +211,111 @@
             </div>
         </div>
 
-        <div class="row g-4 mb-4">
-            <div class="col-lg-7">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>{{ t('Meeting Logs') }}</h5>
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>{{ t('Meeting Logs') }}</h5>
+                <span class="badge bg-light text-dark border rounded-pill">{{ notes|length }} {{ t('Sessions') }}</span>
+            </div>
+            <div class="card-body d-flex flex-column gap-3">
+                {% for note in notes[:5] %}
+                <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+                        <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
+                            <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                            <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                            <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                            <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                            </form>
+                        </div>
                     </div>
-                    <div class="card-body d-grid gap-3">
-                        {% for note in notes[:5] %}
-                        <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
-                            <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
-                                <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
-                                    <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
-                                    <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                </button>
-                                <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
-                                    <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
-                                    </form>
-                                </div>
+                    <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                        <div class="border rounded-3 bg-light-subtle p-3 text-dark">
+                            {% if note['key_topics'] %}
+                            <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
+                            {% endif %}
+                            {% if note['patient_appearance'] %}
+                            <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
+                            {% endif %}
+                            {% if note['link_url'] %}
+                            <div class="small mb-2">
+                                <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                    <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                                </a>
                             </div>
-                            <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                            {% endif %}
+                            <div class="text-dark" style="white-space: pre-wrap;">{{ note['content'] }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
+                            </div>
+                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
+                                <div class="modal-body">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">{{ t('Session Number') }}</label>
+                                            <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">{{ t('Date') }}</label>
+                                            <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">{{ t('Appearance') }}</label>
+                                            <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">{{ t('Meeting Log') }}</label>
+                                            <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">{{ t('Document / Website Link') }}</label>
+                                            <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                                    <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if notes|length > 5 %}
+                <div id="olderLogsCollapse" class="d-flex flex-column gap-3">
+                    {% for note in notes[5:] %}
+                    <div class="note-item border rounded-4 p-3 bg-white shadow-sm d-none previous-note-item">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+                            <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
+                                <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                                <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                                <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                            </button>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                                <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                            <div class="border rounded-3 bg-light-subtle p-3 text-dark">
                                 {% if note['key_topics'] %}
                                 <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
                                 {% endif %}
@@ -247,192 +329,129 @@
                                     </a>
                                 </div>
                                 {% endif %}
-                                <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
+                                <div class="text-dark" style="white-space: pre-wrap;">{{ note['content'] }}</div>
                             </div>
                         </div>
-
-                        <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-lg">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
-                                    </div>
-                                    <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
-                                        <div class="modal-body">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <div class="row g-3">
-                                                <div class="col-md-3">
-                                                    <label class="form-label">{{ t('Session Number') }}</label>
-                                                    <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label class="form-label">{{ t('Date') }}</label>
-                                                    <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <label class="form-label">{{ t('Appearance') }}</label>
-                                                    <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label">{{ t('Meeting Log') }}</label>
-                                                    <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label">{{ t('Document / Website Link') }}</label>
-                                                    <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
-                                            <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                        {% if notes|length > 5 %}
-                        <div class="collapse d-grid gap-3" id="moreMeetingLogs">
-                            {% for note in notes[5:] %}
-                            <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
-                                <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
-                                    <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
-                                        <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
-                                        <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                    </button>
-                                    <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
-                                        <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
-                                        </form>
-                                    </div>
-                                </div>
-                                <div class="collapse" id="noteCollapse{{ note['id'] }}">
-                                    {% if note['key_topics'] %}
-                                    <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
-                                    {% endif %}
-                                    {% if note['patient_appearance'] %}
-                                    <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
-                                    {% endif %}
-                                    {% if note['link_url'] %}
-                                    <div class="small mb-2">
-                                        <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
-                                            <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
-                                        </a>
-                                    </div>
-                                    {% endif %}
-                                    <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
-                                </div>
-                            </div>
-                            <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog modal-lg">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
-                                        </div>
-                                        <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
-                                            <div class="modal-body">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <div class="row g-3">
-                                                    <div class="col-md-3">
-                                                        <label class="form-label">{{ t('Session Number') }}</label>
-                                                        <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <label class="form-label">{{ t('Date') }}</label>
-                                                        <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label">{{ t('Appearance') }}</label>
-                                                        <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label">{{ t('Meeting Log') }}</label>
-                                                        <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
-                                                    </div>
-                                                    <div class="col-12">
-                                                        <label class="form-label">{{ t('Document / Website Link') }}</label>
-                                                        <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
-                                                <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div class="d-flex justify-content-center pt-2">
-                            <button class="btn btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#moreMeetingLogs" aria-expanded="false" aria-controls="moreMeetingLogs">{{ t('Show more') }}</button>
-                        </div>
-                        {% endif %}
-                        {% if not notes %}
-                        <div class="text-muted small">{{ t('No meeting logs yet.') }}</div>
-                        {% endif %}
                     </div>
-                </div>
-            </div>
 
-            <div class="col-lg-5">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0 fw-bold"><i class="bi bi-journal-plus me-2 text-primary"></i>{{ t('Encounter Notes') }}</h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="post" action="{{ url_for('add_patient_encounter_log', patient_id=patient['id']) }}" class="row g-2 mb-3">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-6">
-                                <input type="date" name="encounter_date" class="form-control" value="{{ suggested_note_date }}">
-                            </div>
-                            <div class="col-6">
-                                <input type="text" name="title" class="form-control" placeholder="{{ t('Encounter Title') }}">
-                            </div>
-                            <div class="col-12">
-                                <textarea name="content" class="form-control" rows="4" placeholder="{{ t('Document any call, update, or non-session encounter.') }}" required></textarea>
-                            </div>
-                            <div class="col-12">
-                                <input type="url" name="link_url" class="form-control" placeholder="{{ t('Document / Website Link') }} (https://...)">
-                            </div>
-                            <div class="col-12 d-flex justify-content-end">
-                                <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">{{ t('Save Encounter') }}</button>
-                            </div>
-                        </form>
-
-                        <div class="d-grid gap-2">
-                            {% for entry in patient_logs %}
-                            <div class="border rounded-4 p-3 bg-light-subtle">
-                                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                                    <div>
-                                        <div class="fw-semibold">{{ entry['title'] or t('Encounter Note') }}</div>
-                                        <div class="small text-muted">{{ entry['encounter_date'] or (entry['created_at'][:10] if entry['created_at'] else '') }}</div>
-                                    </div>
-                                    <form method="post" action="{{ url_for('delete_patient_encounter_log', patient_id=patient['id'], log_id=entry['id']) }}" onsubmit="return confirm('{{ t('Delete encounter note?') }}');">
+                    <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
+                                </div>
+                                <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
+                                    <div class="modal-body">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
-                                    </form>
-                                </div>
-                                {% if entry['link_url'] %}
-                                <div class="small mb-2">
-                                    <a href="{{ entry['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
-                                        <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
-                                    </a>
-                                </div>
-                                {% endif %}
-                                <div class="small" style="white-space: pre-wrap;">{{ entry['content'] }}</div>
+                                        <div class="row g-3">
+                                            <div class="col-md-3">
+                                                <label class="form-label">{{ t('Session Number') }}</label>
+                                                <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">{{ t('Date') }}</label>
+                                                <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">{{ t('Appearance') }}</label>
+                                                <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label">{{ t('Meeting Log') }}</label>
+                                                <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label">{{ t('Document / Website Link') }}</label>
+                                                <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                                        <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
+                                    </div>
+                                </form>
                             </div>
-                            {% else %}
-                            <div class="text-muted small">{{ t('No encounter notes yet.') }}</div>
-                            {% endfor %}
                         </div>
                     </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if notes|length > 5 %}
+                <div class="d-flex justify-content-center pt-2">
+                    <button id="loadPreviousMeetingsBtn" class="btn btn-outline-primary rounded-pill" type="button" data-batch-size="5">View More</button>
+                </div>
+                {% endif %}
+
+                {% if not notes %}
+                <div class="text-muted small">{{ t('No meeting logs yet.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-plus me-2 text-primary"></i>{{ t('Encounter Notes') }}</h5>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#addEncounterModal">
+                    <i class="bi bi-plus-circle me-1"></i>{{ t('Add') }}
+                </button>
+            </div>
+            <div class="card-body d-grid gap-2">
+                {% for entry in patient_logs %}
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                            <div class="fw-semibold">{{ entry['title'] or t('Encounter Note') }}</div>
+                            <div class="small text-muted">{{ entry['encounter_date'] or (entry['created_at'][:10] if entry['created_at'] else '') }}</div>
+                        </div>
+                        <form method="post" action="{{ url_for('delete_patient_encounter_log', patient_id=patient['id'], log_id=entry['id']) }}" onsubmit="return confirm('{{ t('Delete encounter note?') }}');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                        </form>
+                    </div>
+                    {% if entry['link_url'] %}
+                    <div class="small mb-2">
+                        <a href="{{ entry['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                            <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                        </a>
+                    </div>
+                    {% endif %}
+                    <div class="small" style="white-space: pre-wrap;">{{ entry['content'] }}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small">{{ t('No encounter notes yet.') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="modal fade" id="addEncounterModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">{{ t('Encounter Notes') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
+                    </div>
+                    <form method="post" action="{{ url_for('add_patient_encounter_log', patient_id=patient['id']) }}" class="row g-2 p-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-6">
+                            <input type="date" name="encounter_date" class="form-control" value="{{ suggested_note_date }}">
+                        </div>
+                        <div class="col-6">
+                            <input type="text" name="title" class="form-control" placeholder="{{ t('Encounter Title') }}">
+                        </div>
+                        <div class="col-12">
+                            <textarea name="content" class="form-control" rows="5" placeholder="{{ t('Document any call, update, or non-session encounter.') }}" required></textarea>
+                        </div>
+                        <div class="col-12">
+                            <input type="url" name="link_url" class="form-control" placeholder="{{ t('Document / Website Link') }} (https://...)">
+                        </div>
+                        <div class="col-12 d-flex justify-content-end gap-2 pt-1">
+                            <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                            <button type="submit" class="btn btn-primary rounded-pill px-3">{{ t('Save Encounter') }}</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -697,6 +716,24 @@
                     </button>
                 </form>
 
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-calendar-check me-1"></i>{{ t('Next meeting:') }}</div>
+                    {% if next_appointment %}
+                    <div class="small fw-semibold">{{ next_appointment['appointment_date'] }} {{ next_appointment['appointment_time'] }}</div>
+                    <div class="small text-muted mt-1">
+                        {{ next_appointment['meeting_type'] or t('In-person') }}
+                        {% if next_appointment['meeting_title'] %}<span class="mx-2">•</span>{{ next_appointment['meeting_title'] }}{% endif %}
+                    </div>
+                    {% if next_appointment['meeting_link'] %}
+                    <a href="{{ next_appointment['meeting_link'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary rounded-pill mt-2">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join Link') }}
+                    </a>
+                    {% endif %}
+                    {% else %}
+                    <div class="small text-muted">{{ t('No upcoming appointments.') }}</div>
+                    {% endif %}
+                </div>
+
                 {% if not intake_enabled %}
                 <form method="post" action="{{ url_for('enable_intake_tab', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -746,27 +783,61 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const loadPreviousBtn = document.getElementById('loadPreviousMeetingsBtn');
+    if (loadPreviousBtn) {
+        const hiddenNotesSelector = '.previous-note-item.d-none';
+        loadPreviousBtn.addEventListener('click', function () {
+            const batchSize = Number(loadPreviousBtn.dataset.batchSize || 5);
+            const hiddenItems = Array.from(document.querySelectorAll(hiddenNotesSelector));
+            hiddenItems.slice(0, batchSize).forEach(function (item) {
+                item.classList.remove('d-none');
+            });
+
+            const remaining = document.querySelectorAll(hiddenNotesSelector).length;
+            if (!remaining) {
+                loadPreviousBtn.disabled = true;
+                loadPreviousBtn.classList.remove('btn-outline-primary');
+                loadPreviousBtn.classList.add('btn-outline-secondary');
+                loadPreviousBtn.textContent = '{{ t('No more previous meetings') }}';
+            }
+        });
+    }
+
     document.querySelectorAll('.gdoc-json-form').forEach(function (form) {
         form.addEventListener('submit', async function (event) {
             event.preventDefault();
             const formData = new FormData(form);
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: formData,
-                headers: { 'X-CSRFToken': formData.get('csrf_token') || '' }
-            });
-            const payload = await response.json().catch(function () { return { error: 'Request failed' }; });
-            if (!response.ok || payload.error) {
-                window.alert(payload.error || 'Request failed');
-                return;
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalLabel = submitButton ? submitButton.innerHTML : '';
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ t('Loading...') }}';
             }
-            if (form.dataset.openDoc === 'true' && payload.doc_url) {
-                window.open(payload.doc_url, '_blank', 'noopener');
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-CSRFToken': formData.get('csrf_token') || '' }
+                });
+                const payload = await response.json().catch(function () { return { error: 'Request failed' }; });
+                if (!response.ok || payload.error) {
+                    window.alert(payload.error || 'Request failed');
+                    return;
+                }
+                if (form.dataset.openDoc === 'true' && payload.doc_url) {
+                    window.open(payload.doc_url, '_blank', 'noopener');
+                }
+                if (payload.message) {
+                    window.alert(payload.message);
+                }
+                window.location.reload();
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalLabel;
+                }
             }
-            if (payload.message) {
-                window.alert(payload.message);
-            }
-            window.location.reload();
         });
     });
 });

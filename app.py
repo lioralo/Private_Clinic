@@ -3610,31 +3610,9 @@ def _get_patient_notes(db, patient_id):
         SELECT * FROM notes
         WHERE patient_id = ?
         ORDER BY COALESCE(note_date, date(created_at)) DESC,
-                 CAST(COALESCE(session_number, '0') AS INTEGER) DESC,
-                 created_at DESC
+                 datetime(created_at) DESC,
+                 id DESC
     ''', (patient_id,)).fetchall()
-
-    if notes:
-        seen_sessions: dict = {}
-        unnumbered = []
-        for note in notes:
-            sn = int(note['session_number'] or 0)
-            if sn == 0:
-                unnumbered.append(note)
-                continue
-            existing = seen_sessions.get(sn)
-            if existing is None:
-                seen_sessions[sn] = note
-            else:
-                existing_has_content = bool((existing['content'] or '').strip())
-                note_has_content = bool((note['content'] or '').strip())
-                if note_has_content and not existing_has_content:
-                    seen_sessions[sn] = note
-                elif note_has_content == existing_has_content and note['id'] > existing['id']:
-                    seen_sessions[sn] = note
-        numbered = sorted(seen_sessions.values(),
-                          key=lambda n: (-(int(n['session_number'] or 0)), -(n['id'])))
-        notes = numbered + unnumbered
     return notes
 
 def _get_patient_group_data(db, patient_id):
@@ -3797,6 +3775,17 @@ def patient_detail(patient_id):
     files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    now = datetime.now()
+    next_appointment = db.execute('''
+        SELECT * FROM appointments
+        WHERE patient_id = ?
+          AND (
+            appointment_date > ?
+            OR (appointment_date = ? AND COALESCE(appointment_time, '') >= ?)
+          )
+        ORDER BY appointment_date ASC, appointment_time ASC, id ASC
+        LIMIT 1
+    ''', (patient_id, now.date().isoformat(), now.date().isoformat(), now.strftime('%H:%M'))).fetchone()
 
     group_attendance_rows, group_membership_rows, group_arrived_count = _get_patient_group_data(db, patient_id)
 
@@ -3854,7 +3843,7 @@ def patient_detail(patient_id):
         (patient_id,)
     ).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
