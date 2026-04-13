@@ -376,24 +376,51 @@
         let selectedConversation = null;
         let allConversations = [];
 
+        function isDesktopViewport() {
+            return window.innerWidth >= 1024;
+        }
+
+        function syncSidebarStateForViewport() {
+            if (!sidebar) return;
+            const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
+            if (isDesktopViewport()) {
+                sidebar.classList.remove(closedClass);
+                sidebar.classList.add('translate-x-0');
+                document.body.classList.remove('overflow-hidden');
+                if (sidebarBackdrop) {
+                    sidebarBackdrop.classList.add('hidden');
+                }
+                if (sidebarToggle) {
+                    sidebarToggle.setAttribute('aria-expanded', 'false');
+                }
+                return;
+            }
+            if (!sidebar.classList.contains('translate-x-0')) {
+                sidebar.classList.add(closedClass);
+            }
+        }
+
         function toggleAdminSidebar(forceOpen) {
-            if (!sidebar || window.innerWidth >= 1024) return;
+            if (!sidebar || isDesktopViewport()) return;
             const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
             const isClosed = sidebar.classList.contains(closedClass);
             const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isClosed;
-            const openClass = {{ '"translate-x-0"' if lang == 'he' else '"translate-x-0"' }};
-            sidebar.classList.toggle(openClass, shouldOpen);
+            sidebar.classList.toggle('translate-x-0', shouldOpen);
             sidebar.classList.toggle(closedClass, !shouldOpen);
             if (sidebarBackdrop) {
                 sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
             }
             document.body.classList.toggle('overflow-hidden', shouldOpen);
+            if (sidebarToggle) {
+                sidebarToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            }
         }
+
+        syncSidebarStateForViewport();
 
         if (sidebarToggle) {
             sidebarToggle.addEventListener('click', function () {
-                const isClosed = sidebar && (sidebar.classList.contains('-translate-x-full') || sidebar.classList.contains('translate-x-full'));
-                toggleAdminSidebar(isClosed);
+                toggleAdminSidebar();
             });
         }
 
@@ -403,12 +430,7 @@
             });
         }
 
-        window.addEventListener('resize', function () {
-            if (window.innerWidth >= 1024 && sidebarBackdrop) {
-                sidebarBackdrop.classList.add('hidden');
-                document.body.classList.remove('overflow-hidden');
-            }
-        });
+        window.addEventListener('resize', syncSidebarStateForViewport);
 
         if (offcanvas) {
             offcanvas.addEventListener('show.bs.offcanvas', function () {
