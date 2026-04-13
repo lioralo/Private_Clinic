@@ -2,6 +2,31 @@
 
 ---
 
+## Session 37
+
+**Date:** 2026-04-13
+
+**Objective:** Allow admins to attach external document/website links in clinical notes and medical history entries.
+
+**Release Summary:**
+
+1. **Meeting Log Link Support**
+- Added `link_url` support to meeting logs (`notes`) in both schema and runtime migrations.
+- Updated add/edit note routes to persist optional link URLs.
+- Updated notes UI to include a URL field and render a clickable "Open Link" action per note.
+
+2. **Encounter Note Link Support (Medical History)**
+- Added `link_url` support to encounter notes (`patient_logs`) in both schema and runtime migrations.
+- Updated encounter log creation route to save optional link URLs.
+- Updated encounter note UI to include a URL field and render a clickable "Open Link" action per entry.
+
+3. **Validation**
+- Tested via full automated suite:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 36
 
 **Date:** 2026-04-12

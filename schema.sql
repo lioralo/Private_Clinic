@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS notes (
     behavior_notes TEXT,
     is_missed_meeting BOOLEAN DEFAULT 0,
     missed_reason TEXT,
+    link_url TEXT,
     updated_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS patient_logs (
     encounter_date DATE,
     title TEXT,
     content TEXT NOT NULL,
+    link_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );

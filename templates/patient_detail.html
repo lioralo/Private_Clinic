@@ -197,6 +197,10 @@
                         <textarea name="content" class="form-control" rows="8" required></textarea>
                     </div>
                     <div class="col-12">
+                        <label class="form-label">{{ t('Document / Website Link') }}</label>
+                        <input type="url" name="link_url" class="form-control" placeholder="https://...">
+                    </div>
+                    <div class="col-12">
                         <label class="form-label">{{ t('Attach File') }}</label>
                         <input type="file" name="file" class="form-control">
                     </div>
@@ -235,6 +239,13 @@
                             {% if note['patient_appearance'] %}
                             <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
                             {% endif %}
+                            {% if note['link_url'] %}
+                            <div class="small mb-2">
+                                <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                    <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                                </a>
+                            </div>
+                            {% endif %}
                             <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
                         </div>
 
@@ -264,6 +275,10 @@
                                                 <div class="col-12">
                                                     <label class="form-label">{{ t('Meeting Log') }}</label>
                                                     <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
+                                                </div>
+                                                <div class="col-12">
+                                                    <label class="form-label">{{ t('Document / Website Link') }}</label>
+                                                    <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
                                                 </div>
                                             </div>
                                         </div>
@@ -299,6 +314,9 @@
                             <div class="col-12">
                                 <textarea name="content" class="form-control" rows="4" placeholder="{{ t('Document any call, update, or non-session encounter.') }}" required></textarea>
                             </div>
+                            <div class="col-12">
+                                <input type="url" name="link_url" class="form-control" placeholder="{{ t('Document / Website Link') }} (https://...)">
+                            </div>
                             <div class="col-12 d-flex justify-content-end">
                                 <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3">{{ t('Save Encounter') }}</button>
                             </div>
@@ -317,6 +335,13 @@
                                         <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
                                     </form>
                                 </div>
+                                {% if entry['link_url'] %}
+                                <div class="small mb-2">
+                                    <a href="{{ entry['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                        <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                                    </a>
+                                </div>
+                                {% endif %}
                                 <div class="small" style="white-space: pre-wrap;">{{ entry['content'] }}</div>
                             </div>
                             {% else %}

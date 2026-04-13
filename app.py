@@ -1643,6 +1643,15 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
 
+    try:
+        db.execute('ALTER TABLE notes ADD COLUMN link_url TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patient_logs ADD COLUMN link_url TEXT')
+    except sqlite3.OperationalError:
+        pass
+
     db.commit()
 
 def _seed_admin_user(db):
@@ -3810,14 +3819,15 @@ def add_patient_encounter_log(patient_id):
     encounter_date = (request.form.get('encounter_date') or '').strip() or None
     title = (request.form.get('title') or '').strip() or None
     content = (request.form.get('content') or '').strip()
+    link_url = (request.form.get('link_url') or '').strip() or None
 
     if not content:
         flash('Encounter note content is required.', 'error')
         return redirect(url_for('patient_detail', patient_id=patient_id, tab='notes'))
 
     db.execute(
-        'INSERT INTO patient_logs (patient_id, encounter_date, title, content) VALUES (?, ?, ?, ?)',
-        (patient_id, encounter_date, title, content)
+        'INSERT INTO patient_logs (patient_id, encounter_date, title, content, link_url) VALUES (?, ?, ?, ?, ?)',
+        (patient_id, encounter_date, title, content, link_url)
     )
     db.commit()
     flash('Encounter note added.', 'success')
@@ -7523,6 +7533,7 @@ def add_note(patient_id):
     behavior_flags = ','.join(request.form.getlist('behavior_flags'))
     mood_summary = request.form.get('mood_summary', '').strip()
     behavior_notes = request.form.get('behavior_notes', '').strip()
+    link_url = request.form.get('link_url', '').strip()
     is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
     missed_reason = request.form.get('missed_reason', '').strip()
     if not is_missed_meeting:
@@ -7542,8 +7553,8 @@ def add_note(patient_id):
         cur = db.execute(
             '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
                                   patient_appearance, behavior_checklist, mood_summary, behavior_notes,
-                                  is_missed_meeting, missed_reason)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  is_missed_meeting, missed_reason, link_url)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 patient_id,
                 appointment_id,
@@ -7555,7 +7566,8 @@ def add_note(patient_id):
                 mood_summary or None,
                 behavior_notes or None,
                 is_missed_meeting,
-                missed_reason or None
+                missed_reason or None,
+                link_url or None
             )
         )
         note_id = cur.lastrowid
@@ -7594,6 +7606,7 @@ def edit_note(note_id):
     behavior_flags = ','.join(request.form.getlist('behavior_flags'))
     mood_summary = request.form.get('mood_summary', '').strip()
     behavior_notes = request.form.get('behavior_notes', '').strip()
+    link_url = request.form.get('link_url', '').strip()
     is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
     missed_reason = request.form.get('missed_reason', '').strip()
     if not is_missed_meeting:
@@ -7606,7 +7619,7 @@ def edit_note(note_id):
             '''UPDATE notes
                SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?,
                    behavior_checklist = ?, mood_summary = ?, behavior_notes = ?,
-                   is_missed_meeting = ?, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
+                   is_missed_meeting = ?, missed_reason = ?, link_url = ?, updated_at = CURRENT_TIMESTAMP
                WHERE id = ?''',
             (
                 content or 'Missed meeting documented.',
@@ -7618,6 +7631,7 @@ def edit_note(note_id):
                 behavior_notes or None,
                 is_missed_meeting,
                 missed_reason or None,
+                link_url or None,
                 note_id
             )
         )
