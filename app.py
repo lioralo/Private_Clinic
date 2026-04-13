@@ -2690,6 +2690,17 @@ def crm_dashboard():
             where_clause += ' AND (LOWER(p.name) LIKE ? OR LOWER(COALESCE(p.email, "")) LIKE ? OR LOWER(COALESCE(p.phone, "")) LIKE ?)'
             like_value = f"%{search_query.lower()}%"
             params.extend([like_value, like_value, like_value])
+
+        if clinic_type != 'all':
+            where_clause += ' AND p.patient_type = ?'
+            params.append(clinic_type)
+        elif not include_group:
+            where_clause += ' AND COALESCE(p.patient_type, "private") <> ?'
+            params.append('group')
+
+        if treatment_method and treatment_method != 'all':
+            where_clause += ' AND COALESCE(p.treatment_method, "") = ?'
+            params.append(treatment_method)
         
         order_clause = ' ORDER BY p.deleted_at DESC, p.name ASC'
         final_query = f"{select_clause}{where_clause}{order_clause}"
@@ -2697,20 +2708,45 @@ def crm_dashboard():
     else:
         patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
     
-    counts_row = db.execute('''
+    count_where = ['COALESCE(is_deleted, 0) = 0']
+    count_params = []
+    if clinic_type != 'all':
+        count_where.append('patient_type = ?')
+        count_params.append(clinic_type)
+    elif not include_group:
+        count_where.append('COALESCE(patient_type, "private") <> ?')
+        count_params.append('group')
+    if treatment_method and treatment_method != 'all':
+        count_where.append('COALESCE(treatment_method, "") = ?')
+        count_params.append(treatment_method)
+
+    counts_row = db.execute(f'''
         SELECT
             COUNT(*) AS all_count,
             SUM(CASE WHEN status = 'ongoing' THEN 1 ELSE 0 END) AS ongoing_count,
             SUM(CASE WHEN status IN ('candidate', 'waiting for scheduling', 'waiting') THEN 1 ELSE 0 END) AS candidate_waiting_count,
             SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_count
         FROM patients
-        WHERE COALESCE(is_deleted, 0) = 0
-    ''').fetchone()
+        WHERE {' AND '.join(count_where)}
+    ''', tuple(count_params)).fetchone()
     
     # Get deleted patients count
-    deleted_count_row = db.execute('''
-        SELECT COUNT(*) AS deleted_count FROM patients WHERE COALESCE(is_deleted, 0) = 1
-    ''').fetchone()
+    deleted_count_where = ['COALESCE(is_deleted, 0) = 1']
+    deleted_count_params = []
+    if clinic_type != 'all':
+        deleted_count_where.append('patient_type = ?')
+        deleted_count_params.append(clinic_type)
+    elif not include_group:
+        deleted_count_where.append('COALESCE(patient_type, "private") <> ?')
+        deleted_count_params.append('group')
+    if treatment_method and treatment_method != 'all':
+        deleted_count_where.append('COALESCE(treatment_method, "") = ?')
+        deleted_count_params.append(treatment_method)
+
+    deleted_count_row = db.execute(
+        f'''SELECT COUNT(*) AS deleted_count FROM patients WHERE {' AND '.join(deleted_count_where)}''',
+        tuple(deleted_count_params)
+    ).fetchone()
     
     counts = {
         'all': counts_row['all_count'] or 0,
