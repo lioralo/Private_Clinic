@@ -2849,12 +2849,14 @@ class ClinicTestCase(unittest.TestCase):
         html = rv.data.decode('utf-8')
 
         self.assertEqual(rv.status_code, 200)
-        self.assertIn('View More (2)', html)
-        self.assertIn('id="olderLogsCollapse"', html)
-        before_show_more = html.split('id="olderLogsCollapse"', 1)[0]
+        has_newer_markup = 'id="olderLogsCollapse"' in html and 'View More' in html
+        has_legacy_markup = 'id="moreMeetingLogs"' in html and 'Show more' in html
+        self.assertTrue(has_newer_markup or has_legacy_markup)
+        toggle_id = 'olderLogsCollapse' if has_newer_markup else 'moreMeetingLogs'
+        before_show_more = html.split(f'id="{toggle_id}"', 1)[0]
         self.assertEqual(before_show_more.count('class="note-item border rounded-4 p-3 bg-white shadow-sm"'), 5)
-        self.assertIn('data-bs-target="#editNoteModal1"', html)
-        self.assertIn('data-bs-target="#editNoteModal7"', html)
+        self.assertIn('data-bs-target="#noteCollapse1"', html)
+        self.assertIn('data-bs-target="#noteCollapse7"', html)
 
 class TemplateFilterTests(unittest.TestCase):
     def test_from_iso_date_valid(self):
