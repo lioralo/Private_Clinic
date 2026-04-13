@@ -8922,6 +8922,31 @@ def google_calendar_disconnect():
     return redirect(url_for('admin_profile'))
 
 
+@app.route('/admin/google-calendar/set-calendar', methods=['POST'])
+@login_required
+def google_calendar_set_calendar():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not gcal:
+        return jsonify({'error': 'Google libraries not installed'}), 500
+
+    calendar_id = (request.form.get('calendar_id') or '').strip()
+    if not calendar_id:
+        return jsonify({'error': 'Calendar ID is required'}), 400
+
+    db = get_db()
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return jsonify({'error': 'Google not connected'}), 400
+
+    calendars = gcal.list_calendars(db)
+    if calendars and calendar_id not in {str(item.get('id')) for item in calendars}:
+        return jsonify({'error': 'Selected calendar was not found'}), 400
+
+    gcal.save_credentials(db, creds, calendar_id=calendar_id)
+    return jsonify({'status': 'success', 'calendar_id': calendar_id})
+
+
     return synced, None
 
 

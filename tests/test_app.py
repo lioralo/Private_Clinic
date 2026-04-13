@@ -2480,6 +2480,49 @@ class ClinicTestCase(unittest.TestCase):
         self.assertTrue(hasattr(app_module.gcal, 'GOOGLE_LIBS_AVAILABLE'))
         self.assertTrue(hasattr(app_module.gdocs, 'GDOCS_LIBS_AVAILABLE'))
 
+    @patch('app.gcal')
+    def test_google_calendar_set_calendar_success(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_creds = MagicMock()
+        mock_gcal.load_credentials.return_value = mock_creds
+        mock_gcal.list_calendars.return_value = [
+            {'id': 'primary', 'summary': 'Primary'},
+            {'id': 'team-calendar', 'summary': 'Team'},
+        ]
+
+        rv = self.client.post('/admin/google-calendar/set-calendar', data={'calendar_id': 'team-calendar'})
+        data = json.loads(rv.data)
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(data['calendar_id'], 'team-calendar')
+        mock_gcal.save_credentials.assert_called_once()
+        _, kwargs = mock_gcal.save_credentials.call_args
+        self.assertEqual(kwargs['calendar_id'], 'team-calendar')
+
+    @patch('app.gcal')
+    def test_google_calendar_set_calendar_requires_connection(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_gcal.load_credentials.return_value = None
+
+        rv = self.client.post('/admin/google-calendar/set-calendar', data={'calendar_id': 'team-calendar'})
+        data = json.loads(rv.data)
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(data['error'], 'Google not connected')
+
+    @patch('app.gcal')
+    def test_google_calendar_set_calendar_rejects_unknown_calendar(self, mock_gcal):
+        self.login('lioraloni', 'Flo@tingind4')
+        mock_gcal.load_credentials.return_value = MagicMock()
+        mock_gcal.list_calendars.return_value = [{'id': 'primary', 'summary': 'Primary'}]
+
+        rv = self.client.post('/admin/google-calendar/set-calendar', data={'calendar_id': 'team-calendar'})
+        data = json.loads(rv.data)
+
+        self.assertEqual(rv.status_code, 400)
+        self.assertEqual(data['error'], 'Selected calendar was not found')
+
     @patch('app.get_db')
     @patch('app.init_db')
     def test_index_db_error(self, mock_init_db, mock_get_db):
