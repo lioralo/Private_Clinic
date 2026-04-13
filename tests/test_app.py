@@ -2523,6 +2523,102 @@ class ClinicTestCase(unittest.TestCase):
         self.assertEqual(rv.status_code, 400)
         self.assertEqual(data['error'], 'Selected calendar was not found')
 
+    def test_attach_gdoc_returns_success_message_without_forcing_open(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='GDoc Patient', status='ongoing'), follow_redirects=True)
+
+        rv = self.client.post('/patient/1/attach-gdoc', data={'doc_url': 'https://docs.google.com/document/d/test-doc-123/edit'})
+        data = json.loads(rv.data)
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(data['status'], 'ok')
+        self.assertEqual(data['doc_id'], 'test-doc-123')
+        self.assertEqual(data['message'], 'Google Doc linked successfully.')
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute('SELECT gdoc_id FROM patients WHERE id = 1').fetchone()
+            self.assertEqual(patient['gdoc_id'], 'test-doc-123')
+
+    @patch('app._pull_gdoc_notes')
+    def test_sync_from_gdoc_returns_success_message(self, mock_pull_gdoc_notes):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='Sync Patient', status='ongoing'), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('UPDATE patients SET gdoc_id = ? WHERE id = 1', ('sync-doc-1',))
+            db.commit()
+
+        mock_pull_gdoc_notes.return_value = (3, None)
+
+        rv = self.client.post('/patient/1/sync-from-gdoc')
+        data = json.loads(rv.data)
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(data['status'], 'ok')
+        self.assertEqual(data['synced'], 3)
+        self.assertEqual(data['message'], 'Synced 3 note(s) from Google Doc.')
+
+    @patch('app.gdocs')
+    @patch('app.gcal')
+    def test_pull_gdoc_notes_inserts_new_notes_and_stamps_doc(self, mock_gcal, mock_gdocs):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='Imported Notes Patient', status='ongoing'), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('UPDATE patients SET gdoc_id = ? WHERE id = 1', ('doc-xyz',))
+            db.commit()
+            patient = db.execute('SELECT * FROM patients WHERE id = 1').fetchone()
+
+            mock_creds = MagicMock()
+            mock_gcal.load_credentials.return_value = mock_creds
+            mock_gcal._refresh_and_save.return_value = mock_creds
+            mock_gdocs.read_doc_text.return_value = 'Session doc text'
+            mock_gdocs.parse_doc_into_notes.return_value = [
+                {'session_number': '7', 'note_date': '2026-04-10', 'content': 'Imported from Google Doc'}
+            ]
+
+            synced, err = app_module._pull_gdoc_notes(db, patient)
+
+            self.assertIsNone(err)
+            self.assertEqual(synced, 1)
+
+            inserted = db.execute(
+                'SELECT session_number, note_date, content FROM notes WHERE patient_id = 1'
+            ).fetchall()
+            self.assertEqual(len(inserted), 1)
+            self.assertEqual(inserted[0]['session_number'], 7)
+            self.assertEqual(inserted[0]['note_date'], '2026-04-10')
+            self.assertEqual(inserted[0]['content'], 'Imported from Google Doc')
+            mock_gdocs.stamp_note_id_in_doc.assert_called_once()
+
+    def test_patient_notes_tab_shows_first_five_with_show_more(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='Meeting Log Patient', status='ongoing'), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            for i in range(1, 8):
+                db.execute(
+                    '''INSERT INTO notes (patient_id, session_number, note_date, content)
+                       VALUES (1, ?, ?, ?)''',
+                    (i, f'2026-04-{i:02d}', f'Note content {i}')
+                )
+            db.commit()
+
+        rv = self.client.get('/patient/1?tab=notes', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('Show more', html)
+        self.assertIn('id="moreMeetingLogs"', html)
+        before_show_more = html.split('id="moreMeetingLogs"', 1)[0]
+        self.assertEqual(before_show_more.count('class="note-item border rounded-4 p-3 bg-white shadow-sm"'), 5)
+        self.assertIn('data-bs-target="#noteCollapse1"', html)
+        self.assertIn('data-bs-target="#noteCollapse7"', html)
+
     @patch('app.get_db')
     @patch('app.init_db')
     def test_index_db_error(self, mock_init_db, mock_get_db):

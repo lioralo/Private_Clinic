@@ -150,7 +150,7 @@
                     </form>
                     {% endif %}
                 </div>
-                <form method="post" action="{{ url_for('attach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form" data-open-doc="true">
+                <form method="post" action="{{ url_for('attach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <label class="form-label">{{ t('Attach Existing Google Doc') }}</label>
                     <div class="d-flex flex-column flex-md-row gap-2">
@@ -218,13 +218,13 @@
                         <h5 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>{{ t('Meeting Logs') }}</h5>
                     </div>
                     <div class="card-body d-grid gap-3">
-                        {% for note in notes %}
+                        {% for note in notes[:5] %}
                         <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
                             <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
-                                <div>
+                                <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
                                     <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
                                     <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                </div>
+                                </button>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
                                     <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
@@ -233,20 +233,22 @@
                                     </form>
                                 </div>
                             </div>
-                            {% if note['key_topics'] %}
-                            <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
-                            {% endif %}
-                            {% if note['patient_appearance'] %}
-                            <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
-                            {% endif %}
-                            {% if note['link_url'] %}
-                            <div class="small mb-2">
-                                <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
-                                    <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
-                                </a>
+                            <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                                {% if note['key_topics'] %}
+                                <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
+                                {% endif %}
+                                {% if note['patient_appearance'] %}
+                                <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
+                                {% endif %}
+                                {% if note['link_url'] %}
+                                <div class="small mb-2">
+                                    <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                        <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                                    </a>
+                                </div>
+                                {% endif %}
+                                <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
                             </div>
-                            {% endif %}
-                            <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
                         </div>
 
                         <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
@@ -290,9 +292,91 @@
                                 </div>
                             </div>
                         </div>
-                        {% else %}
-                        <div class="text-muted small">{{ t('No meeting logs yet.') }}</div>
                         {% endfor %}
+                        {% if notes|length > 5 %}
+                        <div class="collapse d-grid gap-3" id="moreMeetingLogs">
+                            {% for note in notes[5:] %}
+                            <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
+                                    <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
+                                        <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                                        <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                                    </button>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                                        <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" onsubmit="return confirm('{{ t('Delete meeting log?') }}');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                                    {% if note['key_topics'] %}
+                                    <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
+                                    {% endif %}
+                                    {% if note['patient_appearance'] %}
+                                    <div class="small mb-2"><strong>{{ t('Appearance') }}:</strong> {{ note['patient_appearance'] }}</div>
+                                    {% endif %}
+                                    {% if note['link_url'] %}
+                                    <div class="small mb-2">
+                                        <a href="{{ note['link_url'] }}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                                            <i class="bi bi-link-45deg me-1"></i>{{ t('Open Link') }}
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                    <div style="white-space: pre-wrap;">{{ note['content'] }}</div>
+                                </div>
+                            </div>
+                            <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
+                                        </div>
+                                        <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
+                                            <div class="modal-body">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="row g-3">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">{{ t('Session Number') }}</label>
+                                                        <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">{{ t('Date') }}</label>
+                                                        <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label">{{ t('Appearance') }}</label>
+                                                        <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">{{ t('Meeting Log') }}</label>
+                                                        <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label">{{ t('Document / Website Link') }}</label>
+                                                        <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+                                                <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="d-flex justify-content-center pt-2">
+                            <button class="btn btn-outline-primary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#moreMeetingLogs" aria-expanded="false" aria-controls="moreMeetingLogs">{{ t('Show more') }}</button>
+                        </div>
+                        {% endif %}
+                        {% if not notes %}
+                        <div class="text-muted small">{{ t('No meeting logs yet.') }}</div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -678,6 +762,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (form.dataset.openDoc === 'true' && payload.doc_url) {
                 window.open(payload.doc_url, '_blank', 'noopener');
+            }
+            if (payload.message) {
+                window.alert(payload.message);
             }
             window.location.reload();
         });

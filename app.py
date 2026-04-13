@@ -8947,6 +8947,105 @@ def google_calendar_set_calendar():
     return jsonify({'status': 'success', 'calendar_id': calendar_id})
 
 
+def _pull_gdoc_notes(db, patient):
+    if not gdocs:
+        return 0, 'google_docs module not available'
+    if not gcal:
+        return 0, 'Google libraries not installed'
+
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return 0, 'Google not connected — connect via Admin Profile first'
+
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+        doc_text = gdocs.read_doc_text(creds, patient['gdoc_id'])
+        parsed_notes = gdocs.parse_doc_into_notes(doc_text)
+    except Exception as exc:
+        return 0, str(exc)
+
+    latest_note = db.execute(
+        '''SELECT patient_appearance, behavior_checklist, mood_summary, behavior_notes
+           FROM notes
+           WHERE patient_id = ?
+           ORDER BY COALESCE(note_date, date(created_at)) DESC, created_at DESC, id DESC
+           LIMIT 1''',
+        (patient['id'],)
+    ).fetchone()
+    carried_fields = {
+        'patient_appearance': (latest_note['patient_appearance'] if latest_note else None),
+        'behavior_checklist': (latest_note['behavior_checklist'] if latest_note else None),
+        'mood_summary': (latest_note['mood_summary'] if latest_note else None),
+        'behavior_notes': (latest_note['behavior_notes'] if latest_note else None),
+    }
+
+    synced = 0
+    try:
+        for item in parsed_notes:
+            session_number = _normalize_session_number(item.get('session_number'))
+            note_date = (item.get('note_date') or '').strip() or None
+            content = (item.get('content') or '').strip()
+            note_tag = item.get('note_tag')
+
+            if not content:
+                continue
+
+            if isinstance(note_tag, int):
+                existing = db.execute(
+                    'SELECT id FROM notes WHERE id = ? AND patient_id = ?',
+                    (note_tag, patient['id'])
+                ).fetchone()
+                if not existing:
+                    return 0, f'Google Doc references note #{note_tag}, but it was not found for this patient.'
+
+                db.execute(
+                    '''UPDATE notes
+                       SET session_number = ?, note_date = ?, content = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ? AND patient_id = ?''',
+                    (session_number, note_date, content, note_tag, patient['id'])
+                )
+                synced += 1
+                continue
+
+            duplicate = db.execute(
+                '''SELECT id FROM notes
+                   WHERE patient_id = ?
+                     AND COALESCE(session_number, '') = COALESCE(?, '')
+                     AND COALESCE(note_date, '') = COALESCE(?, '')
+                     AND content = ?
+                   ORDER BY id DESC
+                   LIMIT 1''',
+                (patient['id'], session_number, note_date, content)
+            ).fetchone()
+            if duplicate:
+                gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], duplicate['id'])
+                synced += 1
+                continue
+
+            cursor = db.execute(
+                '''INSERT INTO notes (
+                       patient_id, session_number, note_date, content,
+                       patient_appearance, behavior_checklist, mood_summary, behavior_notes
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    patient['id'],
+                    session_number,
+                    note_date,
+                    content,
+                    carried_fields['patient_appearance'],
+                    carried_fields['behavior_checklist'],
+                    carried_fields['mood_summary'],
+                    carried_fields['behavior_notes'],
+                )
+            )
+            new_note_id = cursor.lastrowid
+            gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], new_note_id)
+            synced += 1
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        return 0, str(exc)
+
     return synced, None
 
 
@@ -8994,6 +9093,7 @@ def link_gdoc(patient_id):
         'status':  'ok',
         'doc_id':  doc_id,
         'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+        'message': 'Google Doc created and linked successfully.',
     })
 
 
@@ -9021,6 +9121,7 @@ def attach_gdoc(patient_id):
         'status': 'ok',
         'doc_id': doc_id,
         'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+        'message': 'Google Doc linked successfully.',
     })
 
 
@@ -9069,7 +9170,7 @@ def sync_from_gdoc(patient_id):
     count, err = _pull_gdoc_notes(db, patient)
     if err:
         return jsonify({'error': err}), 500
-    return jsonify({'status': 'ok', 'synced': count})
+    return jsonify({'status': 'ok', 'synced': count, 'message': f'Synced {count} note(s) from Google Doc.'})
 
 
 @app.route('/api/gdoc/webhook', methods=['POST'])
