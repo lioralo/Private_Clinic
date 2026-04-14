@@ -66,10 +66,10 @@
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Showing') }}</span>
         <span class="big" id="calendarWeekLabel">{{ t('Current week') }}</span>
-        <div class="mt-2 d-flex gap-1" id="calendarWeekNav">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarPrevWeek"><i class="bi bi-chevron-left"></i></button>
+        <div class="mt-2 d-flex gap-1 flex-wrap" id="calendarWeekNav" dir="ltr">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarPrevWeek" aria-label="{{ t('Previous week') }}"><i class="bi bi-chevron-left"></i></button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">{{ t('Today') }}</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarNextWeek"><i class="bi bi-chevron-right"></i></button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarNextWeek" aria-label="{{ t('Next week') }}"><i class="bi bi-chevron-right"></i></button>
         </div>
     </div>
     <div class="calendar-mini-card">
@@ -556,7 +556,9 @@ document.addEventListener('DOMContentLoaded', function() {
         editRecurringApplyScope: {{ t('How would you like to apply this change?')|tojson }},
         editOneOccurrence: {{ t('This occurrence only')|tojson }},
         editThisAndUpcoming: {{ t('This and all upcoming')|tojson }},
-        editAllOccurrences: {{ t('All occurrences in this series')|tojson }}
+        editAllOccurrences: {{ t('All occurrences in this series')|tojson }},
+        showMore: {{ t('Show more')|tojson }},
+        showLess: {{ t('Show less')|tojson }}
     };
 
     const calendarEl = document.getElementById('weeklyCalendar');
@@ -564,6 +566,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let activeFilter = 'all';
     let nowWeekAnchor = {{ initial_week_start|tojson if initial_week_start is defined else 'null' }} || getWeekStartString(new Date());
     let activeManagementMode = 'upcoming';
+    let followUpExpanded = false;
 
     function pad2(v) {
         return String(v).padStart(2, '0');
@@ -1938,16 +1941,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderFollowUps(list) {
         if (!list || list.length === 0) {
+            followUpExpanded = false;
             followUpAlerts.innerHTML = `<div class="small text-muted">${I18N.noPendingFollowUps}</div>`;
             return;
         }
-        followUpAlerts.innerHTML = list.map(item => {
+
+        const visibleItems = followUpExpanded ? list : list.slice(0, 5);
+        const hiddenCount = Math.max(0, list.length - visibleItems.length);
+
+        const cardsHtml = visibleItems.map(item => {
             return `<div class="alert alert-warning py-2 mb-2 small">
                 <a href="/patient/${item.patient_id}?tab=info" class="fw-bold text-dark text-decoration-underline">${item.patient_name}</a> (${item.status})<br>
                 Last one-time meeting: ${item.last_meeting_date}<br>
                 ${item.message}
             </div>`;
         }).join('');
+
+        const moreButtonHtml = list.length > 5
+            ? `<button type="button" class="btn btn-link btn-sm px-0 text-decoration-none" id="followUpShowMoreBtn" aria-expanded="${followUpExpanded ? 'true' : 'false'}">${followUpExpanded ? I18N.showLess : `${I18N.showMore} (${hiddenCount})`}</button>`
+            : '';
+
+        followUpAlerts.innerHTML = `${cardsHtml}${moreButtonHtml}`;
+
+        const toggleBtn = document.getElementById('followUpShowMoreBtn');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function () {
+                followUpExpanded = !followUpExpanded;
+                renderFollowUps(list);
+            });
+        }
     }
 
     function renderOngoingList(events) {

@@ -8155,6 +8155,7 @@ def reset_test_patients():
     # Clear patient-dependent data first to keep this utility deterministic.
     for table in (
         'patient_resources', 'diagnosis_documents', 'supervisions', 'goals', 'audit_logs',
+        'group_session_attendance', 'group_member_history', 'group_members', 'group_sessions', 'groups',
         'messages', 'appointments', 'receipts', 'files', 'notes', 'patient_logs'
     ):
         db.execute(f'DELETE FROM {table}')
@@ -8178,11 +8179,13 @@ def reset_test_patients():
         ('Dana Diagnosee', 'archived', 'diagnosee', treatment_options[0 % len(treatment_options)]),
     ]
 
+    seeded_patient_ids = {}
+
     for index, (name, status, patient_type, method) in enumerate(sample_specs, start=1):
         has_intake = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
         db.execute(
-            '''INSERT INTO patients (name, status, email, phone, patient_type, has_intake_tab, treatment_method, background)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            '''INSERT INTO patients (name, status, email, phone, patient_type, has_intake_tab, treatment_method, background, can_self_schedule)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 name,
                 status,
@@ -8191,10 +8194,12 @@ def reset_test_patients():
                 patient_type,
                 has_intake,
                 method,
-                'Seeded sample record for layout and workflow checks.'
+                'Seeded sample record for layout and workflow checks.',
+                1 if patient_type in ('private', 'group') else 0
             )
         )
         patient_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+        seeded_patient_ids[patient_type] = patient_id
 
         db.execute(
             'INSERT INTO notes (patient_id, session_number, content, key_topics) VALUES (?, ?, ?, ?)',
@@ -8219,8 +8224,44 @@ def reset_test_patients():
                 (username, generate_password_hash('patient123'), 'patient', patient_id)
             )
 
+    group_patient_id = seeded_patient_ids.get('group')
+    if group_patient_id:
+        db.execute(
+            'INSERT INTO groups (name, group_type, description) VALUES (?, ?, ?)',
+            ('Sunday Skills Group', 'therapy', 'Seeded sample therapy group for UI and workflow validation.')
+        )
+        group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+        joined_on = datetime.now().date().isoformat()
+        db.execute(
+            'INSERT INTO group_members (group_id, patient_id, joined_at, role) VALUES (?, ?, ?, ?)',
+            (group_id, group_patient_id, joined_on, 'member')
+        )
+        db.execute(
+            'INSERT INTO group_member_history (group_id, patient_id, joined_at, role) VALUES (?, ?, ?, ?)',
+            (group_id, group_patient_id, joined_on, 'member')
+        )
+
+        past_session_date = (datetime.now().date() - timedelta(days=7)).isoformat()
+        next_session_date = (datetime.now().date() + timedelta(days=7)).isoformat()
+        db.execute(
+            '''INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, status)
+               VALUES (?, ?, '18:00', 90, ?, ?, 'in-person', 'completed')''',
+            (group_id, past_session_date, 'Sunday Skills Circle', 'Dr. Lior Aloni')
+        )
+        past_session_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+        db.execute(
+            '''INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, attendance_note)
+               VALUES (?, ?, 'present', ?)''',
+            (past_session_id, group_patient_id, 'Seeded attendance sample for group workflow checks.')
+        )
+        db.execute(
+            '''INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, facilitator, meeting_type, status)
+               VALUES (?, ?, '18:00', 90, ?, ?, 'in-person', 'scheduled')''',
+            (group_id, next_session_date, 'Sunday Skills Circle', 'Dr. Lior Aloni')
+        )
+
     db.commit()
-    flash('Test patients reset successfully: one per core type/track with sample treatment methods.', 'success')
+    flash('Test patients reset successfully: compact examples for private, residency, group, intake, and diagnosee workflows.', 'success')
     return redirect(url_for('crm_dashboard'))
 
 @app.route('/api/admin/import_calendar', methods=('POST',))

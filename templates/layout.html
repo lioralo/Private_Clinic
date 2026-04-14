@@ -99,13 +99,13 @@
 
 {% if current_user.is_authenticated and current_user.role == 'admin' %}
 {# ── ADMIN: sidebar + main content ───────────────────────────── #}
-<div class="flex h-screen overflow-hidden">
+<div class="flex min-h-screen lg:h-screen overflow-hidden">
 
-    <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden"></div>
+    <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar #}
-    <aside id="adminSidebar" class="h-screen w-64 flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 z-40 overflow-y-auto
-        fixed lg:static top-0 {% if lang == 'he' %}right-0 translate-x-full lg:translate-x-0{% else %}left-0 -translate-x-full lg:translate-x-0{% endif %} transition-transform duration-300">
+    <aside id="adminSidebar" aria-hidden="true" class="h-screen w-72 max-w-[85vw] flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 z-40 overflow-y-auto
+        fixed lg:static top-0 {% if lang == 'he' %}right-0 translate-x-full lg:translate-x-0{% else %}left-0 -translate-x-full lg:translate-x-0{% endif %} transition-all duration-300 pointer-events-none opacity-0 shadow-2xl lg:w-64 lg:max-w-none lg:pointer-events-auto lg:opacity-100 lg:shadow-none">
 
         {# Brand #}
         <div class="flex flex-col items-center mb-8 pt-2 px-2 flex-shrink-0">
@@ -172,7 +172,7 @@
         {# Top Header #}
         <header class="fixed top-0 {% if lang == 'he' %}left-0 lg:right-64{% else %}right-0 lg:left-64{% endif %} bg-white/85 backdrop-blur-md z-30 flex justify-between items-center px-4 lg:px-8 py-4 shadow-sm border-b border-slate-200 gap-3">
             <div class="flex items-center gap-6">
-                <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}">
+                <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
                     <i class="bi bi-list" style="font-size:20px"></i>
                 </button>
                 <h2 class="text-xl font-bold text-teal-900 tracking-tight">
@@ -201,7 +201,7 @@
 
         {# Flash Messages #}
         {% for message in get_flashed_messages() %}
-        <div class="mx-6 mt-4 flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
+        <div class="mx-4 lg:mx-6 mt-4 flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
             <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>
             <span class="flex-1">{{ message }}</span>
             <button class="text-teal-600 hover:text-teal-800 transition-colors" onclick="this.parentElement.remove()">
@@ -211,7 +211,7 @@
         {% endfor %}
 
         {# Page content wrapper #}
-        <main class="mt-16 p-8 flex-1 overflow-y-auto app-shell">
+        <main class="mt-16 p-4 sm:p-5 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}
@@ -380,40 +380,44 @@
             return window.innerWidth >= 1024;
         }
 
+        function getSidebarClosedClass() {
+            return {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
+        }
+
+        function setSidebarState(openOnMobile) {
+            if (!sidebar) return;
+            const desktop = isDesktopViewport();
+            const closedClass = getSidebarClosedClass();
+            const shouldShow = desktop || !!openOnMobile;
+
+            sidebar.classList.toggle('translate-x-0', shouldShow);
+            sidebar.classList.toggle(closedClass, !shouldShow);
+            sidebar.classList.toggle('pointer-events-none', !shouldShow);
+            sidebar.classList.toggle('opacity-0', !shouldShow);
+            sidebar.classList.toggle('pointer-events-auto', shouldShow);
+            sidebar.classList.toggle('opacity-100', shouldShow);
+            sidebar.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+
+            if (sidebarBackdrop) {
+                sidebarBackdrop.classList.toggle('hidden', !(openOnMobile && !desktop));
+            }
+            document.body.classList.toggle('overflow-hidden', openOnMobile && !desktop);
+            if (sidebarToggle) {
+                sidebarToggle.setAttribute('aria-expanded', openOnMobile && !desktop ? 'true' : 'false');
+            }
+        }
+
         function syncSidebarStateForViewport() {
             if (!sidebar) return;
-            const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
-            if (isDesktopViewport()) {
-                sidebar.classList.remove(closedClass);
-                sidebar.classList.add('translate-x-0');
-                document.body.classList.remove('overflow-hidden');
-                if (sidebarBackdrop) {
-                    sidebarBackdrop.classList.add('hidden');
-                }
-                if (sidebarToggle) {
-                    sidebarToggle.setAttribute('aria-expanded', 'false');
-                }
-                return;
-            }
-            if (!sidebar.classList.contains('translate-x-0')) {
-                sidebar.classList.add(closedClass);
-            }
+            const isOpen = sidebarToggle && sidebarToggle.getAttribute('aria-expanded') === 'true';
+            setSidebarState(isOpen);
         }
 
         function toggleAdminSidebar(forceOpen) {
             if (!sidebar || isDesktopViewport()) return;
-            const closedClass = {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
-            const isClosed = sidebar.classList.contains(closedClass);
-            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : isClosed;
-            sidebar.classList.toggle('translate-x-0', shouldOpen);
-            sidebar.classList.toggle(closedClass, !shouldOpen);
-            if (sidebarBackdrop) {
-                sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
-            }
-            document.body.classList.toggle('overflow-hidden', shouldOpen);
-            if (sidebarToggle) {
-                sidebarToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
-            }
+            const currentlyOpen = sidebar.getAttribute('aria-hidden') !== 'true';
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !currentlyOpen;
+            setSidebarState(shouldOpen);
         }
 
         syncSidebarStateForViewport();
@@ -429,6 +433,22 @@
                 toggleAdminSidebar(false);
             });
         }
+
+        if (sidebar) {
+            sidebar.querySelectorAll('a').forEach((link) => {
+                link.addEventListener('click', function () {
+                    if (!isDesktopViewport()) {
+                        toggleAdminSidebar(false);
+                    }
+                });
+            });
+        }
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                toggleAdminSidebar(false);
+            }
+        });
 
         window.addEventListener('resize', syncSidebarStateForViewport);
 

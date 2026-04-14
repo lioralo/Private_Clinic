@@ -2,6 +2,38 @@
 
 ---
 
+## Session 38
+
+**Date:** 2026-04-14
+
+**Objective:** Clean up oversized demo data, repair responsive admin navigation, compact the dashboard layout, and improve calendar follow-up usability.
+
+**Release Summary:**
+
+1. **Demo Data Reset + Group Coverage**
+- Replaced the 10,000-candidate demo dataset with a compact sample set covering private, residency, group, intake, and diagnosee workflows.
+- Extended the reset utility to also clear and reseed group-related tables.
+- Added a sample therapy group with membership and sessions so group flows are visible during QA.
+
+2. **Responsive Sidebar Reliability**
+- Hardened the mobile/partial-width admin sidebar so hidden panels no longer intercept clicks or obscure page content.
+- Added close-on-backdrop, close-on-link-tap, and Escape-key behavior for smoother navigation on smaller windows.
+
+3. **Dashboard Density Improvements**
+- Tightened spacing and rebalanced dashboard columns/cards to reduce unnecessary empty space and keep the admin summary view compact.
+
+4. **Calendar Follow-Up Overflow Control**
+- Capped initial follow-up indicators to five items and added a Show more / Show less toggle for additional entries.
+- Kept week navigation controls in stable LTR order so Hebrew mode arrows are no longer visually flipped.
+
+5. **Validation**
+- Focused regression checks passed for the calendar follow-up control, Hebrew week nav, and compact sample reset.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 37
 
 **Date:** 2026-04-13

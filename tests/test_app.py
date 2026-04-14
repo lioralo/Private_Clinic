@@ -1440,6 +1440,50 @@ class ClinicTestCase(unittest.TestCase):
         alert = next(a for a in alerts if a.get('patient_id') == 1)
         assert 'Further decision is needed' in alert.get('message', '')
 
+    def test_calendar_page_renders_show_more_followup_control(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        for index in range(6):
+            self.client.post('/add_patient', data=dict(
+                name=f'Followup Candidate {index}',
+                status='candidate'
+            ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            past_date = (datetime.now().date() - timedelta(days=7)).isoformat()
+            for patient_id in range(1, 7):
+                db.execute('''
+                    INSERT INTO appointments (patient_id, appointment_date, appointment_time, duration_minutes, status, is_recurring)
+                    VALUES (?, ?, '10:00', 60, 'scheduled', 0)
+                ''', (patient_id, past_date))
+            db.commit()
+
+        rv = self.client.get('/calendar', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'followUpShowMoreBtn' in rv.data
+        assert b'Show more' in rv.data
+
+    def test_calendar_week_nav_stays_ltr_in_hebrew(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.get('/set_lang/he', follow_redirects=True)
+        rv = self.client.get('/calendar', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'id="calendarWeekNav"' in rv.data
+        assert b'dir="ltr"' in rv.data
+
+    def test_reset_test_patients_keeps_small_type_coverage(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.post('/admin/reset_test_patients', data={
+            'confirm': 'RESET'
+        }, follow_redirects=True)
+        assert rv.status_code == 200
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('SELECT name, patient_type FROM patients ORDER BY id').fetchall()
+        assert len(rows) <= 8
+        patient_types = {row['patient_type'] for row in rows}
+        assert {'private', 'residency', 'group', 'initial-intake', 'diagnosee'}.issubset(patient_types)
+
     def test_admin_recurring_block_creation(self):
         self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])
