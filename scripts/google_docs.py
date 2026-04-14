@@ -20,7 +20,8 @@ Parser format (Hebrew, dash style – real-world):
     פגישה 1- 05/08/25
     פגישה 1- 05/08/2025
     פגישה #1- 05/08/25
-    (# is optional, date is DD/MM/YY or DD/MM/YYYY, separator is a dash)
+    ~פגישה 6- 23/02/26
+    (# is optional, a leading ~ is allowed, date is DD/MM/YY or DD/MM/YYYY, separator is a dash)
 
 Identity tags:
     [note:new]    – not yet saved; will be inserted and stamped with [note:id=N]
@@ -50,17 +51,18 @@ except ImportError:
 #   SESSION #3 | 2026-04-01 [note:new]       (English, ISO date, pipe)
 #   פגישה #3 | 2026-04-01 [note:id=7]        (Hebrew, ISO date, pipe)
 #   פגישה 1- 05/08/25                         (Hebrew, DD/MM/YY, dash)
-#   פגישה 1- 05/08/2025                        (Hebrew, DD/MM/YYYY, dash)
-#   פגישה #1- 05/06/25                         (Hebrew, optional #, dash)
+#   פגישה 1- 05/08/2025                       (Hebrew, DD/MM/YYYY, dash)
+#   פגישה #1- 05/06/25                        (Hebrew, optional #, dash)
+#   ~פגישה 6- 23/02/26                        (Hebrew, leading tilde marker)
 # ---------------------------------------------------------------------------
 _SESSION_RE = re.compile(
-    r'^(?:SESSION|פגישה)\s*#?(\d+)\s*'   # keyword + optional # + session number
+    r'^\s*[~•*\-–—]?\s*(?:SESSION|פגישה)\s*#?(\d+)\s*'   # optional marker + keyword + optional # + number
     r'(?:'
-        r'\|\s*(\d{4}-\d{2}-\d{2})'       # pipe + ISO date (YYYY-MM-DD)
+        r'\|\s*(\d{4}-\d{2}-\d{2})'                           # pipe + ISO date (YYYY-MM-DD)
         r'|'
-        r'-\s*(\d{1,2}/\d{1,2}/\d{2,4})' # dash  + date   (DD/MM/YY or DD/MM/YYYY)
+        r'[-־–—]\s*(\d{1,2}/\d{1,2}/\d{2,4})'                  # dash variants + DD/MM/YY(YY)
     r')'
-    r'(?:\s*(\[note:[^\]]+\]))?',          # optional [note:…] tag
+    r'(?:\s*(\[note:[^\]]+\]))?',                              # optional [note:…] tag
     re.MULTILINE | re.IGNORECASE,
 )
 

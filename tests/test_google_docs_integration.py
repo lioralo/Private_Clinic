@@ -202,6 +202,81 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
             self.assertEqual(row['session_summary'], 'Group process summary from doc')
 
+    def test_parse_doc_into_notes_accepts_hebrew_group_template_with_tilde(self):
+        text = (
+            '~פגישה 6- 23/02/26\n'
+            '|משתתפים\n'
+            'משה שטרן, מיכאל שפרנוב, שי בראגין, אבינועם קאה\n'
+            '|חסרים\n'
+            '- אופיר לא הגיע לקבוצה ולא הודיע\n'
+            '- צביקה לא הגיע לקבוצה ולא הודיע\n'
+            '|תוכן\n'
+            'השיח בקבוצה התחיל בשתיקה, לאחר מכן שי יזם שיח.\n'
+        )
+
+        parsed = parse_doc_into_notes(text)
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]['session_number'], 6)
+        self.assertEqual(parsed[0]['note_date'], '2026-02-23')
+        self.assertIn('|משתתפים', parsed[0]['content'])
+        self.assertIn('|חסרים', parsed[0]['content'])
+        self.assertIn('|תוכן', parsed[0]['content'])
+
+    def test_group_sync_pulls_hebrew_group_template_into_matching_history(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Hebrew Docs Group', 'therapy', 'Group docs', 'group-doc-hebrew')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                "INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, status) VALUES (?, ?, ?, ?, ?, ?)",
+                (group_id, '2026-02-23', '18:00', 90, 'Hebrew Group', 'scheduled')
+            )
+            db.commit()
+
+        hebrew_text = (
+            '~פגישה 6- 23/02/26\n'
+            '|משתתפים\n'
+            'משה שטרן, מיכאל שפרנוב, שי בראגין, אבינועם קאה\n'
+            '|חסרים\n'
+            '- אופיר לא הגיע לקבוצה ולא הודיע\n'
+            '|תוכן\n'
+            'השיח בקבוצה התחיל בשתיקה, לאחר מכן שי יזם שיח.\n'
+        )
+
+        docs_api = Mock()
+        docs_api.get.return_value.execute.return_value = {'body': {'content': [{'endIndex': 2}]}}
+        docs_api.batchUpdate.return_value.execute.return_value = {}
+        docs_service = Mock()
+        docs_service.documents.return_value = docs_api
+
+        gdocs_mock = Mock()
+        gdocs_mock.GDOCS_LIBS_AVAILABLE = True
+        gdocs_mock.read_doc_text.return_value = hebrew_text
+        gdocs_mock._docs_service.return_value = docs_service
+        gdocs_mock.parse_doc_into_notes.side_effect = parse_doc_into_notes
+
+        gcal_mock = Mock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.load_credentials.return_value = object()
+        gcal_mock._refresh_and_save.return_value = object()
+
+        with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.post(f'/groups/{group_id}/sync-gdoc', data={})
+
+        self.assertEqual(rv.status_code, 200)
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
+            self.assertIn('השיח בקבוצה התחיל בשתיקה', row['session_summary'])
+            self.assertIn('|משתתפים', row['session_summary'])
+
 
 if __name__ == '__main__':
     unittest.main()

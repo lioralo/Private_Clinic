@@ -2,6 +2,31 @@
 
 ---
 
+## Session 46
+
+**Date:** 2026-04-14
+
+**Objective:** Improve the group Google Docs parser so it can reliably identify real Hebrew session headers and sync those structured notes into the correct meeting history.
+
+**Release Summary:**
+
+1. **Hebrew Group Header Recognition**
+- Added support for real-world Hebrew session headers such as:
+  - `~פגישה 6- 23/02/26`
+  - `פגישה #6- 23/02/26`
+- The parser now accepts the leading tilde marker and common dash variants used in manually written Google Docs.
+
+2. **Structured Hebrew Content Sync**
+- Preserved Hebrew section blocks like `|משתתפים`, `|חסרים`, and `|תוכן` so they are pulled into the linked group session summary without losing structure.
+- Matching group meetings now update correctly by the parsed meeting date and flow into the session history.
+
+3. **Validation**
+- Added regressions for the Hebrew tilde-header format and for syncing those notes into the matching group meeting record.
+- Verified with automated tests:
+  - `python -m unittest tests.test_google_docs_integration` → 8 tests passed
+
+---
+
 ## Session 45
 
 **Date:** 2026-04-14
