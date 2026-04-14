@@ -291,6 +291,7 @@
         <span class="badge rounded-pill {% if group['is_active'] %}bg-success-subtle text-success{% else %}bg-secondary-subtle text-secondary{% endif %} border px-3 py-2">
             {% if group['is_active'] %}{{ txt('Active group', 'קבוצה פעילה') }}{% else %}{{ txt('In history', 'בהיסטוריה') }}{% endif %}
         </span>
+        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="openGroupDocsPanel()">{{ txt('Google Docs Integration', 'אינטגרציית Google Docs') }}</button>
         <a href="{{ url_for('groups_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">{{ txt('All Groups', 'כל הקבוצות') }}</a>
         <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary btn-sm rounded-pill">{{ txt('Back to Calendar', 'חזרה ליומן') }}</a>
     </div>
@@ -339,10 +340,10 @@
                                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Save Group Info', 'שמירת פרטי קבוצה') }}</button>
                             </div>
                         </form>
-                        <div class="border rounded-3 p-3 bg-light mt-3">
+                        <div class="border rounded-3 p-3 bg-light mt-3" id="groupDocsIntegrationPanel">
                             <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
                                 <div>
-                                    <div class="fw-semibold text-primary">Google Docs</div>
+                                    <div class="fw-semibold text-primary">{{ txt('Google Docs Integration', 'אינטגרציית Google Docs') }}</div>
                                     <div class="small text-muted">{{ txt('Link a shared Google Doc for the group summary, meeting notes, and materials.', 'קישור מסמך Google משותף לסיכום קבוצה, תיעוד מפגשים וחומרים.') }}</div>
                                 </div>
                                 {% if group['gdoc_id'] %}
@@ -728,6 +729,17 @@ function timeToMinutes(hhmm) {
     if (!hhmm) return 0;
     const parts = hhmm.split(':').map(Number);
     return (parts[0] * 60) + parts[1];
+}
+
+function openGroupDocsPanel() {
+    const infoTab = document.querySelector('.group-mgmt-tab[data-pane="groupMgmtPaneInfo"]');
+    if (infoTab) {
+        infoTab.click();
+    }
+    const docsPanel = document.getElementById('groupDocsIntegrationPanel');
+    if (docsPanel) {
+        docsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 
 function toggleStablePanel(button) {

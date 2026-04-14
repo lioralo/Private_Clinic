@@ -65,8 +65,14 @@
         <label class="form-check-label small text-muted" for="includeGroupToggle">{{ t('Include group-type patients') }}</label>
     </div>
     
-    <!-- Quick access to active/archived/deleted patients -->
-    <div class="d-flex gap-2">
+    <!-- Quick access to patient filters -->
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm {% if status == 'all' and not show_deleted %}btn-primary{% else %}btn-outline-primary{% endif %} rounded-pill">
+            <i class="bi bi-people-fill me-1"></i>{{ t('All') }} ({{ counts.get('ongoing', 0) + counts.get('waiting', 0) + counts.get('archived', 0) }})
+        </a>
+        <a href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}btn-warning{% else %}btn-outline-warning{% endif %} rounded-pill">
+            <i class="bi bi-hourglass-split me-1"></i>{{ t('Candidates') }} ({{ counts.get('waiting', 0) }})
+        </a>
         <a href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-success rounded-pill">
             <i class="bi bi-heart-pulse me-1"></i>{{ t('Active') }} ({{ counts['ongoing'] }})
         </a>

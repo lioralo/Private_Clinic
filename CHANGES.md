@@ -2,6 +2,28 @@
 
 ---
 
+## Session 42
+
+**Date:** 2026-04-14
+
+**Objective:** Make the requested group Docs integration control and patient-view candidate filters clearly visible in the actual screens the admin uses.
+
+**Release Summary:**
+
+1. **Group Page Visibility Fix**
+- Added a persistent Google Docs Integration button in the group header so the integration is visible even before a doc is linked.
+- Kept the Sync to Docs action available once a group doc is attached.
+
+2. **Patients View Quick Filters**
+- Added visible All and Candidates quick-filter buttons directly to the CRM patient view.
+- This makes candidate filtering available in the main patient roster, not only inside the notifications chooser.
+
+3. **Validation**
+- Added focused regressions for the visible group integration button and the CRM All/Candidates quick filters.
+- Verified the visibility fixes with automated tests before publish.
+
+---
+
 ## Session 41
 
 **Date:** 2026-04-14

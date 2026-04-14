@@ -1600,6 +1600,20 @@ class ClinicTestCase(unittest.TestCase):
             assert row is not None
             assert row['gdoc_id'] == 'abc123xyz'
 
+    def test_group_detail_shows_docs_integration_button(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description) VALUES ('Synced Group', 'therapy', 'Docs sync flow')"
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'Google Docs Integration' in rv.data
+
     def test_group_detail_shows_sync_to_docs_button_when_doc_is_linked(self):
         self.login('lioraloni', 'Flo@tingind4')
         with app.app_context():
@@ -1613,6 +1627,13 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
         assert rv.status_code == 200
         assert b'Sync to Docs' in rv.data
+
+    def test_crm_patient_view_shows_all_and_candidates_buttons(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.get('/crm', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'All (' in rv.data
+        assert b'Candidates (' in rv.data
 
     def test_notification_picker_shows_candidate_filter_button(self):
         self.login('lioraloni', 'Flo@tingind4')
