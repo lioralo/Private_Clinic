@@ -1,0 +1,72 @@
+{% extends 'layout.html' %}
+
+{% block page_title %}{{ t('About') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    {% if is_admin_preview and site_settings.get('about_enabled') != '1' %}
+    <div class="alert alert-warning shadow-sm rounded-4 mb-4">
+        <i class="bi bi-eye me-2"></i>{{ t('This page is currently hidden from the public. You are viewing the admin preview.') }}
+    </div>
+    {% endif %}
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-body p-4 p-lg-5">
+            <div class="d-flex flex-column flex-lg-row align-items-center align-items-lg-start gap-4">
+                <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="img-fluid" style="max-width:180px;">
+                <div class="flex-grow-1 text-center text-lg-start">
+                    <h1 class="display-6 fw-bold text-primary mb-2">{{ t('About the Clinic') }}</h1>
+                    <p class="text-muted mb-0">{{ site_settings.get('about_text') or t('Private Psychotherapy Clinic') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-telephone me-2 text-primary"></i>{{ t('Contact Details') }}</h5>
+                </div>
+                <div class="card-body p-4 d-grid gap-3">
+                    {% if site_settings.get('about_phone') %}
+                    <div>
+                        <div class="small text-muted">{{ t('Phone') }}</div>
+                        <div class="fw-semibold">{{ site_settings.get('about_phone') }}</div>
+                    </div>
+                    {% endif %}
+                    {% if site_settings.get('about_email') %}
+                    <div>
+                        <div class="small text-muted">{{ t('Email') }}</div>
+                        <div class="fw-semibold">{{ site_settings.get('about_email') }}</div>
+                    </div>
+                    {% endif %}
+                    {% if not site_settings.get('about_phone') and not site_settings.get('about_email') %}
+                    <div class="text-muted small">{{ t('Contact information will appear here once it is added by the clinic admin.') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-0 py-3">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-geo-alt me-2 text-primary"></i>{{ t('Clinic Location') }}</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if site_settings.get('about_map_url') %}
+                    <iframe
+                        src="{{ site_settings.get('about_map_url') }}"
+                        width="100%"
+                        height="320"
+                        style="border:0; border-bottom-left-radius: 1rem; border-bottom-right-radius: 1rem;"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"></iframe>
+                    {% else %}
+                    <div class="p-4 text-muted small">{{ t('A clinic map can be added from the admin profile page.') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -601,6 +601,48 @@ def load_hebrew_translation_overrides():
 
 HEBREW_TRANSLATIONS.update(load_hebrew_translation_overrides())
 
+DEFAULT_SITE_SETTINGS = {
+    'about_enabled': '0',
+    'about_phone': '',
+    'about_email': '',
+    'about_text': '',
+    'about_map_url': '',
+}
+
+
+def get_site_settings(db=None):
+    settings = DEFAULT_SITE_SETTINGS.copy()
+    try:
+        active_db = db or get_db()
+        rows = active_db.execute('SELECT setting_key, setting_value FROM site_settings').fetchall()
+        for row in rows:
+            key = row['setting_key']
+            if key in settings:
+                settings[key] = row['setting_value'] or ''
+    except Exception:
+        return settings
+
+    settings['about_enabled'] = '1' if str(settings.get('about_enabled') or '0') in {'1', 'true', 'yes', 'on'} else '0'
+    return settings
+
+
+def save_site_settings(db, updates):
+    if not updates:
+        return
+    for key, default_value in DEFAULT_SITE_SETTINGS.items():
+        if key not in updates:
+            continue
+        value = updates.get(key)
+        if key == 'about_enabled':
+            value = '1' if str(value or '0') in {'1', 'true', 'yes', 'on'} else '0'
+        elif value is None:
+            value = default_value
+        db.execute(
+            'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+            'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+            (key, str(value))
+        )
+
 @app.context_processor
 def inject_translations():
     def t(text):
@@ -640,9 +682,14 @@ def _get_notification_unread_count(db, user):
 def inject_global_vars():
     unread_messages = 0
     notification_unread_count = 0
+    db = None
 
-    if current_user.is_authenticated:
+    try:
         db = get_db()
+    except Exception:
+        db = None
+
+    if current_user.is_authenticated and db is not None:
         unread_messages = db.execute(
             'SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = 0',
             (current_user.id,)
@@ -651,7 +698,8 @@ def inject_global_vars():
 
     return dict(
         unread_messages=unread_messages,
-        notification_unread_count=notification_unread_count
+        notification_unread_count=notification_unread_count,
+        site_settings=get_site_settings(db)
     )
 
 @app.route('/set_lang/<lang>')
@@ -1168,6 +1216,8 @@ def _run_db_migrations(db):
             description TEXT,
             url TEXT,
             is_public BOOLEAN DEFAULT 0,
+            allow_patient_view BOOLEAN DEFAULT 1,
+            allow_patient_download BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
     except sqlite3.OperationalError:
@@ -1187,6 +1237,18 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute('ALTER TABLE resources ADD COLUMN allow_patient_view BOOLEAN DEFAULT 1')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE resources ADD COLUMN allow_patient_download BOOLEAN DEFAULT 1')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('UPDATE resources SET allow_patient_view = COALESCE(allow_patient_view, 1), allow_patient_download = COALESCE(allow_patient_download, 1)')
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
     except sqlite3.OperationalError:
         pass
@@ -1196,6 +1258,17 @@ def _run_db_migrations(db):
         pass
     try:
         db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN profile_image TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS site_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT
+        )''')
     except sqlite3.OperationalError:
         pass
     try:
@@ -1811,6 +1884,15 @@ def index():
         elif current_user.role == 'patient':
             return redirect(url_for('patient_home'))
     return redirect(url_for('login'))
+
+
+@app.route('/about')
+def about_page():
+    settings = get_site_settings()
+    is_admin_preview = current_user.is_authenticated and current_user.role == 'admin'
+    if settings.get('about_enabled') != '1' and not is_admin_preview:
+        return 'Page not found', 404
+    return render_template('about.html', site_settings=settings, is_admin_preview=is_admin_preview)
 
 
 HEBREW_NUMBER_WORDS = {
@@ -3115,6 +3197,7 @@ def patient_home():
         FROM resources r
         JOIN patient_resources pr ON r.id = pr.resource_id
         WHERE pr.patient_id = ?
+          AND COALESCE(r.allow_patient_view, 1) = 1
         ORDER BY pr.assigned_at DESC
     ''', (patient_id,)).fetchall()
 
@@ -3435,8 +3518,67 @@ def download_receipt(receipt_id):
 @app.route('/resources')
 def public_resources():
     db = get_db()
-    resources = db.execute('SELECT * FROM resources WHERE is_public = 1 ORDER BY created_at DESC').fetchall()
+    resources = db.execute('''
+        SELECT *
+        FROM resources
+        WHERE is_public = 1 AND COALESCE(allow_patient_view, 1) = 1
+        ORDER BY created_at DESC
+    ''').fetchall()
     return render_template('resources.html', resources=resources, is_admin=False)
+
+
+def _can_access_resource(db, resource, action='view'):
+    if resource is None:
+        return False
+
+    if current_user.is_authenticated and current_user.role == 'admin':
+        return True
+
+    allow_view = int(resource['allow_patient_view'] or 0) == 1
+    allow_download = int(resource['allow_patient_download'] or 0) == 1
+
+    if action == 'download' and not allow_download:
+        return False
+    if not allow_view:
+        return False
+
+    if int(resource['is_public'] or 0) == 1:
+        return True
+
+    if current_user.is_authenticated and current_user.role == 'patient' and current_user.patient_id:
+        assigned = db.execute(
+            'SELECT 1 FROM patient_resources WHERE patient_id = ? AND resource_id = ?',
+            (current_user.patient_id, resource['id'])
+        ).fetchone()
+        return assigned is not None
+
+    return False
+
+
+@app.route('/resource/<int:resource_id>/open')
+def open_resource_link(resource_id):
+    db = get_db()
+    resource = db.execute('SELECT * FROM resources WHERE id = ?', (resource_id,)).fetchone()
+    if resource is None:
+        return 'Resource not found', 404
+    if not _can_access_resource(db, resource, action='view'):
+        return 'Access denied', 403
+    if not resource['url']:
+        return 'Resource URL not found', 404
+    return redirect(resource['url'])
+
+
+@app.route('/resource/<int:resource_id>/download')
+def download_resource_link(resource_id):
+    db = get_db()
+    resource = db.execute('SELECT * FROM resources WHERE id = ?', (resource_id,)).fetchone()
+    if resource is None:
+        return 'Resource not found', 404
+    if not _can_access_resource(db, resource, action='download'):
+        return 'Download not allowed', 403
+    if not resource['url']:
+        return 'Resource URL not found', 404
+    return redirect(resource['url'])
 
 @app.route('/admin/resources', methods=['GET', 'POST'])
 @login_required
@@ -3451,9 +3593,13 @@ def manage_resources():
         description = request.form.get('description', '')
         url = request.form.get('url', '')
         is_public = 1 if request.form.get('is_public') else 0
+        allow_patient_view = 1 if request.form.get('allow_patient_view') else 0
+        allow_patient_download = 1 if request.form.get('allow_patient_download') else 0
 
-        db.execute('INSERT INTO resources (title, description, url, is_public) VALUES (?, ?, ?, ?)',
-                   (title, description, url, is_public))
+        db.execute(
+            'INSERT INTO resources (title, description, url, is_public, allow_patient_view, allow_patient_download) VALUES (?, ?, ?, ?, ?, ?)',
+            (title, description, url, is_public, allow_patient_view, allow_patient_download)
+        )
         db.commit()
         flash('Resource added.')
         return redirect(url_for('manage_resources'))
@@ -3473,9 +3619,13 @@ def edit_resource(resource_id):
     description = request.form.get('description', '')
     url = request.form.get('url', '')
     is_public = 1 if request.form.get('is_public') else 0
+    allow_patient_view = 1 if request.form.get('allow_patient_view') else 0
+    allow_patient_download = 1 if request.form.get('allow_patient_download') else 0
     db = get_db()
-    db.execute('UPDATE resources SET title=?, description=?, url=?, is_public=? WHERE id=?',
-               (title, description, url, is_public, resource_id))
+    db.execute(
+        'UPDATE resources SET title=?, description=?, url=?, is_public=?, allow_patient_view=?, allow_patient_download=? WHERE id=?',
+        (title, description, url, is_public, allow_patient_view, allow_patient_download, resource_id)
+    )
     db.commit()
     flash('Resource updated.')
     return redirect(url_for('manage_resources'))
@@ -8676,11 +8826,12 @@ def download_file(name):
     file_record = db.execute('SELECT patient_id, treatment_id FROM files WHERE filename = ?', (name,)).fetchone()
 
     if not file_record:
-        # Maybe it's not in DB (dummy file). Allow admin.
+        profile_owner = db.execute('SELECT id FROM patients WHERE profile_image = ?', (name,)).fetchone()
         if current_user.role == 'admin':
-             return send_from_directory(app.config['UPLOAD_FOLDER'], name)
-        else:
-             return "File not found or access denied", 403
+            return send_from_directory(app.config['UPLOAD_FOLDER'], name)
+        if profile_owner and current_user.role == 'patient' and current_user.patient_id == profile_owner['id']:
+            return send_from_directory(app.config['UPLOAD_FOLDER'], name)
+        return "File not found or access denied", 403
 
     if current_user.role == 'admin' or (current_user.role == 'patient' and current_user.patient_id == file_record['patient_id']):
         if file_record['treatment_id']:
@@ -9749,17 +9900,33 @@ def admin_profile():
         return "Admin not found", 404
 
     if request.method == 'POST':
-        display_name = (request.form.get('display_name') or '').strip() or admin['username']
-        email = (request.form.get('email') or '').strip() or None
-        phone = (request.form.get('phone') or '').strip() or None
-        id_number = (request.form.get('id_number') or '').strip() or None
-        birth_date = request.form.get('birth_date') or None
+        display_name = request.form.get('display_name') if 'display_name' in request.form else (admin['display_name'] or admin['username'])
+        email = request.form.get('email') if 'email' in request.form else admin['email']
+        phone = request.form.get('phone') if 'phone' in request.form else admin['phone']
+        id_number = request.form.get('id_number') if 'id_number' in request.form else admin['id_number']
+        birth_date = request.form.get('birth_date') if 'birth_date' in request.form else admin['birth_date']
+
+        display_name = (display_name or '').strip() or admin['username']
+        email = (email or '').strip() or None
+        phone = (phone or '').strip() or None
+        id_number = (id_number or '').strip() or None
+        birth_date = birth_date or None
 
         db.execute('''
             UPDATE users
             SET display_name = ?, email = ?, phone = ?, id_number = ?, birth_date = ?
             WHERE id = ?
         ''', (display_name, email, phone, id_number, birth_date, current_user.id))
+
+        if any(key in request.form for key in DEFAULT_SITE_SETTINGS.keys()):
+            save_site_settings(db, {
+                'about_enabled': '1' if request.form.get('about_enabled') else '0',
+                'about_phone': (request.form.get('about_phone') or '').strip(),
+                'about_email': (request.form.get('about_email') or '').strip(),
+                'about_text': (request.form.get('about_text') or '').strip(),
+                'about_map_url': (request.form.get('about_map_url') or '').strip(),
+            })
+
         db.commit()
         flash('Admin profile updated.')
         return redirect(url_for('admin_profile'))
@@ -9773,6 +9940,7 @@ def admin_profile():
         backup_files=backup_files,
         pending_totp_secret=pending_secret,
         totp_uri=totp_uri,
+        site_settings=get_site_settings(db),
         totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
     )
 
@@ -10368,6 +10536,45 @@ def api_update_group_session(session_id):
 
     db.commit()
     return jsonify({'status': 'success'})
+
+@app.route('/patient/<int:patient_id>/upload-photo', methods=('POST',))
+@login_required
+def upload_patient_photo(patient_id):
+    if current_user.role != 'admin' and not (current_user.role == 'patient' and current_user.patient_id == patient_id):
+        return "Unauthorized", 403
+
+    photo = request.files.get('photo')
+    if photo is None or not (photo.filename or '').strip():
+        flash('Please choose an image file.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    extension = os.path.splitext(photo.filename)[1].lower()
+    if extension not in {'.png', '.jpg', '.jpeg', '.gif', '.webp'}:
+        flash('Please upload a PNG, JPG, GIF, or WEBP image.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    filename = secure_filename(f'patient_{patient_id}_{secrets.token_hex(6)}{extension}')
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    photo.save(save_path)
+
+    db = get_db()
+    existing = db.execute('SELECT profile_image FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    old_image = existing['profile_image'] if existing else None
+    db.execute('UPDATE patients SET profile_image = ? WHERE id = ?', (filename, patient_id))
+    db.commit()
+
+    if old_image:
+        old_path = os.path.join(app.config['UPLOAD_FOLDER'], old_image)
+        if os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+
+    flash('Profile picture updated.')
+    return redirect_to_patient_tab(patient_id, 'info')
+
 
 @app.route('/patient/<int:patient_id>/edit_info', methods=('POST',))
 @login_required

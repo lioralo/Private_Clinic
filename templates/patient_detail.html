@@ -7,7 +7,17 @@
 {% set canonical_status = 'candidate' if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else patient['status'] %}
 
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
-    <div>
+    <div class="d-flex align-items-start gap-3 flex-wrap">
+        <div>
+            {% if patient['profile_image'] %}
+            <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover" style="width:76px;height:76px;">
+            {% else %}
+            <div class="rounded-circle bg-light border shadow-sm d-flex align-items-center justify-content-center text-primary" style="width:76px;height:76px;">
+                <i class="bi bi-person-fill" style="font-size:2rem;"></i>
+            </div>
+            {% endif %}
+        </div>
+        <div>
         <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
             <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
                 <i class="bi bi-arrow-left me-1"></i>{{ t('Patients') }}
@@ -37,6 +47,7 @@
             {% if patient['email'] %}<span class="mx-2">•</span>{{ patient['email'] }}{% endif %}
             {% if patient['phone'] %}<span class="mx-2">•</span>{{ patient['phone'] }}{% endif %}
         </p>
+        </div>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="{{ url_for('edit_patient', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill">
@@ -712,6 +723,26 @@
     </div>
 
     <div class="col-xl-4">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-camera me-2 text-primary"></i>{{ t('Profile Picture') }}</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if patient['profile_image'] %}
+                <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover mb-3" style="width:112px;height:112px;">
+                {% else %}
+                <div class="rounded-circle bg-light border shadow-sm d-inline-flex align-items-center justify-content-center text-primary mb-3" style="width:112px;height:112px;">
+                    <i class="bi bi-person-fill" style="font-size:2.4rem;"></i>
+                </div>
+                {% endif %}
+                <form method="post" action="{{ url_for('upload_patient_photo', patient_id=patient['id']) }}" enctype="multipart/form-data" class="d-grid gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="file" name="photo" class="form-control form-control-sm" accept="image/*" required>
+                    <button type="submit" class="btn btn-outline-primary rounded-pill">{{ t('Upload Photo') }}</button>
+                </form>
+            </div>
+        </div>
+
         <div class="card border-0 shadow-sm patient-actions-panel">
             <div class="card-header">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-sliders2 me-2 text-primary"></i>{{ t('Actions') }}</h5>

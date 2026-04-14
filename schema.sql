@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS patients (
     has_intake_tab BOOLEAN DEFAULT 0,
     intake_assessment TEXT,
     intake_questionnaire TEXT,
+    profile_image TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -137,4 +138,29 @@ CREATE TABLE IF NOT EXISTS schedules (
     appointment_time TIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
+);
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    url TEXT,
+    is_public BOOLEAN DEFAULT 0,
+    allow_patient_view BOOLEAN DEFAULT 1,
+    allow_patient_download BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS patient_resources (
+    patient_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (patient_id, resource_id),
+    FOREIGN KEY (patient_id) REFERENCES patients (id),
+    FOREIGN KEY (resource_id) REFERENCES resources (id)
+);
+
+CREATE TABLE IF NOT EXISTS site_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT
 );

@@ -3174,6 +3174,88 @@ class ClinicTestCase(unittest.TestCase):
         self.assertIn('data-panel-id="noteCollapse7"', html)
         self.assertIn('toggleStablePanel(this)', html)
 
+    def test_admin_profile_shows_about_settings_controls(self):
+        self.login('lioraloni', 'Flo@tingind4')
+
+        rv = self.client.get('/admin/profile', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('name="about_enabled"', html)
+        self.assertIn('name="about_phone"', html)
+        self.assertIn('name="about_email"', html)
+        self.assertIn('name="about_map_url"', html)
+
+    def test_public_about_page_uses_saved_admin_settings(self):
+        self.login('lioraloni', 'Flo@tingind4')
+
+        self.client.post('/admin/profile', data={
+            'display_name': 'Clinic Admin',
+            'email': 'admin@example.com',
+            'phone': '050-1111111',
+            'id_number': '1234',
+            'birth_date': '1990-01-01',
+            'about_enabled': '1',
+            'about_phone': '050-2222222',
+            'about_email': 'care@example.com',
+            'about_text': 'Warm and welcoming clinic care.',
+            'about_map_url': 'https://maps.example.com/clinic'
+        }, follow_redirects=True)
+
+        self.logout()
+        rv = self.client.get('/about', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('Warm and welcoming clinic care.', html)
+        self.assertIn('050-2222222', html)
+        self.assertIn('care@example.com', html)
+
+    def test_patient_photo_upload_persists_profile_image(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='Photo Patient', status='ongoing'), follow_redirects=True)
+
+        rv = self.client.post(
+            '/patient/1/upload-photo',
+            data={
+                'photo': (io.BytesIO(b'fake image bytes'), 'avatar.jpg')
+            },
+            content_type='multipart/form-data',
+            follow_redirects=True,
+        )
+
+        self.assertEqual(rv.status_code, 200)
+        with app.app_context():
+            db = get_db()
+            patient = db.execute('SELECT profile_image FROM patients WHERE id = 1').fetchone()
+            self.assertIsNotNone(patient['profile_image'])
+            self.assertTrue(patient['profile_image'].endswith('.jpg'))
+
+    def test_public_resources_respect_view_permissions(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/admin/resources', data={
+            'title': 'Visible Resource',
+            'description': 'Shown to patients',
+            'url': 'https://example.com/view',
+            'is_public': '1',
+            'allow_patient_view': '1',
+            'allow_patient_download': '1',
+        }, follow_redirects=True)
+        self.client.post('/admin/resources', data={
+            'title': 'Hidden Resource',
+            'description': 'Should stay hidden',
+            'url': 'https://example.com/hidden',
+            'is_public': '1',
+        }, follow_redirects=True)
+
+        self.logout()
+        rv = self.client.get('/resources', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('Visible Resource', html)
+        self.assertNotIn('Hidden Resource', html)
+
 class TemplateFilterTests(unittest.TestCase):
     def test_from_iso_date_valid(self):
         self.assertEqual(from_iso_date('2023-10-25'), date(2023, 10, 25))

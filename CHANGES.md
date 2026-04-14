@@ -2,6 +2,39 @@
 
 ---
 
+## Session 45
+
+**Date:** 2026-04-14
+
+**Objective:** Finish the requested profile/settings polish by stabilizing filters, adding collapsible admin/calendar panels, enabling patient photos, introducing a public About page, tightening header responsiveness, and improving resource access control.
+
+**Release Summary:**
+
+1. **UI + Responsive Polish**
+- Slimmed the top ribbon/navigation so it stays out of the way more reliably on smaller windows.
+- Stabilized the quick-filter buttons so selecting All no longer changes the box size or creates a jarring bold-state jump.
+- Made the calendar right-side panels collapsible from their headers for a cleaner workflow.
+
+2. **Admin Profile + Public About Page**
+- Reworked the admin profile so the first card stays open while the other sections can be expanded on demand.
+- Added editable About-page settings for clinic contact phone, email, summary text, map link, and a public on/off toggle.
+- Added a new public About page plus preview access for the admin.
+
+3. **Patient Photos + Resource Permissions**
+- Added patient profile picture upload support and surfaced the avatar across the CRM roster, patient detail view, and patient portal.
+- Expanded resource management with explicit patient view/download permissions and enforced those rules in the public/patient resource links.
+
+4. **Translation Cleanup**
+- Localized the newly touched login, profile, resources, and About-page text into Hebrew so the experience is more consistent across screens.
+
+5. **Validation**
+- Added focused regressions for About-page settings, patient photo upload, and resource visibility rules.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 149 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 44
 
 **Date:** 2026-04-14

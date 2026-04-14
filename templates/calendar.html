@@ -50,12 +50,12 @@
             </div>
             <div class="chip-row align-items-center" id="calendarFilters">
                 <span class="small fw-semibold text-muted me-1">{{ t('Filters:') }}</span>
-            <button type="button" class="btn btn-sm rounded-pill btn-primary filter-chip" data-filter="all">{{ t('All') }}</button>
-            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="ongoing">{{ t('Ongoing') }}</button>
-            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="candidate">{{ t('Candidate/Waiting') }}</button>
-            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="archived">{{ t('Archived') }}</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-primary filter-chip stable-filter-btn" data-filter="all">{{ t('All') }}</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="ongoing">{{ t('Ongoing') }}</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="candidate">{{ t('Candidate/Waiting') }}</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="archived">{{ t('Archived') }}</button>
             {% if current_user.role == 'admin' %}
-            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip" data-filter="blocked">{{ t('Blocked') }}</button>
+            <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="blocked">{{ t('Blocked') }}</button>
             {% endif %}
             </div>
         </div>
@@ -92,27 +92,36 @@
     </div>
     <div class="calendar-side-stack">
         <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white border-0">
+            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#followUpAlertsWrap" aria-expanded="true" aria-controls="followUpAlertsWrap">
                 <h6 class="fw-bold mb-0 text-primary">{{ t('Follow-Up Indicators') }}</h6>
-            </div>
-            <div class="card-body" id="followUpAlerts">
-                <div class="small text-muted">{{ t('No pending follow-up indicators.') }}</div>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse show" id="followUpAlertsWrap">
+                <div class="card-body" id="followUpAlerts">
+                    <div class="small text-muted">{{ t('No pending follow-up indicators.') }}</div>
+                </div>
             </div>
         </div>
         <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <div class="card-header bg-white border-0">
+            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#fridaySpecialsWrap" aria-expanded="false" aria-controls="fridaySpecialsWrap">
                 <h6 class="fw-bold mb-0 text-primary">{{ t('Friday Blocked') }}</h6>
-            </div>
-            <div class="card-body weekend-stack" id="fridaySpecials">
-                <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="fridaySpecialsWrap">
+                <div class="card-body weekend-stack" id="fridaySpecials">
+                    <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                </div>
             </div>
         </div>
         <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-header bg-white border-0">
+            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#saturdaySpecialsWrap" aria-expanded="false" aria-controls="saturdaySpecialsWrap">
                 <h6 class="fw-bold mb-0 text-primary">{{ t('Saturday Blocked') }}</h6>
-            </div>
-            <div class="card-body weekend-stack" id="saturdaySpecials">
-                <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="saturdaySpecialsWrap">
+                <div class="card-body weekend-stack" id="saturdaySpecials">
+                    <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                </div>
             </div>
         </div>
     </div>

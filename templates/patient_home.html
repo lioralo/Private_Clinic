@@ -2,9 +2,18 @@
 
 {% block content %}
 <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-    <div>
-        <h1 class="text-3xl font-extrabold text-primary tracking-tight">{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}</h1>
-        <p class="text-slate-500 mt-1">{{ t('Here is your current status') }}</p>
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+        {% if patient['profile_image'] %}
+        <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover" style="width:72px;height:72px;">
+        {% else %}
+        <div class="rounded-circle bg-light border shadow-sm d-inline-flex align-items-center justify-content-center text-primary" style="width:72px;height:72px;">
+            <i class="bi bi-person-fill" style="font-size:1.8rem;"></i>
+        </div>
+        {% endif %}
+        <div>
+            <h1 class="text-3xl font-extrabold text-primary tracking-tight">{{ t('Welcome back') }}, {{ patient['name'].split()[0] }}</h1>
+            <p class="text-slate-500 mt-1">{{ t('Here is your current status') }}</p>
+        </div>
     </div>
     {% if patient['can_self_schedule'] %}
     <a href="{{ url_for('weekly_calendar') }}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-all">
@@ -216,10 +225,17 @@
                         {% if res['description'] %}
                         <div class="text-muted" style="font-size:.8rem;">{{ res['description'] }}</div>
                         {% endif %}
-                        {% if res['url'] %}
-                        <a href="{{ res['url'] }}" target="_blank" class="text-primary small">
-                            <i class="bi bi-link-45deg me-1"></i>{{ t('Open') }}
-                        </a>
+                        {% if res['url'] and (res['allow_patient_view'] or 0) %}
+                        <div class="d-flex gap-2 flex-wrap mt-2">
+                            <a href="{{ url_for('open_resource_link', resource_id=res['id']) }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill">
+                                <i class="bi bi-link-45deg me-1"></i>{{ t('Open') }}
+                            </a>
+                            {% if res['allow_patient_download'] %}
+                            <a href="{{ url_for('download_resource_link', resource_id=res['id']) }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill">
+                                <i class="bi bi-download me-1"></i>{{ t('Download') }}
+                            </a>
+                            {% endif %}
+                        </div>
                         {% endif %}
                     </div>
                     {% endfor %}

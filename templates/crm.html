@@ -67,19 +67,19 @@
     
     <!-- Quick access to patient filters -->
     <div class="d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm stable-filter-btn {% if status == 'all' and not show_deleted %}btn-primary{% else %}btn-outline-primary{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'all' and not show_deleted %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-people-fill me-1"></i>{{ t('All') }} ({{ counts.get('all', 0) }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm stable-filter-btn {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}btn-warning{% else %}btn-outline-warning{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-hourglass-split me-1"></i>{{ t('Candidates') }} ({{ counts.get('waiting', 0) }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-success stable-filter-btn rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'ongoing' %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-heart-pulse me-1"></i>{{ t('Active') }} ({{ counts['ongoing'] }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-secondary stable-filter-btn rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'archived' %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-archive me-1"></i>{{ t('Archived') }} ({{ counts['archived'] }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status=status, clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='true') }}" class="btn btn-sm btn-outline-danger stable-filter-btn rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status=status, clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='true') }}" class="btn btn-sm btn-outline-danger stable-filter-btn {% if show_deleted %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-trash me-1"></i>{{ t('Deleted') }} ({{ counts.get('deleted', 0) }})
         </a>
     </div>
@@ -194,11 +194,20 @@
                 <td class="crm-drag-handle" title="{{ t('Drag to reorder') }}"><i class="bi bi-grip-vertical text-muted"></i></td>
                 {% endif %}
                 <td>
-                    <span class="fw-semibold">{{ patient['name'] }}</span>
-                    {% if patient['can_self_schedule'] %}<i class="bi bi-calendar2-check text-success ms-1" title="{{ t('Self-booking enabled') }}"></i>{% endif %}
-                    {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
-                    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none ms-1" title="{{ t('Unread messages') }}">{{ patient['unread_messages'] }}</a>
-                    {% endif %}
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        {% if patient['profile_image'] %}
+                        <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border object-fit-cover" style="width:34px;height:34px;">
+                        {% else %}
+                        <span class="rounded-circle bg-light border d-inline-flex align-items-center justify-content-center text-primary" style="width:34px;height:34px;">
+                            <i class="bi bi-person-fill"></i>
+                        </span>
+                        {% endif %}
+                        <span class="fw-semibold">{{ patient['name'] }}</span>
+                        {% if patient['can_self_schedule'] %}<i class="bi bi-calendar2-check text-success ms-1" title="{{ t('Self-booking enabled') }}"></i>{% endif %}
+                        {% if patient['unread_messages'] and patient['unread_messages']|int > 0 %}
+                        <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='messages') }}" class="badge bg-danger text-decoration-none ms-1" title="{{ t('Unread messages') }}">{{ patient['unread_messages'] }}</a>
+                        {% endif %}
+                    </div>
                 </td>
                 <td>
                     {% if patient['status'] == 'ongoing' %}
@@ -259,8 +268,17 @@
         {% else %}patient-status-archived{% endif %}"
         data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}"
         data-patient-id="{{ patient['id'] }}">
-        <div class="crm-card-header">
-            <span class="crm-card-name">{{ patient['name'] }}</span>
+        <div class="crm-card-header d-flex align-items-center justify-content-between gap-2">
+            <div class="d-flex align-items-center gap-2">
+                {% if patient['profile_image'] %}
+                <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border object-fit-cover" style="width:38px;height:38px;">
+                {% else %}
+                <span class="rounded-circle bg-light border d-inline-flex align-items-center justify-content-center text-primary" style="width:38px;height:38px;">
+                    <i class="bi bi-person-fill"></i>
+                </span>
+                {% endif %}
+                <span class="crm-card-name">{{ patient['name'] }}</span>
+            </div>
             {% if patient['can_self_schedule'] %}<i class="bi bi-calendar2-check text-success" title="{{ t('Self-booking enabled') }}"></i>{% endif %}
         </div>
         <div class="crm-card-body">

@@ -23,10 +23,17 @@
                         <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
                     </a>
                     <span class="control-divider">•</span>
-                    <a href="{{ url_for('public_resources') }}" class="login-control-link" title="Resources">
+                    <a href="{{ url_for('public_resources') }}" class="login-control-link" title="{{ t('Resources') }}">
                         <i class="bi bi-bookmark"></i>
                         <span>{{ t('Resources') }}</span>
                     </a>
+                    {% if site_settings.get('about_enabled') == '1' %}
+                    <span class="control-divider">•</span>
+                    <a href="{{ url_for('about_page') }}" class="login-control-link" title="{{ t('About') }}">
+                        <i class="bi bi-info-circle"></i>
+                        <span>{{ t('About') }}</span>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -67,7 +74,7 @@
                                 maxlength="6"
                                 required 
                                 autofocus>
-                            <small class="form-text">Enter the 6-digit code from your authenticator app</small>
+                            <small class="form-text">{{ t('Enter the 6-digit code from your authenticator app') }}</small>
                         </div>
 
                         <button type="submit" class="btn btn-primary btn-lg btn-verify w-100">
@@ -113,7 +120,7 @@
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3">
-                            Sign In <i class="bi bi-arrow-right ms-2"></i>
+                            {{ t('Sign In') }} <i class="bi bi-arrow-right ms-2"></i>
                         </button>
                     </div>
                     {% endif %}
@@ -129,7 +136,7 @@
                     {% endif %}
                     <p class="security-info">
                         <i class="bi bi-shield-lock me-1"></i>
-                        HIPAA Compliant Secure Portal
+                        {{ t('Secure client portal') }}
                     </p>
                 </div>
             </div>
@@ -187,11 +194,15 @@
 .logo-wrapper {
     margin-bottom: 2rem;
     animation: slideDown 0.6s ease;
+    display: flex;
+    justify-content: center;
 }
 
 .clinic-logo-large {
     height: 200px;
     width: auto;
+    display: block;
+    margin: 0 auto;
     object-fit: contain;
     filter: drop-shadow(0 2px 8px rgba(86, 118, 182, 0.15));
     transition: transform 0.3s ease;

@@ -109,13 +109,26 @@
             justify-content: center;
             gap: 0.35rem;
             white-space: nowrap;
+            font-weight: 600 !important;
+            line-height: 1.2;
+            box-sizing: border-box;
+            border-width: 1px !important;
+            transform: none !important;
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stable-filter-btn:hover,
+        .stable-filter-btn:focus,
+        .stable-filter-btn:active {
+            font-weight: 600 !important;
+            transform: none !important;
         }
 
         .stable-filter-btn.is-selected {
             background-color: rgba(86, 118, 182, 0.12) !important;
             color: #36538a !important;
             border-color: rgba(86, 118, 182, 0.45) !important;
+            box-shadow: none !important;
         }
 
         .notification-history-item {
@@ -251,12 +264,12 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {# Top Header #}
-        <header class="fixed top-0 {% if lang == 'he' %}left-0 lg:right-64{% else %}right-0 lg:left-64{% endif %} bg-white/85 backdrop-blur-md z-30 flex justify-between items-center px-4 lg:px-8 py-4 shadow-sm border-b border-slate-200 gap-3">
+        <header class="fixed top-0 {% if lang == 'he' %}left-0 lg:right-64{% else %}right-0 lg:left-64{% endif %} bg-white/88 backdrop-blur-md z-30 flex justify-between items-center flex-wrap px-3 lg:px-6 py-2.5 shadow-sm border-b border-slate-200 gap-2">
             <div class="flex items-center gap-6">
                 <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
                     <i class="bi bi-list" style="font-size:20px"></i>
                 </button>
-                <h2 class="text-xl font-bold text-teal-900 tracking-tight">
+                <h2 class="text-lg lg:text-xl font-bold text-teal-900 tracking-tight">
                     {% block page_title %}{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni Clinic{% endif %}{% endblock %}
                 </h2>
             </div>
@@ -292,11 +305,11 @@
         {% endfor %}
 
         {# Page content wrapper #}
-        <main class="mt-16 p-4 sm:p-5 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
+        <main class="mt-14 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}
-<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center px-6 py-4">
+<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
     <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
             <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
@@ -322,6 +335,11 @@
         <a href="{{ url_for('public_resources') }}" class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors hidden sm:block">
             {{ t('Resources') }}
         </a>
+        {% if site_settings.get('about_enabled') == '1' %}
+        <a href="{{ url_for('about_page') }}" class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors hidden sm:block">
+            {{ t('About') }}
+        </a>
+        {% endif %}
         <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
            class="text-slate-500 hover:text-teal-700 font-medium text-sm px-3 py-1.5 border border-slate-200 rounded-full transition-colors">
             {% if lang == 'en' %}עברית{% else %}English{% endif %}
@@ -330,7 +348,7 @@
            class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors">{{ t('Logout') }}</a>
     </div>
 </nav>
-<main class="pt-20 px-4 pb-10 max-w-4xl mx-auto app-shell">
+<main class="pt-16 px-4 pb-10 max-w-4xl mx-auto app-shell">
     {% for message in get_flashed_messages() %}
     <div class="mt-4 flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
         <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>
@@ -343,7 +361,7 @@
 
 {% else %}
 {# ── PUBLIC / UNAUTHENTICATED ─────────────────────────────────── #}
-<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center px-6 py-4">
+<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
     <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
             <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
@@ -357,6 +375,12 @@
            class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors hidden sm:block">
             {{ t('Resources') }}
         </a>
+        {% if site_settings.get('about_enabled') == '1' %}
+        <a href="{{ url_for('about_page') }}"
+           class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors hidden sm:block">
+            {{ t('About') }}
+        </a>
+        {% endif %}
         <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
            class="text-slate-500 hover:text-teal-700 font-medium text-sm px-3 py-1.5 border border-slate-200 rounded-full transition-colors">
             {% if lang == 'en' %}עברית{% else %}English{% endif %}
@@ -367,7 +391,7 @@
         </a>
     </div>
 </nav>
-<main class="pt-20 px-4 pb-10 app-shell">
+<main class="pt-16 px-4 pb-10 app-shell">
     {% for message in get_flashed_messages() %}
     <div class="mt-4 max-w-2xl mx-auto flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
         <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>

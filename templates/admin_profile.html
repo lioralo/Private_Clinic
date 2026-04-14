@@ -2,190 +2,236 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-lg-7">
-        <div class="card border-0 shadow-sm rounded-4">
+    <div class="col-xl-8 col-lg-9">
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-header bg-white border-0 py-3">
                 <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-person-gear me-2"></i>{{ t('Admin Profile') }}</h4>
             </div>
             <div class="card-body p-4">
-                <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('Display Name') }}</label>
-                            <input class="form-control" name="display_name" value="{{ admin['display_name'] or admin['username'] }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('Username') }}</label>
-                            <input class="form-control" value="{{ admin['username'] }}" disabled>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('Email') }}</label>
-                            <input type="email" class="form-control" name="email" value="{{ admin['email'] or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('Phone') }}</label>
-                            <input class="form-control" name="phone" value="{{ admin['phone'] or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('ID Number') }}</label>
-                            <input class="form-control" name="id_number" value="{{ admin['id_number'] or '' }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small">{{ t('Date of Birth') }}</label>
-                            <input type="date" class="form-control" name="birth_date" value="{{ admin['birth_date'] or '' }}">
-                        </div>
-                        <div class="col-12 pt-2">
-                            <button class="btn btn-primary rounded-pill px-4" type="submit">
-                                <i class="bi bi-save me-1"></i>{{ t('Save Profile') }}
-                            </button>
-                            <button class="btn btn-outline-secondary rounded-pill px-4 ms-2" type="submit" formaction="{{ url_for('backup_now') }}" formmethod="post">
-                                <i class="bi bi-shield-lock me-1"></i>{{ t('Create Encrypted Backup') }}
-                            </button>
-                        </div>
-                    </div>
-                </form>
-
-                <hr class="my-4">
-                <h6 class="fw-bold text-primary mb-2"><i class="bi bi-shield-lock me-1"></i>{{ t('Authenticator Security') }}</h6>
-                <p class="small text-muted mb-3">
-                    {{ t('Use Google Authenticator for two-step admin login and password changes.') }}
-                </p>
-
-                {% if admin['totp_enabled'] %}
-                <div class="alert alert-success py-2 small">
-                    <i class="bi bi-check-circle me-1"></i>{{ t('Authenticator is enabled for this admin account.') }}
-                </div>
-                <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-4">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="disable">
-                    <button class="btn btn-outline-danger rounded-pill" type="submit">
-                        <i class="bi bi-shield-x me-1"></i>{{ t('Disable Authenticator') }}
-                    </button>
-                </form>
-                {% else %}
-                <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="start">
-                    <button class="btn btn-primary rounded-pill" type="submit">
-                        <i class="bi bi-qr-code-scan me-1"></i>{{ t('Start Authenticator Setup') }}
-                    </button>
-                </form>
-                {% endif %}
-
-                {% if pending_totp_secret %}
-                <div class="border rounded-4 p-3 mb-4 bg-light">
-                    <div class="row g-3 align-items-center">
-                        <div class="col-md-4 text-center">
-                            {% if totp_qr_url %}
-                            <img src="{{ totp_qr_url }}" alt="Authenticator QR" class="img-fluid rounded border bg-white p-2" style="max-width:220px;">
-                            {% endif %}
-                        </div>
-                        <div class="col-md-8">
-                            <p class="small mb-2">
-                                {{ t('Scan the QR with Google Authenticator or enter this setup key manually:') }}
-                            </p>
-                            <code class="d-block small mb-3 p-2 bg-white border rounded">{{ pending_totp_secret }}</code>
-                            <form method="post" action="{{ url_for('setup_authenticator') }}" class="row g-2">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="action" value="verify">
-                                <div class="col-sm-7">
-                                    <input type="text" name="otp_code" class="form-control" inputmode="numeric" placeholder="{{ t('Enter 6-digit code') }}" required>
-                                </div>
-                                <div class="col-sm-5 d-grid">
-                                    <button class="btn btn-success rounded-pill" type="submit">
-                                        <i class="bi bi-check2-circle me-1"></i>{{ t('Verify Authenticator') }}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-
-                <h6 class="fw-bold text-primary mb-2"><i class="bi bi-key me-1"></i>{{ t('Change Admin Password') }}</h6>
-                <p class="small text-muted mb-3">
-                    {{ t('Password change requires current password and authenticator code (two-step verification).') }}
-                </p>
-                <form method="post" action="{{ url_for('admin_change_password') }}" class="row g-2 mb-4">
+                <form method="post" class="row g-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="col-md-6">
-                        <input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required>
+                        <label class="form-label fw-bold small">{{ t('Display Name') }}</label>
+                        <input class="form-control" name="display_name" value="{{ admin['display_name'] or admin['username'] }}" required>
                     </div>
                     <div class="col-md-6">
-                        <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code') }}" required>
+                        <label class="form-label fw-bold small">{{ t('Username') }}</label>
+                        <input class="form-control" value="{{ admin['username'] }}" disabled>
                     </div>
                     <div class="col-md-6">
-                        <input type="password" class="form-control" name="new_password" placeholder="{{ t('New Password') }}" required>
+                        <label class="form-label fw-bold small">{{ t('Email') }}</label>
+                        <input type="email" class="form-control" name="email" value="{{ admin['email'] or '' }}">
                     </div>
                     <div class="col-md-6">
-                        <input type="password" class="form-control" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
+                        <label class="form-label fw-bold small">{{ t('Phone') }}</label>
+                        <input class="form-control" name="phone" value="{{ admin['phone'] or '' }}">
                     </div>
-                    <div class="col-12">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">{{ t('ID Number') }}</label>
+                        <input class="form-control" name="id_number" value="{{ admin['id_number'] or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold small">{{ t('Date of Birth') }}</label>
+                        <input type="date" class="form-control" name="birth_date" value="{{ admin['birth_date'] or '' }}">
+                    </div>
+                    <div class="col-12 pt-2 d-flex flex-wrap gap-2">
                         <button class="btn btn-primary rounded-pill px-4" type="submit">
-                            <i class="bi bi-shield-check me-1"></i>{{ t('Update Password') }}
+                            <i class="bi bi-save me-1"></i>{{ t('Save Profile') }}
                         </button>
-                    </div>
-                </form>
-
-                <hr class="my-4">
-                <h6 class="fw-bold text-danger mb-2"><i class="bi bi-arrow-counterclockwise me-1"></i>{{ t('Restore From Encrypted Backup') }}</h6>
-                <p class="small text-muted mb-3">
-                    {{ t('Restoring will replace the current database with the selected backup. A safety copy of the current DB is created automatically before restore.') }}
-                </p>
-                <form method="post" action="{{ url_for('restore_backup_now') }}" onsubmit="return confirm('{{ t('Restore selected backup? This will replace current live data.') }}');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-9">
-                            <label class="form-label fw-bold small">{{ t('Backup File') }}</label>
-                            <select class="form-select" name="backup_file" {% if not backup_files %}disabled{% endif %}>
-                                {% for backup_file in backup_files %}
-                                    <option value="{{ backup_file['name'] }}">{{ backup_file['name'] }} - {{ (backup_file['size'] / 1024)|round(1) }} KB</option>
-                                {% else %}
-                                <option value="">{{ t('No encrypted backups found') }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-3 d-grid">
-                            <button class="btn btn-danger rounded-pill" type="submit" {% if not backup_files %}disabled{% endif %}>
-                                <i class="bi bi-arrow-repeat me-1"></i>{{ t('Restore Backup') }}
-                            </button>
-                        </div>
+                        <button class="btn btn-outline-secondary rounded-pill px-4" type="submit" formaction="{{ url_for('backup_now') }}" formmethod="post">
+                            <i class="bi bi-shield-lock me-1"></i>{{ t('Create Encrypted Backup') }}
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- Google Calendar Integration -->
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
-            <div class="card-header bg-white border-0 py-3">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-check me-2 text-success"></i>{{ t('Google Calendar Integration') }}</h5>
-            </div>
-            <div class="card-body p-4">
-                <div id="gcalStatus" class="mb-3">
-                    <span class="text-muted small"><i class="bi bi-hourglass me-1"></i>{{ t('Checking Google Calendar connection...') }}</span>
-                </div>
-                <div id="gcalActions" class="d-flex flex-wrap gap-2">
-                    <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
-                        <i class="bi bi-google me-1"></i>{{ t('Connect Google Calendar') }}
-                    </a>
-                    <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="d-none" id="gcalDisconnectForm">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#aboutSettingsCollapse" aria-expanded="false" aria-controls="aboutSettingsCollapse">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2 text-primary"></i>{{ t('About Page Settings') }}</h5>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="aboutSettingsCollapse">
+                <div class="card-body p-4">
+                    <form method="post" class="row g-3">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
-                            <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect') }}
-                        </button>
+                        <div class="col-12 form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="about_enabled" id="aboutEnabledSwitch" {% if site_settings.get('about_enabled') == '1' %}checked{% endif %}>
+                            <label class="form-check-label fw-semibold" for="aboutEnabledSwitch">{{ t('Show public About page') }}</label>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">{{ t('Contact Phone') }}</label>
+                            <input class="form-control" name="about_phone" value="{{ site_settings.get('about_phone', '') }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">{{ t('Contact Email') }}</label>
+                            <input type="email" class="form-control" name="about_email" value="{{ site_settings.get('about_email', '') }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">{{ t('Short About Text') }}</label>
+                            <textarea class="form-control" name="about_text" rows="4">{{ site_settings.get('about_text', '') }}</textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">{{ t('Map URL') }}</label>
+                            <input class="form-control" name="about_map_url" value="{{ site_settings.get('about_map_url', '') }}" placeholder="https://maps.google.com/...">
+                        </div>
+                        <div class="col-12 d-flex flex-wrap gap-2">
+                            <button class="btn btn-primary rounded-pill px-4" type="submit">{{ t('Save About Settings') }}</button>
+                            {% if site_settings.get('about_enabled') == '1' %}
+                            <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary rounded-pill" target="_blank">{{ t('Preview About Page') }}</a>
+                            {% endif %}
+                        </div>
                     </form>
                 </div>
-                <div class="d-none mt-3" id="gcalCalendarSelector">
-                    <label class="form-label small fw-semibold">{{ t('Choose calendar to sync to') }}</label>
-                    <div class="d-flex gap-2">
-                        <select id="gcalCalendarSelect" class="form-select form-select-sm"></select>
-                        <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#securityCollapse" aria-expanded="false" aria-controls="securityCollapse">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-primary"></i>{{ t('Authenticator Security') }}</h5>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="securityCollapse">
+                <div class="card-body p-4">
+                    <p class="small text-muted mb-3">{{ t('Use Google Authenticator for two-step admin login and password changes.') }}</p>
+
+                    {% if admin['totp_enabled'] %}
+                    <div class="alert alert-success py-2 small">
+                        <i class="bi bi-check-circle me-1"></i>{{ t('Authenticator is enabled for this admin account.') }}
                     </div>
+                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="disable">
+                        <button class="btn btn-outline-danger rounded-pill" type="submit">
+                            <i class="bi bi-shield-x me-1"></i>{{ t('Disable Authenticator') }}
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="start">
+                        <button class="btn btn-primary rounded-pill" type="submit">
+                            <i class="bi bi-qr-code-scan me-1"></i>{{ t('Start Authenticator Setup') }}
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    {% if pending_totp_secret %}
+                    <div class="border rounded-4 p-3 mb-4 bg-light">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-4 text-center">
+                                {% if totp_qr_url %}
+                                <img src="{{ totp_qr_url }}" alt="Authenticator QR" class="img-fluid rounded border bg-white p-2" style="max-width:220px;">
+                                {% endif %}
+                            </div>
+                            <div class="col-md-8">
+                                <p class="small mb-2">{{ t('Scan the QR with Google Authenticator or enter this setup key manually:') }}</p>
+                                <code class="d-block small mb-3 p-2 bg-white border rounded">{{ pending_totp_secret }}</code>
+                                <form method="post" action="{{ url_for('setup_authenticator') }}" class="row g-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="verify">
+                                    <div class="col-sm-7">
+                                        <input type="text" name="otp_code" class="form-control" inputmode="numeric" placeholder="{{ t('Enter 6-digit code') }}" required>
+                                    </div>
+                                    <div class="col-sm-5 d-grid">
+                                        <button class="btn btn-success rounded-pill" type="submit">
+                                            <i class="bi bi-check2-circle me-1"></i>{{ t('Verify Authenticator') }}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <h6 class="fw-bold text-primary mb-2"><i class="bi bi-key me-1"></i>{{ t('Change Admin Password') }}</h6>
+                    <p class="small text-muted mb-3">{{ t('Password change requires current password and authenticator code (two-step verification).') }}</p>
+                    <form method="post" action="{{ url_for('admin_change_password') }}" class="row g-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-md-6">
+                            <input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="password" class="form-control" name="new_password" placeholder="{{ t('New Password') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="password" class="form-control" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-primary rounded-pill px-4" type="submit">
+                                <i class="bi bi-shield-check me-1"></i>{{ t('Update Password') }}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <p class="text-muted small mt-3 mb-0">
-                    {{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}
-                </p>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#backupCollapse" aria-expanded="false" aria-controls="backupCollapse">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-counterclockwise me-2 text-danger"></i>{{ t('Restore From Encrypted Backup') }}</h5>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="backupCollapse">
+                <div class="card-body p-4">
+                    <p class="small text-muted mb-3">{{ t('Restoring will replace the current database with the selected backup. A safety copy of the current DB is created automatically before restore.') }}</p>
+                    <form method="post" action="{{ url_for('restore_backup_now') }}" onsubmit="return confirm('{{ t('Restore selected backup? This will replace current live data.') }}');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-9">
+                                <label class="form-label fw-bold small">{{ t('Backup File') }}</label>
+                                <select class="form-select" name="backup_file" {% if not backup_files %}disabled{% endif %}>
+                                    {% for backup_file in backup_files %}
+                                        <option value="{{ backup_file['name'] }}">{{ backup_file['name'] }} - {{ (backup_file['size'] / 1024)|round(1) }} KB</option>
+                                    {% else %}
+                                    <option value="">{{ t('No encrypted backups found') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button class="btn btn-danger rounded-pill" type="submit" {% if not backup_files %}disabled{% endif %}>
+                                    <i class="bi bi-arrow-repeat me-1"></i>{{ t('Restore Backup') }}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#gcalCollapse" aria-expanded="false" aria-controls="gcalCollapse">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-check me-2 text-success"></i>{{ t('Google Calendar Integration') }}</h5>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="gcalCollapse">
+                <div class="card-body p-4">
+                    <div id="gcalStatus" class="mb-3">
+                        <span class="text-muted small"><i class="bi bi-hourglass me-1"></i>{{ t('Checking Google Calendar connection...') }}</span>
+                    </div>
+                    <div id="gcalActions" class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
+                            <i class="bi bi-google me-1"></i>{{ t('Connect Google Calendar') }}
+                        </a>
+                        <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="d-none" id="gcalDisconnectForm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
+                                <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect') }}
+                            </button>
+                        </form>
+                    </div>
+                    <div class="d-none mt-3" id="gcalCalendarSelector">
+                        <label class="form-label small fw-semibold">{{ t('Choose calendar to sync to') }}</label>
+                        <div class="d-flex gap-2">
+                            <select id="gcalCalendarSelect" class="form-select form-select-sm"></select>
+                            <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">{{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}</p>
+                </div>
             </div>
         </div>
     </div>
@@ -202,21 +248,24 @@
             const calSelector = document.getElementById('gcalCalendarSelector');
             const calSelect = document.getElementById('gcalCalendarSelect');
 
+            if (!statusDiv) {
+                return;
+            }
             if (!data.google_libs) {
-                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Google libraries not installed</span>';
+                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>';
                 return;
             }
             if (!data.client_configured) {
-                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth</span>';
-                connectBtn.style.display = 'none';
+                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>';
+                if (connectBtn) connectBtn.style.display = 'none';
                 return;
             }
             if (data.connected) {
-                statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Connected</span>' +
-                    (data.calendar_id ? ' <span class="text-muted small ms-1">Calendar: ' + data.calendar_id + '</span>' : '');
-                disconnectForm.classList.remove('d-none');
-                connectBtn.style.display = 'none';
-                if (data.calendars && data.calendars.length) {
+                statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>' +
+                    (data.calendar_id ? ' <span class="text-muted small ms-1">{{ t('Calendar') }}: ' + data.calendar_id + '</span>' : '');
+                if (disconnectForm) disconnectForm.classList.remove('d-none');
+                if (connectBtn) connectBtn.style.display = 'none';
+                if (calSelector && data.calendars && data.calendars.length) {
                     calSelector.classList.remove('d-none');
                     data.calendars.forEach(c => {
                         const opt = document.createElement('option');
@@ -227,11 +276,14 @@
                     });
                 }
             } else {
-                statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>Not connected</span>';
+                statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>';
             }
         })
         .catch(() => {
-            document.getElementById('gcalStatus').innerHTML = '<span class="text-muted small">Could not load Google Calendar status.</span>';
+            const statusDiv = document.getElementById('gcalStatus');
+            if (statusDiv) {
+                statusDiv.innerHTML = '<span class="text-muted small">{{ t('Could not load Google Calendar status.') }}</span>';
+            }
         });
 
     const saveBtn = document.getElementById('gcalSaveCalendarBtn');
@@ -245,7 +297,7 @@
                 body: 'calendar_id=' + encodeURIComponent(calId) + '&csrf_token=' + encodeURIComponent(csrfToken)
             }).then(r => r.json()).then(d => {
                 if (d.status === 'success') {
-                    alert('Calendar updated to: ' + d.calendar_id);
+                    alert('{{ t('Calendar updated successfully.') }}');
                 }
             });
         });
