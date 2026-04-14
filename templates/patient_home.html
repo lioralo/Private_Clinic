@@ -26,11 +26,19 @@
         <div>
             <div class="text-sm font-medium text-blue-900">{{ t('Next meeting:') }}</div>
             <div class="text-lg font-bold text-blue-900">{{ upcoming[0]['appointment_date'] }} {{ upcoming[0]['appointment_time'] }}</div>
+            {% if upcoming[0]['meeting_title'] %}
+            <div class="text-sm text-blue-800 mt-1">{{ upcoming[0]['meeting_title'] }}</div>
+            {% endif %}
         </div>
     </div>
-    {% if upcoming[0]['is_recurring'] %}
-    <span class="px-3 py-1 bg-primary text-white text-xs font-semibold rounded-full">{{ t('Recurring') }}</span>
-    {% endif %}
+    <div class="d-flex gap-2 flex-wrap">
+        {% if upcoming[0]['source'] == 'group_session' %}
+        <span class="px-3 py-1 bg-info text-white text-xs font-semibold rounded-full">{{ t('Group Session') }}</span>
+        {% endif %}
+        {% if upcoming[0]['is_recurring'] %}
+        <span class="px-3 py-1 bg-primary text-white text-xs font-semibold rounded-full">{{ t('Recurring') }}</span>
+        {% endif %}
+    </div>
 </div>
 {% endif %}
 
@@ -54,7 +62,9 @@
                             </div>
                             <div class="flex-grow-1">
                                 <div class="fw-semibold mb-1">
-                                    {% if appt['meeting_type'] in ['zoom', 'google-meet', 'online'] %}
+                                    {% if appt['meeting_title'] %}
+                                    {{ appt['meeting_title'] }}
+                                    {% elif appt['meeting_type'] in ['zoom', 'google-meet', 'online'] %}
                                     <i class="bi bi-camera-video-fill text-info me-1"></i>{{ t('Online Session') }}
                                     {% else %}
                                     <i class="bi bi-building-fill text-success me-1"></i>{{ t('In-Person Session') }}
@@ -63,6 +73,9 @@
                                 <div class="text-muted small mb-2">
                                     <i class="bi bi-clock me-1"></i>{{ appt['appointment_time'] }}
                                     {% if appt['duration_minutes'] %} · {{ appt['duration_minutes'] }} {{ t('minutes') }}{% endif %}
+                                    {% if appt['source'] == 'group_session' %}
+                                    <span class="badge bg-info-subtle text-info border ms-2">{{ t('Group Session') }}</span>
+                                    {% endif %}
                                     {% if appt['is_recurring'] %}
                                     <span class="badge bg-primary-subtle text-primary border ms-2">{{ t('Recurring') }}</span>
                                     {% endif %}
@@ -78,6 +91,7 @@
                                         <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join Link') }}
                                     </a>
                                     {% endif %}
+                                    {% if appt['source'] != 'group_session' %}
                                     <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('export_ics', appointment_id=appt['id']) }}">
                                         <i class="bi bi-download me-1"></i>{{ t('Add to calendar') }}
                                     </a>
@@ -93,8 +107,9 @@
                                         <i class="bi bi-x-circle me-1"></i>{{ t('Ask to cancel') }}
                                     </button>
                                     {% endif %}
+                                    {% endif %}
                                 </div>
-                                {% if appt['status'] == 'scheduled' %}
+                                {% if appt['source'] != 'group_session' and appt['status'] == 'scheduled' %}
                                 <div class="collapse mt-3" id="cancel-request-{{ appt['id'] }}">
                                     <div class="card card-body bg-light border-0">
                                         <form method="post" action="{{ url_for('request_cancel_appointment', appointment_id=appt['id']) }}" class="d-grid gap-2">

@@ -2,6 +2,34 @@
 
 ---
 
+## Session 41
+
+**Date:** 2026-04-14
+
+**Objective:** Expose group meeting Docs sync controls, improve notification patient filtering, and make upcoming appointments visible in patient-facing views.
+
+**Release Summary:**
+
+1. **Group Meeting Docs Sync**
+- Added a visible Sync to Docs action in the group Google Docs area and directly on meeting cards.
+- Added a backend sync endpoint so linked group meeting records can be pushed into the shared Google Doc.
+
+2. **Candidate Filter in Notification Targeting**
+- Added quick filter buttons in the selected-patients chooser so admins can switch between all patients and candidates more easily.
+- Kept bulk select and clear actions available while filtering only the visible list.
+
+3. **Patient Upcoming Meetings Fix**
+- Updated patient upcoming-event logic so group meetings now appear alongside regular appointments.
+- The next-meeting banner and patient detail next-appointment summary now surface the soonest scheduled event more reliably.
+
+4. **Validation**
+- Added focused regressions for the new group Docs sync button, candidate filtering, and patient upcoming group-session visibility.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 40
 
 **Date:** 2026-04-14

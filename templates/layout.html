@@ -463,10 +463,12 @@
                 </select>
             </div>
             <div class="mb-2 d-none" id="selectedPatientsWrap">
-                <div class="d-flex justify-content-between align-items-center mb-1 gap-2">
+                <div class="d-flex justify-content-between align-items-center mb-1 gap-2 flex-wrap">
                     <label class="form-label small mb-0">{{ t('Choose Patients') }}</label>
-                    <div class="d-flex gap-1">
-                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="selectAllNotificationPatients">{{ t('All') }}</button>
+                    <div class="d-flex gap-1 flex-wrap">
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 active" id="filterNotificationAll">{{ t('All') }}</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="filterNotificationCandidates">{{ t('Candidates') }}</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="selectAllNotificationPatients">{{ t('Select All') }}</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="clearAllNotificationPatients">{{ t('Clear') }}</button>
                     </div>
                 </div>
@@ -511,6 +513,8 @@
         const recipientInput = document.getElementById('messageRecipientId');
         const notificationAudience = document.getElementById('notificationAudience');
         const selectedPatientsWrap = document.getElementById('selectedPatientsWrap');
+        const filterNotificationAll = document.getElementById('filterNotificationAll');
+        const filterNotificationCandidates = document.getElementById('filterNotificationCandidates');
         const selectAllNotificationPatients = document.getElementById('selectAllNotificationPatients');
         const clearAllNotificationPatients = document.getElementById('clearAllNotificationPatients');
         const refreshNotificationsBtn = document.getElementById('refreshNotificationsBtn');
@@ -520,6 +524,7 @@
         const pageCsrfToken = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
         let selectedConversation = null;
         let allConversations = [];
+        let activeNotificationRecipientFilter = 'all';
 
         function isDesktopViewport() {
             return window.innerWidth >= 1024;
@@ -671,6 +676,21 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function applyNotificationRecipientFilter(filterName) {
+            activeNotificationRecipientFilter = filterName || 'all';
+            document.querySelectorAll('.notification-recipient-item').forEach((node) => {
+                const statusValue = (node.dataset.status || '').toLowerCase();
+                const shouldShow = activeNotificationRecipientFilter === 'all' || statusValue === 'candidate';
+                node.classList.toggle('d-none', !shouldShow);
+            });
+            if (filterNotificationAll) {
+                filterNotificationAll.classList.toggle('active', activeNotificationRecipientFilter === 'all');
+            }
+            if (filterNotificationCandidates) {
+                filterNotificationCandidates.classList.toggle('active', activeNotificationRecipientFilter === 'candidate');
+            }
+        }
+
         function loadNotificationRecipients() {
             if (!notificationRecipientsList || !isAdmin) {
                 return;
@@ -685,21 +705,24 @@
                     }
                     notificationRecipientsList.innerHTML = items.map(item => {
                         const typeLabel = escapeHtml(String(item.patient_type || 'private').replace(/-/g, ' '));
+                        const statusLabel = escapeHtml(String(item.status || 'ongoing').replace(/-/g, ' '));
                         const patientName = escapeHtml(item.patient_name || '');
                         const disabledAttr = item.has_login ? '' : 'disabled';
                         const mutedClass = item.has_login ? '' : ' opacity-50';
                         const noLogin = item.has_login ? '' : `<span class="d-block text-muted">{{ t('No patient login') }}</span>`;
                         return `
-                            <label class="d-flex align-items-start gap-2 py-1${mutedClass}">
+                            <label class="notification-recipient-item d-flex align-items-start gap-2 py-1${mutedClass}" data-status="${escapeHtml(item.status || '')}" data-patient-type="${escapeHtml(item.patient_type || '')}">
                                 <input type="checkbox" name="patient_ids" value="${item.patient_id}" class="form-check-input mt-1 notification-patient-check" ${disabledAttr}>
                                 <span class="small">
                                     <span class="fw-semibold">${patientName}</span>
                                     <span class="badge bg-light text-dark border ms-1 text-capitalize">${typeLabel}</span>
+                                    <span class="badge bg-warning-subtle text-dark border ms-1 text-capitalize">${statusLabel}</span>
                                     ${noLogin}
                                 </span>
                             </label>
                         `;
                     }).join('');
+                    applyNotificationRecipientFilter(activeNotificationRecipientFilter);
                 })
                 .catch(() => {
                     notificationRecipientsList.innerHTML = '<div class="text-danger small">{{ t('Error') }}</div>';
@@ -800,9 +823,21 @@
             toggleNotificationRecipientsVisibility();
         }
 
+        if (filterNotificationAll) {
+            filterNotificationAll.addEventListener('click', function () {
+                applyNotificationRecipientFilter('all');
+            });
+        }
+
+        if (filterNotificationCandidates) {
+            filterNotificationCandidates.addEventListener('click', function () {
+                applyNotificationRecipientFilter('candidate');
+            });
+        }
+
         if (selectAllNotificationPatients) {
             selectAllNotificationPatients.addEventListener('click', function () {
-                document.querySelectorAll('.notification-patient-check:not([disabled])').forEach((node) => {
+                document.querySelectorAll('.notification-recipient-item:not(.d-none) .notification-patient-check:not([disabled])').forEach((node) => {
                     node.checked = true;
                 });
             });

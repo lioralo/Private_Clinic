@@ -17,7 +17,7 @@
 {%- endif -%}
 {%- endmacro %}
 
-{% macro render_session_card(session, is_past, session_member_map, attendance_by_session, group_supervisions) %}
+{% macro render_session_card(session, is_past, session_member_map, attendance_by_session, group_supervisions, group) %}
 {% set session_members = session_member_map.get(session['id'], []) %}
 {% set marks = attendance_by_session.get(session['id'], {}) %}
 {% set status_value = session['status'] or 'scheduled' %}
@@ -40,6 +40,9 @@
             <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleBookingPanel({{ session['id'] }}, '{{ session['session_date'] }}', '{{ session['session_time'] }}', {{ session['duration_minutes'] or 60 }}, '{{ (session['title'] or '')|e }}', '{{ (session['facilitator'] or '')|e }}', '{{ (session['meeting_type'] or 'in-person') }}', '{{ (session['meeting_link'] or '')|e }}', {{ session['series_id'] or 0 }})">{{ txt('Edit Booking', 'עריכת שיבוץ') }}</button>
             <button type="button" class="btn btn-outline-info btn-sm rounded-pill" onclick="toggleSupervisionPanel({{ session['id'] }})">{{ txt('Link Supervision', 'קישור להדרכה') }}</button>
             <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="toggleRecordEdit({{ session['id'] }}, true)">{{ txt('Edit Record', 'עריכת סיכום') }}</button>
+            {% if group['gdoc_id'] %}
+            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="syncGroupDoc({{ group['id'] }}, {{ session['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
+            {% endif %}
             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
         </div>
     </div>
@@ -349,6 +352,7 @@
                             {% if group['gdoc_id'] %}
                             <div class="small text-dark mb-3" style="word-break:break-all;">{{ txt('Linked document ID', 'מזהה מסמך מקושר') }}: {{ group['gdoc_id'] }}</div>
                             <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="syncGroupDoc({{ group['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
                                 <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
                             </div>
                             {% else %}
@@ -614,7 +618,7 @@
                 <div class="tab-content border rounded-4 bg-light-subtle p-3">
                     <div class="tab-pane show active" id="nextMeetingPane" role="tabpanel">
                         {% if next_session %}
-                        {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions) }}
+                        {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
                         {% else %}
                         <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
                         {% endif %}
@@ -629,7 +633,7 @@
                                 </button>
                                 <div class="d-none" id="pastSession{{ session['id'] }}">
                                     <div class="p-3 border-top">
-                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions) }}
+                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions, group) }}
                                     </div>
                                 </div>
                             </div>
@@ -641,7 +645,7 @@
                     <div class="tab-pane" id="upcomingQueuePane" role="tabpanel">
                         <div class="d-flex flex-column gap-3">
                             {% for session in upcoming_queue %}
-                            {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions) }}
+                            {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
                             {% else %}
                             <div class="small text-muted">{{ txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.') }}</div>
                             {% endfor %}
@@ -823,6 +827,24 @@ function attachGroupDoc(groupId) {
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
             window.location.reload();
+        } else {
+            alert(data.error || labels.groupDocsError);
+        }
+    }).catch(() => alert(labels.groupDocsError));
+}
+
+function syncGroupDoc(groupId, sessionId) {
+    const body = new URLSearchParams();
+    if (sessionId) {
+        body.set('session_id', String(sessionId));
+    }
+    fetch('/groups/' + groupId + '/sync-gdoc', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') {
+            alert(data.message || 'Synced successfully.');
         } else {
             alert(data.error || labels.groupDocsError);
         }

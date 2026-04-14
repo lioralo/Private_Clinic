@@ -1600,6 +1600,59 @@ class ClinicTestCase(unittest.TestCase):
             assert row is not None
             assert row['gdoc_id'] == 'abc123xyz'
 
+    def test_group_detail_shows_sync_to_docs_button_when_doc_is_linked(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES ('Synced Group', 'therapy', 'Docs sync flow', 'group-doc-1')"
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'Sync to Docs' in rv.data
+
+    def test_notification_picker_shows_candidate_filter_button(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.get('/crm', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'filterNotificationCandidates' in rv.data
+        assert b'Candidates' in rv.data
+
+    def test_patient_home_shows_upcoming_group_session(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Portal Group Patient',
+            status='ongoing',
+            patient_type='group'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='portal_group_patient',
+            password='password123'
+        ), follow_redirects=True)
+
+        future_day = (datetime.now().date() + timedelta(days=5)).isoformat()
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO groups (name, group_type, description) VALUES ('Portal Group', 'therapy', 'Weekly group')")
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute('INSERT INTO group_members (group_id, patient_id) VALUES (?, ?)', (group_id, 1))
+            db.execute('''
+                INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, meeting_type, meeting_link, status)
+                VALUES (?, ?, '15:30', 90, 'Process Group', 'zoom', 'https://example.com/room', 'scheduled')
+            ''', (group_id, future_day))
+            db.commit()
+
+        self.logout()
+        self.login('portal_group_patient', 'password123')
+        rv = self.client.get('/patient/home', follow_redirects=True)
+        assert rv.status_code == 200
+        assert future_day.encode() in rv.data
+        assert b'15:30' in rv.data
+        assert b'Process Group' in rv.data
+
     def test_patient_meeting_logs_use_stable_toggle_markup(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
