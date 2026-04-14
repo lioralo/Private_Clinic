@@ -9376,7 +9376,7 @@ def detach_gdoc(patient_id):
         (patient_id,)
     )
     db.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'message': 'Google Doc disconnected successfully.'})
 
 
 @app.route('/patient/<int:patient_id>/open-gdoc')
@@ -9410,6 +9410,88 @@ def sync_from_gdoc(patient_id):
     return jsonify({'status': 'ok', 'synced': count, 'message': f'Synced {count} note(s) from Google Doc.'})
 
 
+def _pull_group_gdoc_notes(db, group):
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        return 0, dependency_error
+    if not group or not group['gdoc_id']:
+        return 0, 'No Google Doc linked'
+
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return 0, 'Google not connected — connect via Admin Profile first'
+
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+        doc_text = gdocs.read_doc_text(creds, group['gdoc_id']) or ''
+        parser = getattr(gdocs, 'parse_doc_into_notes', None)
+        parsed_notes = parser(doc_text) if callable(parser) else []
+    except Exception as exc:
+        return 0, str(exc)
+
+    synced = 0
+    try:
+        ordered_sessions = db.execute('''
+            SELECT id, session_date, session_time, session_summary
+            FROM group_sessions
+            WHERE group_id = ?
+            ORDER BY session_date ASC, session_time ASC, id ASC
+        ''', (group['id'],)).fetchall()
+
+        for item in parsed_notes:
+            content = (item.get('content') or '').strip()
+            note_date = (item.get('note_date') or '').strip() or None
+            session_number = _normalize_session_number(item.get('session_number'))
+            note_tag = item.get('note_tag')
+            if not content:
+                continue
+
+            target = None
+            if isinstance(note_tag, int):
+                target = db.execute(
+                    'SELECT id, session_summary FROM group_sessions WHERE id = ? AND group_id = ?',
+                    (note_tag, group['id'])
+                ).fetchone()
+
+            if target is None and note_date:
+                target = db.execute('''
+                    SELECT id, session_summary
+                    FROM group_sessions
+                    WHERE group_id = ? AND session_date = ?
+                    ORDER BY session_time ASC, id ASC
+                    LIMIT 1
+                ''', (group['id'], note_date)).fetchone()
+
+            if target is None and session_number and session_number <= len(ordered_sessions):
+                target = ordered_sessions[session_number - 1]
+
+            if target is not None:
+                existing_summary = (target['session_summary'] or '').strip()
+                if existing_summary != content:
+                    db.execute(
+                        'UPDATE group_sessions SET session_summary = ? WHERE id = ?',
+                        (content, target['id'])
+                    )
+                    synced += 1
+                continue
+
+            inferred_date = note_date or datetime.now().date().isoformat()
+            title = f"Imported Session {session_number}" if session_number else 'Imported Session'
+            db.execute('''
+                INSERT INTO group_sessions (
+                    group_id, session_date, session_time, duration_minutes, title, status, session_summary
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', content))
+            synced += 1
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        return 0, str(exc)
+
+    return synced, None
+
+
 def _sync_group_gdoc_sessions(db, group, session_id=None):
     dependency_error = _google_docs_dependency_error()
     if dependency_error:
@@ -9437,7 +9519,7 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
     ''', params).fetchall()
 
     if not sessions:
-        return 0, 'No group meetings found to sync.'
+        return 0, None
 
     existing_text = ''
     try:
@@ -9446,9 +9528,14 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
         existing_text = ''
 
     blocks = []
-    for session in sessions:
-        marker = f"GROUP SESSION #{session['id']}"
-        if marker in existing_text:
+    for index, session in enumerate(sessions, start=1):
+        display_number = session['occurrence_index'] or index
+        marker_variants = [
+            f"GROUP SESSION #{session['id']}",
+            f"[note:id={session['id']}]",
+            f"SESSION #{display_number} | {session['session_date']}"
+        ]
+        if any(marker in existing_text for marker in marker_variants):
             continue
 
         attendance_rows = db.execute('''
@@ -9469,9 +9556,11 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
 
         group_label = session['group_name'] or group['name'] or f"Group {group['id']}"
         lines = [
-            marker + f" | {session['session_date']} {session['session_time'] or ''}".rstrip(),
+            f"SESSION #{display_number} | {session['session_date']} [note:id={session['id']}]",
             f"Group: {group_label}",
         ]
+        if session['session_time']:
+            lines.append(f"Time: {session['session_time']}")
         if session['title']:
             lines.append(f"Title: {session['title']}")
         if session['facilitator']:
@@ -9483,12 +9572,11 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
         if missed_names:
             lines.append('Missing: ' + '; '.join(missed_names))
         if session['session_summary']:
-            lines.append('Content:')
             lines.append(session['session_summary'])
         blocks.append('\n'.join(lines).strip())
 
     if not blocks:
-        return 0, 'All selected group meetings are already synced.'
+        return 0, None
 
     service = gdocs._docs_service(creds)
     doc = service.documents().get(documentId=group['gdoc_id']).execute()
@@ -9584,7 +9672,7 @@ def detach_group_gdoc(group_id):
         (group_id,)
     )
     db.commit()
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'message': 'Google Doc disconnected successfully.'})
 
 
 @app.route('/groups/<int:group_id>/open-gdoc')
@@ -9611,14 +9699,23 @@ def sync_group_gdoc(group_id):
         return jsonify({'error': 'Group not found'}), 404
     session_id_raw = (request.form.get('session_id') or '').strip()
     session_id = int(session_id_raw) if session_id_raw.isdigit() else None
-    synced, err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
-    if err:
-        return jsonify({'error': err}), 400
+
+    pulled, pull_err = _pull_group_gdoc_notes(db, group)
+    if pull_err:
+        return jsonify({'error': pull_err}), 400
+
+    pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
+    if push_err:
+        return jsonify({'error': push_err}), 400
+
+    total_synced = int(pulled or 0) + int(pushed or 0)
     return jsonify({
         'status': 'ok',
-        'synced': synced,
+        'synced': total_synced,
+        'pulled': int(pulled or 0),
+        'pushed': int(pushed or 0),
         'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
-        'message': f'Synced {synced} group meeting record(s) to Google Docs.'
+        'message': f'Synced {total_synced} group meeting record(s). Pulled {int(pulled or 0)} from Google Docs and pushed {int(pushed or 0)} back.'
     })
 
 

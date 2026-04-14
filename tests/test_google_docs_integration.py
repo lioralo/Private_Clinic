@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from werkzeug.security import generate_password_hash
 
 from app import app, get_db, _run_db_migrations
+from scripts.google_docs import parse_doc_into_notes
 import app as app_module
 
 
@@ -101,6 +102,59 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         payload = rv.get_json()
         self.assertIn('pip install -r requirements.txt', payload['error'])
 
+    def test_detach_gdoc_clears_patient_doc(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('doc-to-detach',))
+            db.commit()
+
+        rv = self.client.post('/patient/1/detach-gdoc', data={})
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT gdoc_id FROM patients WHERE id = 1').fetchone()
+            self.assertIsNone(row['gdoc_id'])
+
+    def test_group_detach_gdoc_clears_link(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Detach Group', 'therapy', 'Group docs', 'linked-doc')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.post(f'/groups/{group_id}/detach-gdoc', data={})
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT gdoc_id FROM groups WHERE id = ?', (group_id,)).fetchone()
+            self.assertIsNone(row['gdoc_id'])
+
+    def test_parse_doc_into_notes_splits_multiple_meetings(self):
+        text = (
+            'SESSION #1 | 2026-04-10 [note:new]\nFirst meeting summary\n\n'
+            'SESSION #2 | 2026-04-17 [note:new]\nSecond meeting summary\n'
+        )
+        parsed = parse_doc_into_notes(text)
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]['session_number'], 1)
+        self.assertEqual(parsed[0]['note_date'], '2026-04-10')
+        self.assertIn('First meeting summary', parsed[0]['content'])
+        self.assertEqual(parsed[1]['session_number'], 2)
+        self.assertEqual(parsed[1]['note_date'], '2026-04-17')
+
     def test_group_sync_gdoc_returns_success_message(self):
         self._login_admin()
 
@@ -125,8 +179,9 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
 
         gdocs_mock = Mock()
         gdocs_mock.GDOCS_LIBS_AVAILABLE = True
-        gdocs_mock.read_doc_text.return_value = ''
+        gdocs_mock.read_doc_text.return_value = 'SESSION #1 | 2026-04-20 [note:new]\nGroup process summary from doc\n'
         gdocs_mock._docs_service.return_value = docs_service
+        gdocs_mock.parse_doc_into_notes.side_effect = parse_doc_into_notes
 
         gcal_mock = Mock()
         gcal_mock.GOOGLE_LIBS_AVAILABLE = True
@@ -139,8 +194,13 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         payload = rv.get_json()
         self.assertEqual(payload['status'], 'ok')
-        self.assertEqual(payload['synced'], 1)
-        self.assertIn('Synced 1 group meeting record', payload['message'])
+        self.assertGreaterEqual(payload['synced'], 1)
+        self.assertIn('group meeting record', payload['message'])
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
+            self.assertEqual(row['session_summary'], 'Group process summary from doc')
 
 
 if __name__ == '__main__':

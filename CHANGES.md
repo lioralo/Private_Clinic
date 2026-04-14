@@ -2,6 +2,34 @@
 
 ---
 
+## Session 44
+
+**Date:** 2026-04-14
+
+**Objective:** Repair the full Google Docs workflow for groups and individual treatment, including disconnect behavior, multi-meeting parsing, pull sync reliability, and stable filter-button visuals.
+
+**Release Summary:**
+
+1. **Group Google Docs Disconnect + Sync Fix**
+- Verified and fixed the group disconnect flow so a connected group doc can be removed cleanly.
+- Upgraded the group sync action to pull structured meeting content from Google Docs into matching group sessions and then push unsynced meeting records back when needed.
+- Added visible status feedback so the group page now shows when sync is running, succeeds, or fails.
+
+2. **Individual Treatment Docs Reliability**
+- Re-verified patient Google Docs connect, disconnect, and sync flows.
+- Kept the multi-meeting parser working across separate session blocks so treatment notes can still be pulled correctly into the individual record.
+
+3. **Design Stability**
+- Stabilized the All and Candidates filter buttons so switching states no longer causes the control box to jump in size or break the visual flow.
+
+4. **Validation**
+- Added focused regressions for patient disconnect, group disconnect, multi-meeting parsing, and pulling group summaries from Google Docs.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 145 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 43
 
 **Date:** 2026-04-14

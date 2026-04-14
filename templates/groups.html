@@ -815,36 +815,48 @@ function toggleSupervisionPanel(sessionId) {
 }
 
 function createGroupDoc(groupId) {
+    setGroupDocsSyncStatus(isHebrew ? 'יוצר מסמך Google לקבוצה...' : 'Creating a Google Doc for this group...', 'info');
     fetch('/groups/' + groupId + '/link-gdoc', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: ''
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
+            setGroupDocsSyncStatus(data.message || (isHebrew ? 'מסמך Google נוצר בהצלחה.' : 'Google Doc created successfully.'), 'success');
             if (data.doc_url) {
                 window.open(data.doc_url, '_blank', 'noopener');
             }
-            window.location.reload();
+            setTimeout(() => window.location.reload(), 300);
         } else {
+            setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
             alert(data.error || labels.groupDocsError);
         }
-    }).catch(() => alert(labels.groupDocsError));
+    }).catch(() => {
+        setGroupDocsSyncStatus(labels.groupDocsError, 'error');
+        alert(labels.groupDocsError);
+    });
 }
 
 function attachGroupDoc(groupId) {
     const input = document.getElementById('group-gdoc-input-' + groupId);
     const body = new URLSearchParams({ doc_url: input ? input.value : '' });
+    setGroupDocsSyncStatus(isHebrew ? 'מקשר מסמך קיים...' : 'Attaching the existing Google Doc...', 'info');
     fetch('/groups/' + groupId + '/attach-gdoc', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
-            window.location.reload();
+            setGroupDocsSyncStatus(data.message || (isHebrew ? 'המסמך קושר בהצלחה.' : 'Google Doc linked successfully.'), 'success');
+            setTimeout(() => window.location.reload(), 300);
         } else {
+            setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
             alert(data.error || labels.groupDocsError);
         }
-    }).catch(() => alert(labels.groupDocsError));
+    }).catch(() => {
+        setGroupDocsSyncStatus(labels.groupDocsError, 'error');
+        alert(labels.groupDocsError);
+    });
 }
 
 function setGroupDocsSyncStatus(message, tone) {
@@ -907,16 +919,22 @@ function syncGroupDoc(triggerButton, groupId, sessionId) {
 
 function detachGroupDoc(groupId) {
     if (!confirm(labels.groupDocsDetachConfirm)) return;
+    setGroupDocsSyncStatus(isHebrew ? 'מנתק את מסמך Google...' : 'Disconnecting the Google Doc...', 'info');
     fetch('/groups/' + groupId + '/detach-gdoc', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken }
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
-            window.location.reload();
+            setGroupDocsSyncStatus(data.message || (isHebrew ? 'המסמך נותק בהצלחה.' : 'Google Doc disconnected successfully.'), 'success');
+            setTimeout(() => window.location.reload(), 300);
         } else {
+            setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
             alert(data.error || labels.groupDocsError);
         }
-    }).catch(() => alert(labels.groupDocsError));
+    }).catch(() => {
+        setGroupDocsSyncStatus(labels.groupDocsError, 'error');
+        alert(labels.groupDocsError);
+    });
 }
 
 function linkSessionSupervision(sessionId) {
