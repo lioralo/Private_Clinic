@@ -20,7 +20,8 @@
 
 3. **Group View Stability**
 - Simplified the group management panel behavior so content stays open reliably instead of briefly flashing and collapsing.
-- Removed unnecessary fade behavior from the meeting tabs for a steadier session-view experience.
+- Replaced the unstable Bootstrap collapse flow in patient meeting logs and past group meetings with a plain persistent toggle pattern.
+- Added a protective style override so remaining expandable sections stay visible when opened.
 
 4. **Validation**
 - Added focused regressions for notification seen-state and group Google Docs rendering.

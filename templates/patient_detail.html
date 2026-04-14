@@ -220,10 +220,15 @@
                 {% for note in notes[:5] %}
                 <div class="note-item border rounded-4 p-3 bg-white shadow-sm">
                     <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
-                        <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
-                            <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
-                            <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                            <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                        <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1 w-100" type="button" data-panel-id="noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}" onclick="toggleStablePanel(this)">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                                    <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                                    <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                                </div>
+                                <i class="bi bi-chevron-down text-muted stable-toggle-icon mt-1"></i>
+                            </div>
                         </button>
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
@@ -233,7 +238,7 @@
                             </form>
                         </div>
                     </div>
-                    <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                    <div class="d-none mt-2" id="noteCollapse{{ note['id'] }}">
                         <div class="border rounded-3 bg-light-subtle p-3 text-dark">
                             {% if note['key_topics'] %}
                             <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
@@ -301,10 +306,15 @@
                     {% for note in notes[5:] %}
                     <div class="note-item border rounded-4 p-3 bg-white shadow-sm d-none previous-note-item">
                         <div class="d-flex justify-content-between align-items-start gap-3 mb-2 flex-wrap">
-                            <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}">
-                                <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
-                                <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                            <button class="btn btn-link text-start text-decoration-none p-0 flex-grow-1 w-100" type="button" data-panel-id="noteCollapse{{ note['id'] }}" aria-expanded="false" aria-controls="noteCollapse{{ note['id'] }}" onclick="toggleStablePanel(this)">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
+                                        <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
+                                        <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                                    </div>
+                                    <i class="bi bi-chevron-down text-muted stable-toggle-icon mt-1"></i>
+                                </div>
                             </button>
                             <div class="d-flex gap-2">
                                 <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
@@ -314,7 +324,7 @@
                                 </form>
                             </div>
                         </div>
-                        <div class="collapse" id="noteCollapse{{ note['id'] }}">
+                        <div class="d-none mt-2" id="noteCollapse{{ note['id'] }}">
                             <div class="border rounded-3 bg-light-subtle p-3 text-dark">
                                 {% if note['key_topics'] %}
                                 <div class="small text-muted mb-2">{{ note['key_topics'] }}</div>
@@ -782,6 +792,22 @@
 </div>
 
 <script>
+function toggleStablePanel(button) {
+    const panelId = button.getAttribute('data-panel-id');
+    const panel = panelId ? document.getElementById(panelId) : null;
+    if (!panel) {
+        return;
+    }
+    const isExpanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+    panel.classList.toggle('d-none', isExpanded);
+    const icon = button.querySelector('.stable-toggle-icon');
+    if (icon) {
+        icon.classList.toggle('bi-chevron-down', isExpanded);
+        icon.classList.toggle('bi-chevron-up', !isExpanded);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const loadPreviousBtn = document.getElementById('loadPreviousMeetingsBtn');
     if (loadPreviousBtn) {

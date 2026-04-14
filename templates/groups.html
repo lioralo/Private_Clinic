@@ -623,11 +623,11 @@
                         <div class="d-flex flex-column gap-2">
                             {% for session in past_sessions_all %}
                             <div class="border rounded-3 overflow-hidden bg-white">
-                                <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#pastSession{{ session['id'] }}" aria-expanded="false" aria-controls="pastSession{{ session['id'] }}">
+                                <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-panel-id="pastSession{{ session['id'] }}" aria-expanded="false" aria-controls="pastSession{{ session['id'] }}" onclick="toggleStablePanel(this)">
                                     <span class="fw-semibold">{{ session['session_date'] }} · {{ session['session_time'] }}{% if session['title'] %} · {{ session['title'] }}{% endif %}</span>
-                                    <i class="bi bi-chevron-down"></i>
+                                    <i class="bi bi-chevron-down stable-toggle-icon"></i>
                                 </button>
-                                <div class="collapse" id="pastSession{{ session['id'] }}">
+                                <div class="d-none" id="pastSession{{ session['id'] }}">
                                     <div class="p-3 border-top">
                                         {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions) }}
                                     </div>
@@ -724,6 +724,20 @@ function timeToMinutes(hhmm) {
     if (!hhmm) return 0;
     const parts = hhmm.split(':').map(Number);
     return (parts[0] * 60) + parts[1];
+}
+
+function toggleStablePanel(button) {
+    const panelId = button.getAttribute('data-panel-id');
+    const panel = panelId ? document.getElementById(panelId) : null;
+    if (!panel) return;
+    const isExpanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+    panel.classList.toggle('d-none', isExpanded);
+    const icon = button.querySelector('.stable-toggle-icon');
+    if (icon) {
+        icon.classList.toggle('bi-chevron-down', isExpanded);
+        icon.classList.toggle('bi-chevron-up', !isExpanded);
+    }
 }
 
 function toggleMemberPanel(patientId) {

@@ -1600,6 +1600,46 @@ class ClinicTestCase(unittest.TestCase):
             assert row is not None
             assert row['gdoc_id'] == 'abc123xyz'
 
+    def test_patient_meeting_logs_use_stable_toggle_markup(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Stable Logs Patient',
+            status='ongoing',
+            patient_type='private'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO notes (patient_id, session_number, note_date, content) VALUES (?, ?, ?, ?)",
+                (1, '1', '2026-04-14', 'Detailed meeting content for stability check')
+            )
+            db.commit()
+
+        rv = self.client.get('/patient/1?tab=notes', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'toggleStablePanel' in rv.data
+        assert b'data-panel-id="noteCollapse' in rv.data
+        assert b'data-bs-toggle="collapse"' not in rv.data
+
+    def test_group_past_meetings_use_stable_toggle_markup(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO groups (name, group_type, description) VALUES ('Stable Group', 'therapy', 'Past sessions')")
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                "INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, status) VALUES (?, ?, ?, ?, ?, ?)",
+                (group_id, '2026-01-01', '10:00', 60, 'Past session', 'completed')
+            )
+            db.commit()
+
+        rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'toggleStablePanel' in rv.data
+        assert b'data-panel-id="pastSession' in rv.data
+        assert b'data-bs-toggle="collapse"' not in rv.data
+
     def test_group_session_record_generates_structured_summary_text(self):
         self.login('lioraloni', 'Flo@tingind4')
         with app.app_context():
@@ -2830,12 +2870,13 @@ class ClinicTestCase(unittest.TestCase):
         html = rv.data.decode('utf-8')
 
         self.assertEqual(rv.status_code, 200)
-        self.assertIn('Show more', html)
-        self.assertIn('id="moreMeetingLogs"', html)
-        before_show_more = html.split('id="moreMeetingLogs"', 1)[0]
+        self.assertIn('View More', html)
+        self.assertIn('id="olderLogsCollapse"', html)
+        before_show_more = html.split('id="olderLogsCollapse"', 1)[0]
         self.assertEqual(before_show_more.count('class="note-item border rounded-4 p-3 bg-white shadow-sm"'), 5)
-        self.assertIn('data-bs-target="#noteCollapse1"', html)
-        self.assertIn('data-bs-target="#noteCollapse7"', html)
+        self.assertIn('data-panel-id="noteCollapse1"', html)
+        self.assertIn('data-panel-id="noteCollapse7"', html)
+        self.assertIn('toggleStablePanel(this)', html)
 
     @patch('app.get_db')
     @patch('app.init_db')
@@ -3049,8 +3090,9 @@ class ClinicTestCase(unittest.TestCase):
         toggle_id = 'olderLogsCollapse' if has_newer_markup else 'moreMeetingLogs'
         before_show_more = html.split(f'id="{toggle_id}"', 1)[0]
         self.assertEqual(before_show_more.count('class="note-item border rounded-4 p-3 bg-white shadow-sm"'), 5)
-        self.assertIn('data-bs-target="#noteCollapse1"', html)
-        self.assertIn('data-bs-target="#noteCollapse7"', html)
+        self.assertIn('data-panel-id="noteCollapse1"', html)
+        self.assertIn('data-panel-id="noteCollapse7"', html)
+        self.assertIn('toggleStablePanel(this)', html)
 
 class TemplateFilterTests(unittest.TestCase):
     def test_from_iso_date_valid(self):
