@@ -89,6 +89,62 @@
             background-color: #5676b6 !important;
             color: #ffffff !important;
         }
+
+        .admin-sidebar {
+            width: 16rem;
+            max-width: 85vw;
+            will-change: transform;
+        }
+
+        .notification-recipient-list {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .notification-history-item {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 0.9rem;
+            padding: 0.75rem;
+            background: #fff;
+        }
+
+        @media (max-width: 1023.98px) {
+            .admin-sidebar {
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                z-index: 40;
+                opacity: 0;
+                pointer-events: none;
+                transition: transform 0.28s ease, opacity 0.28s ease;
+                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+            }
+            html:not([dir="rtl"]) .admin-sidebar {
+                left: 0;
+                transform: translateX(-105%);
+            }
+            html[dir="rtl"] .admin-sidebar {
+                right: 0;
+                transform: translateX(105%);
+            }
+            .admin-sidebar.is-open {
+                transform: translateX(0) !important;
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .admin-sidebar {
+                position: static !important;
+                inset: auto !important;
+                transform: none !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+                box-shadow: none !important;
+                max-width: none;
+            }
+        }
     </style>
 </head>
 <body class="bg-[#f2f4f6] text-[#191c1e]" data-endpoint="{{ request.endpoint or '' }}">
@@ -104,8 +160,7 @@
     <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar #}
-    <aside id="adminSidebar" aria-hidden="true" class="h-screen w-72 max-w-[85vw] flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 z-40 overflow-y-auto
-        fixed lg:static top-0 {% if lang == 'he' %}right-0 translate-x-full lg:translate-x-0{% else %}left-0 -translate-x-full lg:translate-x-0{% endif %} transition-all duration-300 pointer-events-none opacity-0 shadow-2xl lg:w-64 lg:max-w-none lg:pointer-events-auto lg:opacity-100 lg:shadow-none">
+    <aside id="adminSidebar" aria-hidden="true" class="admin-sidebar h-screen flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 overflow-y-auto">
 
         {# Brand #}
         <div class="flex flex-col items-center mb-8 pt-2 px-2 flex-shrink-0">
@@ -180,10 +235,10 @@
                 </h2>
             </div>
             <div class="flex items-center gap-4">
-                <button class="p-2 text-slate-500 hover:text-primary transition-colors relative">
+                <button type="button" class="p-2 text-slate-500 hover:text-primary transition-colors relative" data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas" title="{{ t('Notifications') }}">
                     <i class="bi bi-bell-fill" style="font-size:20px"></i>
-                    {% if unread_count is defined and unread_count > 0 %}
-                    <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                    {% if notification_unread_count is defined and notification_unread_count > 0 %}
+                    <span class="notification-badge absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white rounded-full border-2 border-white text-[10px] leading-[14px] text-center">{{ notification_unread_count }}</span>
                     {% endif %}
                 </button>
                 <div class="h-8 w-[1px] bg-slate-200 mx-1 lg:mx-2"></div>
@@ -225,6 +280,14 @@
         </a>
     </div>
     <div class="flex items-center gap-3">
+        <a href="#" class="p-2 text-slate-500 hover:text-teal-700 transition-colors relative"
+           data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
+           title="{{ t('Notifications') }}">
+            <i class="bi bi-bell-fill" style="font-size:22px"></i>
+            {% if notification_unread_count is defined and notification_unread_count > 0 %}
+            <span class="notification-badge absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            {% endif %}
+        </a>
         <a href="#" class="p-2 text-slate-500 hover:text-teal-700 transition-colors"
            data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas"
            title="{{ t('Messages') }}">
@@ -361,18 +424,86 @@
       </div>
     </div>
 
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="notificationsOffcanvas" aria-labelledby="notificationsOffcanvasLabel">
+      <div class="offcanvas-header text-white" style="background: linear-gradient(135deg,#134e4a,#003633);">
+        <h5 class="offcanvas-title fw-bold" id="notificationsOffcanvasLabel">
+            <i class="bi bi-bell-fill me-2" style="font-size:18px;vertical-align:middle"></i> {{ t('Notifications') }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="{{ t('Close') }}"></button>
+      </div>
+      <div class="offcanvas-body d-flex flex-column gap-3">
+        {% if current_user.role == 'admin' %}
+        <form id="adminNotificationForm" method="post" action="{{ url_for('send_admin_notification') }}" class="border rounded-3 p-3 bg-light">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                <h6 class="mb-0 fw-bold text-primary">{{ t('Post Notification') }}</h6>
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill">{{ t('Send Notification') }}</button>
+            </div>
+            <div class="mb-2">
+                <label class="form-label small mb-1">{{ t('Title') }}</label>
+                <input type="text" name="title" class="form-control form-control-sm" placeholder="{{ t('Clinic Update') }}">
+            </div>
+            <div class="mb-2">
+                <label class="form-label small mb-1">{{ t('Send To') }}</label>
+                <select name="audience" id="notificationAudience" class="form-select form-select-sm">
+                    <option value="all">{{ t('All Patients') }}</option>
+                    <option value="group">{{ t('All Groups') }}</option>
+                    <option value="private">{{ t('All Private') }}</option>
+                    <option value="residency">{{ t('All Residency') }}</option>
+                    <option value="selected">{{ t('Selected Patients') }}</option>
+                </select>
+            </div>
+            <div class="mb-2 d-none" id="selectedPatientsWrap">
+                <div class="d-flex justify-content-between align-items-center mb-1 gap-2">
+                    <label class="form-label small mb-0">{{ t('Choose Patients') }}</label>
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="selectAllNotificationPatients">{{ t('All') }}</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" id="clearAllNotificationPatients">{{ t('Clear') }}</button>
+                    </div>
+                </div>
+                <div class="notification-recipient-list border rounded-3 bg-white p-2" id="notificationRecipientsList">
+                    <div class="small text-muted">{{ t('Loading...') }}</div>
+                </div>
+            </div>
+            <div>
+                <label class="form-label small mb-1">{{ t('Message') }}</label>
+                <textarea name="message" rows="4" class="form-control form-control-sm" placeholder="{{ t('Type a message...') }}" required></textarea>
+            </div>
+        </form>
+        {% endif %}
+
+        <div class="border rounded-3 p-3 bg-white flex-grow-1 d-flex flex-column overflow-hidden">
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+                <h6 class="mb-0 fw-bold text-primary">{{ t('Recent Notifications') }}</h6>
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" id="refreshNotificationsBtn">{{ t('Refresh') }}</button>
+            </div>
+            <div id="notificationHistoryList" class="d-flex flex-column gap-2 overflow-auto small text-muted">
+                {{ t('Loading...') }}
+            </div>
+        </div>
+      </div>
+    </div>
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const sidebar = document.getElementById('adminSidebar');
         const sidebarToggle = document.getElementById('adminSidebarToggle');
         const sidebarBackdrop = document.getElementById('adminSidebarBackdrop');
         const offcanvas = document.getElementById('messagesOffcanvas');
+        const notificationsOffcanvas = document.getElementById('notificationsOffcanvas');
         const isAdmin = {{ 'true' if current_user.role == 'admin' else 'false' }};
         const conversationSelect = document.getElementById('conversationSelect');
         const conversationSearch = document.getElementById('conversationSearch');
         const conversationTypeFilter = document.getElementById('conversationTypeFilter');
         const conversationStatusFilter = document.getElementById('conversationStatusFilter');
         const recipientInput = document.getElementById('messageRecipientId');
+        const notificationAudience = document.getElementById('notificationAudience');
+        const selectedPatientsWrap = document.getElementById('selectedPatientsWrap');
+        const selectAllNotificationPatients = document.getElementById('selectAllNotificationPatients');
+        const clearAllNotificationPatients = document.getElementById('clearAllNotificationPatients');
+        const refreshNotificationsBtn = document.getElementById('refreshNotificationsBtn');
+        const notificationHistoryList = document.getElementById('notificationHistoryList');
+        const notificationRecipientsList = document.getElementById('notificationRecipientsList');
         let selectedConversation = null;
         let allConversations = [];
 
@@ -380,30 +511,30 @@
             return window.innerWidth >= 1024;
         }
 
-        function getSidebarClosedClass() {
-            return {{ '"translate-x-full"' if lang == 'he' else '"-translate-x-full"' }};
-        }
-
         function setSidebarState(openOnMobile) {
             if (!sidebar) return;
-            const desktop = isDesktopViewport();
-            const closedClass = getSidebarClosedClass();
-            const shouldShow = desktop || !!openOnMobile;
-
-            sidebar.classList.toggle('translate-x-0', shouldShow);
-            sidebar.classList.toggle(closedClass, !shouldShow);
-            sidebar.classList.toggle('pointer-events-none', !shouldShow);
-            sidebar.classList.toggle('opacity-0', !shouldShow);
-            sidebar.classList.toggle('pointer-events-auto', shouldShow);
-            sidebar.classList.toggle('opacity-100', shouldShow);
-            sidebar.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
-
-            if (sidebarBackdrop) {
-                sidebarBackdrop.classList.toggle('hidden', !(openOnMobile && !desktop));
+            if (isDesktopViewport()) {
+                sidebar.classList.remove('is-open');
+                sidebar.setAttribute('aria-hidden', 'false');
+                if (sidebarBackdrop) {
+                    sidebarBackdrop.classList.add('hidden');
+                }
+                document.body.classList.remove('overflow-hidden');
+                if (sidebarToggle) {
+                    sidebarToggle.setAttribute('aria-expanded', 'false');
+                }
+                return;
             }
-            document.body.classList.toggle('overflow-hidden', openOnMobile && !desktop);
+
+            const shouldOpen = !!openOnMobile;
+            sidebar.classList.toggle('is-open', shouldOpen);
+            sidebar.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+            if (sidebarBackdrop) {
+                sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
+            }
+            document.body.classList.toggle('overflow-hidden', shouldOpen);
             if (sidebarToggle) {
-                sidebarToggle.setAttribute('aria-expanded', openOnMobile && !desktop ? 'true' : 'false');
+                sidebarToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
             }
         }
 
@@ -415,7 +546,7 @@
 
         function toggleAdminSidebar(forceOpen) {
             if (!sidebar || isDesktopViewport()) return;
-            const currentlyOpen = sidebar.getAttribute('aria-hidden') !== 'true';
+            const currentlyOpen = sidebar.classList.contains('is-open');
             const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !currentlyOpen;
             setSidebarState(shouldOpen);
         }
@@ -507,6 +638,126 @@
                         }
                     });
                 }
+            });
+        }
+
+        function toggleNotificationRecipientsVisibility() {
+            if (!notificationAudience || !selectedPatientsWrap) {
+                return;
+            }
+            selectedPatientsWrap.classList.toggle('d-none', notificationAudience.value !== 'selected');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function loadNotificationRecipients() {
+            if (!notificationRecipientsList || !isAdmin) {
+                return;
+            }
+            notificationRecipientsList.innerHTML = '<div class="text-muted small">{{ t('Loading...') }}</div>';
+            fetch('/api/notification_recipients')
+                .then(response => response.json())
+                .then(items => {
+                    if (!items || items.length === 0) {
+                        notificationRecipientsList.innerHTML = '<div class="text-muted small">{{ t('No patient conversations') }}</div>';
+                        return;
+                    }
+                    notificationRecipientsList.innerHTML = items.map(item => {
+                        const typeLabel = escapeHtml(String(item.patient_type || 'private').replace(/-/g, ' '));
+                        const patientName = escapeHtml(item.patient_name || '');
+                        const disabledAttr = item.has_login ? '' : 'disabled';
+                        const mutedClass = item.has_login ? '' : ' opacity-50';
+                        const noLogin = item.has_login ? '' : `<span class="d-block text-muted">{{ t('No patient login') }}</span>`;
+                        return `
+                            <label class="d-flex align-items-start gap-2 py-1${mutedClass}">
+                                <input type="checkbox" name="patient_ids" value="${item.patient_id}" class="form-check-input mt-1 notification-patient-check" ${disabledAttr}>
+                                <span class="small">
+                                    <span class="fw-semibold">${patientName}</span>
+                                    <span class="badge bg-light text-dark border ms-1 text-capitalize">${typeLabel}</span>
+                                    ${noLogin}
+                                </span>
+                            </label>
+                        `;
+                    }).join('');
+                })
+                .catch(() => {
+                    notificationRecipientsList.innerHTML = '<div class="text-danger small">{{ t('Error') }}</div>';
+                });
+        }
+
+        function loadNotificationCenter() {
+            if (!notificationHistoryList) {
+                return;
+            }
+            notificationHistoryList.innerHTML = '<div class="text-muted small">{{ t('Loading...') }}</div>';
+            fetch('/api/notifications?all=1&mark_read=1')
+                .then(response => response.json())
+                .then(items => {
+                    if (items && items.length > 0) {
+                        document.querySelectorAll('.notification-badge').forEach((node) => node.remove());
+                    }
+                    if (!items || items.length === 0) {
+                        notificationHistoryList.innerHTML = '<div class="text-muted small">{{ t('No notifications yet.') }}</div>';
+                        return;
+                    }
+                    notificationHistoryList.innerHTML = items.map(item => {
+                        const badgeLabel = escapeHtml(item.audience ? String(item.audience).replace(/-/g, ' ') : '{{ t('Update') }}');
+                        const title = escapeHtml(item.title || '{{ t('Clinic Update') }}');
+                        const message = escapeHtml(item.message || '');
+                        const createdAt = escapeHtml(item.created_at || '');
+                        return `
+                            <div class="notification-history-item">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <div class="fw-semibold text-dark">${title}</div>
+                                    <span class="badge bg-light text-dark border text-uppercase">${badgeLabel}</span>
+                                </div>
+                                <div class="text-muted mb-1" style="white-space:pre-wrap;">${message}</div>
+                                <div class="small text-secondary">${createdAt}</div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(() => {
+                    notificationHistoryList.innerHTML = '<div class="text-danger small">{{ t('Error') }}</div>';
+                });
+        }
+
+        if (notificationAudience) {
+            notificationAudience.addEventListener('change', toggleNotificationRecipientsVisibility);
+            toggleNotificationRecipientsVisibility();
+        }
+
+        if (selectAllNotificationPatients) {
+            selectAllNotificationPatients.addEventListener('click', function () {
+                document.querySelectorAll('.notification-patient-check:not([disabled])').forEach((node) => {
+                    node.checked = true;
+                });
+            });
+        }
+
+        if (clearAllNotificationPatients) {
+            clearAllNotificationPatients.addEventListener('click', function () {
+                document.querySelectorAll('.notification-patient-check').forEach((node) => {
+                    node.checked = false;
+                });
+            });
+        }
+
+        if (refreshNotificationsBtn) {
+            refreshNotificationsBtn.addEventListener('click', loadNotificationCenter);
+        }
+
+        if (notificationsOffcanvas) {
+            notificationsOffcanvas.addEventListener('show.bs.offcanvas', function () {
+                loadNotificationCenter();
+                loadNotificationRecipients();
             });
         }
 
@@ -622,7 +873,7 @@
     <!-- FullCalendar JS -->
     <script src='{{ url_for('static', filename='vendor/fullcalendar/index.global.min.js') }}'></script>
 
-    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+    {% if current_user.is_authenticated %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             function checkNotifications() {
@@ -630,13 +881,15 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.length > 0) {
+                            document.querySelectorAll('.notification-badge').forEach((node) => node.remove());
                             const container = document.getElementById('notificationContainer');
                             data.forEach(notification => {
+                                const title = notification.title || '{{ t('New Activity') }}';
                                 const toastHTML = `
                                     <div class="toast show border-primary" role="alert" aria-live="assertive" aria-atomic="true">
                                         <div class="toast-header bg-primary text-white">
                                             <i class="bi bi-bell-fill me-2"></i>
-                                            <strong class="me-auto">{{ t('New Activity') }}</strong>
+                                            <strong class="me-auto">${title}</strong>
                                             <small class="text-white-50">{{ t('Just now') }}</small>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="{{ t('Close') }}"></button>
                                         </div>

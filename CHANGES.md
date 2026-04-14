@@ -2,6 +2,36 @@
 
 ---
 
+## Session 39
+
+**Date:** 2026-04-14
+
+**Objective:** Restore the admin sidebar reliably across window sizes, add targeted bell-notifications, and strengthen the group meeting recording workflow.
+
+**Release Summary:**
+
+1. **Responsive Sidebar Rework**
+- Replaced the fragile sidebar toggle behavior with a simpler CSS-driven responsive pattern.
+- Desktop now keeps the side menu visible again, while smaller windows use a stable slide-in menu with backdrop and Escape handling.
+
+2. **Bell Notification Center for Admin + Patients**
+- Added a dedicated notification center behind the bell icon.
+- Admins can now post notifications to all patients, all group patients, all private patients, all residency patients, or selected patients from a checklist.
+- Patients can open the bell area to view received notifications, and new notifications also surface through toast alerts.
+
+3. **Group Session Integration Upgrade**
+- Fixed the session-member attendance payload path so the group detail view no longer breaks.
+- Group session records now auto-structure the summary into Meeting / Participants / Missing / Content format.
+- Attendance and content are shown directly on each session card, and patient notes are kept aligned with present/missed statuses.
+
+4. **Validation**
+- Added focused regressions for targeted notifications and structured group session summaries.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 38
 
 **Date:** 2026-04-14

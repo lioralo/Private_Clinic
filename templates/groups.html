@@ -44,6 +44,42 @@
         </div>
     </div>
 
+    {% set stats = namespace(present=[], missed=[], pending=0) %}
+    {% for member in session_members %}
+        {% set mark = marks.get(member['patient_id'], {}) %}
+        {% set attendance_status = mark.get('attendance_status', 'pending') %}
+        {% if attendance_status == 'present' %}
+            {% do stats.present.append(member['patient_name']) %}
+        {% elif attendance_status == 'missed' %}
+            {% set missed_reason = mark.get('absence_reason', '') %}
+            {% do stats.missed.append(member['patient_name'] ~ (' — ' ~ missed_reason if missed_reason else '')) %}
+        {% else %}
+            {% set stats.pending = stats.pending + 1 %}
+        {% endif %}
+    {% endfor %}
+
+    <div class="border rounded-3 p-3 mb-3 bg-light-subtle">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge bg-success-subtle text-success border">{{ txt('Present', 'הגיעו') }} {{ stats.present|length }}</span>
+            <span class="badge bg-danger-subtle text-danger border">{{ txt('Missed', 'נעדרו') }} {{ stats.missed|length }}</span>
+            <span class="badge bg-secondary-subtle text-secondary border">{{ txt('Pending', 'ממתינים') }} {{ stats.pending }}</span>
+        </div>
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Participants', 'משתתפים') }}</div>
+                <div class="small text-dark">{{ stats.present|join(', ') if stats.present else txt('No participants marked yet.', 'עדיין לא סומנו משתתפים.') }}</div>
+            </div>
+            <div class="col-lg-4">
+                <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Missing', 'חסרים') }}</div>
+                <div class="small text-dark" style="white-space:pre-wrap;">{{ stats.missed|join('\n') if stats.missed else txt('No absences recorded.', 'לא נרשמו חסרים.') }}</div>
+            </div>
+            <div class="col-lg-4">
+                <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Content', 'תוכן') }}</div>
+                <div class="small text-dark" style="white-space:pre-wrap;">{{ session['session_summary'] or txt('No session summary recorded yet.', 'עדיין לא נשמר סיכום מפגש.') }}</div>
+            </div>
+        </div>
+    </div>
+
     <div class="supervision-link-panel border rounded-3 bg-light p-3 mb-3" id="supervision-link-panel-{{ session['id'] }}">
         <div class="row g-2 align-items-end">
             <div class="col-lg-9">
@@ -124,6 +160,7 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label small mb-1">{{ txt('What happened in this meeting?', 'מה קרה במפגש הזה?') }}</label>
+                        <div class="small text-muted mb-2">{{ txt('The saved record will be structured as Meeting / Participants / Missing / Content.', 'הרשומה תישמר במבנה של פגישה / משתתפים / חסרים / תוכן.') }}</div>
                         <textarea class="form-control form-control-sm session-summary-input" name="session_summary" rows="10" placeholder="{{ txt('Process, interventions, themes, and follow-up', 'תהליך, התערבויות, נושאים והמשך') }}">{{ session['session_summary'] or '' }}</textarea>
                     </div>
                 </div>

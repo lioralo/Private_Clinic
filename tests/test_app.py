@@ -1484,6 +1484,83 @@ class ClinicTestCase(unittest.TestCase):
         patient_types = {row['patient_type'] for row in rows}
         assert {'private', 'residency', 'group', 'initial-intake', 'diagnosee'}.issubset(patient_types)
 
+    def test_admin_can_send_notification_to_residency_patients_only(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Residency Patient',
+            status='ongoing',
+            patient_type='residency'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='residency_user',
+            password='password123'
+        ), follow_redirects=True)
+
+        self.client.post('/add_patient', data=dict(
+            name='Private Patient',
+            status='ongoing',
+            patient_type='private'
+        ), follow_redirects=True)
+        self.client.post('/patient/2/access', data=dict(
+            username='private_user',
+            password='password123'
+        ), follow_redirects=True)
+
+        rv = self.client.post('/admin/notifications/send', data=dict(
+            title='Residency Update',
+            message='Residency-only notification',
+            audience='residency'
+        ), follow_redirects=True)
+        assert rv.status_code == 200
+
+        self.logout()
+        self.login('residency_user', 'password123')
+        rv = self.client.get('/api/notifications')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert any('Residency-only notification' in item.get('message', '') for item in payload)
+
+        self.logout()
+        self.login('private_user', 'password123')
+        rv = self.client.get('/api/notifications')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert not any('Residency-only notification' in item.get('message', '') for item in payload)
+
+    def test_group_session_record_generates_structured_summary_text(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO patients (name, status, patient_type) VALUES ('Moshe', 'ongoing', 'group')")
+            db.execute("INSERT INTO patients (name, status, patient_type) VALUES ('Ofir', 'ongoing', 'group')")
+            db.execute("INSERT INTO groups (name, group_type, description) VALUES ('Process Group', 'therapy', 'Weekly group')")
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute("INSERT INTO group_members (group_id, patient_id, joined_at, role) VALUES (?, 1, '2026-01-01', 'member')", (group_id,))
+            db.execute("INSERT INTO group_members (group_id, patient_id, joined_at, role) VALUES (?, 2, '2026-01-01', 'member')", (group_id,))
+            db.execute("INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, facilitator, status) VALUES (?, '2026-02-23', '18:00', 90, 'Session 6', 'Dr. Lior', 'scheduled')", (group_id,))
+            session_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.post(f'/groups/sessions/{session_id}/record', data={
+            'session_status': 'completed',
+            'session_summary': 'The group started in silence and then opened into a discussion of physical freeze and emotional expression.',
+            'attendance_1': 'present',
+            'attendance_note_1': 'شارك באופן פעיל',
+            'attendance_2': 'missed',
+            'absence_reason_2': 'Did not arrive and did not notify'
+        }, follow_redirects=True)
+        assert rv.status_code == 200
+
+        with app.app_context():
+            db = get_db()
+            session_row = db.execute('SELECT session_summary FROM group_sessions WHERE id = ?', (session_id,)).fetchone()
+            assert session_row is not None
+            assert 'Participants' in session_row['session_summary']
+            assert 'Missing' in session_row['session_summary']
+            assert 'Content' in session_row['session_summary']
+            assert 'Moshe' in session_row['session_summary']
+            assert 'Ofir' in session_row['session_summary']
+
     def test_admin_recurring_block_creation(self):
         self.login('lioraloni', 'Flo@tingind4')
         booking_date, booking_time = self.next_allowed_booking_slot(preferred_times=['10:00', '09:00', '14:00'])

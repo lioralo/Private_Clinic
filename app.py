@@ -612,16 +612,47 @@ def inject_translations():
         ui_density = 'balanced'
     return dict(t=t, lang=session.get('lang', 'en'), ui_density=ui_density)
 
+def _get_notification_unread_count(db, user):
+    if not getattr(user, 'is_authenticated', False):
+        return 0
+
+    try:
+        if getattr(user, 'role', None) == 'admin':
+            row = db.execute('''
+                SELECT COUNT(*) AS count
+                FROM notifications
+                WHERE COALESCE(is_read, 0) = 0
+                  AND (COALESCE(audience, 'admin') = 'admin' OR recipient_user_id = ?)
+            ''', (user.id,)).fetchone()
+        else:
+            row = db.execute('''
+                SELECT COUNT(*) AS count
+                FROM notifications
+                WHERE COALESCE(is_read, 0) = 0
+                  AND recipient_user_id = ?
+            ''', (user.id,)).fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    return int((row['count'] if row else 0) or 0)
+
+
 @app.context_processor
 def inject_global_vars():
     unread_messages = 0
+    notification_unread_count = 0
+
     if current_user.is_authenticated:
         db = get_db()
         unread_messages = db.execute(
             'SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = 0',
             (current_user.id,)
         ).fetchone()['count']
-    return dict(unread_messages=unread_messages)
+        notification_unread_count = _get_notification_unread_count(db, current_user)
+
+    return dict(
+        unread_messages=unread_messages,
+        notification_unread_count=notification_unread_count
+    )
 
 @app.route('/set_lang/<lang>')
 def set_lang(lang):
@@ -1373,10 +1404,30 @@ def _run_db_migrations(db):
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
             message TEXT NOT NULL,
+            recipient_user_id INTEGER,
+            sender_id INTEGER,
+            audience TEXT DEFAULT 'admin',
             is_read BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notifications ADD COLUMN title TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notifications ADD COLUMN recipient_user_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE notifications ADD COLUMN sender_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE notifications ADD COLUMN audience TEXT DEFAULT 'admin'")
     except sqlite3.OperationalError:
         pass
 
@@ -5901,7 +5952,7 @@ def _get_group_attendance_data(db, group_sessions, member_history_rows, group_me
             left_date = row['left_at'][:10] if row['left_at'] else None
 
             if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
-                members.append(row.copy())
+                members.append(dict(row))
 
         if not members:
             for row in group_members:
@@ -5909,7 +5960,7 @@ def _get_group_attendance_data(db, group_sessions, member_history_rows, group_me
                 left_date = row['left_at'][:10] if row['left_at'] else None
 
                 if joined_date <= session_date_iso and (left_date is None or left_date >= session_date_iso):
-                    members.append(row.copy())
+                    members.append(dict(row))
 
         session_member_map[int(gs_row['id'])] = members
 
@@ -6496,6 +6547,57 @@ def add_group_session(group_id):
     return redirect(destination)
 
 
+def _build_group_session_summary_text(session_row, members, attendance_payload, raw_content):
+    text = (raw_content or '').strip()
+    lowered = text.lower()
+    if any(token in lowered for token in ('participants', 'משתתפים')) and any(token in lowered for token in ('content', 'תוכן')):
+        return text
+
+    is_he = session.get('lang') == 'he'
+    session_date = parse_date_safe(session_row['session_date'])
+    formatted_date = session_date.strftime('%d/%m/%y') if session_date else (session_row['session_date'] or '')
+    title_value = (session_row['title'] or '').strip()
+
+    heading_prefix = 'פגישה' if is_he else 'Meeting'
+    participants_label = 'משתתפים' if is_he else 'Participants'
+    missing_label = 'חסרים' if is_he else 'Missing'
+    content_label = 'תוכן' if is_he else 'Content'
+    none_label = 'אין' if is_he else 'None'
+    no_content_label = 'לא נרשם תוכן מפגש.' if is_he else 'No session content recorded.'
+    missed_fallback = 'לא הגיע לקבוצה ולא הודיע' if is_he else 'did not attend and did not notify'
+
+    heading = f"{heading_prefix} {title_value or session_row['id']} - {formatted_date}"
+    present_names = []
+    missing_lines = []
+
+    for member in members:
+        patient_id = int(member['patient_id'])
+        payload = attendance_payload.get(patient_id, {})
+        status_value = (payload.get('attendance_status') or 'pending').strip().lower()
+        patient_name = member.get('patient_name') or member.get('name') or f'Patient {patient_id}'
+        if status_value == 'present':
+            present_names.append(patient_name)
+        elif status_value == 'missed':
+            reason_text = (payload.get('absence_reason') or '').strip() or missed_fallback
+            if is_he:
+                missing_lines.append(f"{patient_name} {reason_text}")
+            else:
+                missing_lines.append(f"{patient_name} — {reason_text}")
+
+    sections = [
+        heading,
+        participants_label,
+        ', '.join(present_names) if present_names else none_label,
+        '',
+        missing_label,
+        '\n'.join(missing_lines) if missing_lines else none_label,
+        '',
+        content_label,
+        text or no_content_label,
+    ]
+    return '\n'.join(sections).strip()
+
+
 @app.route('/groups/sessions/<int:session_id>/record', methods=['POST'])
 @login_required
 def record_group_session(session_id):
@@ -6508,24 +6610,30 @@ def record_group_session(session_id):
         flash('Group session not found.')
         return redirect(url_for('groups_dashboard'))
 
-    session_summary = (request.form.get('session_summary') or '').strip()
+    raw_session_summary = (request.form.get('session_summary') or '').strip()
     session_status = (request.form.get('session_status') or 'completed').strip().lower()
     if session_status not in ('scheduled', 'completed', 'cancelled'):
         session_status = 'completed'
 
-    db.execute('''
-        UPDATE group_sessions
-        SET session_summary = ?, status = ?
-        WHERE id = ?
-    ''', (session_summary or None, session_status, session_id))
-
     members = get_group_members_for_session(db, int(session_row['group_id']), session_row['session_date'])
+    attendance_payload = {}
 
-    def upsert_missed_group_note(pid, missed_reason_text):
+    def upsert_group_session_note(pid, status_value, attendance_note_text, missed_reason_text):
         marker = f"[Group Session #{session_id}]"
-        note_content = f"{marker} Missed group session on {session_row['session_date']} ({session_row['session_time']})."
+        if status_value not in ('present', 'missed'):
+            db.execute('DELETE FROM notes WHERE patient_id = ? AND content LIKE ?', (pid, f'{marker}%'))
+            return
+        status_label = 'Missed' if status_value == 'missed' else 'Present'
+        note_parts = [
+            f"{marker} {status_label} group session on {session_row['session_date']} ({session_row['session_time']})."
+        ]
         if missed_reason_text:
-            note_content = f"{note_content} Reason: {missed_reason_text}"
+            note_parts.append(f"Reason: {missed_reason_text}")
+        if raw_session_summary:
+            note_parts.append(f"Content: {raw_session_summary}")
+        if attendance_note_text:
+            note_parts.append(f"Member note: {attendance_note_text}")
+        note_content = ' '.join(part for part in note_parts if part).strip()
         existing_note = db.execute('''
             SELECT id
             FROM notes
@@ -6537,14 +6645,14 @@ def record_group_session(session_id):
         if existing_note:
             db.execute('''
                 UPDATE notes
-                SET note_date = ?, content = ?, is_missed_meeting = 1, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
+                SET note_date = ?, content = ?, is_missed_meeting = ?, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            ''', (session_row['session_date'], note_content, missed_reason_text or None, existing_note['id']))
+            ''', (session_row['session_date'], note_content, 1 if status_value == 'missed' else 0, missed_reason_text or None, existing_note['id']))
         else:
             db.execute('''
                 INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
-                VALUES (?, ?, ?, 1, ?)
-            ''', (pid, session_row['session_date'], note_content, missed_reason_text or None))
+                VALUES (?, ?, ?, ?, ?)
+            ''', (pid, session_row['session_date'], note_content, 1 if status_value == 'missed' else 0, missed_reason_text or None))
 
     for member in members:
         pid = int(member['patient_id'])
@@ -6558,6 +6666,13 @@ def record_group_session(session_id):
             absence_reason = ''
             notified_on_time = 0
 
+        attendance_payload[pid] = {
+            'attendance_status': status_value,
+            'absence_reason': absence_reason,
+            'notified_on_time': notified_on_time,
+            'attendance_note': attendance_note,
+        }
+
         db.execute('''
             INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -6569,8 +6684,16 @@ def record_group_session(session_id):
                           updated_at = CURRENT_TIMESTAMP
         ''', (session_id, pid, status_value, absence_reason or None, notified_on_time, attendance_note or None))
 
-        if status_value == 'missed':
-            upsert_missed_group_note(pid, absence_reason)
+        if session_status == 'completed':
+            upsert_group_session_note(pid, status_value, attendance_note, absence_reason)
+
+    formatted_summary = _build_group_session_summary_text(session_row, members, attendance_payload, raw_session_summary)
+
+    db.execute('''
+        UPDATE group_sessions
+        SET session_summary = ?, status = ?
+        WHERE id = ?
+    ''', (formatted_summary or None, session_status, session_id))
 
     db.commit()
     flash('Session record saved.')
@@ -10271,16 +10394,179 @@ END:VCALENDAR\r
 def export_ical(appointment_id):
     return redirect(url_for('export_ics', appointment_id=appointment_id))
 
-@app.route('/api/notifications')
+def _get_notification_patient_choices(db):
+    return [dict(row) for row in db.execute('''
+        SELECT p.id AS patient_id,
+               p.name AS patient_name,
+               COALESCE(p.patient_type, 'private') AS patient_type,
+               COALESCE(p.status, 'ongoing') AS status,
+               u.id AS user_id,
+               CASE WHEN u.id IS NULL THEN 0 ELSE 1 END AS has_login
+        FROM patients p
+        LEFT JOIN users u
+          ON u.patient_id = p.id
+         AND u.role = 'patient'
+         AND COALESCE(u.is_active, 1) = 1
+        WHERE COALESCE(p.is_deleted, 0) = 0
+        ORDER BY CASE COALESCE(p.patient_type, 'private')
+            WHEN 'group' THEN 0
+            WHEN 'private' THEN 1
+            WHEN 'residency' THEN 2
+            WHEN 'initial-intake' THEN 3
+            ELSE 4 END,
+            CASE WHEN COALESCE(p.status, '') = 'archived' THEN 1 ELSE 0 END,
+            p.name ASC
+    ''').fetchall()]
+
+
+def _get_notification_target_users(db, audience='all', selected_patient_ids=None):
+    selected_patient_ids = [int(pid) for pid in (selected_patient_ids or []) if str(pid).isdigit()]
+    filters = ["u.role = 'patient'", 'COALESCE(u.is_active, 1) = 1', 'COALESCE(p.is_deleted, 0) = 0']
+    params = []
+
+    normalized_audience = (audience or 'all').strip().lower()
+    if normalized_audience in {'group', 'private', 'residency'}:
+        filters.append('COALESCE(p.patient_type, \'private\') = ?')
+        params.append(normalized_audience)
+    elif normalized_audience == 'selected':
+        if not selected_patient_ids:
+            return []
+        placeholders = ','.join(['?'] * len(selected_patient_ids))
+        filters.append(f'p.id IN ({placeholders})')
+        params.extend(selected_patient_ids)
+
+    query = f'''
+        SELECT DISTINCT u.id AS user_id,
+               p.id AS patient_id,
+               p.name AS patient_name,
+               COALESCE(p.patient_type, 'private') AS patient_type
+        FROM users u
+        JOIN patients p ON p.id = u.patient_id
+        WHERE {' AND '.join(filters)}
+        ORDER BY p.name ASC
+    '''
+    return [dict(row) for row in db.execute(query, params).fetchall()]
+
+
+@app.route('/api/notification_recipients')
 @login_required
-def get_notifications():
+def notification_recipients():
     if current_user.role != 'admin':
         return jsonify([])
 
     db = get_db()
-    notifications = db.execute('SELECT * FROM notifications WHERE is_read = 0 ORDER BY created_at ASC').fetchall()
+    return jsonify(_get_notification_patient_choices(db))
 
-    if notifications:
+
+@app.route('/admin/notifications/send', methods=['POST'])
+@login_required
+def send_admin_notification():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    title = (request.form.get('title') or '').strip()
+    message = (request.form.get('message') or '').strip()
+    audience = (request.form.get('audience') or 'all').strip().lower()
+    selected_patient_ids = request.form.getlist('patient_ids')
+
+    if not message:
+        flash('Notification message is required.', 'error')
+        return redirect(request.referrer or url_for('admin_dashboard'))
+
+    if audience not in {'all', 'group', 'private', 'residency', 'selected'}:
+        audience = 'all'
+
+    db = get_db()
+    recipients = _get_notification_target_users(db, audience=audience, selected_patient_ids=selected_patient_ids)
+    if not recipients:
+        flash('No patient portal users matched the selected notification audience.', 'warning')
+        return redirect(request.referrer or url_for('admin_dashboard'))
+
+    title_value = title or 'Clinic Update'
+    for recipient in recipients:
+        db.execute('''
+            INSERT INTO notifications (title, message, recipient_user_id, sender_id, audience, is_read)
+            VALUES (?, ?, ?, ?, ?, 0)
+        ''', (title_value, message, recipient['user_id'], current_user.id, audience))
+
+    db.commit()
+    flash(f'Notification sent to {len(recipients)} patient(s).', 'success')
+    return redirect(request.referrer or url_for('admin_dashboard'))
+
+
+@app.route('/api/notifications')
+@login_required
+def get_notifications():
+    db = get_db()
+    include_all = (request.args.get('all') or '').strip() in {'1', 'true', 'yes'}
+    mark_read = (request.args.get('mark_read') or '1').strip().lower() not in {'0', 'false', 'no'}
+
+    if current_user.role == 'admin':
+        if include_all:
+            notifications = db.execute('''
+                SELECT id,
+                       COALESCE(title, 'Clinic Update') AS title,
+                       message,
+                       COALESCE(audience, 'admin') AS audience,
+                       recipient_user_id,
+                       sender_id,
+                       COALESCE(is_read, 0) AS is_read,
+                       created_at
+                FROM notifications
+                WHERE COALESCE(audience, 'admin') = 'admin'
+                   OR recipient_user_id = ?
+                   OR sender_id = ?
+                ORDER BY datetime(created_at) DESC, id DESC
+                LIMIT 60
+            ''', (current_user.id, current_user.id)).fetchall()
+        else:
+            notifications = db.execute('''
+                SELECT id,
+                       COALESCE(title, 'Clinic Update') AS title,
+                       message,
+                       COALESCE(audience, 'admin') AS audience,
+                       recipient_user_id,
+                       sender_id,
+                       COALESCE(is_read, 0) AS is_read,
+                       created_at
+                FROM notifications
+                WHERE COALESCE(is_read, 0) = 0
+                  AND (COALESCE(audience, 'admin') = 'admin' OR recipient_user_id = ?)
+                ORDER BY datetime(created_at) ASC, id ASC
+            ''', (current_user.id,)).fetchall()
+    else:
+        if include_all:
+            notifications = db.execute('''
+                SELECT id,
+                       COALESCE(title, 'Clinic Update') AS title,
+                       message,
+                       COALESCE(audience, 'patient') AS audience,
+                       recipient_user_id,
+                       sender_id,
+                       COALESCE(is_read, 0) AS is_read,
+                       created_at
+                FROM notifications
+                WHERE recipient_user_id = ?
+                ORDER BY datetime(created_at) DESC, id DESC
+                LIMIT 60
+            ''', (current_user.id,)).fetchall()
+        else:
+            notifications = db.execute('''
+                SELECT id,
+                       COALESCE(title, 'Clinic Update') AS title,
+                       message,
+                       COALESCE(audience, 'patient') AS audience,
+                       recipient_user_id,
+                       sender_id,
+                       COALESCE(is_read, 0) AS is_read,
+                       created_at
+                FROM notifications
+                WHERE COALESCE(is_read, 0) = 0
+                  AND recipient_user_id = ?
+                ORDER BY datetime(created_at) ASC, id ASC
+            ''', (current_user.id,)).fetchall()
+
+    if notifications and mark_read:
         notification_ids = [n['id'] for n in notifications]
         placeholders = ','.join(['?'] * len(notification_ids))
         db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', notification_ids)
