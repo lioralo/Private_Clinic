@@ -2,6 +2,31 @@
 
 ---
 
+## Session 43
+
+**Date:** 2026-04-14
+
+**Objective:** Fix category counters so they match the real patient totals and harden the group Google Docs sync workflow with visible progress feedback and dependency checks.
+
+**Release Summary:**
+
+1. **Patient Counter Alignment**
+- Fixed the CRM category totals so the visible All and Candidates counts now match the actual patient roster.
+- Corrected the waiting/candidate mapping in the counter payload and aligned the All filter to the true filtered total.
+
+2. **Group Docs Sync Reliability**
+- Verified the Sync to Docs backend route with automated coverage.
+- Added a visible sync status indicator on the group page so admins can see when syncing is in progress, succeeds, or fails.
+- Hardened the Google dependency checks so missing libraries now return a clear install hint instead of crashing the route.
+
+3. **Validation**
+- Added focused regressions for counter accuracy and group Docs sync success.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 142 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 42
 
 **Date:** 2026-04-14

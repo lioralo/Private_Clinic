@@ -41,7 +41,7 @@
             <button type="button" class="btn btn-outline-info btn-sm rounded-pill" onclick="toggleSupervisionPanel({{ session['id'] }})">{{ txt('Link Supervision', 'קישור להדרכה') }}</button>
             <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="toggleRecordEdit({{ session['id'] }}, true)">{{ txt('Edit Record', 'עריכת סיכום') }}</button>
             {% if group['gdoc_id'] %}
-            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="syncGroupDoc({{ group['id'] }}, {{ session['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-sync-docs-button="1" onclick="syncGroupDoc(this, {{ group['id'] }}, {{ session['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
             {% endif %}
             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
         </div>
@@ -353,10 +353,12 @@
                             {% if group['gdoc_id'] %}
                             <div class="small text-dark mb-3" style="word-break:break-all;">{{ txt('Linked document ID', 'מזהה מסמך מקושר') }}: {{ group['gdoc_id'] }}</div>
                             <div class="d-flex gap-2 flex-wrap">
-                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="syncGroupDoc({{ group['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-sync-docs-button="1" onclick="syncGroupDoc(this, {{ group['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
                                 <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
                             </div>
+                            <div id="groupDocsSyncStatus" class="small text-muted mt-2" aria-live="polite">{{ txt('Ready to sync the latest group meeting notes.', 'מוכן לסנכרן את סיכומי המפגשים האחרונים.') }}</div>
                             {% else %}
+                            <div id="groupDocsSyncStatus" class="small text-muted mt-2 mb-2" aria-live="polite">{{ txt('Create or attach a Google Doc to enable sync.', 'יש ליצור או לקשר מסמך Google כדי לאפשר סנכרון.') }}</div>
                             <div class="d-flex flex-column gap-2">
                                 <div>
                                     <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="createGroupDoc({{ group['id'] }})">{{ txt('Create Group Doc', 'יצירת מסמך קבוצה') }}</button>
@@ -845,22 +847,62 @@ function attachGroupDoc(groupId) {
     }).catch(() => alert(labels.groupDocsError));
 }
 
-function syncGroupDoc(groupId, sessionId) {
+function setGroupDocsSyncStatus(message, tone) {
+    const statusNode = document.getElementById('groupDocsSyncStatus');
+    if (!statusNode) return;
+    statusNode.textContent = message || '';
+    statusNode.classList.remove('text-muted', 'text-info', 'text-success', 'text-danger');
+    if (tone === 'success') {
+        statusNode.classList.add('text-success');
+    } else if (tone === 'error') {
+        statusNode.classList.add('text-danger');
+    } else if (tone === 'info') {
+        statusNode.classList.add('text-info');
+    } else {
+        statusNode.classList.add('text-muted');
+    }
+}
+
+function setGroupDocsButtonsBusy(isBusy) {
+    document.querySelectorAll('[data-sync-docs-button]').forEach((btn) => {
+        if (!btn.dataset.defaultLabel) {
+            btn.dataset.defaultLabel = btn.innerHTML;
+        }
+        btn.disabled = !!isBusy;
+        btn.innerHTML = isBusy
+            ? ((isHebrew ? 'מסנכרן...' : 'Syncing...'))
+            : (btn.dataset.defaultLabel || btn.innerHTML);
+    });
+}
+
+function syncGroupDoc(triggerButton, groupId, sessionId) {
+    if (typeof triggerButton !== 'object' || !triggerButton) {
+        sessionId = groupId;
+        groupId = triggerButton;
+    }
     const body = new URLSearchParams();
     if (sessionId) {
         body.set('session_id', String(sessionId));
     }
+    setGroupDocsSyncStatus(isHebrew ? 'מתבצע סנכרון ל-Google Docs...' : 'Syncing group meeting notes to Google Docs...', 'info');
+    setGroupDocsButtonsBusy(true);
     fetch('/groups/' + groupId + '/sync-gdoc', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
-            alert(data.message || 'Synced successfully.');
+            setGroupDocsSyncStatus(data.message || (isHebrew ? 'הסנכרון הושלם בהצלחה.' : 'Sync completed successfully.'), 'success');
         } else {
+            setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
             alert(data.error || labels.groupDocsError);
         }
-    }).catch(() => alert(labels.groupDocsError));
+    }).catch(() => {
+        setGroupDocsSyncStatus(labels.groupDocsError, 'error');
+        alert(labels.groupDocsError);
+    }).finally(() => {
+        setGroupDocsButtonsBusy(false);
+    });
 }
 
 function detachGroupDoc(groupId) {

@@ -1627,13 +1627,19 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
         assert rv.status_code == 200
         assert b'Sync to Docs' in rv.data
+        assert b'groupDocsSyncStatus' in rv.data
 
     def test_crm_patient_view_shows_all_and_candidates_buttons(self):
         self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(name='Ongoing Count', status='ongoing', patient_type='private'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Candidate One', status='candidate', patient_type='private'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Candidate Two', status='candidate', patient_type='private'), follow_redirects=True)
+        self.client.post('/add_patient', data=dict(name='Archived Count', status='archived', patient_type='private'), follow_redirects=True)
+
         rv = self.client.get('/crm', follow_redirects=True)
         assert rv.status_code == 200
-        assert b'All (' in rv.data
-        assert b'Candidates (' in rv.data
+        assert b'All (4)' in rv.data
+        assert b'Candidates (2)' in rv.data
 
     def test_notification_picker_shows_candidate_filter_button(self):
         self.login('lioraloni', 'Flo@tingind4')

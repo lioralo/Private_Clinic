@@ -2830,10 +2830,13 @@ def crm_dashboard():
         tuple(deleted_count_params)
     ).fetchone()
     
+    waiting_count = counts_row['candidate_waiting_count'] or 0
     counts = {
         'all': counts_row['all_count'] or 0,
         'ongoing': counts_row['ongoing_count'] or 0,
-        'candidate_waiting': counts_row['candidate_waiting_count'] or 0,
+        'waiting': waiting_count,
+        'candidate': waiting_count,
+        'candidate_waiting': waiting_count,
         'archived': counts_row['archived_count'] or 0,
         'deleted': deleted_count_row['deleted_count'] or 0
     }
@@ -9276,19 +9279,31 @@ def _extract_google_doc_id(raw_value):
     return match.group(1) if match else raw_text
 
 
+def _google_docs_dependency_error():
+    issues = []
+    if not gdocs or not bool(getattr(gdocs, 'GDOCS_LIBS_AVAILABLE', True)):
+        detail = getattr(gdocs, 'GDOCS_LIBS_ERROR', None) if gdocs else None
+        issues.append(detail or 'google_docs module not available')
+    if not gcal or not bool(getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', True)):
+        detail = getattr(gcal, 'GOOGLE_LIBS_ERROR', None) if gcal else None
+        issues.append(detail or 'Google libraries not installed')
+    if not issues:
+        return None
+    return 'Google integration dependencies are unavailable: ' + '; '.join(str(item) for item in issues) + '. Please run pip install -r requirements.txt.'
+
+
 @app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
 @login_required
 def link_gdoc(patient_id):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-    if not gdocs:
-        return jsonify({'error': 'google_docs module not available'}), 500
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        return jsonify({'error': dependency_error}), 500
     db = get_db()
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if not patient:
         return jsonify({'error': 'Patient not found'}), 404
-    if not gcal:
-        return jsonify({'error': 'Google libraries not installed'}), 500
     creds = gcal.load_credentials(db)
     if not creds:
         return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
@@ -9382,8 +9397,9 @@ def open_gdoc(patient_id):
 def sync_from_gdoc(patient_id):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-    if not gdocs:
-        return jsonify({'error': 'google_docs module not available'}), 500
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        return jsonify({'error': dependency_error}), 500
     db = get_db()
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if not patient or not patient['gdoc_id']:
@@ -9395,10 +9411,9 @@ def sync_from_gdoc(patient_id):
 
 
 def _sync_group_gdoc_sessions(db, group, session_id=None):
-    if not gdocs:
-        return 0, 'google_docs module not available'
-    if not gcal:
-        return 0, 'Google libraries not installed'
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        return 0, dependency_error
     if not group or not group['gdoc_id']:
         return 0, 'No Google Doc linked'
 
@@ -9491,14 +9506,13 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
 def link_group_gdoc(group_id):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-    if not gdocs:
-        return jsonify({'error': 'google_docs module not available'}), 500
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        return jsonify({'error': dependency_error}), 500
     db = get_db()
     group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group:
         return jsonify({'error': 'Group not found'}), 404
-    if not gcal:
-        return jsonify({'error': 'Google libraries not installed'}), 500
     creds = gcal.load_credentials(db)
     if not creds:
         return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
