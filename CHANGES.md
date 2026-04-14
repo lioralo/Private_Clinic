@@ -2,6 +2,34 @@
 
 ---
 
+## Session 40
+
+**Date:** 2026-04-14
+
+**Objective:** Finish the patient notification seen-state flow, add Google Docs controls inside group management, and stabilize the group meeting content view.
+
+**Release Summary:**
+
+1. **Patient Notification Seen-State**
+- Added a dedicated read-state endpoint so patient and admin notifications can be marked as seen explicitly.
+- Updated the bell offcanvas so notifications stay visible until the user chooses to mark one or all of them as seen.
+
+2. **Group Google Docs Integration**
+- Added group-level Google Docs linking, attaching, opening, and detaching routes.
+- Exposed the controls directly in the group management view so each group can keep a shared working document.
+
+3. **Group View Stability**
+- Simplified the group management panel behavior so content stays open reliably instead of briefly flashing and collapsing.
+- Removed unnecessary fade behavior from the meeting tabs for a steadier session-view experience.
+
+4. **Validation**
+- Added focused regressions for notification seen-state and group Google Docs rendering.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 39
 
 **Date:** 2026-04-14

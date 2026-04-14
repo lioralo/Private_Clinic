@@ -298,14 +298,14 @@
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-body p-3">
                 <div class="d-flex flex-wrap gap-2" id="groupMgmtTabs">
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneInfo" type="button">{{ txt('Group Info', 'פרטי קבוצה') }}</button>
+                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab active" data-pane="groupMgmtPaneInfo" type="button">{{ txt('Group Info', 'פרטי קבוצה') }}</button>
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSchedule" type="button">{{ txt('Schedule Session', 'קביעת מפגש') }}</button>
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneMembers" type="button">{{ txt('Members', 'משתתפים') }}{% if group_members %} <span class="badge bg-secondary rounded-pill ms-1">{{ group_members|length }}</span>{% endif %}</button>
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneHistory" type="button">{{ txt('Member History', 'היסטוריית משתתפים') }}</button>
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSupervision" type="button">{{ txt('Supervision', 'הדרכה') }}{% if group_supervisions %} <span class="badge bg-primary rounded-pill ms-1">{{ group_supervisions|length }}</span>{% endif %}</button>
                     <button class="btn btn-sm btn-outline-danger rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneDanger" type="button">{{ txt('Delete Group', 'מחיקת קבוצה') }}</button>
                 </div>
-                <div id="groupMgmtCanvas" class="mt-3 pt-3 border-top" style="display:none;">
+                <div id="groupMgmtCanvas" class="mt-3 pt-3 border-top">
                     <div id="groupMgmtPaneInfo" class="group-mgmt-pane">
                         <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -336,6 +336,36 @@
                                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Save Group Info', 'שמירת פרטי קבוצה') }}</button>
                             </div>
                         </form>
+                        <div class="border rounded-3 p-3 bg-light mt-3">
+                            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
+                                <div>
+                                    <div class="fw-semibold text-primary">Google Docs</div>
+                                    <div class="small text-muted">{{ txt('Link a shared Google Doc for the group summary, meeting notes, and materials.', 'קישור מסמך Google משותף לסיכום קבוצה, תיעוד מפגשים וחומרים.') }}</div>
+                                </div>
+                                {% if group['gdoc_id'] %}
+                                <a href="{{ url_for('open_group_gdoc', group_id=group['id']) }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Open Group Doc', 'פתיחת מסמך הקבוצה') }}</a>
+                                {% endif %}
+                            </div>
+                            {% if group['gdoc_id'] %}
+                            <div class="small text-dark mb-3" style="word-break:break-all;">{{ txt('Linked document ID', 'מזהה מסמך מקושר') }}: {{ group['gdoc_id'] }}</div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
+                            </div>
+                            {% else %}
+                            <div class="d-flex flex-column gap-2">
+                                <div>
+                                    <button type="button" class="btn btn-primary btn-sm rounded-pill" onclick="createGroupDoc({{ group['id'] }})">{{ txt('Create Group Doc', 'יצירת מסמך קבוצה') }}</button>
+                                </div>
+                                <div>
+                                    <label class="form-label small mb-1">{{ txt('Attach Existing Google Doc', 'קישור מסמך Google קיים') }}</label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <input type="text" class="form-control form-control-sm" id="group-gdoc-input-{{ group['id'] }}" placeholder="https://docs.google.com/document/d/...">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="attachGroupDoc({{ group['id'] }})">{{ txt('Attach', 'קישור') }}</button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
                     </div>
                     <div id="groupMgmtPaneSchedule" class="group-mgmt-pane d-none">
                         <form method="post" action="{{ url_for('add_group_session', group_id=group['id']) }}" class="row g-3" id="groupScheduleForm">
@@ -582,14 +612,14 @@
                     </li>
                 </ul>
                 <div class="tab-content border rounded-4 bg-light-subtle p-3">
-                    <div class="tab-pane fade show active" id="nextMeetingPane" role="tabpanel">
+                    <div class="tab-pane show active" id="nextMeetingPane" role="tabpanel">
                         {% if next_session %}
                         {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions) }}
                         {% else %}
                         <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
                         {% endif %}
                     </div>
-                    <div class="tab-pane fade" id="pastMeetingsPane" role="tabpanel">
+                    <div class="tab-pane" id="pastMeetingsPane" role="tabpanel">
                         <div class="d-flex flex-column gap-2">
                             {% for session in past_sessions_all %}
                             <div class="border rounded-3 overflow-hidden bg-white">
@@ -608,7 +638,7 @@
                             {% endfor %}
                         </div>
                     </div>
-                    <div class="tab-pane fade" id="upcomingQueuePane" role="tabpanel">
+                    <div class="tab-pane" id="upcomingQueuePane" role="tabpanel">
                         <div class="d-flex flex-column gap-3">
                             {% for session in upcoming_queue %}
                             {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions) }}
@@ -660,11 +690,6 @@ const csrfToken = document.getElementById('groups_csrf_token').value;
     tabs.forEach(function(btn) {
         btn.addEventListener('click', function() {
             var targetId = this.getAttribute('data-pane');
-            if (this.classList.contains('active')) {
-                this.classList.remove('active');
-                canvas.style.display = 'none';
-                return;
-            }
             tabs.forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
             panes.forEach(function(p) { p.classList.add('d-none'); });
@@ -684,7 +709,9 @@ const labels = {
     saveError: isHebrew ? 'לא ניתן לשמור שינויים במפגש.' : 'Could not save session changes.',
     deleteSessionConfirm: isHebrew ? 'למחוק את המפגש הזה?' : 'Delete this group session?',
     deleteSessionError: isHebrew ? 'לא ניתן למחוק את המפגש.' : 'Could not delete session.',
-    linkSupervisionError: isHebrew ? 'לא ניתן לקשר הדרכה למפגש.' : 'Could not link supervision to this session.'
+    linkSupervisionError: isHebrew ? 'לא ניתן לקשר הדרכה למפגש.' : 'Could not link supervision to this session.',
+    groupDocsError: isHebrew ? 'לא ניתן לעדכן את מסמך Google של הקבוצה.' : 'Could not update the group Google Doc.',
+    groupDocsDetachConfirm: isHebrew ? 'לנתק את מסמך Google מהקבוצה?' : 'Detach the Google Doc from this group?'
 };
 
 function minutesToTime(totalMinutes) {
@@ -753,6 +780,53 @@ function toggleBookingPanel(id, date, start, durationMin, title, facilitator, ty
 function toggleSupervisionPanel(sessionId) {
     const panel = document.getElementById('supervision-link-panel-' + sessionId);
     panel.classList.toggle('is-open');
+}
+
+function createGroupDoc(groupId) {
+    fetch('/groups/' + groupId + '/link-gdoc', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: ''
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') {
+            if (data.doc_url) {
+                window.open(data.doc_url, '_blank', 'noopener');
+            }
+            window.location.reload();
+        } else {
+            alert(data.error || labels.groupDocsError);
+        }
+    }).catch(() => alert(labels.groupDocsError));
+}
+
+function attachGroupDoc(groupId) {
+    const input = document.getElementById('group-gdoc-input-' + groupId);
+    const body = new URLSearchParams({ doc_url: input ? input.value : '' });
+    fetch('/groups/' + groupId + '/attach-gdoc', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') {
+            window.location.reload();
+        } else {
+            alert(data.error || labels.groupDocsError);
+        }
+    }).catch(() => alert(labels.groupDocsError));
+}
+
+function detachGroupDoc(groupId) {
+    if (!confirm(labels.groupDocsDetachConfirm)) return;
+    fetch('/groups/' + groupId + '/detach-gdoc', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken }
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') {
+            window.location.reload();
+        } else {
+            alert(data.error || labels.groupDocsError);
+        }
+    }).catch(() => alert(labels.groupDocsError));
 }
 
 function linkSessionSupervision(sessionId) {

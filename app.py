@@ -1461,8 +1461,23 @@ def _run_db_migrations(db):
             group_type TEXT DEFAULT 'support',
             description TEXT,
             is_active BOOLEAN DEFAULT 1,
+            gdoc_id TEXT,
+            gdoc_watch_channel TEXT,
+            gdoc_watch_expiry TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE groups ADD COLUMN gdoc_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE groups ADD COLUMN gdoc_watch_channel TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE groups ADD COLUMN gdoc_watch_expiry TEXT')
     except sqlite3.OperationalError:
         pass
 
@@ -9216,6 +9231,15 @@ def _pull_gdoc_notes(db, patient):
 # Google Docs routes
 # ---------------------------------------------------------------------------
 
+def _extract_google_doc_id(raw_value):
+    raw_text = (raw_value or '').strip()
+    if not raw_text:
+        return None
+    import re as _re
+    match = _re.search(r'/document/d/([a-zA-Z0-9_-]+)', raw_text)
+    return match.group(1) if match else raw_text
+
+
 @app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
 @login_required
 def link_gdoc(patient_id):
@@ -9269,9 +9293,7 @@ def attach_gdoc(patient_id):
     doc_url = request.form.get('doc_url', '').strip()
     if not doc_url:
         return jsonify({'error': 'No document URL provided'}), 400
-    import re as _re
-    m = _re.search(r'/document/d/([a-zA-Z0-9_-]+)', doc_url)
-    doc_id = m.group(1) if m else doc_url.strip()
+    doc_id = _extract_google_doc_id(doc_url)
     if not doc_id:
         return jsonify({'error': 'Invalid document URL or ID'}), 400
     db = get_db()
@@ -9334,6 +9356,106 @@ def sync_from_gdoc(patient_id):
     if err:
         return jsonify({'error': err}), 500
     return jsonify({'status': 'ok', 'synced': count, 'message': f'Synced {count} note(s) from Google Doc.'})
+
+
+@app.route('/groups/<int:group_id>/link-gdoc', methods=['POST'])
+@login_required
+def link_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not gdocs:
+        return jsonify({'error': 'google_docs module not available'}), 500
+    db = get_db()
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+    if not gcal:
+        return jsonify({'error': 'Google libraries not installed'}), 500
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
+    creds = gcal._refresh_and_save(db, creds)
+    try:
+        create_group_doc = getattr(gdocs, 'create_group_doc', None)
+        group_name = (group['name'] or '').strip() or f'Group {group_id}'
+        if callable(create_group_doc):
+            doc_id = create_group_doc(creds, group_name)
+        else:
+            doc_id = gdocs.create_patient_doc(creds, f"Group — {group_name}")
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+    webhook_url = (request.form.get('webhook_url') or '').strip()
+    channel_id, expiry = None, None
+    if webhook_url:
+        try:
+            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
+        except Exception:
+            pass
+
+    db.execute(
+        'UPDATE groups SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+        (doc_id, channel_id, expiry, group_id)
+    )
+    db.commit()
+    return jsonify({
+        'status': 'ok',
+        'doc_id': doc_id,
+        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+        'message': 'Google Doc created and linked successfully.'
+    })
+
+
+@app.route('/groups/<int:group_id>/attach-gdoc', methods=['POST'])
+@login_required
+def attach_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    doc_id = _extract_google_doc_id(request.form.get('doc_url', ''))
+    if not doc_id:
+        return jsonify({'error': 'Invalid document URL or ID'}), 400
+    db = get_db()
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+    db.execute('UPDATE groups SET gdoc_id = ? WHERE id = ?', (doc_id, group_id))
+    db.commit()
+    return jsonify({
+        'status': 'ok',
+        'doc_id': doc_id,
+        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
+        'message': 'Google Doc linked successfully.'
+    })
+
+
+@app.route('/groups/<int:group_id>/detach-gdoc', methods=['POST'])
+@login_required
+def detach_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+    db.execute(
+        'UPDATE groups SET gdoc_id = NULL, gdoc_watch_channel = NULL, gdoc_watch_expiry = NULL WHERE id = ?',
+        (group_id,)
+    )
+    db.commit()
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/groups/<int:group_id>/open-gdoc')
+@login_required
+def open_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    group = db.execute('SELECT gdoc_id FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group or not group['gdoc_id']:
+        flash('No Google Doc linked for this group.')
+        return redirect(url_for('group_detail', group_id=group_id))
+    return redirect(f"https://docs.google.com/document/d/{group['gdoc_id']}/edit")
 
 
 @app.route('/api/gdoc/webhook', methods=['POST'])
@@ -10499,7 +10621,7 @@ def send_admin_notification():
 def get_notifications():
     db = get_db()
     include_all = (request.args.get('all') or '').strip() in {'1', 'true', 'yes'}
-    mark_read = (request.args.get('mark_read') or '1').strip().lower() not in {'0', 'false', 'no'}
+    mark_read = (request.args.get('mark_read') or '0').strip().lower() not in {'0', 'false', 'no'}
 
     if current_user.role == 'admin':
         if include_all:
@@ -10573,6 +10695,61 @@ def get_notifications():
         db.commit()
 
     return jsonify([dict(n) for n in notifications])
+
+
+@app.route('/api/notifications/mark_read', methods=['POST'])
+@login_required
+def mark_notifications_read():
+    db = get_db()
+    mark_all = (request.form.get('all') or request.args.get('all') or '').strip().lower() in {'1', 'true', 'yes'}
+    raw_ids = request.form.getlist('notification_id') or request.args.getlist('notification_id')
+    notification_ids = [int(value) for value in raw_ids if str(value).isdigit()]
+
+    if current_user.role == 'admin':
+        if mark_all:
+            db.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE COALESCE(is_read, 0) = 0
+                  AND (COALESCE(audience, 'admin') = 'admin' OR recipient_user_id = ? OR sender_id = ?)
+            ''', (current_user.id, current_user.id))
+            db.commit()
+            return jsonify({'status': 'success'})
+
+        if not notification_ids:
+            return jsonify({'status': 'error', 'message': 'No notification selected.'}), 400
+
+        placeholders = ','.join(['?'] * len(notification_ids))
+        db.execute(f'''
+            UPDATE notifications
+            SET is_read = 1
+            WHERE id IN ({placeholders})
+              AND (COALESCE(audience, 'admin') = 'admin' OR recipient_user_id = ? OR sender_id = ?)
+        ''', [*notification_ids, current_user.id, current_user.id])
+    else:
+        if mark_all:
+            db.execute('''
+                UPDATE notifications
+                SET is_read = 1
+                WHERE COALESCE(is_read, 0) = 0
+                  AND recipient_user_id = ?
+            ''', (current_user.id,))
+            db.commit()
+            return jsonify({'status': 'success'})
+
+        if not notification_ids:
+            return jsonify({'status': 'error', 'message': 'No notification selected.'}), 400
+
+        placeholders = ','.join(['?'] * len(notification_ids))
+        db.execute(f'''
+            UPDATE notifications
+            SET is_read = 1
+            WHERE id IN ({placeholders})
+              AND recipient_user_id = ?
+        ''', [*notification_ids, current_user.id])
+
+    db.commit()
+    return jsonify({'status': 'success'})
 
 @app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
 @login_required

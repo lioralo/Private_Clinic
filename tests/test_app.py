@@ -1527,6 +1527,79 @@ class ClinicTestCase(unittest.TestCase):
         payload = rv.get_json()
         assert not any('Residency-only notification' in item.get('message', '') for item in payload)
 
+    def test_patient_can_mark_notification_seen(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Notify Patient',
+            status='ongoing',
+            patient_type='private'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='notify_user',
+            password='password123'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            patient_user = db.execute("SELECT id FROM users WHERE username = 'notify_user'").fetchone()
+            db.execute(
+                "INSERT INTO notifications (title, message, recipient_user_id, audience, is_read) VALUES (?, ?, ?, ?, 0)",
+                ('Reminder', 'Please review your update', patient_user['id'], 'selected')
+            )
+            notification_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        self.logout()
+        self.login('notify_user', 'password123')
+
+        rv = self.client.get('/api/notifications?all=1&mark_read=0')
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert any(int(item['id']) == notification_id and int(item.get('is_read', 0)) == 0 for item in payload)
+
+        rv = self.client.post('/api/notifications/mark_read', data={'notification_id': str(notification_id)})
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT is_read FROM notifications WHERE id = ?', (notification_id,)).fetchone()
+            assert row is not None
+            assert int(row['is_read'] or 0) == 1
+
+    def test_group_detail_renders_google_docs_controls(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO groups (name, group_type, description) VALUES ('Docs Group', 'therapy', 'Group with docs')")
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
+        assert rv.status_code == 200
+        assert b'Google Docs' in rv.data
+        assert b'Create Group Doc' in rv.data or b'Attach Existing Google Doc' in rv.data
+
+    def test_group_can_attach_google_doc(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO groups (name, group_type, description) VALUES ('Attached Docs Group', 'therapy', 'Docs attach flow')")
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.post(f'/groups/{group_id}/attach-gdoc', data={'doc_url': 'https://docs.google.com/document/d/abc123xyz/edit'})
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload.get('status') == 'ok'
+        assert payload.get('doc_id') == 'abc123xyz'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT gdoc_id FROM groups WHERE id = ?', (group_id,)).fetchone()
+            assert row is not None
+            assert row['gdoc_id'] == 'abc123xyz'
+
     def test_group_session_record_generates_structured_summary_text(self):
         self.login('lioraloni', 'Flo@tingind4')
         with app.app_context():
