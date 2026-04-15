@@ -1614,7 +1614,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         assert b'Google Docs Integration' in rv.data
 
-    def test_group_detail_shows_sync_to_docs_button_when_doc_is_linked(self):
+    def test_group_detail_shows_pull_and_append_docs_buttons_when_doc_is_linked(self):
         self.login('lioraloni', 'Flo@tingind4')
         with app.app_context():
             db = get_db()
@@ -1626,7 +1626,8 @@ class ClinicTestCase(unittest.TestCase):
 
         rv = self.client.get(f'/groups/{group_id}', follow_redirects=True)
         assert rv.status_code == 200
-        assert b'Sync to Docs' in rv.data
+        assert b'Append Site Notes to Doc' in rv.data
+        assert b'Pull Doc and Replace Site Notes' in rv.data
         assert b'groupDocsSyncStatus' in rv.data
 
     def test_crm_patient_view_shows_all_and_candidates_buttons(self):

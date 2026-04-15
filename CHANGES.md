@@ -2,6 +2,40 @@
 
 ---
 
+## Session 47
+
+**Date:** 2026-04-15
+
+**Objective:** Improve editing flow and layout by locking non-primary sections by default, fixing group page structure issues, and splitting group Google Docs actions into explicit append vs pull/replace operations.
+
+**Release Summary:**
+
+1. **Default Minimized Panels + Edit Locks**
+- Updated group and patient detail screens so secondary panels start minimized while the primary working area remains visible.
+- Locked key text/date editing fields by default and added explicit `Edit / Cancel / Save` flows before changes can be submitted.
+- Added lock-first editing for group member history date rows so former members' start/end dates are only editable when intentionally opened.
+
+2. **Group Meeting Layout + Duplicate Header Fix**
+- Reordered session summary presentation to prioritize full-width content, then participants and missing lists.
+- Removed the repeated previous-meeting title effect on expanded past sessions while keeping action controls available.
+
+3. **Google Docs Integration Split (Group)**
+- Added explicit group routes:
+  - `POST /groups/<id>/push-gdoc` (append-only, supports optional `session_id`)
+  - `POST /groups/<id>/pull-gdoc` (pull from docs and replace matching site records)
+- Kept `POST /groups/<id>/sync-gdoc` backward-compatible and mode-aware (`both`, `pull`, `push`).
+- Reworked group UI controls into two clear actions:
+  - append site notes to the doc (with warning)
+  - pull doc notes and replace site records.
+
+4. **Validation**
+- Updated and expanded automated tests for the new Docs action split and updated labels.
+- Full automated suite passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 152 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 46
 
 **Date:** 2026-04-14

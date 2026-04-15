@@ -17,14 +17,14 @@
 {%- endif -%}
 {%- endmacro %}
 
-{% macro render_session_card(session, is_past, session_member_map, attendance_by_session, group_supervisions, group) %}
+{% macro render_session_card(session, is_past, session_member_map, attendance_by_session, group_supervisions, group, show_header=true) %}
 {% set session_members = session_member_map.get(session['id'], []) %}
 {% set marks = attendance_by_session.get(session['id'], {}) %}
 {% set status_value = session['status'] or 'scheduled' %}
 {% set linked_sup = (group_supervisions | selectattr('id', 'equalto', session['supervision_id']) | list | first) if session['supervision_id'] else None %}
 <div class="session-card p-3 {% if is_past %}archived-session{% endif %}" id="session-record-{{ session['id'] }}">
     <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
-        <div>
+        <div {% if not show_header %}class="d-none"{% endif %}>
             <div class="fw-bold">{{ session['session_date'] }} · {{ session['session_time'] }}{% if session['title'] %} · {{ session['title'] }}{% endif %}</div>
             <div class="session-meta text-muted mt-1">
                 {{ session['duration_minutes'] or 60 }} {{ txt('minutes', 'דקות') }}
@@ -41,7 +41,7 @@
             <button type="button" class="btn btn-outline-info btn-sm rounded-pill" onclick="toggleSupervisionPanel({{ session['id'] }})">{{ txt('Link Supervision', 'קישור להדרכה') }}</button>
             <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="toggleRecordEdit({{ session['id'] }}, true)">{{ txt('Edit Record', 'עריכת סיכום') }}</button>
             {% if group['gdoc_id'] %}
-            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-sync-docs-button="1" onclick="syncGroupDoc(this, {{ group['id'] }}, {{ session['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-doc-sync-action="push" onclick="pushGroupDoc({{ group['id'] }}, {{ session['id'] }}, true)">{{ txt('Append to Doc', 'הוספה למסמך') }}</button>
             {% endif %}
             <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
         </div>
@@ -68,17 +68,17 @@
             <span class="badge bg-secondary-subtle text-secondary border">{{ txt('Pending', 'ממתינים') }} {{ stats.pending }}</span>
         </div>
         <div class="row g-3">
-            <div class="col-lg-4">
+            <div class="col-12">
+                <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Content', 'תוכן') }}</div>
+                <div class="small text-dark" style="white-space:pre-wrap;">{{ session['session_summary'] or txt('No session summary recorded yet.', 'עדיין לא נשמר סיכום מפגש.') }}</div>
+            </div>
+            <div class="col-lg-6">
                 <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Participants', 'משתתפים') }}</div>
                 <div class="small text-dark">{{ stats.present|join(', ') if stats.present else txt('No participants marked yet.', 'עדיין לא סומנו משתתפים.') }}</div>
             </div>
-            <div class="col-lg-4">
+            <div class="col-lg-6">
                 <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Missing', 'חסרים') }}</div>
                 <div class="small text-dark" style="white-space:pre-wrap;">{{ stats.missed|join('\n') if stats.missed else txt('No absences recorded.', 'לא נרשמו חסרים.') }}</div>
-            </div>
-            <div class="col-lg-4">
-                <div class="small text-uppercase fw-semibold text-muted mb-1">{{ txt('Content', 'תוכן') }}</div>
-                <div class="small text-dark" style="white-space:pre-wrap;">{{ session['session_summary'] or txt('No session summary recorded yet.', 'עדיין לא נשמר סיכום מפגש.') }}</div>
             </div>
         </div>
     </div>
@@ -300,7 +300,13 @@
 <div class="row g-4 align-items-start">
     <div class="col-12">
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-body p-3">
+            <div class="card-header bg-white border-0 p-3">
+                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="groupMgmtBody" aria-expanded="false" aria-controls="groupMgmtBody" onclick="toggleStablePanel(this)">
+                    <span class="fw-bold text-primary">{{ txt('Group Management', 'ניהול קבוצה') }}</span>
+                    <i class="bi bi-chevron-down stable-toggle-icon"></i>
+                </button>
+            </div>
+            <div class="card-body p-3 d-none" id="groupMgmtBody">
                 <div class="d-flex flex-wrap gap-2" id="groupMgmtTabs">
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab active" data-pane="groupMgmtPaneInfo" type="button">{{ txt('Group Info', 'פרטי קבוצה') }}</button>
                     <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSchedule" type="button">{{ txt('Schedule Session', 'קביעת מפגש') }}</button>
@@ -311,33 +317,37 @@
                 </div>
                 <div id="groupMgmtCanvas" class="mt-3 pt-3 border-top">
                     <div id="groupMgmtPaneInfo" class="group-mgmt-pane">
-                        <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3">
+                        <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3" id="groupInfoForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-12">
-                                <label class="form-label small">{{ txt('Name', 'שם') }}</label>
-                                <input type="text" name="name" class="form-control form-control-sm" value="{{ group['name'] }}" required>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">{{ txt('Type', 'סוג') }}</label>
-                                <select name="group_type" class="form-select form-select-sm">
-                                    <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>{{ group_type_label('support') }}</option>
-                                    <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>{{ group_type_label('skills') }}</option>
-                                    <option value="psychoeducation" {% if group['group_type'] == 'psychoeducation' %}selected{% endif %}>{{ group_type_label('psychoeducation') }}</option>
-                                    <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>{{ group_type_label('therapy') }}</option>
-                                </select>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small">{{ txt('Description', 'תיאור') }}</label>
-                                <textarea name="description" rows="7" class="form-control form-control-sm">{{ group['description'] or '' }}</textarea>
-                            </div>
-                            <div class="col-12">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="groupIsActive" name="is_active" {% if group['is_active'] %}checked{% endif %}>
-                                    <label class="form-check-label small" for="groupIsActive">{{ txt('Active group', 'קבוצה פעילה') }}</label>
+                            <fieldset id="groupInfoFieldset" class="row g-3" disabled>
+                                <div class="col-12">
+                                    <label class="form-label small">{{ txt('Name', 'שם') }}</label>
+                                    <input type="text" name="name" class="form-control form-control-sm" value="{{ group['name'] }}" required>
                                 </div>
-                            </div>
+                                <div class="col-12">
+                                    <label class="form-label small">{{ txt('Type', 'סוג') }}</label>
+                                    <select name="group_type" class="form-select form-select-sm">
+                                        <option value="support" {% if group['group_type'] == 'support' %}selected{% endif %}>{{ group_type_label('support') }}</option>
+                                        <option value="skills" {% if group['group_type'] == 'skills' %}selected{% endif %}>{{ group_type_label('skills') }}</option>
+                                        <option value="psychoeducation" {% if group['group_type'] == 'psychoeducation' %}selected{% endif %}>{{ group_type_label('psychoeducation') }}</option>
+                                        <option value="therapy" {% if group['group_type'] == 'therapy' %}selected{% endif %}>{{ group_type_label('therapy') }}</option>
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small">{{ txt('Description', 'תיאור') }}</label>
+                                    <textarea name="description" rows="7" class="form-control form-control-sm">{{ group['description'] or '' }}</textarea>
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="groupIsActive" name="is_active" {% if group['is_active'] %}checked{% endif %}>
+                                        <label class="form-check-label small" for="groupIsActive">{{ txt('Active group', 'קבוצה פעילה') }}</label>
+                                    </div>
+                                </div>
+                            </fieldset>
                             <div class="col-12 d-flex justify-content-end">
-                                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Save Group Info', 'שמירת פרטי קבוצה') }}</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" id="groupInfoEditBtn" onclick="toggleGroupInfoEdit(true)">{{ txt('Edit', 'עריכה') }}</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill d-none" id="groupInfoCancelBtn" onclick="toggleGroupInfoEdit(false)">{{ txt('Cancel', 'ביטול') }}</button>
+                                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill d-none" id="groupInfoSaveBtn">{{ txt('Save Group Info', 'שמירת פרטי קבוצה') }}</button>
                             </div>
                         </form>
                         <div class="border rounded-3 p-3 bg-light mt-3" id="groupDocsIntegrationPanel">
@@ -353,10 +363,11 @@
                             {% if group['gdoc_id'] %}
                             <div class="small text-dark mb-3" style="word-break:break-all;">{{ txt('Linked document ID', 'מזהה מסמך מקושר') }}: {{ group['gdoc_id'] }}</div>
                             <div class="d-flex gap-2 flex-wrap">
-                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-sync-docs-button="1" onclick="syncGroupDoc(this, {{ group['id'] }})">{{ txt('Sync to Docs', 'סנכרון ל-Docs') }}</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-doc-sync-action="push" onclick="pushGroupDoc({{ group['id'] }}, null, true)">{{ txt('Append Site Notes to Doc', 'הוספת רשומות האתר למסמך') }}</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" data-doc-sync-action="pull" onclick="pullGroupDoc({{ group['id'] }})">{{ txt('Pull Doc and Replace Site Notes', 'משיכת מסמך והחלפת רשומות באתר') }}</button>
                                 <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
                             </div>
-                            <div id="groupDocsSyncStatus" class="small text-muted mt-2" aria-live="polite">{{ txt('Ready to sync the latest group meeting notes.', 'מוכן לסנכרן את סיכומי המפגשים האחרונים.') }}</div>
+                            <div id="groupDocsSyncStatus" class="small text-muted mt-2" aria-live="polite">{{ txt('Choose append (site to doc) or pull/replace (doc to site).', 'יש לבחור בין הוספה למסמך (מהאתר) לבין משיכה והחלפה באתר (מהמסמך).') }}</div>
                             {% else %}
                             <div id="groupDocsSyncStatus" class="small text-muted mt-2 mb-2" aria-live="polite">{{ txt('Create or attach a Google Doc to enable sync.', 'יש ליצור או לקשר מסמך Google כדי לאפשר סנכרון.') }}</div>
                             <div class="d-flex flex-column gap-2">
@@ -506,23 +517,27 @@
                             {% for row in member_history_rows %}
                             <div class="list-group-item py-3">
                                 <div class="small fw-semibold mb-2">{{ row['patient_name'] }}</div>
-                                <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2">
+                                <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2 member-history-form" id="member-history-form-{{ row['id'] }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="return_group_id" value="{{ group['id'] }}">
                                     <div class="col-6">
                                         <label class="form-label small mb-1">{{ txt('Joined', 'הצטרף') }}</label>
-                                        <input type="date" class="form-control form-control-sm" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" required>
+                                        <input type="date" class="form-control form-control-sm member-history-input" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" data-original-value="{{ (row['joined_at'] or '')[:10] }}" required disabled>
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small mb-1">{{ txt('Left', 'עזב') }}</label>
-                                        <input type="date" class="form-control form-control-sm" name="left_date" value="{{ (row['left_at'] or '')[:10] }}">
+                                        <input type="date" class="form-control form-control-sm member-history-input" name="left_date" value="{{ (row['left_at'] or '')[:10] }}" data-original-value="{{ (row['left_at'] or '')[:10] }}" disabled>
                                     </div>
                                     <div class="col-12 d-flex justify-content-between align-items-center">
                                         <div class="small text-muted">
                                             {% if row['left_at'] %}{{ txt('Closed period', 'תקופה סגורה') }}{% else %}{{ txt('Active period', 'תקופה פעילה') }}{% endif %}
                                             {% if row['membership_days'] is not none %} · {{ row['membership_days'] }} days{% endif %}
                                         </div>
-                                        <button class="btn btn-outline-secondary btn-sm rounded-pill" type="submit">{{ txt('Save Dates', 'שמירת תאריכים') }}</button>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-outline-secondary btn-sm rounded-pill" type="button" data-history-edit-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, true)">{{ txt('Edit', 'עריכה') }}</button>
+                                            <button class="btn btn-outline-secondary btn-sm rounded-pill d-none" type="button" data-history-cancel-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, false)">{{ txt('Cancel', 'ביטול') }}</button>
+                                            <button class="btn btn-outline-primary btn-sm rounded-pill d-none" type="submit" data-history-save-btn="{{ row['id'] }}">{{ txt('Save Dates', 'שמירת תאריכים') }}</button>
+                                        </div>
                                     </div>
                                 </form>
                             </div>
@@ -636,7 +651,7 @@
                                 </button>
                                 <div class="d-none" id="pastSession{{ session['id'] }}">
                                     <div class="p-3 border-top">
-                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions, group) }}
+                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions, group, false) }}
                                     </div>
                                 </div>
                             </div>
@@ -660,11 +675,16 @@
 
         <!-- Supervision History -->
         <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-shield-check me-2"></i>{{ txt('Supervision', 'הדרכה') }}</h5>
-                <span class="badge bg-light text-dark border">{{ group_supervisions|length }} {{ txt('total', 'בסך הכל') }}</span>
+            <div class="card-header bg-white border-0 p-3">
+                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="supervisionHistoryBody" aria-expanded="false" aria-controls="supervisionHistoryBody" onclick="toggleStablePanel(this)">
+                    <span class="fw-bold text-primary"><i class="bi bi-shield-check me-2"></i>{{ txt('Supervision', 'הדרכה') }}</span>
+                    <span class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark border">{{ group_supervisions|length }} {{ txt('total', 'בסך הכל') }}</span>
+                        <i class="bi bi-chevron-down stable-toggle-icon"></i>
+                    </span>
+                </button>
             </div>
-            <div class="card-body">
+            <div class="card-body d-none" id="supervisionHistoryBody">
                 {% for sup in group_supervisions %}
                 <div class="border rounded-4 p-3 mb-3 bg-white shadow-sm" id="supervision-{{ sup['id'] }}">
                     <div class="d-flex justify-content-between align-items-start gap-3">
@@ -718,7 +738,8 @@ const labels = {
     deleteSessionError: isHebrew ? 'לא ניתן למחוק את המפגש.' : 'Could not delete session.',
     linkSupervisionError: isHebrew ? 'לא ניתן לקשר הדרכה למפגש.' : 'Could not link supervision to this session.',
     groupDocsError: isHebrew ? 'לא ניתן לעדכן את מסמך Google של הקבוצה.' : 'Could not update the group Google Doc.',
-    groupDocsDetachConfirm: isHebrew ? 'לנתק את מסמך Google מהקבוצה?' : 'Detach the Google Doc from this group?'
+    groupDocsDetachConfirm: isHebrew ? 'לנתק את מסמך Google מהקבוצה?' : 'Detach the Google Doc from this group?',
+    groupDocsPushConfirm: isHebrew ? 'הרשומות יתווספו לסוף מסמך Google ולא יחליפו תוכן קיים. להמשיך?' : 'This will append records to the end of Google Docs and will not replace existing content. Continue?'
 };
 
 function minutesToTime(totalMinutes) {
@@ -791,6 +812,69 @@ function toggleRecordEdit(sessionId, enabled) {
     document.getElementById('record-fieldset-' + sessionId).disabled = !enabled;
     document.getElementById('record-cancel-' + sessionId).classList.toggle('d-none', !enabled);
     document.getElementById('record-save-' + sessionId).classList.toggle('d-none', !enabled);
+}
+
+function toggleGroupInfoEdit(enabled) {
+    const fieldset = document.getElementById('groupInfoFieldset');
+    const editBtn = document.getElementById('groupInfoEditBtn');
+    const cancelBtn = document.getElementById('groupInfoCancelBtn');
+    const saveBtn = document.getElementById('groupInfoSaveBtn');
+    if (!fieldset) {
+        return;
+    }
+
+    fieldset.disabled = !enabled;
+    if (editBtn) {
+        editBtn.classList.toggle('d-none', enabled);
+    }
+    if (cancelBtn) {
+        cancelBtn.classList.toggle('d-none', !enabled);
+    }
+    if (saveBtn) {
+        saveBtn.classList.toggle('d-none', !enabled);
+    }
+
+    if (!enabled) {
+        document.querySelectorAll('#groupInfoFieldset [name]').forEach((node) => {
+            const initialValue = node.getAttribute('value');
+            if (node.type === 'checkbox') {
+                node.checked = node.defaultChecked;
+            } else if (node.tagName === 'TEXTAREA') {
+                node.value = node.defaultValue;
+            } else if (typeof initialValue === 'string') {
+                node.value = initialValue;
+            } else {
+                node.value = node.defaultValue;
+            }
+        });
+    }
+}
+
+function toggleMemberHistoryEdit(historyId, enabled) {
+    const form = document.getElementById('member-history-form-' + historyId);
+    if (!form) {
+        return;
+    }
+
+    form.querySelectorAll('.member-history-input').forEach((inputNode) => {
+        inputNode.disabled = !enabled;
+        if (!enabled) {
+            inputNode.value = inputNode.dataset.originalValue || '';
+        }
+    });
+
+    const editBtn = form.querySelector('[data-history-edit-btn="' + historyId + '"]');
+    const cancelBtn = form.querySelector('[data-history-cancel-btn="' + historyId + '"]');
+    const saveBtn = form.querySelector('[data-history-save-btn="' + historyId + '"]');
+    if (editBtn) {
+        editBtn.classList.toggle('d-none', enabled);
+    }
+    if (cancelBtn) {
+        cancelBtn.classList.toggle('d-none', !enabled);
+    }
+    if (saveBtn) {
+        saveBtn.classList.toggle('d-none', !enabled);
+    }
 }
 
 function toggleBookingPanel(id, date, start, durationMin, title, facilitator, type, link, seriesId) {
@@ -876,35 +960,56 @@ function setGroupDocsSyncStatus(message, tone) {
 }
 
 function setGroupDocsButtonsBusy(isBusy) {
-    document.querySelectorAll('[data-sync-docs-button]').forEach((btn) => {
+    document.querySelectorAll('[data-doc-sync-action]').forEach((btn) => {
         if (!btn.dataset.defaultLabel) {
             btn.dataset.defaultLabel = btn.innerHTML;
         }
         btn.disabled = !!isBusy;
         btn.innerHTML = isBusy
-            ? ((isHebrew ? 'מסנכרן...' : 'Syncing...'))
+            ? ((isHebrew ? 'מעדכן...' : 'Working...'))
             : (btn.dataset.defaultLabel || btn.innerHTML);
     });
 }
 
-function syncGroupDoc(triggerButton, groupId, sessionId) {
-    if (typeof triggerButton !== 'object' || !triggerButton) {
-        sessionId = groupId;
-        groupId = triggerButton;
+function pushGroupDoc(groupId, sessionId, askConfirmation) {
+    if (askConfirmation && !confirm(labels.groupDocsPushConfirm)) {
+        return;
     }
     const body = new URLSearchParams();
     if (sessionId) {
         body.set('session_id', String(sessionId));
     }
-    setGroupDocsSyncStatus(isHebrew ? 'מתבצע סנכרון ל-Google Docs...' : 'Syncing group meeting notes to Google Docs...', 'info');
+    setGroupDocsSyncStatus(isHebrew ? 'מוסיף רשומות לסוף מסמך Google...' : 'Appending meeting records to the end of Google Docs...', 'info');
     setGroupDocsButtonsBusy(true);
-    fetch('/groups/' + groupId + '/sync-gdoc', {
+    fetch('/groups/' + groupId + '/push-gdoc', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
     }).then(r => r.json()).then(data => {
         if (data.status === 'ok') {
             setGroupDocsSyncStatus(data.message || (isHebrew ? 'הסנכרון הושלם בהצלחה.' : 'Sync completed successfully.'), 'success');
+        } else {
+            setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
+            alert(data.error || labels.groupDocsError);
+        }
+    }).catch(() => {
+        setGroupDocsSyncStatus(labels.groupDocsError, 'error');
+        alert(labels.groupDocsError);
+    }).finally(() => {
+        setGroupDocsButtonsBusy(false);
+    });
+}
+
+function pullGroupDoc(groupId) {
+    setGroupDocsSyncStatus(isHebrew ? 'מושך מהמסמך ומחליף רשומות באתר...' : 'Pulling from Google Docs and replacing site records...', 'info');
+    setGroupDocsButtonsBusy(true);
+    fetch('/groups/' + groupId + '/pull-gdoc', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: ''
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') {
+            setGroupDocsSyncStatus(data.message || (isHebrew ? 'המשיכה הושלמה בהצלחה.' : 'Pull completed successfully.'), 'success');
         } else {
             setGroupDocsSyncStatus(data.error || labels.groupDocsError, 'error');
             alert(data.error || labels.groupDocsError);
@@ -1019,6 +1124,14 @@ document.querySelectorAll('input[name="recurrence_end_mode"]').forEach(input => 
     input.addEventListener('change', syncRecurrenceUi);
 });
 syncRecurrenceUi();
+
+toggleGroupInfoEdit(false);
+document.querySelectorAll('.member-history-form').forEach((formNode) => {
+    const id = formNode.id.replace('member-history-form-', '');
+    if (id) {
+        toggleMemberHistoryEdit(id, false);
+    }
+});
 
 document.querySelectorAll('.attendance-status').forEach((selectNode) => {
     selectNode.addEventListener('change', function() {

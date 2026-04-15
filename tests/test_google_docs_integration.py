@@ -155,7 +155,7 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(parsed[1]['session_number'], 2)
         self.assertEqual(parsed[1]['note_date'], '2026-04-17')
 
-    def test_group_sync_gdoc_returns_success_message(self):
+    def test_group_pull_gdoc_returns_success_message(self):
         self._login_admin()
 
         with app.app_context():
@@ -189,18 +189,60 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         gcal_mock._refresh_and_save.return_value = object()
 
         with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
-            rv = self.client.post(f'/groups/{group_id}/sync-gdoc', data={})
+            rv = self.client.post(f'/groups/{group_id}/pull-gdoc', data={})
 
         self.assertEqual(rv.status_code, 200)
         payload = rv.get_json()
         self.assertEqual(payload['status'], 'ok')
-        self.assertGreaterEqual(payload['synced'], 1)
-        self.assertIn('group meeting record', payload['message'])
+        self.assertGreaterEqual(payload['pulled'], 1)
+        self.assertIn('Replaced site meeting content from Google Docs', payload['message'])
 
         with app.app_context():
             db = get_db()
             row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
             self.assertEqual(row['session_summary'], 'Group process summary from doc')
+
+    def test_group_push_gdoc_appends_new_records_only(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Docs Group Push', 'therapy', 'Group docs', 'group-doc-push-123')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                "INSERT INTO group_sessions (group_id, session_date, session_time, duration_minutes, title, status) VALUES (?, ?, ?, ?, ?, ?)",
+                (group_id, '2026-04-21', '17:00', 90, 'Weekly Group Push', 'scheduled')
+            )
+            db.commit()
+
+        docs_api = Mock()
+        docs_api.get.return_value.execute.return_value = {'body': {'content': [{'endIndex': 2}]}}
+        docs_api.batchUpdate.return_value.execute.return_value = {}
+        docs_service = Mock()
+        docs_service.documents.return_value = docs_api
+
+        gdocs_mock = Mock()
+        gdocs_mock.GDOCS_LIBS_AVAILABLE = True
+        gdocs_mock.read_doc_text.return_value = ''
+        gdocs_mock._docs_service.return_value = docs_service
+        gdocs_mock.parse_doc_into_notes.side_effect = parse_doc_into_notes
+
+        gcal_mock = Mock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.load_credentials.return_value = object()
+        gcal_mock._refresh_and_save.return_value = object()
+
+        with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.post(f'/groups/{group_id}/push-gdoc', data={})
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+        self.assertGreaterEqual(payload['pushed'], 1)
+        self.assertIn('Appended', payload['message'])
 
     def test_parse_doc_into_notes_accepts_hebrew_group_template_with_tilde(self):
         text = (
@@ -267,7 +309,7 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         gcal_mock._refresh_and_save.return_value = object()
 
         with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
-            rv = self.client.post(f'/groups/{group_id}/sync-gdoc', data={})
+            rv = self.client.post(f'/groups/{group_id}/pull-gdoc', data={})
 
         self.assertEqual(rv.status_code, 200)
 

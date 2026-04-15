@@ -9851,22 +9851,87 @@ def sync_group_gdoc(group_id):
     session_id_raw = (request.form.get('session_id') or '').strip()
     session_id = int(session_id_raw) if session_id_raw.isdigit() else None
 
-    pulled, pull_err = _pull_group_gdoc_notes(db, group)
-    if pull_err:
-        return jsonify({'error': pull_err}), 400
+    sync_mode = (request.form.get('mode') or 'both').strip().lower()
+    if sync_mode not in ('both', 'pull', 'push'):
+        return jsonify({'error': 'Invalid sync mode'}), 400
 
-    pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
-    if push_err:
-        return jsonify({'error': push_err}), 400
+    pulled = 0
+    pushed = 0
+
+    if sync_mode in ('both', 'pull'):
+        pulled, pull_err = _pull_group_gdoc_notes(db, group)
+        if pull_err:
+            return jsonify({'error': pull_err}), 400
+
+    if sync_mode in ('both', 'push'):
+        pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
+        if push_err:
+            return jsonify({'error': push_err}), 400
 
     total_synced = int(pulled or 0) + int(pushed or 0)
+    if sync_mode == 'pull':
+        message = f'Replaced site meeting content from Google Docs for {int(pulled or 0)} meeting(s).'
+    elif sync_mode == 'push':
+        message = f'Appended {int(pushed or 0)} meeting record(s) to the end of Google Docs.'
+    else:
+        message = f'Synced {total_synced} group meeting record(s). Pulled {int(pulled or 0)} from Google Docs and pushed {int(pushed or 0)} back.'
+
     return jsonify({
         'status': 'ok',
         'synced': total_synced,
         'pulled': int(pulled or 0),
         'pushed': int(pushed or 0),
         'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
-        'message': f'Synced {total_synced} group meeting record(s). Pulled {int(pulled or 0)} from Google Docs and pushed {int(pushed or 0)} back.'
+        'mode': sync_mode,
+        'message': message
+    })
+
+
+@app.route('/groups/<int:group_id>/pull-gdoc', methods=['POST'])
+@login_required
+def pull_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+
+    pulled, pull_err = _pull_group_gdoc_notes(db, group)
+    if pull_err:
+        return jsonify({'error': pull_err}), 400
+
+    return jsonify({
+        'status': 'ok',
+        'pulled': int(pulled or 0),
+        'synced': int(pulled or 0),
+        'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
+        'message': f'Replaced site meeting content from Google Docs for {int(pulled or 0)} meeting(s).'
+    })
+
+
+@app.route('/groups/<int:group_id>/push-gdoc', methods=['POST'])
+@login_required
+def push_group_gdoc(group_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
+    if not group:
+        return jsonify({'error': 'Group not found'}), 404
+
+    session_id_raw = (request.form.get('session_id') or '').strip()
+    session_id = int(session_id_raw) if session_id_raw.isdigit() else None
+    pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
+    if push_err:
+        return jsonify({'error': push_err}), 400
+
+    return jsonify({
+        'status': 'ok',
+        'pushed': int(pushed or 0),
+        'synced': int(pushed or 0),
+        'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
+        'message': f'Appended {int(pushed or 0)} meeting record(s) to the end of Google Docs.'
     })
 
 
