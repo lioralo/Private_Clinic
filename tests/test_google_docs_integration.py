@@ -261,9 +261,9 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0]['session_number'], 6)
         self.assertEqual(parsed[0]['note_date'], '2026-02-23')
-        self.assertIn('|משתתפים', parsed[0]['content'])
-        self.assertIn('|חסרים', parsed[0]['content'])
-        self.assertIn('|תוכן', parsed[0]['content'])
+        self.assertIn('משה שטרן', parsed[0]['participants'])
+        self.assertIn('אופיר לא הגיע לקבוצה ולא הודיע', parsed[0]['missing'])
+        self.assertIn('השיח בקבוצה התחיל בשתיקה', parsed[0]['content'])
 
     def test_group_sync_pulls_hebrew_group_template_into_matching_history(self):
         self._login_admin()
@@ -318,6 +318,33 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
             self.assertIn('השיח בקבוצה התחיל בשתיקה', row['session_summary'])
             self.assertIn('|משתתפים', row['session_summary'])
+
+    def test_parse_doc_into_notes_two_hebrew_meetings_with_sections(self):
+        text = (
+            '~פגישה 9- 30/03/26\n'
+            '|משתתפים\n'
+            'משה שטרן, מיכאל שפרנוב , שי בראגין , אבינועם קאה, אופיר כתפי\n'
+            '|חסרים\n'
+            '|תוכן\n'
+            'מפגש תשע תוכן קצר.\n'
+            '~פגישה 10- 13/04/26\n'
+            '|משתתפים\n'
+            'משה שטרן, מיכאל שפרנוב , שי בראגין , אבינועם קאה, אופיר כתפי, בטואל אוסקר\n'
+            '|חסרים\n'
+            '|תוכן\n'
+            'מפגש עשר תוכן ארוך יותר.\n'
+        )
+
+        parsed = parse_doc_into_notes(text)
+
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]['session_number'], 9)
+        self.assertEqual(parsed[0]['note_date'], '2026-03-30')
+        self.assertEqual(len(parsed[0]['participants']), 5)
+        self.assertEqual(parsed[1]['session_number'], 10)
+        self.assertEqual(parsed[1]['note_date'], '2026-04-13')
+        self.assertEqual(len(parsed[1]['participants']), 6)
+        self.assertIn('מפגש עשר תוכן ארוך יותר', parsed[1]['content'])
 
 
 if __name__ == '__main__':

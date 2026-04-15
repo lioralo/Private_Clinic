@@ -2,6 +2,34 @@
 
 ---
 
+## Session 48
+
+**Date:** 2026-04-15
+
+**Objective:** Fix Hebrew group Google Docs parsing so each meeting block is split correctly into participants, missing, and content for real-world templates like `~פגישה 5- 16/02/26`.
+
+**Release Summary:**
+
+1. **Structured Hebrew Group Parsing**
+- Updated the group parser to split each session block by section headers:
+  - `|משתתפים` -> parsed `participants`
+  - `|חסרים` -> parsed `missing`
+  - `|תוכן` -> parsed `content`
+- Kept support for the meeting identifier style with tilde and dash date, for example `~פגישה 9- 30/03/26`.
+
+2. **Two-Meeting Block Handling**
+- Verified and fixed multi-meeting extraction so consecutive Hebrew blocks are parsed as separate sessions (for example meeting 9 and meeting 10 in one document).
+- Pull sync now updates the matching group sessions with structured summary content and applies parsed attendance signals where names are matched.
+
+3. **Validation**
+- Added regression coverage for the two-meeting Hebrew example structure.
+- Verified with tests:
+  - `python -m unittest tests.test_google_docs_integration` -> 10 tests passed
+  - `python -m unittest discover -s tests -p 'test_*.py'` -> 153 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` -> 13 tests passed
+
+---
+
 ## Session 47
 
 **Date:** 2026-04-15

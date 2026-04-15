@@ -69,6 +69,53 @@ _SESSION_RE = re.compile(
 _NOTE_ID_RE = re.compile(r'\[note:id=(\d+)\]')
 
 
+def _split_hebrew_group_sections(block_text):
+    """Parse a group-session block into participants, missing, and content sections."""
+    participants = []
+    missing = []
+    content_parts = []
+
+    current_section = None
+    for raw_line in (block_text or '').splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        lowered = line.lower()
+        if lowered in ('|משתתפים', 'משתתפים', 'participants', '|participants'):
+            current_section = 'participants'
+            continue
+        if lowered in ('|חסרים', 'חסרים', 'missing', '|missing'):
+            current_section = 'missing'
+            continue
+        if lowered in ('|תוכן', 'תוכן', 'content', '|content'):
+            current_section = 'content'
+            continue
+
+        if current_section == 'participants':
+            for token in line.split(','):
+                cleaned = token.strip().strip('-').strip()
+                if cleaned:
+                    participants.append(cleaned)
+            continue
+
+        if current_section == 'missing':
+            cleaned = line.lstrip('-').strip()
+            if cleaned:
+                missing.append(cleaned)
+            continue
+
+        if current_section == 'content':
+            content_parts.append(line)
+
+    content = '\n'.join(content_parts).strip()
+    has_structured_headers = any(tag in (block_text or '') for tag in ('|משתתפים', '|חסרים', '|תוכן'))
+    if not has_structured_headers:
+        content = (block_text or '').strip()
+
+    return participants, missing, content
+
+
 def _parse_date(iso_group, slash_group):
     """Return a YYYY-MM-DD string from whichever capture group matched."""
     if iso_group:
@@ -109,7 +156,8 @@ def parse_doc_into_notes(text):
 
         block_start = m.end()
         block_end   = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        content     = text[block_start:block_end].strip()
+        block_text  = text[block_start:block_end].strip()
+        participants, missing, content = _split_hebrew_group_sections(block_text)
 
         if '[note:new]' in raw_tag:
             note_tag = 'new'
@@ -121,6 +169,8 @@ def parse_doc_into_notes(text):
             'session_number': session_num,
             'note_date':      note_date,
             'content':        content,
+            'participants':   participants,
+            'missing':        missing,
             'note_tag':       note_tag,
         })
     return results

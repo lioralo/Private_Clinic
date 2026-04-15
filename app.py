@@ -9580,6 +9580,99 @@ def _pull_group_gdoc_notes(db, group):
     except Exception as exc:
         return 0, str(exc)
 
+    def _normalize_person_name(value):
+        text = (value or '').strip().lower()
+        text = re.sub(r'\s+', ' ', text)
+        text = text.replace(',', ' ').replace('.', ' ')
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    def _extract_missing_reason(raw_entry, matched_name):
+        entry = (raw_entry or '').strip()
+        if not entry:
+            return ''
+        if matched_name and entry.startswith(matched_name):
+            reason = entry[len(matched_name):].strip(' -—:\t')
+            return reason
+        return entry
+
+    def _build_structured_summary(parsed_item):
+        participants = [name.strip() for name in (parsed_item.get('participants') or []) if name and name.strip()]
+        missing = [line.strip() for line in (parsed_item.get('missing') or []) if line and line.strip()]
+        content_body = (parsed_item.get('content') or '').strip()
+
+        if not participants and not missing:
+            return ''
+
+        lines = [
+            '|משתתפים',
+            ', '.join(participants) if participants else '-',
+            '|חסרים',
+            '\n'.join(missing) if missing else '-',
+            '|תוכן',
+            content_body or '-',
+        ]
+        return '\n'.join(lines).strip()
+
+    def _apply_attendance_from_doc(session_id, participants, missing_entries):
+        if not session_id:
+            return
+
+        rows = db.execute('''
+            SELECT DISTINCT p.id AS patient_id, p.name AS patient_name
+            FROM group_member_history h
+            JOIN patients p ON p.id = h.patient_id
+            WHERE h.group_id = ?
+              AND COALESCE(p.is_deleted, 0) = 0
+        ''', (group['id'],)).fetchall()
+
+        name_map = {}
+        for row in rows:
+            normalized = _normalize_person_name(row['patient_name'])
+            if normalized and normalized not in name_map:
+                name_map[normalized] = {
+                    'patient_id': int(row['patient_id']),
+                    'patient_name': row['patient_name'],
+                }
+
+        def find_member(raw_name):
+            normalized = _normalize_person_name(raw_name)
+            if normalized in name_map:
+                return name_map[normalized]
+            for key, value in name_map.items():
+                if normalized and (key.startswith(normalized) or normalized.startswith(key)):
+                    return value
+            return None
+
+        for raw_name in participants:
+            matched = find_member(raw_name)
+            if not matched:
+                continue
+            db.execute('''
+                INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
+                VALUES (?, ?, 'present', NULL, 0, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(session_id, patient_id)
+                DO UPDATE SET attendance_status = 'present',
+                              absence_reason = NULL,
+                              notified_on_time = 0,
+                              updated_at = CURRENT_TIMESTAMP
+            ''', (session_id, matched['patient_id']))
+
+        for raw_entry in missing_entries:
+            matched = find_member(raw_entry)
+            if not matched:
+                continue
+            reason = _extract_missing_reason(raw_entry, matched['patient_name'])
+            db.execute('''
+                INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
+                VALUES (?, ?, 'missed', ?, 0, NULL, CURRENT_TIMESTAMP)
+                ON CONFLICT(session_id, patient_id)
+                DO UPDATE SET attendance_status = 'missed',
+                              absence_reason = excluded.absence_reason,
+                              notified_on_time = 0,
+                              updated_at = CURRENT_TIMESTAMP
+            ''', (session_id, matched['patient_id'], reason or None))
+
     synced = 0
     try:
         ordered_sessions = db.execute('''
@@ -9591,10 +9684,13 @@ def _pull_group_gdoc_notes(db, group):
 
         for item in parsed_notes:
             content = (item.get('content') or '').strip()
+            participants = item.get('participants') or []
+            missing_entries = item.get('missing') or []
             note_date = (item.get('note_date') or '').strip() or None
             session_number = _normalize_session_number(item.get('session_number'))
             note_tag = item.get('note_tag')
-            if not content:
+            structured_summary = _build_structured_summary(item)
+            if not content and not structured_summary:
                 continue
 
             target = None
@@ -9617,13 +9713,15 @@ def _pull_group_gdoc_notes(db, group):
                 target = ordered_sessions[session_number - 1]
 
             if target is not None:
+                final_summary = structured_summary or content
                 existing_summary = (target['session_summary'] or '').strip()
-                if existing_summary != content:
+                if existing_summary != final_summary:
                     db.execute(
                         'UPDATE group_sessions SET session_summary = ? WHERE id = ?',
-                        (content, target['id'])
+                        (final_summary, target['id'])
                     )
                     synced += 1
+                _apply_attendance_from_doc(int(target['id']), participants, missing_entries)
                 continue
 
             inferred_date = note_date or datetime.now().date().isoformat()
@@ -9632,7 +9730,9 @@ def _pull_group_gdoc_notes(db, group):
                 INSERT INTO group_sessions (
                     group_id, session_date, session_time, duration_minutes, title, status, session_summary
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', content))
+            ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', structured_summary or content))
+            created_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            _apply_attendance_from_doc(int(created_id), participants, missing_entries)
             synced += 1
 
         db.commit()
