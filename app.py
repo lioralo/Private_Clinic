@@ -4129,20 +4129,27 @@ def patient_detail(patient_id):
 
     source_questionnaire_titles = []
     source_questionnaire_error = None
+    source_questionnaire_activation_url = None
+    source_questionnaire_sheet_url = ''
     if questionnaire_enabled:
+        settings = get_site_settings(db)
+        source_questionnaire_sheet_url = (settings.get('questionnaires_source_sheet_url') or '').strip()
         source_tabs, source_questionnaire_error = _list_questionnaire_tabs(db)
+        source_questionnaire_activation_url = _extract_google_activation_url(source_questionnaire_error)
         source_questionnaire_titles = [str(item.get('title')).strip() for item in source_tabs if str(item.get('title') or '').strip()]
 
     available_questionnaire_titles = []
     questionnaire_tabs_error = None
+    questionnaire_tabs_activation_url = None
     if questionnaire_enabled:
         linked_sheet_id = _extract_google_sheet_id(patient.get('questionnaires_file_id') or patient.get('questionnaires_file_url'))
         if linked_sheet_id:
             available_questionnaire_titles, questionnaire_tabs_error = _list_spreadsheet_tab_titles(db, linked_sheet_id)
+            questionnaire_tabs_activation_url = _extract_google_activation_url(questionnaire_tabs_error)
     if not available_questionnaire_titles and selected_questionnaire_titles:
         available_questionnaire_titles = selected_questionnaire_titles
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error)
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
@@ -9540,6 +9547,44 @@ def _extract_google_sheet_id(raw_value):
     return match.group(1) if match else raw_text
 
 
+def _extract_google_activation_url(error_text):
+    text = str(error_text or '')
+    if not text:
+        return None
+    for pattern in [
+        r'https://console\.developers\.google\.com/apis/api/sheets\.googleapis\.com/overview\?project=\d+',
+        r'https://console\.cloud\.google\.com/apis/library/sheets\.googleapis\.com\?project=[^\s"\']+'
+    ]:
+        match = re.search(pattern, text)
+        if match:
+            return match.group(0)
+    return None
+
+
+def _friendly_google_sheets_error(error_text):
+    text = str(error_text or '')
+    if not text:
+        return None
+
+    activation_url = _extract_google_activation_url(text)
+    if 'SERVICE_DISABLED' in text or 'Google Sheets API has not been used in project' in text:
+        project_match = re.search(r'project\s+(\d+)', text)
+        project_hint = f" (project {project_match.group(1)})" if project_match else ''
+        return (
+            'Google Sheets API is disabled for the connected Google Cloud project'
+            f'{project_hint}. Enable Google Sheets API and retry.',
+            activation_url,
+        )
+
+    if 'insufficient authentication scopes' in text.lower() or 'missing Sheets permission' in text:
+        return (
+            'Google token is missing Sheets permission. Reconnect Google in Admin Profile and approve Sheets access.',
+            activation_url,
+        )
+
+    return text, activation_url
+
+
 def _google_sheets_dependency_error():
     if not gcal or not bool(getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', False)):
         return 'Google Sheets integration is unavailable: Google libraries are not installed.'
@@ -9587,7 +9632,8 @@ def _list_questionnaire_tabs(db):
             fields='sheets(properties(sheetId,title,hidden))'
         ).execute()
     except Exception as exc:
-        return [], str(exc)
+        friendly_error, _activation_url = _friendly_google_sheets_error(exc)
+        return [], friendly_error
 
     tabs = []
     for item in spreadsheet.get('sheets', []):
@@ -9615,7 +9661,8 @@ def _list_spreadsheet_tab_titles(db, spreadsheet_id):
             fields='sheets(properties(title,hidden))'
         ).execute()
     except Exception as exc:
-        return [], str(exc)
+        friendly_error, _activation_url = _friendly_google_sheets_error(exc)
+        return [], friendly_error
 
     titles = []
     for item in spreadsheet.get('sheets', []):

@@ -2,6 +2,32 @@
 
 ---
 
+## Session 53
+
+**Date:** 2026-04-16
+
+**Objective:** Improve questionnaire-tab behavior when Google Sheets API is disabled so admins get actionable guidance instead of raw HttpError output.
+
+**Release Summary:**
+
+1. **Error Normalization for Sheets Calls**
+- Added Google Sheets error parsing helpers to detect API-disabled and scope issues.
+- Replaced raw exception dumps with clear, user-facing guidance (for example: API disabled for connected project).
+
+2. **Actionable UI in Questionnaire Tab**
+- Added direct `Enable Sheets API` button when an activation URL is present in the error.
+- Added `Open Source Spreadsheet` button in source-load failure state for quick verification of the configured source sheet.
+- Applied the same activation-link behavior for linked-file questionnaire tab loading errors.
+
+3. **Validation**
+- Verified Python compilation:
+  - `python -m py_compile app.py`
+- Verified tests:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 153 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 52
 
 **Date:** 2026-04-16

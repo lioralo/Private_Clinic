@@ -762,6 +762,18 @@
                 <div class="alert alert-warning mb-0">
                     {{ t('Could not load questionnaires from the source spreadsheet.') }}
                     <div class="small mt-1">{{ source_questionnaire_error }}</div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        {% if source_questionnaire_activation_url %}
+                        <a href="{{ source_questionnaire_activation_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-warning rounded-pill">
+                            <i class="bi bi-shield-check me-1"></i>{{ t('Enable Sheets API') }}
+                        </a>
+                        {% endif %}
+                        {% if source_questionnaire_sheet_url %}
+                        <a href="{{ source_questionnaire_sheet_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary rounded-pill">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open Source Spreadsheet') }}
+                        </a>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
 
@@ -793,6 +805,13 @@
                 <div class="alert alert-warning mb-0">
                     {{ t('Could not load questionnaire tabs from the linked spreadsheet right now.') }}
                     <div class="small mt-1">{{ questionnaire_tabs_error }}</div>
+                    {% if questionnaire_tabs_activation_url %}
+                    <div class="mt-2">
+                        <a href="{{ questionnaire_tabs_activation_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-warning rounded-pill">
+                            <i class="bi bi-shield-check me-1"></i>{{ t('Enable Sheets API') }}
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
