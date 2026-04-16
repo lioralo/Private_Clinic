@@ -56,13 +56,17 @@ except ImportError:
 #   ~פגישה 6- 23/02/26                        (Hebrew, leading tilde marker)
 # ---------------------------------------------------------------------------
 _SESSION_RE = re.compile(
-    r'^\s*[~•*\-–—]?\s*(?:SESSION|פגישה)\s*#?(\d+)\s*'   # optional marker + keyword + optional # + number
+    r'^\s*[~•*\-–—]?\s*(?P<label>SESSION|פגישה)\s*(?:#\s*)?'
     r'(?:'
-        r'\|\s*(\d{4}-\d{2}-\d{2})'                           # pipe + ISO date (YYYY-MM-DD)
+        r'(?P<number>\d+)\s*(?:'
+            r'\|\s*(?P<iso>\d{4}-\d{2}-\d{2})'
+            r'|'
+            r'[-־–—]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
+        r')'
         r'|'
-        r'[-־–—]\s*(\d{1,2}/\d{1,2}/\d{2,4})'                  # dash variants + DD/MM/YY(YY)
+        r'(?P<title_date>\d{1,2}/\d{1,2}/\d{2,4})'
     r')'
-    r'(?:\s*(\[note:[^\]]+\]))?',                              # optional [note:…] tag
+    r'(?:\s*(?P<tag>\[note:[^\]]+\]))?\s*$',
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -81,21 +85,30 @@ def _split_hebrew_group_sections(block_text):
         if not line:
             continue
 
-        lowered = line.lower()
-        if lowered in ('|משתתפים', 'משתתפים', 'participants', '|participants'):
+        normalized_header = line.strip().lstrip('|').strip().rstrip(':').strip().lower()
+        if normalized_header in ('משתתפים', 'participants'):
             current_section = 'participants'
             continue
-        if lowered in ('|חסרים', 'חסרים', 'missing', '|missing'):
+        if normalized_header in ('חסרים', 'missing'):
             current_section = 'missing'
             continue
-        if lowered in ('|תוכן', 'תוכן', 'content', '|content'):
+        if normalized_header in ('תוכן', 'content'):
             current_section = 'content'
             continue
 
         if current_section == 'participants':
-            for token in line.split(','):
+            for token in re.split(r'[,;]', line):
                 cleaned = token.strip().strip('-').strip()
-                if cleaned:
+                if not cleaned:
+                    continue
+
+                split_by_and = re.split(r'\s+ו(?=[\u0590-\u05FFA-Za-z])', cleaned)
+                if len(split_by_and) > 1:
+                    for part in split_by_and:
+                        item = part.strip().strip('-').strip()
+                        if item:
+                            participants.append(item)
+                else:
                     participants.append(cleaned)
             continue
 
@@ -109,7 +122,10 @@ def _split_hebrew_group_sections(block_text):
             content_parts.append(line)
 
     content = '\n'.join(content_parts).strip()
-    has_structured_headers = any(tag in (block_text or '') for tag in ('|משתתפים', '|חסרים', '|תוכן'))
+    has_structured_headers = any(
+        marker in (block_text or '').lower()
+        for marker in ('משתתפים', 'חסרים', 'תוכן', 'participants', 'missing', 'content')
+    )
     if not has_structured_headers:
         content = (block_text or '').strip()
 
@@ -149,10 +165,14 @@ def parse_doc_into_notes(text):
     results = []
     matches = list(_SESSION_RE.finditer(text))
     for i, m in enumerate(matches):
-        session_num = int(m.group(1))
-        # group(2) = ISO date from pipe-style; group(3) = DD/MM/YY from dash-style
-        note_date   = _parse_date(m.group(2), m.group(3))
-        raw_tag     = (m.group(4) or '').strip()
+        number_group = (m.group('number') or '').strip()
+        session_num = int(number_group) if number_group.isdigit() else None
+        note_date = _parse_date(m.group('iso'), m.group('slash') or m.group('title_date'))
+        raw_tag = (m.group('tag') or '').strip()
+
+        raw_header = (text[m.start():m.end()] or '').strip()
+        raw_header = re.sub(r'\s*\[note:[^\]]+\]\s*$', '', raw_header).strip()
+        meeting_title = re.sub(r'\s+', ' ', raw_header)
 
         block_start = m.end()
         block_end   = matches[i + 1].start() if i + 1 < len(matches) else len(text)
@@ -171,6 +191,7 @@ def parse_doc_into_notes(text):
             'content':        content,
             'participants':   participants,
             'missing':        missing,
+            'meeting_title':  meeting_title,
             'note_tag':       note_tag,
         })
     return results

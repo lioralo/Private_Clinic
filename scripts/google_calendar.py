@@ -32,6 +32,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/documents',
+    'https://www.googleapis.com/auth/spreadsheets',
 ]
 
 DB_TOKEN_TABLE = 'google_calendar_tokens'

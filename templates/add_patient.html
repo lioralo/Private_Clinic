@@ -99,6 +99,32 @@
                         </div>
                         {% endif %}
 
+                        <div class="col-12 d-none" id="diagnoseeQuestionnairesWrap">
+                            <div class="border rounded-4 p-3 bg-light-subtle">
+                                <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
+                                    <label class="form-label fw-semibold small mb-0">{{ t('Questionnaires') }}</label>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" id="syncQuestionnaireOptionsBtn">
+                                        <i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync') }}
+                                    </button>
+                                </div>
+                                <div id="diagnoseeQuestionnairesHelp" class="small text-muted mb-2">
+                                    {{ t('Choose one or more questionnaires to create in the diagnosee questionnaires file.') }}
+                                </div>
+                                <div id="diagnoseeQuestionnairesOptions" class="d-grid gap-2">
+                                    {% if questionnaire_options %}
+                                        {% for option in questionnaire_options %}
+                                        <div class="form-check">
+                                            <input class="form-check-input diagnosee-questionnaire-input" type="checkbox" name="diagnosee_questionnaires" value="{{ option }}" id="diagQuestionnaire{{ loop.index }}">
+                                            <label class="form-check-label" for="diagQuestionnaire{{ loop.index }}">{{ option }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="small text-muted">{{ t('No questionnaires found. Set the source Google Sheet in Admin Profile and click Sync.') }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="col-12 mt-5">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
                                 <i class="bi bi-person-check me-2"></i> {{ t('Register Patient Record') }}
@@ -120,6 +146,38 @@ document.addEventListener('DOMContentLoaded', function () {
     const hiddenType = document.getElementById('patientTypeHidden');
     const trackInput = document.getElementById('treatmentTrack');
     const baseInputs = document.querySelectorAll('input[name="patient_type_base"]');
+    const diagnoseeQuestionnairesWrap = document.getElementById('diagnoseeQuestionnairesWrap');
+    const syncQuestionnaireOptionsBtn = document.getElementById('syncQuestionnaireOptionsBtn');
+    const questionnaireOptionsContainer = document.getElementById('diagnoseeQuestionnairesOptions');
+    const questionnaireHelp = document.getElementById('diagnoseeQuestionnairesHelp');
+
+    function renderQuestionnaireOptions(options) {
+        if (!questionnaireOptionsContainer) {
+            return;
+        }
+        questionnaireOptionsContainer.innerHTML = '';
+        if (!Array.isArray(options) || !options.length) {
+            questionnaireOptionsContainer.innerHTML = '<div class="small text-muted">{{ t('No questionnaires found. Set the source Google Sheet in Admin Profile and click Sync.') }}</div>';
+            return;
+        }
+        options.forEach(function (name, index) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'form-check';
+            const input = document.createElement('input');
+            input.className = 'form-check-input diagnosee-questionnaire-input';
+            input.type = 'checkbox';
+            input.name = 'diagnosee_questionnaires';
+            input.value = name;
+            input.id = 'diagQuestionnaireDynamic' + index;
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.setAttribute('for', input.id);
+            label.textContent = name;
+            wrapper.appendChild(input);
+            wrapper.appendChild(label);
+            questionnaireOptionsContainer.appendChild(wrapper);
+        });
+    }
 
     function syncPatientType() {
         const baseType = document.querySelector('input[name="patient_type_base"]:checked')?.value || 'private';
@@ -128,6 +186,37 @@ document.addEventListener('DOMContentLoaded', function () {
         if (track !== 'standard') {
             statusInput.value = 'candidate';
         }
+        if (diagnoseeQuestionnairesWrap) {
+            diagnoseeQuestionnairesWrap.classList.toggle('d-none', track !== 'diagnosee');
+        }
+    }
+
+    if (syncQuestionnaireOptionsBtn) {
+        syncQuestionnaireOptionsBtn.addEventListener('click', async function () {
+            const csrfToken = document.querySelector('[name="csrf_token"]')?.value || '';
+            syncQuestionnaireOptionsBtn.disabled = true;
+            const originalText = syncQuestionnaireOptionsBtn.innerHTML;
+            syncQuestionnaireOptionsBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>{{ t('Loading...') }}';
+            try {
+                const response = await fetch('/admin/questionnaires/options', {
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+                const payload = await response.json().catch(function () { return {}; });
+                if (!response.ok || payload.error) {
+                    if (questionnaireHelp) {
+                        questionnaireHelp.textContent = payload.error || '{{ t('Could not load questionnaires from Google Sheets.') }}';
+                    }
+                    return;
+                }
+                renderQuestionnaireOptions(payload.options || []);
+                if (questionnaireHelp) {
+                    questionnaireHelp.textContent = '{{ t('Questionnaire list synced from source sheet tabs.') }}';
+                }
+            } finally {
+                syncQuestionnaireOptionsBtn.disabled = false;
+                syncQuestionnaireOptionsBtn.innerHTML = originalText;
+            }
+        });
     }
 
     baseInputs.forEach((input) => input.addEventListener('change', syncPatientType));

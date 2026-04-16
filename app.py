@@ -607,6 +607,7 @@ DEFAULT_SITE_SETTINGS = {
     'about_email': '',
     'about_text': '',
     'about_map_url': '',
+    'questionnaires_source_sheet_url': '',
 }
 
 
@@ -1795,6 +1796,18 @@ def _run_db_migrations(db):
         pass
     try:
         db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_file_id TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_file_url TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_selected TEXT')
     except sqlite3.OperationalError:
         pass
 
@@ -3781,6 +3794,9 @@ def add_patient():
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
+        selected_questionnaires = [
+            item.strip() for item in request.form.getlist('diagnosee_questionnaires') if item and item.strip()
+        ] if patient_type == 'diagnosee' else []
         has_intake_tab = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
         intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
@@ -3790,11 +3806,39 @@ def add_patient():
             flash('Name is required!')
         else:
             db = get_db()
-            db.execute('''INSERT INTO patients
+            cursor = db.execute('''INSERT INTO patients
                                   (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, intake_assessment, intake_questionnaire, treatment_method)
                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                               (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
                                intake_assessment or None, intake_questionnaire or None, treatment_method))
+
+            created_patient_id = int(cursor.lastrowid)
+            if patient_type == 'diagnosee' and selected_questionnaires:
+                result, create_err = _create_diagnosee_questionnaires_sheet(db, name, selected_questionnaires)
+                if create_err:
+                    db.rollback()
+                    flash(f'Failed to create diagnosee questionnaires file: {create_err}')
+                    tabs, _ = _list_questionnaire_tabs(db)
+                    treatment_method_options = [r['label'] for r in db.execute(
+                        'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
+                    ).fetchall()]
+                    return render_template(
+                        'add_patient.html',
+                        treatment_method_options=treatment_method_options,
+                        questionnaire_options=[item['title'] for item in tabs],
+                    )
+
+                db.execute('''
+                    UPDATE patients
+                    SET questionnaires_file_id = ?, questionnaires_file_url = ?, questionnaires_selected = ?
+                    WHERE id = ?
+                ''', (
+                    result['spreadsheet_id'],
+                    result['spreadsheet_url'],
+                    json.dumps(result['selected_titles'], ensure_ascii=False),
+                    created_patient_id,
+                ))
+
             db.commit()
             return redirect(url_for('patients', status=status))
 
@@ -3802,7 +3846,13 @@ def add_patient():
     treatment_method_options = [r['label'] for r in db.execute(
         'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
     ).fetchall()]
-    return render_template('add_patient.html', treatment_method_options=treatment_method_options)
+    questionnaire_tabs, _ = _list_questionnaire_tabs(db)
+    questionnaire_options = [item['title'] for item in questionnaire_tabs]
+    return render_template(
+        'add_patient.html',
+        treatment_method_options=treatment_method_options,
+        questionnaire_options=questionnaire_options,
+    )
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -3981,6 +4031,11 @@ def patient_detail(patient_id):
         patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if patient is None:
         return "Patient not found", 404
+
+    patient = dict(patient)
+    patient.setdefault('questionnaires_file_id', None)
+    patient.setdefault('questionnaires_file_url', None)
+    patient.setdefault('questionnaires_selected', None)
 
     # Fetch user account if exists
     user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
@@ -9443,6 +9498,139 @@ def _google_docs_dependency_error():
     return 'Google integration dependencies are unavailable: ' + '; '.join(str(item) for item in issues) + '. Please run pip install -r requirements.txt.'
 
 
+def _extract_google_sheet_id(raw_value):
+    raw_text = (raw_value or '').strip()
+    if not raw_text:
+        return None
+    match = re.search(r'/spreadsheets/d/([a-zA-Z0-9_-]+)', raw_text)
+    return match.group(1) if match else raw_text
+
+
+def _google_sheets_dependency_error():
+    if not gcal or not bool(getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', False)):
+        return 'Google Sheets integration is unavailable: Google libraries are not installed.'
+    if not hasattr(gcal, 'build'):
+        return 'Google Sheets integration is unavailable: google-api-python-client build helper is missing.'
+    return None
+
+
+def _get_google_sheets_credentials(db):
+    dependency_error = _google_sheets_dependency_error()
+    if dependency_error:
+        return None, dependency_error
+
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return None, 'Google not connected — connect via Admin Profile first'
+
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+    except Exception as exc:
+        return None, str(exc)
+
+    has_scopes = getattr(creds, 'has_scopes', None)
+    required_scopes = ['https://www.googleapis.com/auth/spreadsheets']
+    if callable(has_scopes) and not creds.has_scopes(required_scopes):
+        return None, 'Google token is missing Sheets permission. Reconnect Google integration from Admin Profile.'
+    return creds, None
+
+
+def _list_questionnaire_tabs(db):
+    settings = get_site_settings(db)
+    source_url = (settings.get('questionnaires_source_sheet_url') or '').strip()
+    source_sheet_id = _extract_google_sheet_id(source_url)
+    if not source_sheet_id:
+        return [], 'Please set the questionnaires Google Sheets file link in Admin Profile first.'
+
+    creds, cred_err = _get_google_sheets_credentials(db)
+    if cred_err:
+        return [], cred_err
+
+    try:
+        sheets_service = gcal.build('sheets', 'v4', credentials=creds, cache_discovery=False)
+        spreadsheet = sheets_service.spreadsheets().get(
+            spreadsheetId=source_sheet_id,
+            fields='sheets(properties(sheetId,title,hidden))'
+        ).execute()
+    except Exception as exc:
+        return [], str(exc)
+
+    tabs = []
+    for item in spreadsheet.get('sheets', []):
+        props = item.get('properties') or {}
+        title = (props.get('title') or '').strip()
+        if not title or props.get('hidden'):
+            continue
+        tabs.append({'sheet_id': props.get('sheetId'), 'title': title})
+    return tabs, None
+
+
+def _create_diagnosee_questionnaires_sheet(db, diagnosee_name, selected_titles):
+    tabs, tabs_err = _list_questionnaire_tabs(db)
+    if tabs_err:
+        return None, tabs_err
+
+    selected_clean = [str(item).strip() for item in (selected_titles or []) if str(item).strip()]
+    if not selected_clean:
+        return None, 'No questionnaires selected.'
+
+    title_to_sheet = {str(item['title']).strip(): item for item in tabs}
+    missing = [name for name in selected_clean if name not in title_to_sheet]
+    if missing:
+        return None, 'Selected questionnaires were not found in source sheet: ' + ', '.join(missing)
+
+    settings = get_site_settings(db)
+    source_sheet_id = _extract_google_sheet_id(settings.get('questionnaires_source_sheet_url'))
+    creds, cred_err = _get_google_sheets_credentials(db)
+    if cred_err:
+        return None, cred_err
+
+    try:
+        sheets_service = gcal.build('sheets', 'v4', credentials=creds, cache_discovery=False)
+        spreadsheet_title = f'{diagnosee_name} questionaires'
+        created = sheets_service.spreadsheets().create(
+            body={'properties': {'title': spreadsheet_title}},
+            fields='spreadsheetId,spreadsheetUrl,sheets(properties(sheetId,title))'
+        ).execute()
+        destination_id = created.get('spreadsheetId')
+        destination_url = created.get('spreadsheetUrl') or f'https://docs.google.com/spreadsheets/d/{destination_id}/edit'
+
+        copied_any = False
+        for tab_name in selected_clean:
+            source_sheet_tab = title_to_sheet.get(tab_name)
+            source_tab_id = source_sheet_tab.get('sheet_id') if source_sheet_tab else None
+            if source_tab_id is None:
+                continue
+            sheets_service.spreadsheets().sheets().copyTo(
+                spreadsheetId=source_sheet_id,
+                sheetId=source_tab_id,
+                body={'destinationSpreadsheetId': destination_id}
+            ).execute()
+            copied_any = True
+
+        if copied_any:
+            destination_meta = sheets_service.spreadsheets().get(
+                spreadsheetId=destination_id,
+                fields='sheets(properties(sheetId,title))'
+            ).execute()
+            for sheet_item in destination_meta.get('sheets', []):
+                props = sheet_item.get('properties') or {}
+                if (props.get('title') or '').strip() == 'Sheet1':
+                    sheets_service.spreadsheets().batchUpdate(
+                        spreadsheetId=destination_id,
+                        body={'requests': [{'deleteSheet': {'sheetId': props.get('sheetId')}}]}
+                    ).execute()
+                    break
+
+        return {
+            'spreadsheet_id': destination_id,
+            'spreadsheet_url': destination_url,
+            'selected_titles': selected_clean,
+        }, None
+    except Exception as exc:
+        return None, str(exc)
+
+
 @app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
 @login_required
 def link_gdoc(patient_id):
@@ -9587,13 +9775,25 @@ def _pull_group_gdoc_notes(db, group):
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
+    def _normalize_meeting_title(value):
+        text = (value or '').strip().lower()
+        text = re.sub(r'\s+', ' ', text)
+        text = text.replace('—', '-').replace('–', '-').replace('־', '-')
+        text = re.sub(r'\s*#\s*', ' # ', text)
+        text = re.sub(r'\s*-\s*', ' - ', text)
+        return re.sub(r'\s+', ' ', text).strip()
+
     def _extract_missing_reason(raw_entry, matched_name):
         entry = (raw_entry or '').strip()
         if not entry:
             return ''
-        if matched_name and entry.startswith(matched_name):
-            reason = entry[len(matched_name):].strip(' -—:\t')
-            return reason
+        if matched_name:
+            pattern = re.compile(rf'^\s*{re.escape(matched_name)}\s*[-—–:]+\s*(.*)$')
+            match = pattern.match(entry)
+            if match:
+                return (match.group(1) or '').strip()
+            if entry.startswith(matched_name):
+                return entry[len(matched_name):].strip(' -—–:\t')
         return entry
 
     def _build_structured_summary(parsed_item):
@@ -9676,16 +9876,22 @@ def _pull_group_gdoc_notes(db, group):
     synced = 0
     try:
         ordered_sessions = db.execute('''
-            SELECT id, session_date, session_time, session_summary
+            SELECT id, session_date, session_time, title, session_summary
             FROM group_sessions
             WHERE group_id = ?
             ORDER BY session_date ASC, session_time ASC, id ASC
         ''', (group['id'],)).fetchall()
+        title_session_map = {}
+        for session_row in ordered_sessions:
+            lookup_title = _normalize_meeting_title(session_row['title'] if 'title' in session_row.keys() else None)
+            if lookup_title and lookup_title not in title_session_map:
+                title_session_map[lookup_title] = session_row
 
         for item in parsed_notes:
             content = (item.get('content') or '').strip()
             participants = item.get('participants') or []
             missing_entries = item.get('missing') or []
+            meeting_title = (item.get('meeting_title') or '').strip()
             note_date = (item.get('note_date') or '').strip() or None
             session_number = _normalize_session_number(item.get('session_number'))
             note_tag = item.get('note_tag')
@@ -9699,6 +9905,9 @@ def _pull_group_gdoc_notes(db, group):
                     'SELECT id, session_summary FROM group_sessions WHERE id = ? AND group_id = ?',
                     (note_tag, group['id'])
                 ).fetchone()
+
+            if target is None and meeting_title:
+                target = title_session_map.get(_normalize_meeting_title(meeting_title))
 
             if target is None and note_date:
                 target = db.execute('''
@@ -9721,11 +9930,16 @@ def _pull_group_gdoc_notes(db, group):
                         (final_summary, target['id'])
                     )
                     synced += 1
+                if meeting_title:
+                    db.execute(
+                        'UPDATE group_sessions SET title = ? WHERE id = ?',
+                        (meeting_title, target['id'])
+                    )
                 _apply_attendance_from_doc(int(target['id']), participants, missing_entries)
                 continue
 
             inferred_date = note_date or datetime.now().date().isoformat()
-            title = f"Imported Session {session_number}" if session_number else 'Imported Session'
+            title = meeting_title or (f"Imported Session {session_number}" if session_number else 'Imported Session')
             db.execute('''
                 INSERT INTO group_sessions (
                     group_id, session_date, session_time, duration_minutes, title, status, session_summary
@@ -10090,6 +10304,7 @@ def admin_profile():
                 'about_email': (request.form.get('about_email') or '').strip(),
                 'about_text': (request.form.get('about_text') or '').strip(),
                 'about_map_url': (request.form.get('about_map_url') or '').strip(),
+                'questionnaires_source_sheet_url': (request.form.get('questionnaires_source_sheet_url') or '').strip(),
             })
 
         db.commit()
@@ -10152,6 +10367,20 @@ def setup_authenticator():
 
     flash('Invalid authenticator action.')
     return redirect(url_for('admin_profile'))
+
+
+@app.route('/admin/questionnaires/options')
+@login_required
+def admin_questionnaire_options():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    tabs, err = _list_questionnaire_tabs(db)
+    if err:
+        return jsonify({'error': err}), 400
+
+    return jsonify({'status': 'ok', 'options': [item['title'] for item in tabs]})
 
 
 @app.route('/admin/change_password', methods=['POST'])

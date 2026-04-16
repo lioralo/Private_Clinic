@@ -230,6 +230,15 @@
                             <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
                         </div>
                     </div>
+                    <form method="post" class="mt-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="form-label small fw-semibold">{{ t('Specify questionaries Google sheets file link') }}</label>
+                        <div class="d-flex flex-column flex-md-row gap-2">
+                            <input type="text" class="form-control form-control-sm" name="questionnaires_source_sheet_url" value="{{ site_settings.get('questionnaires_source_sheet_url', '') }}" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3">{{ t('Save') }}</button>
+                        </div>
+                        <div class="small text-muted mt-2">{{ t('This source file is used to sync questionnaire tabs for diagnosee creation.') }}</div>
+                    </form>
                     <p class="text-muted small mt-3 mb-0">{{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}</p>
                 </div>
             </div>

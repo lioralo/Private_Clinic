@@ -2,6 +2,46 @@
 
 ---
 
+## Session 49
+
+**Date:** 2026-04-16
+
+**Objective:** Finalize group-note parsing for the updated Hebrew format and add diagnosee questionnaire sheet generation from a configurable Google Sheets source file.
+
+**Release Summary:**
+
+1. **Group Meeting Parsing + Matching Update**
+- Updated the Google Docs parser to support the new header format such as `פגישה # 13/04/2026` while keeping support for existing `פגישה 6- 23/02/26` style headers.
+- Section parsing now recognizes `משתתפים`, `חסרים`, and `תוכן` markers more robustly (including variants like trailing `:`) and keeps content strictly from the `תוכן` section when structured headers are present.
+- Pull sync now prefers matching sessions by parsed meeting title first, then date/ordinal fallback, and writes the parsed meeting title into the group session title field.
+- Missing-member reason extraction now correctly captures reason text after `-`, `—`, or `:` in the `חסרים` section.
+
+2. **Diagnosee Questionnaire Sheet Flow**
+- Added admin-configurable setting: questionnaires source Google Sheets link in Admin Profile (`Specify questionaries Google sheets file link`).
+- Added backend helpers to:
+  - read questionnaire tab names from the source spreadsheet,
+  - create a diagnosee spreadsheet named `<Diagnosee Name> questionaires`,
+  - copy selected questionnaire tabs into that new spreadsheet.
+- Added diagnosee questionnaire selection UI in Add Patient (checkboxes + sync button pulling current tabs from the source sheet).
+- On diagnosee creation, selected questionnaires now trigger spreadsheet creation and store the generated file link/id on the patient record.
+- Added a linked questionnaires file block in the patient intake view for quick opening.
+
+3. **Google Permissions + Schema**
+- Added Google Sheets OAuth scope to calendar integration scopes for questionnaire operations.
+- Added patient columns for questionnaire integration metadata (`questionnaires_file_id`, `questionnaires_file_url`, `questionnaires_selected`).
+- Added compatibility defaults in patient-detail rendering for legacy rows.
+
+4. **Validation**
+- Parser verified against uploaded `תיעוד קבוצת פסיכותרפיה.docx` (10 meeting blocks parsed).
+- Verified new-format sample parsing for `פגישה # dd/mm/yyyy` with correct participants/missing/content extraction.
+- Verified Python compilation:
+  - `/usr/bin/python3 -m py_compile app.py scripts/google_docs.py scripts/google_calendar.py`
+- Verified tests:
+  - `/usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'` → 153 tests passed
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 48
 
 **Date:** 2026-04-15
