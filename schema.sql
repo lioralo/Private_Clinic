@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS patients (
     can_self_schedule BOOLEAN DEFAULT 0,
     patient_type TEXT DEFAULT 'private',
     has_intake_tab BOOLEAN DEFAULT 0,
+    has_questionnaire_tab BOOLEAN DEFAULT 0,
     intake_assessment TEXT,
     intake_questionnaire TEXT,
     profile_image TEXT,

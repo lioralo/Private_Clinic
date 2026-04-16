@@ -2,6 +2,38 @@
 
 ---
 
+## Session 50
+
+**Date:** 2026-04-16
+
+**Objective:** Make questionnaires discoverable and controllable through a dedicated Questionnaire tab/button, with diagnosee auto-enable and intake-style quick-action enablement for other patients.
+
+**Release Summary:**
+
+1. **Dedicated Questionnaire Navigation + View**
+- Added a dedicated Questionnaire button next to Intake in patient detail tabs.
+- Moved questionnaire-specific UI out of the Intake panel into its own Questionnaire tab panel.
+- Questionnaire tab now shows linked file access and selected questionnaire badges in a dedicated section.
+
+2. **Enablement Rules (Diagnosee + Manual Quick Action)**
+- Added `has_questionnaire_tab` patient flag and backend handling so Questionnaire visibility is explicit.
+- Diagnosee patients now auto-enable the Questionnaire tab on create/edit.
+- Added admin quick action to manually enable the Questionnaire tab for any patient (similar to Intake behavior).
+- Added backend route to persist quick-action enablement and redirect directly into the Questionnaire tab.
+
+3. **Spelling + Consistency Fixes**
+- Corrected questionnaire spelling in touched UI/settings labels and generated spreadsheet naming.
+- Updated schema baseline to include `has_questionnaire_tab` so fresh installs are consistent without relying only on runtime migrations.
+
+4. **Validation**
+- Verified Python compilation:
+  - `python -m py_compile app.py scripts/import_clinic_data.py scripts/export_data.py test_import_clinic_data.py test_export_data.py test_google_calendar.py`
+- Verified tests:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 153 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 49
 
 **Date:** 2026-04-16
@@ -17,10 +49,10 @@
 - Missing-member reason extraction now correctly captures reason text after `-`, `—`, or `:` in the `חסרים` section.
 
 2. **Diagnosee Questionnaire Sheet Flow**
-- Added admin-configurable setting: questionnaires source Google Sheets link in Admin Profile (`Specify questionaries Google sheets file link`).
+- Added admin-configurable setting: questionnaires source Google Sheets link in Admin Profile (`Specify questionnaires Google Sheets file link`).
 - Added backend helpers to:
   - read questionnaire tab names from the source spreadsheet,
-  - create a diagnosee spreadsheet named `<Diagnosee Name> questionaires`,
+  - create a diagnosee spreadsheet named `<Diagnosee Name> questionnaires`,
   - copy selected questionnaire tabs into that new spreadsheet.
 - Added diagnosee questionnaire selection UI in Add Patient (checkboxes + sync button pulling current tabs from the source sheet).
 - On diagnosee creation, selected questionnaires now trigger spreadsheet creation and store the generated file link/id on the patient record.

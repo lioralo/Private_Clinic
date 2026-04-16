@@ -4,6 +4,7 @@
 
 {% block content %}
 {% set intake_enabled = patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
+{% set questionnaire_tab_enabled = questionnaire_enabled if questionnaire_enabled is defined else (patient['patient_type'] == 'diagnosee' or patient.get('has_questionnaire_tab')) %}
 {% set canonical_status = 'candidate' if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else patient['status'] %}
 
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3 mb-4">
@@ -72,6 +73,9 @@
     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='supervision') }}" class="btn rounded-pill {% if active_tab == 'supervision' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Supervision') }}</a>
     {% if intake_enabled %}
     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake') }}" class="btn rounded-pill {% if active_tab == 'intake' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Intake') }}</a>
+    {% endif %}
+    {% if questionnaire_tab_enabled %}
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='questionnaires') }}" class="btn rounded-pill {% if active_tab == 'questionnaires' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Questionnaires') }}</a>
     {% endif %}
 </div>
 
@@ -681,19 +685,6 @@
         </div>
 
         <div class="card border-0 shadow-sm">
-            {% if patient['questionnaires_file_url'] %}
-            <div class="card-body border-bottom">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div>
-                        <div class="fw-bold text-primary"><i class="bi bi-table me-1"></i>{{ t('Questionnaires File') }}</div>
-                        <div class="small text-muted">{{ patient['questionnaires_file_url'] }}</div>
-                    </div>
-                    <a href="{{ patient['questionnaires_file_url'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill">
-                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open') }}
-                    </a>
-                </div>
-            </div>
-            {% endif %}
             <div class="card-header">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-folder2-open me-2 text-primary"></i>{{ t('Diagnostic Documents') }}</h5>
             </div>
@@ -744,6 +735,39 @@
                     <div class="text-muted small">{{ t('No diagnostic documents uploaded yet.') }}</div>
                     {% endfor %}
                 </div>
+            </div>
+        </div>
+
+        {% elif active_tab == 'questionnaires' and questionnaire_tab_enabled %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-ui-checks-grid me-2 text-primary"></i>{{ t('Questionnaires') }}</h5>
+            </div>
+            <div class="card-body d-grid gap-3">
+                {% if patient['questionnaires_file_url'] %}
+                <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <div class="fw-bold text-primary"><i class="bi bi-table me-1"></i>{{ t('Questionnaires File') }}</div>
+                        <div class="small text-muted">{{ patient['questionnaires_file_url'] }}</div>
+                    </div>
+                    <a href="{{ patient['questionnaires_file_url'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary rounded-pill">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open') }}
+                    </a>
+                </div>
+                {% else %}
+                <div class="alert alert-warning mb-0">{{ t('No questionnaires file is linked to this patient yet.') }}</div>
+                {% endif %}
+
+                {% if selected_questionnaire_titles %}
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-list-check me-1"></i>{{ t('Selected Questionnaires') }}</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for item in selected_questionnaire_titles %}
+                        <span class="badge rounded-pill text-bg-light border">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -813,6 +837,15 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-warning rounded-pill w-100">
                         <i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Enable Intake Tab') }}
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if not questionnaire_tab_enabled %}
+                <form method="post" action="{{ url_for('enable_questionnaire_tab', patient_id=patient['id']) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-warning rounded-pill w-100">
+                        <i class="bi bi-ui-checks-grid me-1"></i>{{ t('Enable Questionnaires Tab') }}
                     </button>
                 </form>
                 {% endif %}

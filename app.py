@@ -1356,6 +1356,10 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute('ALTER TABLE patients ADD COLUMN has_questionnaire_tab BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute('''CREATE TABLE IF NOT EXISTS patient_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id INTEGER NOT NULL,
@@ -3798,6 +3802,7 @@ def add_patient():
             item.strip() for item in request.form.getlist('diagnosee_questionnaires') if item and item.strip()
         ] if patient_type == 'diagnosee' else []
         has_intake_tab = 1 if patient_type in ('initial-intake', 'diagnosee') else 0
+        has_questionnaire_tab = 1 if patient_type == 'diagnosee' else 0
         intake_assessment = request.form.get('intake_assessment', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
         intake_questionnaire = request.form.get('intake_questionnaire', '').strip() if patient_type in ('initial-intake', 'diagnosee') else ''
         treatment_method = request.form.get('treatment_method', '').strip() or None
@@ -3807,10 +3812,10 @@ def add_patient():
         else:
             db = get_db()
             cursor = db.execute('''INSERT INTO patients
-                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, intake_assessment, intake_questionnaire, treatment_method)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, has_questionnaire_tab, intake_assessment, intake_questionnaire, treatment_method)
+                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                               (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
-                               intake_assessment or None, intake_questionnaire or None, treatment_method))
+                               has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method))
 
             created_patient_id = int(cursor.lastrowid)
             if patient_type == 'diagnosee' and selected_questionnaires:
@@ -4033,6 +4038,7 @@ def patient_detail(patient_id):
         return "Patient not found", 404
 
     patient = dict(patient)
+    patient.setdefault('has_questionnaire_tab', 0)
     patient.setdefault('questionnaires_file_id', None)
     patient.setdefault('questionnaires_file_url', None)
     patient.setdefault('questionnaires_selected', None)
@@ -4072,7 +4078,10 @@ def patient_detail(patient_id):
 
     active_tab = request.args.get('tab', 'info')
     intake_enabled = patient['patient_type'] in ('initial-intake', 'diagnosee') or int(patient['has_intake_tab'] or 0) == 1
+    questionnaire_enabled = patient['patient_type'] == 'diagnosee' or int(patient.get('has_questionnaire_tab') or 0) == 1
     if active_tab == 'intake' and not intake_enabled:
+        active_tab = 'info'
+    if active_tab == 'questionnaires' and not questionnaire_enabled:
         active_tab = 'info'
 
     if user and active_tab == 'messages' and unread_messages_count:
@@ -4108,7 +4117,17 @@ def patient_detail(patient_id):
         (patient_id,)
     ).fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data)
+    selected_questionnaire_titles = []
+    raw_selected_questionnaires = patient.get('questionnaires_selected')
+    if raw_selected_questionnaires:
+        try:
+            parsed_questionnaires = json.loads(raw_selected_questionnaires)
+            if isinstance(parsed_questionnaires, list):
+                selected_questionnaire_titles = [str(item).strip() for item in parsed_questionnaires if str(item).strip()]
+        except Exception:
+            selected_questionnaire_titles = []
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
@@ -9587,7 +9606,7 @@ def _create_diagnosee_questionnaires_sheet(db, diagnosee_name, selected_titles):
 
     try:
         sheets_service = gcal.build('sheets', 'v4', credentials=creds, cache_discovery=False)
-        spreadsheet_title = f'{diagnosee_name} questionaires'
+        spreadsheet_title = f'{diagnosee_name} questionnaires'
         created = sheets_service.spreadsheets().create(
             body={'properties': {'title': spreadsheet_title}},
             fields='spreadsheetId,spreadsheetUrl,sheets(properties(sheetId,title))'
@@ -11083,8 +11102,11 @@ def edit_patient(patient_id):
         if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
         has_intake_tab = int(patient['has_intake_tab'] or 0)
+        has_questionnaire_tab = int(patient['has_questionnaire_tab'] or 0)
         if patient_type in ('initial-intake', 'diagnosee'):
             has_intake_tab = 1
+        if patient_type == 'diagnosee':
+            has_questionnaire_tab = 1
         if patient_type in ('initial-intake', 'diagnosee'):
             intake_assessment = request.form.get('intake_assessment')
             intake_questionnaire = request.form.get('intake_questionnaire')
@@ -11106,11 +11128,11 @@ def edit_patient(patient_id):
             treatment_method = request.form.get('treatment_method', '').strip() or None
             db.execute('''UPDATE patients
                           SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
-                              patient_type = ?, has_intake_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
+                              patient_type = ?, has_intake_tab = ?, has_questionnaire_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
                               treatment_method = ?
                           WHERE id = ?''',
                        (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
-                        has_intake_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
+                        has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
             db.commit()
             flash('Patient updated successfully.')
             return redirect(url_for('patient_detail', patient_id=patient_id))
@@ -11172,6 +11194,19 @@ def enable_intake_tab(patient_id):
     db.commit()
     flash('Intake tab enabled for this patient.')
     return redirect(url_for('patient_detail', patient_id=patient_id, tab='intake'))
+
+
+@app.route('/patient/<int:patient_id>/enable_questionnaire_tab', methods=('POST',))
+@login_required
+def enable_questionnaire_tab(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    db.execute('UPDATE patients SET has_questionnaire_tab = 1 WHERE id = ?', (patient_id,))
+    db.commit()
+    flash('Questionnaire tab enabled for this patient.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
 
 @app.route('/patient/<int:patient_id>/toggle_access', methods=('POST',))
 @login_required
