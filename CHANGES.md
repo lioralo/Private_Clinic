@@ -2,6 +2,32 @@
 
 ---
 
+## Session 51
+
+**Date:** 2026-04-16
+
+**Objective:** Fix diagnosee Questionnaire tab so linked Google Sheets questionnaires are visible in the dedicated tab view.
+
+**Release Summary:**
+
+1. **Questionnaire Tab Data Fix (Diagnosee View)**
+- Updated patient-detail backend flow to fetch visible sheet tab names directly from the linked questionnaires spreadsheet (`questionnaires_file_id` / `questionnaires_file_url`).
+- Kept safe fallback to stored `questionnaires_selected` data when live tab loading is unavailable.
+
+2. **Visual/UI Fix in Dedicated Questionnaire Tab**
+- Added an `Available Questionnaires` section that renders live tab badges in the dedicated Questionnaire tab.
+- Added a non-blocking warning message when Google tab loading fails, so admins can see why list loading failed instead of seeing an empty panel.
+- Preserved `Selected During Setup` display when it differs from currently available tabs.
+
+3. **Validation**
+- Verified Python compilation:
+  - `python -m py_compile app.py`
+- Verified tests:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 153 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 50
 
 **Date:** 2026-04-16

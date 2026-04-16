@@ -758,9 +758,27 @@
                 <div class="alert alert-warning mb-0">{{ t('No questionnaires file is linked to this patient yet.') }}</div>
                 {% endif %}
 
-                {% if selected_questionnaire_titles %}
+                {% if questionnaire_tabs_error and patient['questionnaires_file_url'] %}
+                <div class="alert alert-warning mb-0">
+                    {{ t('Could not load questionnaire tabs from the linked spreadsheet right now.') }}
+                    <div class="small mt-1">{{ questionnaire_tabs_error }}</div>
+                </div>
+                {% endif %}
+
+                {% if available_questionnaire_titles %}
                 <div class="border rounded-4 p-3 bg-light-subtle">
-                    <div class="fw-bold text-primary mb-2"><i class="bi bi-list-check me-1"></i>{{ t('Selected Questionnaires') }}</div>
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-list-check me-1"></i>{{ t('Available Questionnaires') }}</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for item in available_questionnaire_titles %}
+                        <span class="badge rounded-pill text-bg-light border">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if selected_questionnaire_titles and selected_questionnaire_titles != available_questionnaire_titles %}
+                <div class="border rounded-4 p-3 bg-light-subtle">
+                    <div class="fw-bold text-primary mb-2"><i class="bi bi-clipboard-check me-1"></i>{{ t('Selected During Setup') }}</div>
                     <div class="d-flex flex-wrap gap-2">
                         {% for item in selected_questionnaire_titles %}
                         <span class="badge rounded-pill text-bg-light border">{{ item }}</span>

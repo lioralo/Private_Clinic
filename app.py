@@ -4127,7 +4127,16 @@ def patient_detail(patient_id):
         except Exception:
             selected_questionnaire_titles = []
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles)
+    available_questionnaire_titles = []
+    questionnaire_tabs_error = None
+    if questionnaire_enabled:
+        linked_sheet_id = _extract_google_sheet_id(patient.get('questionnaires_file_id') or patient.get('questionnaires_file_url'))
+        if linked_sheet_id:
+            available_questionnaire_titles, questionnaire_tabs_error = _list_spreadsheet_tab_titles(db, linked_sheet_id)
+    if not available_questionnaire_titles and selected_questionnaire_titles:
+        available_questionnaire_titles = selected_questionnaire_titles
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
@@ -9582,6 +9591,34 @@ def _list_questionnaire_tabs(db):
             continue
         tabs.append({'sheet_id': props.get('sheetId'), 'title': title})
     return tabs, None
+
+
+def _list_spreadsheet_tab_titles(db, spreadsheet_id):
+    parsed_sheet_id = _extract_google_sheet_id(spreadsheet_id)
+    if not parsed_sheet_id:
+        return [], 'Missing spreadsheet id.'
+
+    creds, cred_err = _get_google_sheets_credentials(db)
+    if cred_err:
+        return [], cred_err
+
+    try:
+        sheets_service = gcal.build('sheets', 'v4', credentials=creds, cache_discovery=False)
+        spreadsheet = sheets_service.spreadsheets().get(
+            spreadsheetId=parsed_sheet_id,
+            fields='sheets(properties(title,hidden))'
+        ).execute()
+    except Exception as exc:
+        return [], str(exc)
+
+    titles = []
+    for item in spreadsheet.get('sheets', []):
+        props = item.get('properties') or {}
+        title = (props.get('title') or '').strip()
+        if not title or props.get('hidden'):
+            continue
+        titles.append(title)
+    return titles, None
 
 
 def _create_diagnosee_questionnaires_sheet(db, diagnosee_name, selected_titles):
