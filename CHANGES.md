@@ -2,6 +2,32 @@
 
 ---
 
+## Session 52
+
+**Date:** 2026-04-16
+
+**Objective:** Fix diagnosee Questionnaire tab so admins can see and use questionnaire checkboxes even when no patient questionnaires file is linked yet.
+
+**Release Summary:**
+
+1. **Root Cause + Data Flow Fix**
+- The Questionnaire tab previously showed only linked-file data and did not expose a checkbox selection flow on the patient detail page.
+- Added source questionnaire loading in patient detail so checkbox options are rendered from the configured source Google Sheet tabs.
+
+2. **Visual + Functional Fix in Questionnaire Tab**
+- Added checkbox list (`Select Questionnaires`) directly in the dedicated Questionnaire tab.
+- Added submit flow that:
+  - creates and links the patient questionnaires file when missing, or
+  - copies selected source tabs into the existing linked patient file (without duplicating already-existing tabs).
+- Added clear warning blocks when source spreadsheet loading fails.
+
+3. **Backend Route + Sync Handling**
+- Added patient route for questionnaire saves/updates:
+  - `POST /patient/<id>/save_questionnaires`
+- Saves selected questionnaire metadata and reports copied/skipped/missing tab counts via flash messages.
+
+---
+
 ## Session 51
 
 **Date:** 2026-04-16

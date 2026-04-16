@@ -4127,6 +4127,12 @@ def patient_detail(patient_id):
         except Exception:
             selected_questionnaire_titles = []
 
+    source_questionnaire_titles = []
+    source_questionnaire_error = None
+    if questionnaire_enabled:
+        source_tabs, source_questionnaire_error = _list_questionnaire_tabs(db)
+        source_questionnaire_titles = [str(item.get('title')).strip() for item in source_tabs if str(item.get('title') or '').strip()]
+
     available_questionnaire_titles = []
     questionnaire_tabs_error = None
     if questionnaire_enabled:
@@ -4136,7 +4142,7 @@ def patient_detail(patient_id):
     if not available_questionnaire_titles and selected_questionnaire_titles:
         available_questionnaire_titles = selected_questionnaire_titles
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error)
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
@@ -9687,6 +9693,66 @@ def _create_diagnosee_questionnaires_sheet(db, diagnosee_name, selected_titles):
         return None, str(exc)
 
 
+def _copy_questionnaire_tabs_to_spreadsheet(db, destination_sheet_id, selected_titles):
+    tabs, tabs_err = _list_questionnaire_tabs(db)
+    if tabs_err:
+        return None, tabs_err
+
+    parsed_destination_id = _extract_google_sheet_id(destination_sheet_id)
+    if not parsed_destination_id:
+        return None, 'Missing destination questionnaires file id.'
+
+    selected_clean = [str(item).strip() for item in (selected_titles or []) if str(item).strip()]
+    if not selected_clean:
+        return None, 'No questionnaires selected.'
+
+    title_to_sheet = {str(item['title']).strip(): item for item in tabs}
+    missing = [name for name in selected_clean if name not in title_to_sheet]
+
+    settings = get_site_settings(db)
+    source_sheet_id = _extract_google_sheet_id(settings.get('questionnaires_source_sheet_url'))
+    creds, cred_err = _get_google_sheets_credentials(db)
+    if cred_err:
+        return None, cred_err
+
+    try:
+        sheets_service = gcal.build('sheets', 'v4', credentials=creds, cache_discovery=False)
+        destination_meta = sheets_service.spreadsheets().get(
+            spreadsheetId=parsed_destination_id,
+            fields='sheets(properties(title,hidden))'
+        ).execute()
+        existing_titles = {
+            (sheet.get('properties') or {}).get('title', '').strip()
+            for sheet in destination_meta.get('sheets', [])
+            if (sheet.get('properties') or {}).get('title') and not (sheet.get('properties') or {}).get('hidden')
+        }
+
+        copied = []
+        skipped_existing = []
+        for tab_name in selected_clean:
+            if tab_name in existing_titles:
+                skipped_existing.append(tab_name)
+                continue
+            source_sheet_tab = title_to_sheet.get(tab_name)
+            source_tab_id = source_sheet_tab.get('sheet_id') if source_sheet_tab else None
+            if source_tab_id is None:
+                continue
+            sheets_service.spreadsheets().sheets().copyTo(
+                spreadsheetId=source_sheet_id,
+                sheetId=source_tab_id,
+                body={'destinationSpreadsheetId': parsed_destination_id}
+            ).execute()
+            copied.append(tab_name)
+
+        return {
+            'copied_titles': copied,
+            'skipped_existing_titles': skipped_existing,
+            'missing_titles': missing,
+        }, None
+    except Exception as exc:
+        return None, str(exc)
+
+
 @app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
 @login_required
 def link_gdoc(patient_id):
@@ -11243,6 +11309,78 @@ def enable_questionnaire_tab(patient_id):
     db.execute('UPDATE patients SET has_questionnaire_tab = 1 WHERE id = ?', (patient_id,))
     db.commit()
     flash('Questionnaire tab enabled for this patient.')
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
+
+
+@app.route('/patient/<int:patient_id>/save_questionnaires', methods=('POST',))
+@login_required
+def save_patient_questionnaires(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return 'Patient not found', 404
+
+    patient_type = (patient['patient_type'] or '').strip()
+    has_questionnaire_tab = int(patient['has_questionnaire_tab'] or 0) == 1
+    if patient_type != 'diagnosee' and not has_questionnaire_tab:
+        flash('Questionnaire tab is not enabled for this patient.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='info'))
+
+    selected_titles = [
+        item.strip() for item in request.form.getlist('questionnaire_titles') if item and item.strip()
+    ]
+    if not selected_titles:
+        flash('Select at least one questionnaire.')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
+
+    linked_sheet_id = _extract_google_sheet_id(patient['questionnaires_file_id'] or patient['questionnaires_file_url'])
+
+    if linked_sheet_id:
+        result, sync_err = _copy_questionnaire_tabs_to_spreadsheet(db, linked_sheet_id, selected_titles)
+        if sync_err:
+            flash(f'Failed to update questionnaires file: {sync_err}')
+            return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
+
+        db.execute(
+            'UPDATE patients SET questionnaires_selected = ? WHERE id = ?',
+            (json.dumps(selected_titles, ensure_ascii=False), patient_id)
+        )
+        db.commit()
+
+        copied_count = len(result.get('copied_titles') or [])
+        skipped_count = len(result.get('skipped_existing_titles') or [])
+        missing_titles = result.get('missing_titles') or []
+        msg = f'Questionnaires updated. Added {copied_count} new tab(s).'
+        if skipped_count:
+            msg += f' {skipped_count} already existed.'
+        if missing_titles:
+            msg += ' Missing in source: ' + ', '.join(missing_titles)
+        flash(msg)
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
+
+    create_result, create_err = _create_diagnosee_questionnaires_sheet(db, patient['name'], selected_titles)
+    if create_err:
+        flash(f'Failed to create questionnaires file: {create_err}')
+        return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
+
+    db.execute(
+        '''
+        UPDATE patients
+        SET questionnaires_file_id = ?, questionnaires_file_url = ?, questionnaires_selected = ?
+        WHERE id = ?
+        ''',
+        (
+            create_result['spreadsheet_id'],
+            create_result['spreadsheet_url'],
+            json.dumps(create_result['selected_titles'], ensure_ascii=False),
+            patient_id,
+        )
+    )
+    db.commit()
+    flash('Questionnaires file created and linked successfully.')
     return redirect(url_for('patient_detail', patient_id=patient_id, tab='questionnaires'))
 
 @app.route('/patient/<int:patient_id>/toggle_access', methods=('POST',))
