@@ -79,13 +79,20 @@ def _split_hebrew_group_sections(block_text):
     missing = []
     content_parts = []
 
+    def _normalized_section_header(raw_line):
+        normalized = (raw_line or '').strip()
+        normalized = re.sub(r'^[|#>*\-–—\s]+', '', normalized)
+        normalized = normalized.rstrip(':').strip().lower()
+        normalized = normalized.strip('*_`')
+        return normalized
+
     current_section = None
     for raw_line in (block_text or '').splitlines():
         line = raw_line.strip()
         if not line:
             continue
 
-        normalized_header = line.strip().lstrip('|').strip().rstrip(':').strip().lower()
+        normalized_header = _normalized_section_header(line)
         if normalized_header in ('משתתפים', 'participants'):
             current_section = 'participants'
             continue
@@ -122,11 +129,26 @@ def _split_hebrew_group_sections(block_text):
             content_parts.append(line)
 
     content = '\n'.join(content_parts).strip()
+    if content:
+        cleaned_content_lines = []
+        for raw_line in content.splitlines():
+            if _normalized_section_header(raw_line) in ('משתתפים', 'participants', 'חסרים', 'missing', 'תוכן', 'content'):
+                continue
+            cleaned_content_lines.append(raw_line)
+        content = '\n'.join(cleaned_content_lines).strip()
+
     has_structured_headers = any(
         marker in (block_text or '').lower()
         for marker in ('משתתפים', 'חסרים', 'תוכן', 'participants', 'missing', 'content')
     )
-    if not has_structured_headers:
+    has_content_header = any(
+        _normalized_section_header(raw_line) in ('תוכן', 'content')
+        for raw_line in (block_text or '').splitlines()
+    )
+
+    if has_structured_headers and not has_content_header:
+        content = ''
+    elif not has_structured_headers:
         content = (block_text or '').strip()
 
     return participants, missing, content

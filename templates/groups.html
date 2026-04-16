@@ -61,7 +61,7 @@
         {% endif %}
     {% endfor %}
 
-    <div class="border rounded-3 p-3 mb-3 bg-light-subtle">
+    <div class="border rounded-3 p-3 mb-3 bg-light-subtle" id="record-view-{{ session['id'] }}">
         <div class="d-flex flex-wrap gap-2 mb-3">
             <span class="badge bg-success-subtle text-success border">{{ txt('Present', 'הגיעו') }} {{ stats.present|length }}</span>
             <span class="badge bg-danger-subtle text-danger border">{{ txt('Missed', 'נעדרו') }} {{ stats.missed|length }}</span>
@@ -148,7 +148,7 @@
         </div>
     </div>
 
-    <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}">
+    <form method="post" action="{{ url_for('record_group_session', session_id=session['id']) }}" class="d-none" id="record-edit-form-{{ session['id'] }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <fieldset class="record-fieldset" id="record-fieldset-{{ session['id'] }}" disabled>
             <div class="border rounded-3 p-3 mb-3 bg-light-subtle">
@@ -809,9 +809,27 @@ function confirmGroupDelete(form) {
 }
 
 function toggleRecordEdit(sessionId, enabled) {
-    document.getElementById('record-fieldset-' + sessionId).disabled = !enabled;
-    document.getElementById('record-cancel-' + sessionId).classList.toggle('d-none', !enabled);
-    document.getElementById('record-save-' + sessionId).classList.toggle('d-none', !enabled);
+    const fieldset = document.getElementById('record-fieldset-' + sessionId);
+    const cancelBtn = document.getElementById('record-cancel-' + sessionId);
+    const saveBtn = document.getElementById('record-save-' + sessionId);
+    const readPanel = document.getElementById('record-view-' + sessionId);
+    const editForm = document.getElementById('record-edit-form-' + sessionId);
+
+    if (fieldset) {
+        fieldset.disabled = !enabled;
+    }
+    if (cancelBtn) {
+        cancelBtn.classList.toggle('d-none', !enabled);
+    }
+    if (saveBtn) {
+        saveBtn.classList.toggle('d-none', !enabled);
+    }
+    if (readPanel) {
+        readPanel.classList.toggle('d-none', enabled);
+    }
+    if (editForm) {
+        editForm.classList.toggle('d-none', !enabled);
+    }
 }
 
 function toggleGroupInfoEdit(enabled) {

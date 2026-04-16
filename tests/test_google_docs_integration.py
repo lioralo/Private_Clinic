@@ -317,7 +317,9 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             db = get_db()
             row = db.execute('SELECT session_summary FROM group_sessions WHERE group_id = ?', (group_id,)).fetchone()
             self.assertIn('השיח בקבוצה התחיל בשתיקה', row['session_summary'])
-            self.assertIn('|משתתפים', row['session_summary'])
+            self.assertNotIn('|משתתפים', row['session_summary'])
+            self.assertNotIn('|חסרים', row['session_summary'])
+            self.assertNotIn('|תוכן', row['session_summary'])
 
     def test_parse_doc_into_notes_two_hebrew_meetings_with_sections(self):
         text = (

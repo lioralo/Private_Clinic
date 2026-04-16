@@ -9710,11 +9710,26 @@ def _create_diagnosee_questionnaires_sheet(db, diagnosee_name, selected_titles):
             source_tab_id = source_sheet_tab.get('sheet_id') if source_sheet_tab else None
             if source_tab_id is None:
                 continue
-            sheets_service.spreadsheets().sheets().copyTo(
+            copied_result = sheets_service.spreadsheets().sheets().copyTo(
                 spreadsheetId=source_sheet_id,
                 sheetId=source_tab_id,
                 body={'destinationSpreadsheetId': destination_id}
             ).execute()
+            copied_props = copied_result.get('properties') or {}
+            copied_sheet_id = copied_props.get('sheetId')
+            copied_title = (copied_props.get('title') or '').strip()
+            if copied_sheet_id is not None and copied_title != tab_name:
+                sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=destination_id,
+                    body={
+                        'requests': [{
+                            'updateSheetProperties': {
+                                'properties': {'sheetId': copied_sheet_id, 'title': tab_name},
+                                'fields': 'title',
+                            }
+                        }]
+                    }
+                ).execute()
             copied_any = True
 
         if copied_any:
@@ -9784,11 +9799,26 @@ def _copy_questionnaire_tabs_to_spreadsheet(db, destination_sheet_id, selected_t
             source_tab_id = source_sheet_tab.get('sheet_id') if source_sheet_tab else None
             if source_tab_id is None:
                 continue
-            sheets_service.spreadsheets().sheets().copyTo(
+            copied_result = sheets_service.spreadsheets().sheets().copyTo(
                 spreadsheetId=source_sheet_id,
                 sheetId=source_tab_id,
                 body={'destinationSpreadsheetId': parsed_destination_id}
             ).execute()
+            copied_props = copied_result.get('properties') or {}
+            copied_sheet_id = copied_props.get('sheetId')
+            copied_title = (copied_props.get('title') or '').strip()
+            if copied_sheet_id is not None and copied_title != tab_name:
+                sheets_service.spreadsheets().batchUpdate(
+                    spreadsheetId=parsed_destination_id,
+                    body={
+                        'requests': [{
+                            'updateSheetProperties': {
+                                'properties': {'sheetId': copied_sheet_id, 'title': tab_name},
+                                'fields': 'title',
+                            }
+                        }]
+                    }
+                ).execute()
             copied.append(tab_name)
 
         return {
@@ -9966,22 +9996,8 @@ def _pull_group_gdoc_notes(db, group):
         return entry
 
     def _build_structured_summary(parsed_item):
-        participants = [name.strip() for name in (parsed_item.get('participants') or []) if name and name.strip()]
-        missing = [line.strip() for line in (parsed_item.get('missing') or []) if line and line.strip()]
         content_body = (parsed_item.get('content') or '').strip()
-
-        if not participants and not missing:
-            return ''
-
-        lines = [
-            '|משתתפים',
-            ', '.join(participants) if participants else '-',
-            '|חסרים',
-            '\n'.join(missing) if missing else '-',
-            '|תוכן',
-            content_body or '-',
-        ]
-        return '\n'.join(lines).strip()
+        return content_body
 
     def _apply_attendance_from_doc(session_id, participants, missing_entries):
         if not session_id:

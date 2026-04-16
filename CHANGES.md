@@ -2,6 +2,39 @@
 
 ---
 
+## Session 54
+
+**Date:** 2026-04-16
+
+**Objective:** Improve group meeting record UX and parser output quality, and ensure copied questionnaire sheet tabs keep original names.
+
+**Release Summary:**
+
+1. **Group Previous-Meeting Edit UX**
+- Updated group session cards so the edit panel is hidden by default.
+- When pressing `Edit Record`, the edit panel now replaces the read-only summary block instead of showing as a duplicate second box.
+- This removes the always-visible extra panel (`Session Status` + members table) until edit mode is explicitly opened.
+
+2. **Group Content Parsing Cleanup**
+- Updated Hebrew section parser to keep only the actual content body after the `תוכן` / `Content` marker.
+- Dropped structured marker lines (`|משתתפים`, `|חסרים`, `|תוכן`, and variants) from parsed content.
+- Updated group pull processing so saved `session_summary` stores the cleaned content text, not the section-marker scaffold.
+
+3. **Questionnaire Sheet Copy Naming**
+- Updated questionnaire tab copy flow (new file creation and update flow) to rename copied sheets to the exact source tab name.
+- Prevents Google default `Copy of ...` tab names; resulting tabs now keep original names like `PCL-5`.
+
+4. **Validation**
+- Verified Python compilation:
+  - `python -m py_compile app.py scripts/google_docs.py`
+- Verified focused parser/group-doc tests:
+  - `python -m unittest tests.test_google_docs_integration` → 10 tests passed
+- Verified full test coverage:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 153 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+---
+
 ## Session 53
 
 **Date:** 2026-04-16
