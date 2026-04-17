@@ -165,3 +165,19 @@ CREATE TABLE IF NOT EXISTS site_settings (
     setting_key TEXT PRIMARY KEY,
     setting_value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS gdocs_sync_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    trigger_source TEXT,
+    status TEXT,
+    interval_key TEXT,
+    targets_total INTEGER DEFAULT 0,
+    targets_processed INTEGER DEFAULT 0,
+    synced_total INTEGER DEFAULT 0,
+    synced_patients INTEGER DEFAULT 0,
+    synced_groups INTEGER DEFAULT 0,
+    pushed_groups INTEGER DEFAULT 0,
+    errors_json TEXT,
+    details_json TEXT
+);

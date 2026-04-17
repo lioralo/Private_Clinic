@@ -2,6 +2,49 @@
 
 ---
 
+## Session 55
+
+**Date:** 2026-04-17
+
+**Objective:** Expand Google Docs automation to production-ready scheduling with per-target sync modes, retries, history, and health visibility.
+
+**Release Summary:**
+
+1. **Per-Target Auto-Sync Modes**
+- Extended auto-sync target config to support per-target mode selection.
+- Patient targets remain pull-only.
+- Group targets now support:
+  - `Pull doc to site only`
+  - `Pull and push (two-way)`
+
+2. **Sync Retry/Backoff + Partial Result Handling**
+- Added transient-error detection and retry/backoff for Google Docs sync operations.
+- Manual auto-sync responses now include run status, push counts, warnings, and history id.
+- Partial failures no longer silently pass; they are surfaced as warnings/errors.
+
+3. **Sync History/Audit Trail**
+- Added `gdocs_sync_history` table and write path for auto, request-triggered, worker-triggered, and manual runs.
+- Added Admin Profile history table with run time, trigger, status, processed targets, synced count, and error count.
+
+4. **Background Scheduler Worker**
+- Added a daemon background worker loop for recurring auto-sync execution independent of incoming requests.
+- Worker starts in non-testing mode during initialization.
+
+5. **Dashboard Health Indicator**
+- Added Google Docs auto-sync health widget to Admin Dashboard.
+- Shows enabled/disabled state, interval, selected docs count, last run, next run, overdue flag, and last status.
+
+6. **Compatibility + Stability**
+- Added graceful fallback for environments/tests where legacy schemas are missing Google Docs columns.
+- Updated `schema.sql` baseline with `gdocs_sync_history` for clean installs.
+
+7. **Validation**
+- Verified tests:
+  - `/usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 54
 
 **Date:** 2026-04-16

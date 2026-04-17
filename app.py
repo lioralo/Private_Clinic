@@ -57,6 +57,20 @@ DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_m
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
 BACKUP_INTERVAL_HOURS = 12
+GDOC_AUTO_SYNC_INTERVAL_SECONDS = {
+    'twice_daily': 12 * 60 * 60,
+    'daily': 24 * 60 * 60,
+    'twice_weekly': int(3.5 * 24 * 60 * 60),
+    'weekly': 7 * 24 * 60 * 60,
+    'biweekly': 14 * 24 * 60 * 60,
+    'monthly': 30 * 24 * 60 * 60,
+}
+GDOC_AUTO_SYNC_GROUP_MODES = {'pull', 'both'}
+_GDOC_AUTO_SYNC_LOCK = threading.Lock()
+_GDOC_AUTO_SYNC_LAST_CHECK_TS = 0.0
+_GDOC_AUTO_SYNC_WORKER_STATE_LOCK = threading.Lock()
+_GDOC_AUTO_SYNC_WORKER_STARTED = False
+_GDOC_AUTO_SYNC_STOP_EVENT = threading.Event()
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
@@ -608,6 +622,11 @@ DEFAULT_SITE_SETTINGS = {
     'about_text': '',
     'about_map_url': '',
     'questionnaires_source_sheet_url': '',
+    'gdocs_auto_sync_enabled': '0',
+    'gdocs_auto_sync_interval': 'daily',
+    'gdocs_auto_sync_targets_json': '[]',
+    'gdocs_auto_sync_targets_config_json': '[]',
+    'gdocs_auto_sync_last_run_at': '',
 }
 
 
@@ -643,6 +662,444 @@ def save_site_settings(db, updates):
             'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
             (key, str(value))
         )
+
+
+def _format_gdoc_target_key(target_type, target_id):
+    normalized_type = (target_type or '').strip().lower()
+    try:
+        normalized_id = int(target_id)
+    except (TypeError, ValueError):
+        return None
+    if normalized_type not in {'patient', 'group'} or normalized_id <= 0:
+        return None
+    return f'{normalized_type}:{normalized_id}'
+
+
+def _parse_gdoc_target_key(raw_value):
+    text = (raw_value or '').strip().lower()
+    match = re.fullmatch(r'(patient|group):(\d+)', text)
+    if not match:
+        return None, None
+    return match.group(1), int(match.group(2))
+
+
+def _safe_parse_gdoc_targets_json(raw_json):
+    try:
+        parsed = json.loads(raw_json or '[]')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    normalized = []
+    seen = set()
+    for item in parsed:
+        target_type, target_id = _parse_gdoc_target_key(str(item))
+        if not target_type:
+            continue
+        key = f'{target_type}:{target_id}'
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(key)
+    return normalized
+
+
+def _safe_parse_gdoc_targets_config_json(raw_json):
+    try:
+        parsed = json.loads(raw_json or '[]')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    normalized = []
+    seen = set()
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        target_type, target_id = _parse_gdoc_target_key(item.get('target_key'))
+        if not target_type:
+            continue
+        mode = str(item.get('mode') or 'pull').strip().lower()
+        if target_type == 'group':
+            mode = mode if mode in GDOC_AUTO_SYNC_GROUP_MODES else 'pull'
+        else:
+            mode = 'pull'
+        target_key = f'{target_type}:{target_id}'
+        if target_key in seen:
+            continue
+        seen.add(target_key)
+        normalized.append({'target_key': target_key, 'mode': mode})
+    return normalized
+
+
+def _list_connected_google_docs(db):
+    docs = []
+
+    try:
+        patient_rows = db.execute('''
+            SELECT id, name, gdoc_id
+            FROM patients
+            WHERE COALESCE(gdoc_id, '') <> ''
+              AND COALESCE(is_deleted, 0) = 0
+            ORDER BY name COLLATE NOCASE ASC, id ASC
+        ''').fetchall()
+    except sqlite3.OperationalError:
+        patient_rows = []
+    for row in patient_rows:
+        target_key = _format_gdoc_target_key('patient', row['id'])
+        if not target_key:
+            continue
+        docs.append({
+            'target_key': target_key,
+            'target_type': 'patient',
+            'target_id': int(row['id']),
+            'label': row['name'] or f"Patient #{row['id']}",
+            'doc_id': row['gdoc_id'],
+            'doc_url': f"https://docs.google.com/document/d/{row['gdoc_id']}/edit",
+        })
+
+    try:
+        group_rows = db.execute('''
+            SELECT id, name, gdoc_id
+            FROM groups
+            WHERE COALESCE(gdoc_id, '') <> ''
+            ORDER BY name COLLATE NOCASE ASC, id ASC
+        ''').fetchall()
+    except sqlite3.OperationalError:
+        group_rows = []
+    for row in group_rows:
+        target_key = _format_gdoc_target_key('group', row['id'])
+        if not target_key:
+            continue
+        docs.append({
+            'target_key': target_key,
+            'target_type': 'group',
+            'target_id': int(row['id']),
+            'label': row['name'] or f"Group #{row['id']}",
+            'doc_id': row['gdoc_id'],
+            'doc_url': f"https://docs.google.com/document/d/{row['gdoc_id']}/edit",
+        })
+
+    docs.sort(key=lambda item: (item['target_type'], (item['label'] or '').lower(), item['target_id']))
+    return docs
+
+
+def _get_google_docs_auto_sync_state(db, connected_docs=None):
+    settings = get_site_settings(db)
+    interval_key = (settings.get('gdocs_auto_sync_interval') or 'daily').strip().lower()
+    if interval_key not in GDOC_AUTO_SYNC_INTERVAL_SECONDS:
+        interval_key = 'daily'
+
+    connected_docs = connected_docs if connected_docs is not None else _list_connected_google_docs(db)
+    connected_by_key = {item['target_key']: item for item in connected_docs}
+
+    selected_config = _safe_parse_gdoc_targets_config_json(settings.get('gdocs_auto_sync_targets_config_json'))
+    if not selected_config:
+        selected_config = [{'target_key': key, 'mode': 'pull'} for key in _safe_parse_gdoc_targets_json(settings.get('gdocs_auto_sync_targets_json'))]
+
+    selected_targets = []
+    for item in selected_config:
+        target_key = item.get('target_key')
+        if target_key not in connected_by_key:
+            continue
+        target_type, target_id = _parse_gdoc_target_key(target_key)
+        if not target_type:
+            continue
+        mode = str(item.get('mode') or 'pull').strip().lower()
+        if target_type == 'group':
+            mode = mode if mode in GDOC_AUTO_SYNC_GROUP_MODES else 'pull'
+        else:
+            mode = 'pull'
+        target_doc = connected_by_key[target_key]
+        selected_targets.append({
+            'target_key': target_key,
+            'target_type': target_type,
+            'target_id': target_id,
+            'mode': mode,
+            'label': target_doc.get('label') or target_key,
+        })
+    last_run_at_raw = (settings.get('gdocs_auto_sync_last_run_at') or '').strip()
+    last_run_at = None
+    if last_run_at_raw:
+        try:
+            last_run_at = datetime.fromisoformat(last_run_at_raw)
+        except ValueError:
+            last_run_at = None
+
+    return {
+        'enabled': str(settings.get('gdocs_auto_sync_enabled') or '0') in {'1', 'true', 'yes', 'on'},
+        'interval_key': interval_key,
+        'selected_target_keys': [item['target_key'] for item in selected_targets],
+        'selected_targets': selected_targets,
+        'last_run_at': last_run_at,
+        'last_run_at_raw': last_run_at_raw,
+        'connected_docs': connected_docs,
+    }
+
+
+def _is_transient_sync_error(error_text):
+    text = str(error_text or '').lower()
+    transient_signals = (
+        'timeout',
+        'timed out',
+        'temporarily unavailable',
+        'rate limit',
+        'too many requests',
+        'connection reset',
+        'connection aborted',
+        'connection refused',
+        '503',
+        '502',
+        '500',
+        '429',
+    )
+    return any(signal in text for signal in transient_signals)
+
+
+def _run_sync_with_retry(sync_callable, max_attempts=3, base_delay_seconds=1.0):
+    import time
+
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
+        count, sync_err = sync_callable()
+        if not sync_err:
+            return int(count or 0), None, attempt
+        if attempt >= max_attempts or not _is_transient_sync_error(sync_err):
+            return int(count or 0), str(sync_err), attempt
+        time.sleep(base_delay_seconds * (2 ** (attempt - 1)))
+    return 0, 'Sync failed after retries', max_attempts
+
+
+def _record_gdocs_sync_history(db, trigger_source, status, interval_key, selected_targets, processed_targets,
+                               synced_total, synced_patients, synced_groups, pushed_groups, errors, details):
+    try:
+        cursor = db.execute(
+            '''INSERT INTO gdocs_sync_history (
+                   trigger_source, status, interval_key,
+                   targets_total, targets_processed,
+                   synced_total, synced_patients, synced_groups, pushed_groups,
+                   errors_json, details_json
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                trigger_source,
+                status,
+                interval_key,
+                len(selected_targets),
+                len(processed_targets),
+                int(synced_total or 0),
+                int(synced_patients or 0),
+                int(synced_groups or 0),
+                int(pushed_groups or 0),
+                json.dumps(errors or []),
+                json.dumps(details or []),
+            )
+        )
+        return int(cursor.lastrowid)
+    except sqlite3.OperationalError:
+        return None
+
+
+def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
+    state = _get_google_docs_auto_sync_state(db)
+    now = datetime.now(timezone.utc)
+    should_run = bool(force)
+
+    if not should_run:
+        if not state['enabled']:
+            return {'ran': False, 'reason': 'disabled'}
+        if not state['selected_targets']:
+            return {'ran': False, 'reason': 'no-targets'}
+
+        interval_seconds = GDOC_AUTO_SYNC_INTERVAL_SECONDS.get(state['interval_key'], GDOC_AUTO_SYNC_INTERVAL_SECONDS['daily'])
+        if state['last_run_at'] is None:
+            should_run = True
+        else:
+            elapsed_seconds = (now - state['last_run_at']).total_seconds()
+            should_run = elapsed_seconds >= interval_seconds
+
+    if not should_run:
+        return {'ran': False, 'reason': 'not-due'}
+
+    selected_targets = list(state['selected_targets'])
+    if not selected_targets:
+        return {'ran': False, 'reason': 'no-connected-targets'}
+
+    dependency_error = _google_docs_dependency_error()
+    if dependency_error:
+        history_id = _record_gdocs_sync_history(
+            db,
+            trigger_source=trigger_source,
+            status='failed',
+            interval_key=state['interval_key'],
+            selected_targets=selected_targets,
+            processed_targets=[],
+            synced_total=0,
+            synced_patients=0,
+            synced_groups=0,
+            pushed_groups=0,
+            errors=[dependency_error],
+            details=[],
+        )
+        db.commit()
+        return {'ran': False, 'reason': 'dependency', 'errors': [dependency_error], 'history_id': history_id}
+
+    total_synced = 0
+    synced_patients = 0
+    synced_groups = 0
+    pushed_groups = 0
+    errors = []
+    warnings = []
+    processed = []
+    details = []
+
+    for target in selected_targets:
+        target_key = target['target_key']
+        target_type = target['target_type']
+        target_id = target['target_id']
+        target_mode = target.get('mode') or 'pull'
+
+        if target_type == 'patient':
+            patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(gdoc_id, "") <> ""', (target_id,)).fetchone()
+            if not patient:
+                continue
+            synced_count, sync_err, attempts = _run_sync_with_retry(lambda: _pull_gdoc_notes(db, patient))
+            if sync_err:
+                errors.append(f"patient:{target_id} -> {sync_err}")
+                details.append({'target_key': target_key, 'mode': 'pull', 'action': 'pull', 'status': 'error', 'attempts': attempts, 'error': sync_err})
+                continue
+
+            total_synced += int(synced_count or 0)
+            synced_patients += 1
+            processed.append(target_key)
+            details.append({'target_key': target_key, 'mode': 'pull', 'action': 'pull', 'status': 'ok', 'attempts': attempts, 'synced': int(synced_count or 0)})
+            continue
+
+        group = db.execute('SELECT * FROM groups WHERE id = ? AND COALESCE(gdoc_id, "") <> ""', (target_id,)).fetchone()
+        if not group:
+            continue
+
+        pulled_count, pull_err, pull_attempts = _run_sync_with_retry(lambda: _pull_group_gdoc_notes(db, group))
+        if pull_err:
+            errors.append(f"group:{target_id} pull -> {pull_err}")
+            details.append({'target_key': target_key, 'mode': target_mode, 'action': 'pull', 'status': 'error', 'attempts': pull_attempts, 'error': pull_err})
+            continue
+
+        total_synced += int(pulled_count or 0)
+        synced_groups += 1
+        processed.append(target_key)
+        details.append({'target_key': target_key, 'mode': target_mode, 'action': 'pull', 'status': 'ok', 'attempts': pull_attempts, 'synced': int(pulled_count or 0)})
+
+        if target_mode == 'both':
+            pushed_count, push_err, push_attempts = _run_sync_with_retry(lambda: _sync_group_gdoc_sessions(db, group))
+            if push_err:
+                warnings.append(f"group:{target_id} push skipped after errors: {push_err}")
+                details.append({'target_key': target_key, 'mode': target_mode, 'action': 'push', 'status': 'error', 'attempts': push_attempts, 'error': push_err})
+            else:
+                total_synced += int(pushed_count or 0)
+                pushed_groups += 1
+                details.append({'target_key': target_key, 'mode': target_mode, 'action': 'push', 'status': 'ok', 'attempts': push_attempts, 'synced': int(pushed_count or 0)})
+
+    save_site_settings(db, {
+        'gdocs_auto_sync_last_run_at': now.isoformat(),
+    })
+
+    if errors:
+        run_status = 'partial' if processed else 'failed'
+    elif warnings:
+        run_status = 'partial'
+    else:
+        run_status = 'success'
+
+    history_id = _record_gdocs_sync_history(
+        db,
+        trigger_source=trigger_source,
+        status=run_status,
+        interval_key=state['interval_key'],
+        selected_targets=selected_targets,
+        processed_targets=processed,
+        synced_total=total_synced,
+        synced_patients=synced_patients,
+        synced_groups=synced_groups,
+        pushed_groups=pushed_groups,
+        errors=errors,
+        details=details,
+    )
+    db.commit()
+
+    return {
+        'ran': True,
+        'status': run_status,
+        'processed_targets': processed,
+        'total_synced': total_synced,
+        'synced_patients': synced_patients,
+        'synced_groups': synced_groups,
+        'pushed_groups': pushed_groups,
+        'errors': errors,
+        'warnings': warnings,
+        'history_id': history_id,
+    }
+
+
+def _get_recent_gdocs_sync_history(db, limit=12):
+    try:
+        rows = db.execute('''
+            SELECT *
+            FROM gdocs_sync_history
+            ORDER BY run_at DESC, id DESC
+            LIMIT ?
+        ''', (int(limit),)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+
+    history = []
+    for row in rows:
+        try:
+            errors = json.loads(row['errors_json'] or '[]')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            errors = []
+        history.append({
+            'id': int(row['id']),
+            'run_at': row['run_at'],
+            'trigger_source': row['trigger_source'] or 'auto',
+            'status': row['status'] or 'unknown',
+            'targets_total': int(row['targets_total'] or 0),
+            'targets_processed': int(row['targets_processed'] or 0),
+            'synced_total': int(row['synced_total'] or 0),
+            'synced_patients': int(row['synced_patients'] or 0),
+            'synced_groups': int(row['synced_groups'] or 0),
+            'pushed_groups': int(row['pushed_groups'] or 0),
+            'errors': errors,
+        })
+    return history
+
+
+def _get_gdocs_auto_sync_health(db):
+    state = _get_google_docs_auto_sync_state(db)
+    interval_seconds = GDOC_AUTO_SYNC_INTERVAL_SECONDS.get(state['interval_key'], GDOC_AUTO_SYNC_INTERVAL_SECONDS['daily'])
+    now = datetime.now(timezone.utc)
+    last_run = state['last_run_at']
+    next_run = (last_run + timedelta(seconds=interval_seconds)) if last_run else None
+    overdue = bool(state['enabled'] and next_run and now > next_run)
+    age_seconds = int((now - last_run).total_seconds()) if last_run else None
+
+    recent_history = _get_recent_gdocs_sync_history(db, limit=1)
+    last_status = recent_history[0]['status'] if recent_history else None
+
+    return {
+        'enabled': state['enabled'],
+        'interval_key': state['interval_key'],
+        'selected_count': len(state['selected_targets']),
+        'last_run_at': last_run,
+        'next_run_at': next_run,
+        'last_run_age_seconds': age_seconds,
+        'overdue': overdue,
+        'last_status': last_status,
+    }
 
 @app.context_processor
 def inject_translations():
@@ -769,6 +1226,62 @@ def routine_backup_guard():
             perform_routine_encrypted_backup(db_path)
         except Exception:
             app.logger.exception('Routine encrypted backup failed')
+
+
+@app.before_request
+def gdocs_auto_sync_guard():
+    if request.path.startswith('/static/'):
+        return
+    if app.config.get('TESTING'):
+        return
+
+    global _GDOC_AUTO_SYNC_LAST_CHECK_TS
+
+    import time
+
+    now_ts = time.time()
+    # Avoid checking on every request; due logic is handled inside the sync runner.
+    if now_ts - float(_GDOC_AUTO_SYNC_LAST_CHECK_TS or 0.0) < 60:
+        return
+    if not _GDOC_AUTO_SYNC_LOCK.acquire(blocking=False):
+        return
+
+    try:
+        _GDOC_AUTO_SYNC_LAST_CHECK_TS = now_ts
+        db = get_db()
+        _run_google_docs_auto_sync(db, force=False, trigger_source='request')
+    except Exception:
+        app.logger.exception('Google Docs auto-sync guard failed')
+    finally:
+        _GDOC_AUTO_SYNC_LOCK.release()
+
+
+def _gdocs_auto_sync_worker_loop():
+    while not _GDOC_AUTO_SYNC_STOP_EVENT.is_set():
+        if _GDOC_AUTO_SYNC_STOP_EVENT.wait(timeout=60):
+            break
+        if not _GDOC_AUTO_SYNC_LOCK.acquire(blocking=False):
+            continue
+        try:
+            with app.app_context():
+                db = get_db()
+                _run_google_docs_auto_sync(db, force=False, trigger_source='worker')
+        except Exception:
+            app.logger.exception('Google Docs auto-sync worker iteration failed')
+        finally:
+            _GDOC_AUTO_SYNC_LOCK.release()
+
+
+def ensure_gdocs_auto_sync_worker_started():
+    if app.config.get('TESTING'):
+        return
+    with _GDOC_AUTO_SYNC_WORKER_STATE_LOCK:
+        global _GDOC_AUTO_SYNC_WORKER_STARTED
+        if _GDOC_AUTO_SYNC_WORKER_STARTED:
+            return
+        worker = threading.Thread(target=_gdocs_auto_sync_worker_loop, name='gdocs-auto-sync-worker', daemon=True)
+        worker.start()
+        _GDOC_AUTO_SYNC_WORKER_STARTED = True
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None, display_name=None):
@@ -1269,6 +1782,24 @@ def _run_db_migrations(db):
         db.execute('''CREATE TABLE IF NOT EXISTS site_settings (
             setting_key TEXT PRIMARY KEY,
             setting_value TEXT
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS gdocs_sync_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            trigger_source TEXT,
+            status TEXT,
+            interval_key TEXT,
+            targets_total INTEGER DEFAULT 0,
+            targets_processed INTEGER DEFAULT 0,
+            synced_total INTEGER DEFAULT 0,
+            synced_patients INTEGER DEFAULT 0,
+            synced_groups INTEGER DEFAULT 0,
+            pushed_groups INTEGER DEFAULT 0,
+            errors_json TEXT,
+            details_json TEXT
         )''')
     except sqlite3.OperationalError:
         pass
@@ -1883,6 +2414,7 @@ def init_db():
                 perform_routine_encrypted_backup(database)
             except Exception as backup_error:
                 print(f"Routine backup skipped: {backup_error}")
+            ensure_gdocs_auto_sync_worker_started()
 
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -3115,6 +3647,7 @@ def admin_dashboard():
     recent_patients = _get_dashboard_recent_patients(db)
     recent_activity = _get_dashboard_recent_activity(db)
     missing_recurring = _get_dashboard_missing_recurring(db)
+    gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
 
     return render_template('admin_home.html',
                            today=today,
@@ -3126,7 +3659,8 @@ def admin_dashboard():
                            waiting_patients=waiting_patients,
                            recent_patients=recent_patients,
                            recent_activity=recent_activity,
-                           missing_recurring=missing_recurring)
+                           missing_recurring=missing_recurring,
+                           gdocs_auto_sync_health=gdocs_auto_sync_health)
 
 
 @app.route('/api/patients/reorder', methods=['POST'])
@@ -10452,6 +10986,38 @@ def gdoc_webhook():
     return '', 200
 
 
+@app.route('/admin/google-docs/auto-sync-now', methods=['POST'])
+@login_required
+def google_docs_auto_sync_now():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    with _GDOC_AUTO_SYNC_LOCK:
+        result = _run_google_docs_auto_sync(db, force=True, trigger_source='manual')
+
+    if not result.get('ran'):
+        reason = result.get('reason')
+        if reason == 'dependency':
+            return jsonify({'error': '; '.join(result.get('errors') or ['Google dependencies unavailable'])}), 400
+        if reason in {'no-targets', 'no-connected-targets'}:
+            return jsonify({'error': 'No connected Google Docs are selected for automatic sync.'}), 400
+        return jsonify({'error': 'Google Docs auto-sync is disabled or not due yet.'}), 400
+
+    return jsonify({
+        'status': 'ok',
+        'run_status': result.get('status') or 'success',
+        'synced': int(result.get('total_synced') or 0),
+        'patients': int(result.get('synced_patients') or 0),
+        'groups': int(result.get('synced_groups') or 0),
+        'pushed_groups': int(result.get('pushed_groups') or 0),
+        'errors': result.get('errors') or [],
+        'warnings': result.get('warnings') or [],
+        'history_id': result.get('history_id'),
+        'message': f"Synced {int(result.get('total_synced') or 0)} records from Google Docs.",
+    })
+
+
 @app.route('/admin/profile', methods=['GET', 'POST'])
 @login_required
 def admin_profile():
@@ -10482,7 +11048,27 @@ def admin_profile():
             WHERE id = ?
         ''', (display_name, email, phone, id_number, birth_date, current_user.id))
 
-        if any(key in request.form for key in DEFAULT_SITE_SETTINGS.keys()):
+        selected_sync_targets = []
+        selected_sync_targets_config = []
+        for raw_target in request.form.getlist('gdoc_sync_targets'):
+            target_type, target_id = _parse_gdoc_target_key(raw_target)
+            if not target_type:
+                continue
+            target_key = _format_gdoc_target_key(target_type, target_id)
+            if target_key and target_key not in selected_sync_targets:
+                selected_sync_targets.append(target_key)
+                target_mode = (request.form.get(f'gdoc_sync_mode::{target_key}') or 'pull').strip().lower()
+                if target_type == 'group':
+                    target_mode = target_mode if target_mode in GDOC_AUTO_SYNC_GROUP_MODES else 'pull'
+                else:
+                    target_mode = 'pull'
+                selected_sync_targets_config.append({'target_key': target_key, 'mode': target_mode})
+
+        selected_interval = (request.form.get('gdocs_auto_sync_interval') or 'daily').strip().lower()
+        if selected_interval not in GDOC_AUTO_SYNC_INTERVAL_SECONDS:
+            selected_interval = 'daily'
+
+        if any(key in request.form for key in DEFAULT_SITE_SETTINGS.keys()) or 'gdoc_sync_targets' in request.form:
             save_site_settings(db, {
                 'about_enabled': '1' if request.form.get('about_enabled') else '0',
                 'about_phone': (request.form.get('about_phone') or '').strip(),
@@ -10490,6 +11076,10 @@ def admin_profile():
                 'about_text': (request.form.get('about_text') or '').strip(),
                 'about_map_url': (request.form.get('about_map_url') or '').strip(),
                 'questionnaires_source_sheet_url': (request.form.get('questionnaires_source_sheet_url') or '').strip(),
+                'gdocs_auto_sync_enabled': '1' if request.form.get('gdocs_auto_sync_enabled') else '0',
+                'gdocs_auto_sync_interval': selected_interval,
+                'gdocs_auto_sync_targets_json': json.dumps(selected_sync_targets),
+                'gdocs_auto_sync_targets_config_json': json.dumps(selected_sync_targets_config),
             })
 
         db.commit()
@@ -10499,6 +11089,10 @@ def admin_profile():
     backup_files = list_encrypted_backups()
     pending_secret = session.get('pending_totp_secret')
     totp_uri = _admin_totp_uri(admin, pending_secret) if pending_secret else None
+    connected_google_docs = _list_connected_google_docs(db)
+    gdocs_auto_sync_state = _get_google_docs_auto_sync_state(db, connected_docs=connected_google_docs)
+    gdocs_sync_history = _get_recent_gdocs_sync_history(db, limit=12)
+    gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
     return render_template(
         'admin_profile.html',
         admin=admin,
@@ -10506,6 +11100,10 @@ def admin_profile():
         pending_totp_secret=pending_secret,
         totp_uri=totp_uri,
         site_settings=get_site_settings(db),
+        connected_google_docs=connected_google_docs,
+        gdocs_auto_sync_state=gdocs_auto_sync_state,
+        gdocs_sync_history=gdocs_sync_history,
+        gdocs_auto_sync_health=gdocs_auto_sync_health,
         totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
     )
 

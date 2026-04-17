@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import tempfile
 import unittest
@@ -347,6 +348,126 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(parsed[1]['note_date'], '2026-04-13')
         self.assertEqual(len(parsed[1]['participants']), 6)
         self.assertIn('מפגש עשר תוכן ארוך יותר', parsed[1]['content'])
+
+    def test_admin_profile_saves_google_docs_auto_sync_settings(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('patient-doc-1',))
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Auto Sync Group', 'therapy', 'Auto sync docs', 'group-doc-1')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.post('/admin/profile', data={
+            'gdocs_auto_sync_enabled': '1',
+            'gdocs_auto_sync_interval': 'weekly',
+            'gdoc_sync_targets': ['patient:1', f'group:{group_id}'],
+        }, follow_redirects=True)
+
+        self.assertEqual(rv.status_code, 200)
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('SELECT setting_key, setting_value FROM site_settings').fetchall()
+            settings = {row['setting_key']: row['setting_value'] for row in rows}
+
+        self.assertEqual(settings.get('gdocs_auto_sync_enabled'), '1')
+        self.assertEqual(settings.get('gdocs_auto_sync_interval'), 'weekly')
+        self.assertEqual(
+            settings.get('gdocs_auto_sync_targets_json'),
+            json.dumps(['patient:1', f'group:{group_id}'])
+        )
+
+    def test_auto_sync_now_runs_selected_targets(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('patient-doc-1',))
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Auto Sync Group Run', 'therapy', 'Auto sync docs', 'group-doc-2')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_enabled', '1')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_interval', 'daily')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_json', json.dumps(['patient:1', f'group:{group_id}']))
+            )
+            db.commit()
+
+        with patch.object(app_module, '_google_docs_dependency_error', return_value=None), \
+             patch.object(app_module, '_pull_gdoc_notes', return_value=(2, None)), \
+             patch.object(app_module, '_pull_group_gdoc_notes', return_value=(3, None)):
+            rv = self.client.post('/admin/google-docs/auto-sync-now', data={})
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+        self.assertEqual(payload['synced'], 5)
+        self.assertEqual(payload['patients'], 1)
+        self.assertEqual(payload['groups'], 1)
+
+    def test_auto_sync_now_group_two_way_mode_pushes_and_writes_history(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Auto Sync Group Two Way', 'therapy', 'Auto sync docs', 'group-doc-3')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_enabled', '1')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_interval', 'daily')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_config_json', json.dumps([{'target_key': f'group:{group_id}', 'mode': 'both'}]))
+            )
+            db.commit()
+
+        with patch.object(app_module, '_google_docs_dependency_error', return_value=None), \
+             patch.object(app_module, '_pull_group_gdoc_notes', return_value=(2, None)), \
+             patch.object(app_module, '_sync_group_gdoc_sessions', return_value=(4, None)):
+            rv = self.client.post('/admin/google-docs/auto-sync-now', data={})
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+        self.assertEqual(payload['synced'], 6)
+        self.assertEqual(payload['groups'], 1)
+        self.assertEqual(payload['pushed_groups'], 1)
+
+        with app.app_context():
+            db = get_db()
+            history = db.execute('SELECT status, synced_total, pushed_groups FROM gdocs_sync_history ORDER BY id DESC LIMIT 1').fetchone()
+        self.assertIsNotNone(history)
+        self.assertIn(history['status'], ('success', 'partial'))
+        self.assertEqual(int(history['synced_total'] or 0), 6)
+        self.assertEqual(int(history['pushed_groups'] or 0), 1)
 
 
 if __name__ == '__main__':

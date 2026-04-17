@@ -238,6 +238,123 @@
                             <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3">{{ t('Save') }}</button>
                         </div>
                         <div class="small text-muted mt-2">{{ t('This source file is used to sync questionnaire tabs for diagnosee creation.') }}</div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                            <label class="form-label small fw-semibold mb-0">{{ t('Google Docs Auto Sync') }}</label>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" name="gdocs_auto_sync_enabled" id="gdocsAutoSyncEnabled" {% if gdocs_auto_sync_state.enabled %}checked{% endif %}>
+                                <label class="form-check-label small" for="gdocsAutoSyncEnabled">{{ t('Enable recurring sync') }}</label>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 align-items-end">
+                            <div class="col-12 col-md-6">
+                                <label for="gdocsAutoSyncInterval" class="form-label small">{{ t('Sync interval') }}</label>
+                                <select class="form-select form-select-sm" id="gdocsAutoSyncInterval" name="gdocs_auto_sync_interval">
+                                    <option value="twice_daily" {% if gdocs_auto_sync_state.interval_key == 'twice_daily' %}selected{% endif %}>{{ t('Twice a day') }}</option>
+                                    <option value="daily" {% if gdocs_auto_sync_state.interval_key == 'daily' %}selected{% endif %}>{{ t('Once a day') }}</option>
+                                    <option value="twice_weekly" {% if gdocs_auto_sync_state.interval_key == 'twice_weekly' %}selected{% endif %}>{{ t('Twice a week') }}</option>
+                                    <option value="weekly" {% if gdocs_auto_sync_state.interval_key == 'weekly' %}selected{% endif %}>{{ t('Once a week') }}</option>
+                                    <option value="biweekly" {% if gdocs_auto_sync_state.interval_key == 'biweekly' %}selected{% endif %}>{{ t('Once every two weeks') }}</option>
+                                    <option value="monthly" {% if gdocs_auto_sync_state.interval_key == 'monthly' %}selected{% endif %}>{{ t('Once a month') }}</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-6 d-flex flex-column flex-md-row gap-2">
+                                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 w-100 w-md-auto">{{ t('Save Auto Sync Settings') }}</button>
+                                <button type="button" id="runGdocsAutoSyncNowBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3 w-100 w-md-auto">{{ t('Sync Now') }}</button>
+                            </div>
+                        </div>
+
+                        <div class="small text-muted mt-3">
+                            {% if gdocs_auto_sync_state.last_run_at %}
+                            {{ t('Last auto-sync run:') }} {{ gdocs_auto_sync_state.last_run_at|strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            {{ t('Last auto-sync run: never') }}
+                            {% endif %}
+                            {% if gdocs_auto_sync_health.next_run_at %}
+                            &middot; {{ t('Next run:') }} {{ gdocs_auto_sync_health.next_run_at|strftime('%Y-%m-%d %H:%M') }}
+                            {% endif %}
+                        </div>
+
+                        <div id="gdocsAutoSyncStatus" class="small text-muted mt-2" aria-live="polite"></div>
+
+                        <div class="mt-3">
+                            <label class="form-label small fw-semibold">{{ t('Connected Google Docs') }}</label>
+                            {% if connected_google_docs %}
+                            <div class="border rounded-3 p-2" style="max-height: 220px; overflow:auto;">
+                                {% for doc in connected_google_docs %}
+                                {% set selected_mode = 'pull' %}
+                                {% for selected in gdocs_auto_sync_state.selected_targets %}
+                                    {% if selected.target_key == doc.target_key %}
+                                        {% set selected_mode = selected.mode %}
+                                    {% endif %}
+                                {% endfor %}
+                                <div class="form-check py-1">
+                                    <input class="form-check-input" type="checkbox" name="gdoc_sync_targets" value="{{ doc.target_key }}" id="docSyncTarget_{{ loop.index }}" {% if doc.target_key in gdocs_auto_sync_state.selected_target_keys %}checked{% endif %}>
+                                    <label class="form-check-label small" for="docSyncTarget_{{ loop.index }}">
+                                        <span class="fw-semibold">{{ doc.label }}</span>
+                                        <span class="text-muted">({{ 'Group' if doc.target_type == 'group' else 'Patient' }})</span>
+                                    </label>
+                                    {% if doc.target_type == 'group' %}
+                                    <div class="mt-1 ms-4" style="max-width: 320px;">
+                                        <select class="form-select form-select-sm" name="gdoc_sync_mode::{{ doc.target_key }}">
+                                            <option value="pull" {% if selected_mode == 'pull' %}selected{% endif %}>{{ t('Pull doc to site only') }}</option>
+                                            <option value="both" {% if selected_mode == 'both' %}selected{% endif %}>{{ t('Pull and push (two-way)') }}</option>
+                                        </select>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="small text-muted mt-2">{{ t('Choose the Google Docs sources to sync into the site automatically.') }}</div>
+                            {% else %}
+                            <div class="small text-muted">{{ t('No Google Docs are connected yet. Link a patient or group doc first.') }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mt-4">
+                            <label class="form-label small fw-semibold mb-2">{{ t('Recent Google Docs Sync Runs') }}</label>
+                            {% if gdocs_sync_history %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t('Run time') }}</th>
+                                            <th>{{ t('Trigger') }}</th>
+                                            <th>{{ t('Status') }}</th>
+                                            <th>{{ t('Processed') }}</th>
+                                            <th>{{ t('Synced') }}</th>
+                                            <th>{{ t('Errors') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for item in gdocs_sync_history %}
+                                        <tr>
+                                            <td class="small text-nowrap">{{ item.run_at }}</td>
+                                            <td class="small">{{ item.trigger_source }}</td>
+                                            <td class="small">
+                                                {% if item.status == 'success' %}
+                                                <span class="badge bg-success">{{ item.status }}</span>
+                                                {% elif item.status == 'partial' %}
+                                                <span class="badge bg-warning text-dark">{{ item.status }}</span>
+                                                {% else %}
+                                                <span class="badge bg-danger">{{ item.status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="small">{{ item.targets_processed }}/{{ item.targets_total }}</td>
+                                            <td class="small">{{ item.synced_total }}</td>
+                                            <td class="small">{{ item.errors|length }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="small text-muted">{{ t('No sync history yet.') }}</div>
+                            {% endif %}
+                        </div>
                     </form>
                     <p class="text-muted small mt-3 mb-0">{{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}</p>
                 </div>
@@ -309,6 +426,50 @@
                     alert('{{ t('Calendar updated successfully.') }}');
                 }
             });
+        });
+    }
+
+    const runAutoSyncBtn = document.getElementById('runGdocsAutoSyncNowBtn');
+    const autoSyncStatusNode = document.getElementById('gdocsAutoSyncStatus');
+    if (runAutoSyncBtn) {
+        runAutoSyncBtn.addEventListener('click', async function () {
+            const csrfTokenNode = document.querySelector('[name=csrf_token]');
+            const csrfToken = csrfTokenNode ? csrfTokenNode.value : '';
+            runAutoSyncBtn.disabled = true;
+            if (autoSyncStatusNode) {
+                autoSyncStatusNode.className = 'small text-muted mt-2';
+                autoSyncStatusNode.textContent = '{{ t('Running Google Docs sync...') }}';
+            }
+
+            try {
+                const response = await fetch('/admin/google-docs/auto-sync-now', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'csrf_token=' + encodeURIComponent(csrfToken)
+                });
+                const data = await response.json();
+                if (!response.ok || data.error) {
+                    if (autoSyncStatusNode) {
+                        autoSyncStatusNode.className = 'small text-danger mt-2';
+                        autoSyncStatusNode.textContent = data.error || '{{ t('Could not run Google Docs sync.') }}';
+                    }
+                    return;
+                }
+
+                if (autoSyncStatusNode) {
+                    autoSyncStatusNode.className = 'small text-success mt-2';
+                    const warningCount = Array.isArray(data.warnings) ? data.warnings.length : 0;
+                    const baseMsg = data.message || '{{ t('Google Docs sync completed.') }}';
+                    autoSyncStatusNode.textContent = warningCount > 0 ? (baseMsg + ' ' + warningCount + ' {{ t('warning(s)') }}.') : baseMsg;
+                }
+            } catch (_err) {
+                if (autoSyncStatusNode) {
+                    autoSyncStatusNode.className = 'small text-danger mt-2';
+                    autoSyncStatusNode.textContent = '{{ t('Could not run Google Docs sync.') }}';
+                }
+            } finally {
+                runAutoSyncBtn.disabled = false;
+            }
         });
     }
 })();
