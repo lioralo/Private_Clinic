@@ -43,9 +43,15 @@
 ## Priority Implementation Plan
 1. Remove hard-coded admin credentials and enforce secure bootstrap flow.
 2. Enforce strong `SECRET_KEY` policy in non-dev runtime.
-3. Add rate limiting for public booking endpoints.
-4. Add hardened security headers and cookie flags.
-5. Strengthen webhook verification logic.
+3. Add rate limiting for public booking endpoints. (Implemented 2026-04-18)
+4. Add hardened security headers and cookie flags. (Implemented 2026-04-18)
+5. Strengthen webhook verification logic. (Implemented 2026-04-18 with optional shared secret)
+
+## Implemented In This Pass (2026-04-18)
+- Added public booking API rate limiting (`429` + `Retry-After`).
+- Added response security headers and secure session cookie defaults.
+- Added webhook required-header checks and optional secret verification.
+- Added/updated automated tests covering the above controls.
 
 ## Suggested Next Security Tests
 - Add tests for missing/weak `SECRET_KEY` startup behavior in production mode.

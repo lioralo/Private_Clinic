@@ -196,5 +196,77 @@ class SecurityTestCase(unittest.TestCase):
         rv = self.client.get('/uploads/../../../../../../../etc/passwd')
         self.assertEqual(rv.status_code, 404)
 
+    def test_public_booking_rate_limit(self):
+        prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
+        prev_max = app.config.get('PUBLIC_BOOKING_RATE_LIMIT_MAX')
+        prev_window = app.config.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS')
+
+        app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
+        app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = 2
+        app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = 60
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS slots_override (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    share_token TEXT,
+                    status TEXT,
+                    slot_date DATE,
+                    slot_time TIME,
+                    duration_minutes INTEGER
+                )
+            ''')
+            db.commit()
+
+        try:
+            rv1 = self.client.post('/api/calendar/open/test-token/book', data={'name': 'A'})
+            rv2 = self.client.post('/api/calendar/open/test-token/book', data={'name': 'A'})
+            rv3 = self.client.post('/api/calendar/open/test-token/book', data={'name': 'A'})
+
+            self.assertEqual(rv1.status_code, 409)
+            self.assertEqual(rv2.status_code, 409)
+            self.assertEqual(rv3.status_code, 429)
+            self.assertIn('Retry-After', rv3.headers)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
+            app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = prev_max
+            app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
+
+    def test_security_headers_present(self):
+        rv = self.client.get('/login')
+        self.assertEqual(rv.headers.get('X-Content-Type-Options'), 'nosniff')
+        self.assertEqual(rv.headers.get('X-Frame-Options'), 'SAMEORIGIN')
+        self.assertEqual(rv.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+
+    def test_gdoc_webhook_requires_required_headers(self):
+        rv = self.client.post('/api/gdoc/webhook', headers={'X-Goog-Channel-ID': 'abc'})
+        self.assertEqual(rv.status_code, 403)
+
+        rv_ok = self.client.post('/api/gdoc/webhook', headers={
+            'X-Goog-Channel-ID': 'abc',
+            'X-Goog-Resource-State': 'sync'
+        })
+        self.assertEqual(rv_ok.status_code, 200)
+
+    def test_gdoc_webhook_secret_when_configured(self):
+        prev_secret = app.config.get('GOOGLE_DOCS_WEBHOOK_SECRET')
+        app.config['GOOGLE_DOCS_WEBHOOK_SECRET'] = 'test-secret'
+        try:
+            rv_bad = self.client.post('/api/gdoc/webhook', headers={
+                'X-Goog-Channel-ID': 'abc',
+                'X-Goog-Resource-State': 'sync'
+            })
+            self.assertEqual(rv_bad.status_code, 403)
+
+            rv_ok = self.client.post('/api/gdoc/webhook', headers={
+                'X-Goog-Channel-ID': 'abc',
+                'X-Goog-Resource-State': 'sync',
+                'X-Webhook-Secret': 'test-secret'
+            })
+            self.assertEqual(rv_ok.status_code, 200)
+        finally:
+            app.config['GOOGLE_DOCS_WEBHOOK_SECRET'] = prev_secret
+
 if __name__ == '__main__':
     unittest.main()

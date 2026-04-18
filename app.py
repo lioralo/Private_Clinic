@@ -4,6 +4,7 @@ import socket
 import json
 import ast
 import importlib
+import hmac
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -51,6 +52,11 @@ app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 app.secret_key = os.environ.get('SECRET_KEY', 'dev')
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = (os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax') or 'Lax').strip() or 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = str(os.environ.get('SESSION_COOKIE_SECURE', '0')).strip().lower() in {'1', 'true', 'yes', 'on'}
+app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
+app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
@@ -75,6 +81,8 @@ _GDOC_MANUAL_SYNC_JOB_LOCK = threading.Lock()
 _GDOC_MANUAL_SYNC_JOBS = {}
 _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
 _GDOC_MANUAL_SYNC_MAX_JOBS = 40
+_PUBLIC_RATE_LIMIT_LOCK = threading.Lock()
+_PUBLIC_RATE_LIMIT_BUCKETS = {}
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
@@ -93,6 +101,73 @@ def ensure_runtime_paths():
 
     backup_path = Path(BACKUP_DIR)
     backup_path.mkdir(parents=True, exist_ok=True)
+
+
+def _request_client_ip():
+    forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
+    if forwarded_for:
+        first_ip = forwarded_for.split(',')[0].strip()
+        if first_ip:
+            return first_ip
+    return request.remote_addr or 'unknown'
+
+
+def _check_public_rate_limit(scope_key, token=''):
+    if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
+        return None
+
+    max_requests = int(app.config.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', 20) or 20)
+    window_seconds = int(app.config.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', 60) or 60)
+    if max_requests <= 0 or window_seconds <= 0:
+        return None
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    client_ip = _request_client_ip()
+    token_prefix = (token or '')[:32]
+    bucket_key = f'{scope_key}:{client_ip}:{token_prefix}'
+    cutoff_ts = now_ts - window_seconds
+
+    with _PUBLIC_RATE_LIMIT_LOCK:
+        timestamps = _PUBLIC_RATE_LIMIT_BUCKETS.get(bucket_key, [])
+        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
+
+        if len(timestamps) >= max_requests:
+            _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
+            retry_after = max(1, int(window_seconds - (now_ts - timestamps[0])))
+            response = jsonify({
+                'status': 'error',
+                'message': 'Too many requests. Please retry shortly.',
+                'retry_after_seconds': retry_after,
+            })
+            response.status_code = 429
+            response.headers['Retry-After'] = str(retry_after)
+            return response
+
+        timestamps.append(now_ts)
+        _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
+
+    return None
+
+
+def _validate_gdoc_webhook_request():
+    channel_id = (request.headers.get('X-Goog-Channel-ID') or '').strip()
+    resource_state = (request.headers.get('X-Goog-Resource-State') or '').strip()
+    if not channel_id:
+        return False
+    if not resource_state:
+        return False
+
+    configured_secret = (
+        app.config.get('GOOGLE_DOCS_WEBHOOK_SECRET')
+        or os.environ.get('GOOGLE_DOCS_WEBHOOK_SECRET')
+        or ''
+    ).strip()
+    if configured_secret:
+        provided_secret = (request.headers.get('X-Webhook-Secret') or '').strip()
+        if not hmac.compare_digest(provided_secret, configured_secret):
+            return False
+
+    return True
 
 
 def _resolve_backup_artifact_sources():
@@ -1554,6 +1629,15 @@ def gdocs_auto_sync_guard():
         app.logger.exception('Google Docs auto-sync guard failed')
     finally:
         _GDOC_AUTO_SYNC_LOCK.release()
+
+
+@app.after_request
+def apply_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    return response
 
 
 def _gdocs_auto_sync_worker_loop():
@@ -6905,6 +6989,10 @@ def open_public_booking_calendar(token):
 @app.route('/api/calendar/public/<token>/book', methods=['POST'])
 @csrf.exempt
 def api_public_calendar_book(token):
+    rate_limit_response = _check_public_rate_limit('calendar-public-book', token=token)
+    if rate_limit_response is not None:
+        return rate_limit_response
+
     db = get_db()
     link_row = db.execute(
         'SELECT id FROM public_booking_links WHERE token = ? AND COALESCE(is_active, 1) = 1',
@@ -8187,6 +8275,10 @@ def open_booking_page(token):
 @csrf.exempt
 def api_open_slot_book(token):
     """Public endpoint – books a shared vacancy slot. No authentication required."""
+    rate_limit_response = _check_public_rate_limit('calendar-open-slot-book', token=token)
+    if rate_limit_response is not None:
+        return rate_limit_response
+
     booker_name = (request.form.get('name') or '').strip()
     booker_phone = (request.form.get('phone') or '').strip()
     booker_notes = (request.form.get('notes') or '').strip()
@@ -11271,13 +11363,17 @@ def push_group_gdoc(group_id):
 @app.route('/api/gdoc/webhook', methods=['POST'])
 @csrf.exempt
 def gdoc_webhook():
-    channel_id = request.headers.get('X-Goog-Channel-ID')
-    if not channel_id:
-        return '', 200
+    if not _validate_gdoc_webhook_request():
+        return '', 403
+
+    channel_id = (request.headers.get('X-Goog-Channel-ID') or '').strip()
     db = get_db()
-    patient = db.execute(
-        'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
-    ).fetchone()
+    try:
+        patient = db.execute(
+            'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        patient = None
     if patient and patient['gdoc_id'] and gdocs:
         try:
             _pull_gdoc_notes(db, patient)
