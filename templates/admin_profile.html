@@ -279,6 +279,12 @@
                         </div>
 
                         <div id="gdocsAutoSyncStatus" class="small text-muted mt-2" aria-live="polite"></div>
+                        <div id="gdocsAutoSyncProgressWrap" class="d-none mt-2" aria-live="polite">
+                            <div class="progress" role="progressbar" aria-label="{{ t('Google Docs sync progress') }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="gdocsAutoSyncProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+                            </div>
+                            <div id="gdocsAutoSyncProgressLabel" class="small text-muted mt-1"></div>
+                        </div>
 
                         <div class="mt-3">
                             <label class="form-label small fw-semibold">{{ t('Connected Google Docs') }}</label>
@@ -431,15 +437,74 @@
 
     const runAutoSyncBtn = document.getElementById('runGdocsAutoSyncNowBtn');
     const autoSyncStatusNode = document.getElementById('gdocsAutoSyncStatus');
+    const autoSyncProgressWrap = document.getElementById('gdocsAutoSyncProgressWrap');
+    const autoSyncProgressBar = document.getElementById('gdocsAutoSyncProgressBar');
+    const autoSyncProgressLabel = document.getElementById('gdocsAutoSyncProgressLabel');
+
+    const syncProgressSteps = [
+        '{{ t('Preparing sync request...') }}',
+        '{{ t('Checking Google credentials and targets...') }}',
+        '{{ t('Syncing selected documents...') }}',
+        '{{ t('Saving sync history and finishing...') }}'
+    ];
+
+    function setAutoSyncProgress(stepIndex, totalSteps, labelText, options) {
+        if (!autoSyncProgressWrap || !autoSyncProgressBar) {
+            return;
+        }
+        const opts = options || {};
+        const safeTotal = Math.max(1, Number(totalSteps) || 1);
+        const safeIndex = Math.min(Math.max(Number(stepIndex) || 0, 0), safeTotal);
+        const percent = Math.min(100, Math.max(0, Math.round((safeIndex / safeTotal) * 100)));
+
+        autoSyncProgressWrap.classList.remove('d-none');
+        autoSyncProgressBar.style.width = percent + '%';
+        autoSyncProgressBar.textContent = percent + '%';
+        autoSyncProgressBar.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+
+        if (opts.variant === 'success') {
+            autoSyncProgressBar.classList.add('bg-success');
+            autoSyncProgressBar.classList.remove('progress-bar-striped', 'progress-bar-animated');
+        } else if (opts.variant === 'error') {
+            autoSyncProgressBar.classList.add('bg-danger');
+            autoSyncProgressBar.classList.remove('progress-bar-animated');
+        } else if (opts.variant === 'warning') {
+            autoSyncProgressBar.classList.add('bg-warning');
+            autoSyncProgressBar.classList.remove('progress-bar-animated');
+            autoSyncProgressBar.classList.add('text-dark');
+        } else {
+            autoSyncProgressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
+            autoSyncProgressBar.classList.remove('text-dark');
+        }
+
+        const progressRoot = autoSyncProgressBar.parentElement;
+        if (progressRoot) {
+            progressRoot.setAttribute('aria-valuenow', String(percent));
+        }
+        if (autoSyncProgressLabel) {
+            autoSyncProgressLabel.textContent = labelText || '';
+        }
+    }
+
     if (runAutoSyncBtn) {
         runAutoSyncBtn.addEventListener('click', async function () {
             const csrfTokenNode = document.querySelector('[name=csrf_token]');
             const csrfToken = csrfTokenNode ? csrfTokenNode.value : '';
+            const defaultLabel = runAutoSyncBtn.dataset.defaultLabel || runAutoSyncBtn.innerHTML;
+            runAutoSyncBtn.dataset.defaultLabel = defaultLabel;
             runAutoSyncBtn.disabled = true;
+            runAutoSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ t('Syncing...') }}';
             if (autoSyncStatusNode) {
                 autoSyncStatusNode.className = 'small text-muted mt-2';
                 autoSyncStatusNode.textContent = '{{ t('Running Google Docs sync...') }}';
             }
+
+            let progressStepIndex = 1;
+            setAutoSyncProgress(progressStepIndex, syncProgressSteps.length, syncProgressSteps[0]);
+            const progressTimer = window.setInterval(() => {
+                progressStepIndex = Math.min(progressStepIndex + 1, syncProgressSteps.length - 1);
+                setAutoSyncProgress(progressStepIndex, syncProgressSteps.length, syncProgressSteps[progressStepIndex - 1]);
+            }, 1500);
 
             try {
                 const response = await fetch('/admin/google-docs/auto-sync-now', {
@@ -453,22 +518,48 @@
                         autoSyncStatusNode.className = 'small text-danger mt-2';
                         autoSyncStatusNode.textContent = data.error || '{{ t('Could not run Google Docs sync.') }}';
                     }
+                    setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync failed.') }}', {variant: 'error'});
                     return;
                 }
 
                 if (autoSyncStatusNode) {
-                    autoSyncStatusNode.className = 'small text-success mt-2';
+                    const runStatus = String(data.run_status || 'success').toLowerCase();
+                    autoSyncStatusNode.className = runStatus === 'failed'
+                        ? 'small text-danger mt-2'
+                        : (runStatus === 'partial' ? 'small text-warning mt-2' : 'small text-success mt-2');
                     const warningCount = Array.isArray(data.warnings) ? data.warnings.length : 0;
+                    const errorCount = Array.isArray(data.errors) ? data.errors.length : 0;
                     const baseMsg = data.message || '{{ t('Google Docs sync completed.') }}';
-                    autoSyncStatusNode.textContent = warningCount > 0 ? (baseMsg + ' ' + warningCount + ' {{ t('warning(s)') }}.') : baseMsg;
+                    const totals = '{{ t('Patients') }}: ' + Number(data.patients || 0) + ', ' +
+                        '{{ t('Groups pulled') }}: ' + Number(data.groups || 0) + ', ' +
+                        '{{ t('Groups pushed') }}: ' + Number(data.pushed_groups || 0);
+                    let resultMessage = baseMsg + ' (' + totals + ')';
+                    if (warningCount > 0) {
+                        resultMessage += ' ' + warningCount + ' {{ t('warning(s)') }}.';
+                    }
+                    if (errorCount > 0) {
+                        resultMessage += ' ' + errorCount + ' {{ t('error(s)') }}.';
+                    }
+                    autoSyncStatusNode.textContent = resultMessage;
+
+                    if (runStatus === 'failed') {
+                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync finished with errors.') }}', {variant: 'error'});
+                    } else if (runStatus === 'partial') {
+                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync finished with warnings.') }}', {variant: 'warning'});
+                    } else {
+                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync completed successfully.') }}', {variant: 'success'});
+                    }
                 }
             } catch (_err) {
                 if (autoSyncStatusNode) {
                     autoSyncStatusNode.className = 'small text-danger mt-2';
                     autoSyncStatusNode.textContent = '{{ t('Could not run Google Docs sync.') }}';
                 }
+                setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync failed.') }}', {variant: 'error'});
             } finally {
+                window.clearInterval(progressTimer);
                 runAutoSyncBtn.disabled = false;
+                runAutoSyncBtn.innerHTML = runAutoSyncBtn.dataset.defaultLabel || '{{ t('Sync Now') }}';
             }
         });
     }
