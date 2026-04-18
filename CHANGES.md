@@ -2,6 +2,49 @@
 
 ---
 
+## Session 56
+
+**Date:** 2026-04-18
+
+**Objective:** Upgrade manual Google Docs `Sync Now` to true live progress, keep test compatibility, validate behavior end-to-end, and record a focused security review.
+
+**Release Summary:**
+
+1. **True Live `Sync Now` Progress (Admin Profile)**
+- Replaced timer-based client progress with real backend job progress.
+- Added async manual sync execution with in-memory job tracking.
+- Added polling endpoint for progress/status retrieval.
+- Progress now reflects actual processed targets (processed/total, current target, percent).
+
+2. **Backend Manual Sync Job API**
+- Updated `/admin/google-docs/auto-sync-now` to start a background sync job in normal runtime.
+- Added `/admin/google-docs/auto-sync-status/<job_id>` for progress polling.
+- Added bounded job retention and single-active-job protection to avoid overlapping manual runs.
+
+3. **Sync Runner Progress Emission**
+- Extended `_run_google_docs_auto_sync(...)` with an optional progress callback.
+- Emitted phase/status updates across preparation, per-target processing, and completion.
+- Included `targets_total` and `targets_processed` in sync result payloads.
+
+4. **Compatibility Fix for Tests**
+- Preserved synchronous manual sync behavior when `TESTING=True`.
+- This keeps existing integration tests stable (status code and DB-write behavior).
+
+5. **Validation**
+- Verified suites:
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v tests.test_security`
+
+6. **Security Review Snapshot (Static + Tests)**
+- Confirmed existing protections still pass current security tests (auth, TOTP flow, inactivity timeout, path traversal check).
+- Flagged high-priority hardening items for next iteration:
+  - Replace default fallback `SECRET_KEY='dev'` in non-dev runtime.
+  - Remove hard-coded default admin credentials from bootstrap/migration path.
+  - Add stricter webhook request verification (`/api/gdoc/webhook`) beyond header presence.
+
+---
+
 ## Session 55
 
 **Date:** 2026-04-17

@@ -71,6 +71,10 @@ _GDOC_AUTO_SYNC_LAST_CHECK_TS = 0.0
 _GDOC_AUTO_SYNC_WORKER_STATE_LOCK = threading.Lock()
 _GDOC_AUTO_SYNC_WORKER_STARTED = False
 _GDOC_AUTO_SYNC_STOP_EVENT = threading.Event()
+_GDOC_MANUAL_SYNC_JOB_LOCK = threading.Lock()
+_GDOC_MANUAL_SYNC_JOBS = {}
+_GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+_GDOC_MANUAL_SYNC_MAX_JOBS = 40
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
@@ -904,7 +908,15 @@ def _record_gdocs_sync_history(db, trigger_source, status, interval_key, selecte
         return None
 
 
-def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
+def _run_google_docs_auto_sync(db, force=False, trigger_source='auto', progress_callback=None):
+    def emit_progress(**payload):
+        if not callable(progress_callback):
+            return
+        try:
+            progress_callback(payload)
+        except Exception:
+            pass
+
     state = _get_google_docs_auto_sync_state(db)
     now = datetime.now(timezone.utc)
     should_run = bool(force)
@@ -923,11 +935,23 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
             should_run = elapsed_seconds >= interval_seconds
 
     if not should_run:
+        emit_progress(status='skipped', message='Sync is not due yet.', percent=100)
         return {'ran': False, 'reason': 'not-due'}
 
     selected_targets = list(state['selected_targets'])
     if not selected_targets:
+        emit_progress(status='failed', message='No connected Google Docs are selected for sync.', percent=100)
         return {'ran': False, 'reason': 'no-connected-targets'}
+
+    targets_total = len(selected_targets)
+    emit_progress(
+        status='running',
+        message='Starting Google Docs sync...',
+        phase='prepare',
+        targets_total=targets_total,
+        targets_processed=0,
+        percent=0,
+    )
 
     dependency_error = _google_docs_dependency_error()
     if dependency_error:
@@ -946,6 +970,14 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
             details=[],
         )
         db.commit()
+        emit_progress(
+            status='failed',
+            message='Google dependencies are unavailable.',
+            phase='failed',
+            targets_total=targets_total,
+            targets_processed=0,
+            percent=100,
+        )
         return {'ran': False, 'reason': 'dependency', 'errors': [dependency_error], 'history_id': history_id}
 
     total_synced = 0
@@ -956,37 +988,105 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
     warnings = []
     processed = []
     details = []
+    processed_steps = 0
 
     for target in selected_targets:
         target_key = target['target_key']
         target_type = target['target_type']
         target_id = target['target_id']
         target_mode = target.get('mode') or 'pull'
+        target_label = target.get('label') or target_key
+
+        emit_progress(
+            status='running',
+            phase='syncing',
+            message=f'Syncing {target_label}...',
+            current_target=target_label,
+            current_target_key=target_key,
+            targets_total=targets_total,
+            targets_processed=processed_steps,
+            percent=int((processed_steps / targets_total) * 100) if targets_total else 0,
+        )
 
         if target_type == 'patient':
             patient = db.execute('SELECT * FROM patients WHERE id = ? AND COALESCE(gdoc_id, "") <> ""', (target_id,)).fetchone()
             if not patient:
+                processed_steps += 1
+                emit_progress(
+                    status='running',
+                    phase='syncing',
+                    message=f'Skipped {target_label} (not connected).',
+                    current_target=target_label,
+                    current_target_key=target_key,
+                    targets_total=targets_total,
+                    targets_processed=processed_steps,
+                    percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+                )
                 continue
             synced_count, sync_err, attempts = _run_sync_with_retry(lambda: _pull_gdoc_notes(db, patient))
             if sync_err:
                 errors.append(f"patient:{target_id} -> {sync_err}")
                 details.append({'target_key': target_key, 'mode': 'pull', 'action': 'pull', 'status': 'error', 'attempts': attempts, 'error': sync_err})
+                processed_steps += 1
+                emit_progress(
+                    status='running',
+                    phase='syncing',
+                    message=f'Finished {target_label} with errors.',
+                    current_target=target_label,
+                    current_target_key=target_key,
+                    targets_total=targets_total,
+                    targets_processed=processed_steps,
+                    percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+                )
                 continue
 
             total_synced += int(synced_count or 0)
             synced_patients += 1
             processed.append(target_key)
             details.append({'target_key': target_key, 'mode': 'pull', 'action': 'pull', 'status': 'ok', 'attempts': attempts, 'synced': int(synced_count or 0)})
+            processed_steps += 1
+            emit_progress(
+                status='running',
+                phase='syncing',
+                message=f'Finished {target_label}.',
+                current_target=target_label,
+                current_target_key=target_key,
+                targets_total=targets_total,
+                targets_processed=processed_steps,
+                percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+            )
             continue
 
         group = db.execute('SELECT * FROM groups WHERE id = ? AND COALESCE(gdoc_id, "") <> ""', (target_id,)).fetchone()
         if not group:
+            processed_steps += 1
+            emit_progress(
+                status='running',
+                phase='syncing',
+                message=f'Skipped {target_label} (not connected).',
+                current_target=target_label,
+                current_target_key=target_key,
+                targets_total=targets_total,
+                targets_processed=processed_steps,
+                percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+            )
             continue
 
         pulled_count, pull_err, pull_attempts = _run_sync_with_retry(lambda: _pull_group_gdoc_notes(db, group))
         if pull_err:
             errors.append(f"group:{target_id} pull -> {pull_err}")
             details.append({'target_key': target_key, 'mode': target_mode, 'action': 'pull', 'status': 'error', 'attempts': pull_attempts, 'error': pull_err})
+            processed_steps += 1
+            emit_progress(
+                status='running',
+                phase='syncing',
+                message=f'Finished {target_label} with pull errors.',
+                current_target=target_label,
+                current_target_key=target_key,
+                targets_total=targets_total,
+                targets_processed=processed_steps,
+                percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+            )
             continue
 
         total_synced += int(pulled_count or 0)
@@ -1003,6 +1103,18 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
                 total_synced += int(pushed_count or 0)
                 pushed_groups += 1
                 details.append({'target_key': target_key, 'mode': target_mode, 'action': 'push', 'status': 'ok', 'attempts': push_attempts, 'synced': int(pushed_count or 0)})
+
+        processed_steps += 1
+        emit_progress(
+            status='running',
+            phase='syncing',
+            message=f'Finished {target_label}.',
+            current_target=target_label,
+            current_target_key=target_key,
+            targets_total=targets_total,
+            targets_processed=processed_steps,
+            percent=int((processed_steps / targets_total) * 100) if targets_total else 100,
+        )
 
     save_site_settings(db, {
         'gdocs_auto_sync_last_run_at': now.isoformat(),
@@ -1031,10 +1143,21 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto'):
     )
     db.commit()
 
+    emit_progress(
+        status=run_status,
+        phase='done',
+        message='Google Docs sync completed.',
+        targets_total=targets_total,
+        targets_processed=processed_steps,
+        percent=100,
+    )
+
     return {
         'ran': True,
         'status': run_status,
         'processed_targets': processed,
+        'targets_total': targets_total,
+        'targets_processed': processed_steps,
         'total_synced': total_synced,
         'synced_patients': synced_patients,
         'synced_groups': synced_groups,
@@ -1100,6 +1223,183 @@ def _get_gdocs_auto_sync_health(db):
         'overdue': overdue,
         'last_status': last_status,
     }
+
+
+def _cleanup_manual_sync_jobs_locked():
+    if len(_GDOC_MANUAL_SYNC_JOBS) <= _GDOC_MANUAL_SYNC_MAX_JOBS:
+        return
+    ordered_ids = sorted(
+        _GDOC_MANUAL_SYNC_JOBS.keys(),
+        key=lambda key: (_GDOC_MANUAL_SYNC_JOBS[key].get('started_at') or '', key)
+    )
+    removable = len(_GDOC_MANUAL_SYNC_JOBS) - _GDOC_MANUAL_SYNC_MAX_JOBS
+    for job_id in ordered_ids:
+        if removable <= 0:
+            break
+        if job_id == _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID:
+            continue
+        _GDOC_MANUAL_SYNC_JOBS.pop(job_id, None)
+        removable -= 1
+
+
+def _create_manual_sync_job(admin_user_id):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    job_id = secrets.token_hex(16)
+    with _GDOC_MANUAL_SYNC_JOB_LOCK:
+        global _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
+        existing_id = _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
+        existing_job = _GDOC_MANUAL_SYNC_JOBS.get(existing_id) if existing_id else None
+        if existing_job and existing_job.get('status') == 'running':
+            return None, existing_id
+
+        _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = job_id
+        _GDOC_MANUAL_SYNC_JOBS[job_id] = {
+            'job_id': job_id,
+            'status': 'running',
+            'created_by': int(admin_user_id),
+            'started_at': now_iso,
+            'finished_at': None,
+            'message': 'Starting Google Docs sync...',
+            'phase': 'prepare',
+            'targets_total': 0,
+            'targets_processed': 0,
+            'percent': 0,
+            'current_target': None,
+            'result': None,
+            'error': None,
+        }
+        _cleanup_manual_sync_jobs_locked()
+    return job_id, None
+
+
+def _update_manual_sync_job(job_id, payload):
+    with _GDOC_MANUAL_SYNC_JOB_LOCK:
+        job = _GDOC_MANUAL_SYNC_JOBS.get(job_id)
+        if not job:
+            return
+        for key in ('message', 'phase', 'current_target'):
+            if key in payload:
+                job[key] = payload.get(key)
+
+        if 'targets_total' in payload:
+            job['targets_total'] = int(payload.get('targets_total') or 0)
+        if 'targets_processed' in payload:
+            job['targets_processed'] = int(payload.get('targets_processed') or 0)
+
+        total = max(0, int(job.get('targets_total') or 0))
+        processed = max(0, int(job.get('targets_processed') or 0))
+        if total > 0:
+            computed_percent = int(round((processed / total) * 100))
+        else:
+            computed_percent = int(payload.get('percent') or 0)
+        computed_percent = max(0, min(100, computed_percent))
+        job['percent'] = int(payload.get('percent', computed_percent)) if payload.get('percent') is not None else computed_percent
+
+        status = payload.get('status')
+        if status in {'running', 'success', 'partial', 'failed', 'error', 'skipped'}:
+            job['status'] = status
+
+
+def _complete_manual_sync_job(job_id, status, result=None, error_message=None):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with _GDOC_MANUAL_SYNC_JOB_LOCK:
+        global _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
+        job = _GDOC_MANUAL_SYNC_JOBS.get(job_id)
+        if not job:
+            if _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID == job_id:
+                _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+            return
+
+        job['status'] = status
+        job['finished_at'] = now_iso
+        job['percent'] = 100
+        if result is not None:
+            job['result'] = result
+            if result.get('targets_total') is not None:
+                job['targets_total'] = int(result.get('targets_total') or 0)
+            if result.get('targets_processed') is not None:
+                job['targets_processed'] = int(result.get('targets_processed') or 0)
+            if status in {'success', 'partial', 'failed'}:
+                job['message'] = result.get('message') or job.get('message')
+        if error_message:
+            job['error'] = str(error_message)
+            job['message'] = str(error_message)
+        if _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID == job_id:
+            _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+        _cleanup_manual_sync_jobs_locked()
+
+
+def _snapshot_manual_sync_job(job_id):
+    with _GDOC_MANUAL_SYNC_JOB_LOCK:
+        job = _GDOC_MANUAL_SYNC_JOBS.get(job_id)
+        if not job:
+            return None
+        return dict(job)
+
+
+def _run_manual_google_docs_sync_job(job_id):
+    try:
+        with app.app_context():
+            db = get_db()
+            with _GDOC_AUTO_SYNC_LOCK:
+                result = _run_google_docs_auto_sync(
+                    db,
+                    force=True,
+                    trigger_source='manual',
+                    progress_callback=lambda payload: _update_manual_sync_job(job_id, payload),
+                )
+
+            if not result.get('ran'):
+                reason = result.get('reason')
+                if reason == 'dependency':
+                    status = 'failed'
+                    message = '; '.join(result.get('errors') or ['Google dependencies unavailable'])
+                elif reason in {'no-targets', 'no-connected-targets'}:
+                    status = 'failed'
+                    message = 'No connected Google Docs are selected for automatic sync.'
+                elif reason == 'not-due':
+                    status = 'skipped'
+                    message = 'Google Docs auto-sync is not due yet.'
+                else:
+                    status = 'failed'
+                    message = 'Google Docs auto-sync did not run.'
+
+                result_payload = {
+                    'status': status,
+                    'run_status': status,
+                    'synced': int(result.get('total_synced') or 0),
+                    'patients': int(result.get('synced_patients') or 0),
+                    'groups': int(result.get('synced_groups') or 0),
+                    'pushed_groups': int(result.get('pushed_groups') or 0),
+                    'targets_total': int(result.get('targets_total') or 0),
+                    'targets_processed': int(result.get('targets_processed') or 0),
+                    'errors': result.get('errors') or [message],
+                    'warnings': result.get('warnings') or [],
+                    'history_id': result.get('history_id'),
+                    'message': message,
+                }
+                _complete_manual_sync_job(job_id, status=status, result=result_payload)
+                return
+
+            run_status = str(result.get('status') or 'success').lower()
+            result_payload = {
+                'status': 'ok',
+                'run_status': run_status,
+                'synced': int(result.get('total_synced') or 0),
+                'patients': int(result.get('synced_patients') or 0),
+                'groups': int(result.get('synced_groups') or 0),
+                'pushed_groups': int(result.get('pushed_groups') or 0),
+                'targets_total': int(result.get('targets_total') or 0),
+                'targets_processed': int(result.get('targets_processed') or 0),
+                'errors': result.get('errors') or [],
+                'warnings': result.get('warnings') or [],
+                'history_id': result.get('history_id'),
+                'message': f"Synced {int(result.get('total_synced') or 0)} records from Google Docs.",
+            }
+            _complete_manual_sync_job(job_id, status=run_status, result=result_payload)
+    except Exception as exc:
+        app.logger.exception('Manual Google Docs sync job failed')
+        _complete_manual_sync_job(job_id, status='error', error_message=f'Manual sync failed: {exc}')
 
 @app.context_processor
 def inject_translations():
@@ -10992,30 +11292,96 @@ def google_docs_auto_sync_now():
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    db = get_db()
-    with _GDOC_AUTO_SYNC_LOCK:
-        result = _run_google_docs_auto_sync(db, force=True, trigger_source='manual')
+    if app.config.get('TESTING'):
+        db = get_db()
+        with _GDOC_AUTO_SYNC_LOCK:
+            result = _run_google_docs_auto_sync(db, force=True, trigger_source='manual')
 
-    if not result.get('ran'):
-        reason = result.get('reason')
-        if reason == 'dependency':
-            return jsonify({'error': '; '.join(result.get('errors') or ['Google dependencies unavailable'])}), 400
-        if reason in {'no-targets', 'no-connected-targets'}:
-            return jsonify({'error': 'No connected Google Docs are selected for automatic sync.'}), 400
-        return jsonify({'error': 'Google Docs auto-sync is disabled or not due yet.'}), 400
+        if not result.get('ran'):
+            reason = result.get('reason')
+            if reason == 'dependency':
+                return jsonify({'error': '; '.join(result.get('errors') or ['Google dependencies unavailable'])}), 400
+            if reason in {'no-targets', 'no-connected-targets'}:
+                return jsonify({'error': 'No connected Google Docs are selected for automatic sync.'}), 400
+            return jsonify({'error': 'Google Docs auto-sync is disabled or not due yet.'}), 400
+
+        return jsonify({
+            'status': 'ok',
+            'run_status': result.get('status') or 'success',
+            'synced': int(result.get('total_synced') or 0),
+            'patients': int(result.get('synced_patients') or 0),
+            'groups': int(result.get('synced_groups') or 0),
+            'pushed_groups': int(result.get('pushed_groups') or 0),
+            'targets_total': int(result.get('targets_total') or 0),
+            'targets_processed': int(result.get('targets_processed') or 0),
+            'errors': result.get('errors') or [],
+            'warnings': result.get('warnings') or [],
+            'history_id': result.get('history_id'),
+            'message': f"Synced {int(result.get('total_synced') or 0)} records from Google Docs.",
+        })
+
+    job_id, running_job_id = _create_manual_sync_job(current_user.id)
+    if not job_id:
+        return jsonify({
+            'status': 'running',
+            'job_id': running_job_id,
+            'message': 'A sync is already running.',
+        }), 409
+
+    worker = threading.Thread(
+        target=_run_manual_google_docs_sync_job,
+        args=(job_id,),
+        name=f'gdocs-manual-sync-{job_id[:8]}',
+        daemon=True,
+    )
+    worker.start()
 
     return jsonify({
-        'status': 'ok',
-        'run_status': result.get('status') or 'success',
-        'synced': int(result.get('total_synced') or 0),
-        'patients': int(result.get('synced_patients') or 0),
-        'groups': int(result.get('synced_groups') or 0),
-        'pushed_groups': int(result.get('pushed_groups') or 0),
-        'errors': result.get('errors') or [],
-        'warnings': result.get('warnings') or [],
-        'history_id': result.get('history_id'),
-        'message': f"Synced {int(result.get('total_synced') or 0)} records from Google Docs.",
-    })
+        'status': 'accepted',
+        'job_id': job_id,
+        'message': 'Google Docs sync started.',
+    }), 202
+
+
+@app.route('/admin/google-docs/auto-sync-status/<job_id>', methods=['GET'])
+@login_required
+def google_docs_auto_sync_status(job_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    job = _snapshot_manual_sync_job(job_id)
+    if not job:
+        return jsonify({'error': 'Sync job not found.'}), 404
+
+    payload = {
+        'status': job.get('status') or 'unknown',
+        'job_id': job_id,
+        'started_at': job.get('started_at'),
+        'finished_at': job.get('finished_at'),
+        'percent': int(job.get('percent') or 0),
+        'phase': job.get('phase') or 'syncing',
+        'message': job.get('message') or '',
+        'targets_total': int(job.get('targets_total') or 0),
+        'targets_processed': int(job.get('targets_processed') or 0),
+        'current_target': job.get('current_target') or None,
+        'error': job.get('error'),
+    }
+
+    result = job.get('result') or {}
+    if result:
+        payload.update({
+            'run_status': result.get('run_status') or payload['status'],
+            'synced': int(result.get('synced') or 0),
+            'patients': int(result.get('patients') or 0),
+            'groups': int(result.get('groups') or 0),
+            'pushed_groups': int(result.get('pushed_groups') or 0),
+            'errors': result.get('errors') or [],
+            'warnings': result.get('warnings') or [],
+            'history_id': result.get('history_id'),
+            'result_message': result.get('message') or '',
+        })
+
+    return jsonify(payload)
 
 
 @app.route('/admin/profile', methods=['GET', 'POST'])

@@ -441,13 +441,6 @@
     const autoSyncProgressBar = document.getElementById('gdocsAutoSyncProgressBar');
     const autoSyncProgressLabel = document.getElementById('gdocsAutoSyncProgressLabel');
 
-    const syncProgressSteps = [
-        '{{ t('Preparing sync request...') }}',
-        '{{ t('Checking Google credentials and targets...') }}',
-        '{{ t('Syncing selected documents...') }}',
-        '{{ t('Saving sync history and finishing...') }}'
-    ];
-
     function setAutoSyncProgress(stepIndex, totalSteps, labelText, options) {
         if (!autoSyncProgressWrap || !autoSyncProgressBar) {
             return;
@@ -496,40 +489,91 @@
             runAutoSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ t('Syncing...') }}';
             if (autoSyncStatusNode) {
                 autoSyncStatusNode.className = 'small text-muted mt-2';
-                autoSyncStatusNode.textContent = '{{ t('Running Google Docs sync...') }}';
+                autoSyncStatusNode.textContent = '{{ t('Starting Google Docs sync...') }}';
+            }
+            setAutoSyncProgress(0, 100, '{{ t('Preparing sync request...') }}');
+
+            const runningStatuses = new Set(['running', 'accepted']);
+            const finishedStatuses = new Set(['success', 'partial', 'failed', 'error', 'skipped']);
+
+            async function pollSyncJob(jobId) {
+                for (let attempt = 0; attempt < 300; attempt += 1) {
+                    let response;
+                    let data;
+                    try {
+                        response = await fetch('/admin/google-docs/auto-sync-status/' + encodeURIComponent(jobId));
+                        data = await response.json();
+                    } catch (_pollErr) {
+                        throw new Error('{{ t('Could not read sync progress.') }}');
+                    }
+
+                    if (!response.ok || data.error) {
+                        throw new Error(data.error || '{{ t('Could not read sync progress.') }}');
+                    }
+
+                    const percent = Math.max(0, Math.min(100, Number(data.percent || 0)));
+                    const totalTargets = Number(data.targets_total || 0);
+                    const processedTargets = Number(data.targets_processed || 0);
+                    const currentTarget = data.current_target ? String(data.current_target) : '';
+                    const phaseMessage = data.message || '{{ t('Syncing selected documents...') }}';
+                    const progressLabel = totalTargets > 0
+                        ? (phaseMessage + ' (' + processedTargets + '/' + totalTargets + ')')
+                        : phaseMessage;
+                    setAutoSyncProgress(percent, 100, currentTarget ? (progressLabel + ' - ' + currentTarget) : progressLabel);
+
+                    const status = String(data.status || '').toLowerCase();
+                    if (finishedStatuses.has(status)) {
+                        return data;
+                    }
+                    if (!runningStatuses.has(status)) {
+                        throw new Error('{{ t('Sync job entered an unknown state.') }}');
+                    }
+
+                    await new Promise((resolve) => window.setTimeout(resolve, 900));
+                }
+
+                throw new Error('{{ t('Sync timed out before completion.') }}');
             }
 
-            let progressStepIndex = 1;
-            setAutoSyncProgress(progressStepIndex, syncProgressSteps.length, syncProgressSteps[0]);
-            const progressTimer = window.setInterval(() => {
-                progressStepIndex = Math.min(progressStepIndex + 1, syncProgressSteps.length - 1);
-                setAutoSyncProgress(progressStepIndex, syncProgressSteps.length, syncProgressSteps[progressStepIndex - 1]);
-            }, 1500);
-
             try {
-                const response = await fetch('/admin/google-docs/auto-sync-now', {
+                const startResponse = await fetch('/admin/google-docs/auto-sync-now', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                     body: 'csrf_token=' + encodeURIComponent(csrfToken)
                 });
-                const data = await response.json();
-                if (!response.ok || data.error) {
+                const startData = await startResponse.json();
+
+                if ((!startResponse.ok && startResponse.status !== 409) || startData.error) {
                     if (autoSyncStatusNode) {
                         autoSyncStatusNode.className = 'small text-danger mt-2';
-                        autoSyncStatusNode.textContent = data.error || '{{ t('Could not run Google Docs sync.') }}';
+                        autoSyncStatusNode.textContent = startData.error || '{{ t('Could not run Google Docs sync.') }}';
                     }
-                    setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync failed.') }}', {variant: 'error'});
+                    setAutoSyncProgress(100, 100, '{{ t('Sync failed to start.') }}', {variant: 'error'});
                     return;
                 }
 
+                const jobId = startData.job_id;
+                if (!jobId) {
+                    throw new Error('{{ t('No sync job id was returned.') }}');
+                }
+
                 if (autoSyncStatusNode) {
-                    const runStatus = String(data.run_status || 'success').toLowerCase();
+                    autoSyncStatusNode.className = 'small text-info mt-2';
+                    autoSyncStatusNode.textContent = startResponse.status === 409
+                        ? '{{ t('A sync is already running. Tracking existing job...') }}'
+                        : '{{ t('Google Docs sync is running...') }}';
+                }
+
+                const data = await pollSyncJob(jobId);
+
+                if (autoSyncStatusNode) {
+                    const runStatus = String(data.run_status || data.status || 'success').toLowerCase();
                     autoSyncStatusNode.className = runStatus === 'failed'
                         ? 'small text-danger mt-2'
-                        : (runStatus === 'partial' ? 'small text-warning mt-2' : 'small text-success mt-2');
+                        : (runStatus === 'partial' || runStatus === 'skipped' ? 'small text-warning mt-2' : 'small text-success mt-2');
                     const warningCount = Array.isArray(data.warnings) ? data.warnings.length : 0;
                     const errorCount = Array.isArray(data.errors) ? data.errors.length : 0;
-                    const baseMsg = data.message || '{{ t('Google Docs sync completed.') }}';
+                    const baseMsg = data.result_message || data.message || '{{ t('Google Docs sync completed.') }}';
                     const totals = '{{ t('Patients') }}: ' + Number(data.patients || 0) + ', ' +
                         '{{ t('Groups pulled') }}: ' + Number(data.groups || 0) + ', ' +
                         '{{ t('Groups pushed') }}: ' + Number(data.pushed_groups || 0);
@@ -543,21 +587,24 @@
                     autoSyncStatusNode.textContent = resultMessage;
 
                     if (runStatus === 'failed') {
-                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync finished with errors.') }}', {variant: 'error'});
-                    } else if (runStatus === 'partial') {
-                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync finished with warnings.') }}', {variant: 'warning'});
+                        setAutoSyncProgress(100, 100, '{{ t('Sync finished with errors.') }}', {variant: 'error'});
+                    } else if (runStatus === 'partial' || runStatus === 'skipped') {
+                        setAutoSyncProgress(100, 100, '{{ t('Sync finished with warnings.') }}', {variant: 'warning'});
                     } else {
-                        setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync completed successfully.') }}', {variant: 'success'});
+                        setAutoSyncProgress(100, 100, '{{ t('Sync completed successfully.') }}', {variant: 'success'});
                     }
                 }
-            } catch (_err) {
+
+                window.setTimeout(() => {
+                    window.location.reload();
+                }, 1200);
+            } catch (err) {
                 if (autoSyncStatusNode) {
                     autoSyncStatusNode.className = 'small text-danger mt-2';
-                    autoSyncStatusNode.textContent = '{{ t('Could not run Google Docs sync.') }}';
+                    autoSyncStatusNode.textContent = (err && err.message) ? err.message : '{{ t('Could not run Google Docs sync.') }}';
                 }
-                setAutoSyncProgress(syncProgressSteps.length, syncProgressSteps.length, '{{ t('Sync failed.') }}', {variant: 'error'});
+                setAutoSyncProgress(100, 100, '{{ t('Sync failed.') }}', {variant: 'error'});
             } finally {
-                window.clearInterval(progressTimer);
                 runAutoSyncBtn.disabled = false;
                 runAutoSyncBtn.innerHTML = runAutoSyncBtn.dataset.defaultLabel || '{{ t('Sync Now') }}';
             }
