@@ -2,53 +2,6 @@
 
 ---
 
-## Session 57
-
-**Date:** 2026-04-18
-
-**Objective:** Implement security hardening recommendations from the previous review and verify with regression tests.
-
-**Release Summary:**
-
-1. **Public Booking Rate Limiting**
-- Added server-side rate limiting for public booking APIs:
-  - `/api/calendar/public/<token>/book`
-  - `/api/calendar/open/<token>/book`
-- Returns HTTP `429` with `Retry-After` and JSON retry metadata when exceeded.
-
-2. **Google Docs Webhook Hardening**
-- Added stricter request validation for `/api/gdoc/webhook`:
-  - Requires `X-Goog-Channel-ID`
-  - Requires `X-Goog-Resource-State`
-  - Optional shared-secret verification via `GOOGLE_DOCS_WEBHOOK_SECRET` / `app.config['GOOGLE_DOCS_WEBHOOK_SECRET']`
-- Added graceful fallback for legacy schemas missing `gdoc_watch_channel`.
-
-3. **Response + Session Security Defaults**
-- Added global response hardening headers:
-  - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: SAMEORIGIN`
-  - `Referrer-Policy: strict-origin-when-cross-origin`
-  - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
-- Added secure cookie defaults:
-  - `SESSION_COOKIE_HTTPONLY = True`
-  - `SESSION_COOKIE_SAMESITE` from env (default `Lax`)
-  - `SESSION_COOKIE_SECURE` from env flag (`SESSION_COOKIE_SECURE`)
-
-4. **Security Test Coverage Added**
-- Added tests for:
-  - Public booking rate-limit behavior
-  - Presence of core security headers
-  - Webhook required-header validation
-  - Webhook secret verification when configured
-
-5. **Validation**
-- Verified suites:
-  - `python -m unittest -v tests.test_security` (15 tests)
-  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
-  - `python -m unittest discover -s tests -p 'test_*.py'` (160 tests)
-
----
-
 ## Session 56
 
 **Date:** 2026-04-18
