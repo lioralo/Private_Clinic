@@ -25,6 +25,7 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN}
+      TLS_EMAIL: ${TLS_EMAIL}
     ports:
       - "80:80"
       - "443:443"

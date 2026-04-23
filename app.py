@@ -4,6 +4,7 @@ import socket
 import json
 import ast
 import importlib
+import sys
 import hmac
 try:
     from dotenv import load_dotenv
@@ -33,11 +34,28 @@ from datetime import datetime, timedelta, timezone
 
 
 def _import_optional_module(*module_names):
+    scripts_dir = Path(__file__).resolve().parent / 'scripts'
+    scripts_dir_str = str(scripts_dir)
+    if scripts_dir.is_dir() and scripts_dir_str not in sys.path:
+        # Allow importing optional modules that live in ./scripts without packaging changes.
+        sys.path.insert(0, scripts_dir_str)
+
     for module_name in module_names:
         try:
             return importlib.import_module(module_name)
         except ImportError:
             continue
+
+    # Fallback: if callers pass scripts.<module> and scripts is not a package,
+    # retry by importing the module basename from the scripts path.
+    for module_name in module_names:
+        if module_name.startswith('scripts.'):
+            bare_name = module_name.split('.', 1)[1]
+            try:
+                return importlib.import_module(bare_name)
+            except ImportError:
+                continue
+
     return None
 
 
@@ -10226,7 +10244,14 @@ def google_calendar_status():
         return jsonify({'error': 'Unauthorized'}), 403
     db = get_db()
     if not gcal:
-        return jsonify({'connected': False, 'reason': 'Google libraries not installed.'})
+        return jsonify({
+            'connected': False,
+            'google_libs': False,
+            'client_configured': False,
+            'calendar_id': None,
+            'calendars': [],
+            'reason': 'Google libraries not installed.',
+        })
     try:
         connected = bool(gcal.is_connected(db))
         calendars_raw = gcal.list_calendars(db) if connected else []

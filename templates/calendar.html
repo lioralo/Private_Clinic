@@ -833,7 +833,11 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         }
 
-        function submitAppointmentEdit(scopeChoice) {
+        modalConfirmBtn.onclick = function() {
+            submitAppointmentEdit('all');
+        };
+
+        function submitAppointmentEdit() {
             const selectedType = document.getElementById('editMeetingType').value;
             const getEditBody = (scope) => {
                 return new URLSearchParams({

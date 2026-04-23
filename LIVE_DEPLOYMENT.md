@@ -142,6 +142,31 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml down
 - Enable server firewall (`ufw`) with only `22`, `80`, `443` open.
 - Snapshot `./data` periodically at infrastructure level too.
 
+### TLS Trust Check (including Fortinet-protected networks)
+
+If users see `net::ERR_CERT_AUTHORITY_INVALID` and Chrome mentions `Fortinet`,
+verify the site serves a public CA certificate chain (not self-signed or local CA):
+
+```bash
+curl -Iv https://<YOUR_DOMAIN> 2>&1 | grep -Ei 'issuer|subject|expire date|SSL certificate verify'
+```
+
+Expected: issuer is a public CA (for example Let's Encrypt / ZeroSSL) and TLS verification succeeds.
+
+If the issuer contains `Fortinet`, `Proxy`, or another enterprise interceptor,
+the network is performing TLS inspection. That must be fixed on the client/network side
+(install the enterprise root certificate correctly or bypass SSL inspection for the domain).
+This cannot be fixed by Flask app code alone.
+
+To re-issue a clean certificate from Caddy after DNS and ports are correct:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f caddy
+docker compose --env-file .env.prod -f docker-compose.prod.yml restart caddy
+```
+
+Then re-run the `curl -Iv` command from a clean network.
+
 ## 9. First-Time AWS Operator Checklist
 
 Use this exact order on a fresh EC2 server:

@@ -186,7 +186,7 @@
         }
     </style>
 </head>
-<body class="bg-[#f2f4f6] text-[#191c1e]" data-endpoint="{{ request.endpoint or '' }}">
+<body class="bg-[#f2f4f6] text-[#191c1e]" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 
 {# ═══════════════════ LAYOUT SHELL (open) ══════════════════════ #}
 {# The content block is defined exactly ONCE below.               #}
@@ -1004,11 +1004,13 @@
                 });
         }
 
-        document.querySelectorAll('[oncopy],[onpaste],[oncut]').forEach(function (node) {
-            node.removeAttribute('oncopy');
-            node.removeAttribute('onpaste');
-            node.removeAttribute('oncut');
-        });
+        if (isAdmin) {
+            document.querySelectorAll('[oncopy],[onpaste],[oncut]').forEach(function (node) {
+                node.removeAttribute('oncopy');
+                node.removeAttribute('onpaste');
+                node.removeAttribute('oncut');
+            });
+        }
     });
     </script>
     {% endif %}
@@ -1066,8 +1068,22 @@
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const endpoint = (document.body.dataset.endpoint || '').trim();
+        const userRole = (document.body.dataset.userRole || '').trim();
         if (endpoint === 'login') {
             return;
+        }
+
+        if (userRole && userRole !== 'admin') {
+            const blockClipboard = function(event) {
+                const eventTarget = event.target;
+                if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
+                    return;
+                }
+                event.preventDefault();
+            };
+            document.addEventListener('copy', blockClipboard, true);
+            document.addEventListener('cut', blockClipboard, true);
+            document.addEventListener('paste', blockClipboard, true);
         }
 
         document.querySelectorAll('form').forEach((form) => {
