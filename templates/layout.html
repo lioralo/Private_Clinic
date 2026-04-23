@@ -186,7 +186,7 @@
         }
     </style>
 </head>
-<body class="bg-[#f2f4f6] text-[#191c1e]" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
+<body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 
 {# ═══════════════════ LAYOUT SHELL (open) ══════════════════════ #}
 {# The content block is defined exactly ONCE below.               #}
@@ -1079,7 +1079,14 @@
         document.addEventListener('cut', blockClipboard, true);
         document.addEventListener('paste', blockClipboard, true);
         {% elif current_user.role == 'admin' %}
-        console.debug('[Clinic] Admin clipboard access enabled');
+        console.log('[Clinic] Admin clipboard access enabled (role: admin)');
+        // Prevent any third-party library (e.g. FullCalendar) from blocking the
+        // native browser context menu for admin users. Run at capture phase so
+        // we intercept before any bubble-phase listeners on child elements.
+        document.addEventListener('contextmenu', function(e) {
+            e.stopImmediatePropagation();
+            // Do NOT call preventDefault — we want the native menu to appear.
+        }, true);
         {% endif %}
 
         document.querySelectorAll('form').forEach((form) => {

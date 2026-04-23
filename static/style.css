@@ -791,6 +791,13 @@ select,
     user-select: text;
 }
 
+/* Admin users: allow text selection and clipboard everywhere */
+body.admin-user,
+body.admin-user * {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+}
+
 /* ── CARDS view ────────────────────────────────────────── */
 .crm-cards-grid {
     display: grid;
