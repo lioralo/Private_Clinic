@@ -1004,13 +1004,6 @@
                 });
         }
 
-        if (isAdmin) {
-            document.querySelectorAll('[oncopy],[onpaste],[oncut]').forEach(function (node) {
-                node.removeAttribute('oncopy');
-                node.removeAttribute('onpaste');
-                node.removeAttribute('oncut');
-            });
-        }
     });
     </script>
     {% endif %}
@@ -1073,17 +1066,23 @@
             return;
         }
 
-        if (userRole && userRole !== 'admin') {
+        // Only restrict clipboard for patient and guest users; admins have full access
+        if (userRole === 'patient' || userRole === 'guest') {
             const blockClipboard = function(event) {
                 const eventTarget = event.target;
+                // Allow clipboard on elements explicitly marked with data-allow-clipboard
                 if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
                     return;
                 }
                 event.preventDefault();
             };
+            // Block all clipboard operations in capture phase for highest priority
             document.addEventListener('copy', blockClipboard, true);
             document.addEventListener('cut', blockClipboard, true);
             document.addEventListener('paste', blockClipboard, true);
+        } else if (userRole === 'admin') {
+            // Admins have full clipboard access; no restrictions
+            console.debug('[Clinic] Admin clipboard access enabled');
         }
 
         document.querySelectorAll('form').forEach((form) => {
