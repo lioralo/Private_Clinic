@@ -1061,29 +1061,26 @@
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const endpoint = (document.body.dataset.endpoint || '').trim();
-        const userRole = (document.body.dataset.userRole || '').trim();
         if (endpoint === 'login') {
             return;
         }
 
-        // Only restrict clipboard for patient and guest users; admins have full access
-        if (userRole === 'patient' || userRole === 'guest') {
-            const blockClipboard = function(event) {
-                const eventTarget = event.target;
-                // Allow clipboard on elements explicitly marked with data-allow-clipboard
-                if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
-                    return;
-                }
-                event.preventDefault();
-            };
-            // Block all clipboard operations in capture phase for highest priority
-            document.addEventListener('copy', blockClipboard, true);
-            document.addEventListener('cut', blockClipboard, true);
-            document.addEventListener('paste', blockClipboard, true);
-        } else if (userRole === 'admin') {
-            // Admins have full clipboard access; no restrictions
-            console.debug('[Clinic] Admin clipboard access enabled');
-        }
+        {% if not current_user.is_authenticated or current_user.role == 'patient' %}
+        const blockClipboard = function(event) {
+            const eventTarget = event.target;
+            // Allow clipboard on elements explicitly marked with data-allow-clipboard
+            if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
+                return;
+            }
+            event.preventDefault();
+        };
+        // Render-time role checks keep admin pages from shipping the blocker at all.
+        document.addEventListener('copy', blockClipboard, true);
+        document.addEventListener('cut', blockClipboard, true);
+        document.addEventListener('paste', blockClipboard, true);
+        {% elif current_user.role == 'admin' %}
+        console.debug('[Clinic] Admin clipboard access enabled');
+        {% endif %}
 
         document.querySelectorAll('form').forEach((form) => {
             form.setAttribute('autocomplete', 'off');

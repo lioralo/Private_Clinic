@@ -87,6 +87,15 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(rv.status_code, 302)
         self.assertIn('/admin/profile', rv.headers.get('Location', ''))
 
+    def test_admin_pages_do_not_ship_clipboard_blocker(self):
+        rv = self.client.post('/login', data=dict(
+            username='admin',
+            password='admin'
+        ), follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'data-user-role="admin"', rv.data)
+        self.assertNotIn(b"document.addEventListener('copy', blockClipboard, true);", rv.data)
+
     def test_admin_totp_login_with_valid_code_redirects(self):
         with app.app_context():
             db = get_db()
