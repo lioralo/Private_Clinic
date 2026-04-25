@@ -215,8 +215,19 @@ def _refresh_and_save(db, creds):
     """Refresh the token if expired and persist the updated credentials."""
     if not creds.valid and creds.refresh_token:
         from google.auth.transport.requests import Request
-        creds.refresh(Request())
-        save_credentials(db, creds, get_calendar_id(db))
+        from google.auth.exceptions import RefreshError
+        try:
+            creds.refresh(Request())
+            save_credentials(db, creds, get_calendar_id(db))
+        except RefreshError as e:
+            # Token has been revoked or expired and cannot be refreshed
+            error_desc = str(e)
+            if 'invalid_grant' in error_desc or 'revoked' in error_desc.lower():
+                # Clear the invalid token so user must reconnect
+                db.execute('DELETE FROM google_calendar_tokens')
+                db.commit()
+                raise Exception('Google authentication expired. Please reconnect via Admin Profile → Google Calendar.')
+            raise
     return creds
 
 
