@@ -221,8 +221,16 @@ def _refresh_and_save(db, creds):
             save_credentials(db, creds, get_calendar_id(db))
         except RefreshError as e:
             # Token has been revoked or expired and cannot be refreshed
-            error_desc = str(e)
-            if 'invalid_grant' in error_desc or 'revoked' in error_desc.lower():
+            # RefreshError args can be:
+            # - (message_str, error_dict) tuple
+            # - just a message string
+            error_str = str(e)
+            error_args = str(e.args) if hasattr(e, 'args') else ''
+            
+            # Check for invalid_grant in multiple places
+            if ('invalid_grant' in error_str or 
+                'invalid_grant' in error_args or 
+                'revoked' in error_str.lower()):
                 # Clear the invalid token so user must reconnect
                 db.execute('DELETE FROM google_calendar_tokens')
                 db.commit()
