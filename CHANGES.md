@@ -4,6 +4,37 @@
 
 ## Session 57
 
+## Session 58
+
+**Date:** 2026-04-30
+
+**Objective:** Improve intake editing safety and usability with local draft autosave and unsaved-change protection.
+
+**Release Summary:**
+
+1. **Intake Draft Autosave**
+- Added client-side autosave for intake form fields (`intake_*`) to local storage every 20 seconds while changes are pending.
+- Added draft status indicator in the intake footer.
+
+2. **Draft Restore Flow**
+- On intake tab load, if a local draft exists, clinicians are prompted to restore it.
+- On successful form submit, the local draft is cleared automatically.
+
+3. **Unsaved-Change Guard**
+- Added browser leave warning when intake changes are unsaved.
+- Added visual unsaved-changes status feedback while editing.
+
+4. **Validation**
+- Targeted intake tests passed:
+  - `python -m unittest -v tests.test_app.ClinicTestCase.test_intake_form_save_edit_and_export_docx tests.test_app.ClinicTestCase.test_intake_partial_update_preserves_existing_fields tests.test_app.ClinicTestCase.test_legacy_plain_text_intake_can_be_loaded_edited_and_exported`
+- Full regressions passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
+## Session 57
+
 **Date:** 2026-04-30
 
 **Objective:** Complete intake regression debug pass, add missing partial-update protection test coverage, and prepare a clean merge-ready patch set.
