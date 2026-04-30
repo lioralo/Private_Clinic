@@ -6,6 +6,33 @@
 
 ## Session 58
 
+## Session 59
+
+**Date:** 2026-04-30
+
+**Objective:** Fix recurring calendar edit flow where saving with scope (`this and upcoming` / `all in series`) could appear to do nothing.
+
+**Release Summary:**
+
+1. **Root Cause Fixed (Recurring Edit Scope Save)**
+- In `openAppointmentEditor`, the scope picker reused the same modal body and replaced edit fields before payload creation.
+- Save logic then attempted to read removed DOM nodes (`editMeetingDate`, `editMeetingTime`, etc.), causing payload build failure and no outgoing update request.
+
+2. **Implementation Update**
+- Added an edit snapshot in `submitAppointmentEdit()` before opening scope selection.
+- Payload builder now uses snapshot values rather than querying DOM after scope modal render.
+- Added guard for missing edit controls and fallback `showActionModal` error handling if payload build fails.
+- Added catch handling on the scope promise chain to surface errors instead of silent no-op behavior.
+
+3. **Validation**
+- Full suites passed:
+  - `python -m unittest discover -s tests -p 'test_*.py'`
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
+## Session 58
+
 **Date:** 2026-04-30
 
 **Objective:** Improve intake editing safety and usability with local draft autosave and unsaved-change protection.

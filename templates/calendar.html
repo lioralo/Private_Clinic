@@ -834,19 +834,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         modalConfirmBtn.onclick = function() {
-            submitAppointmentEdit('all');
+            submitAppointmentEdit();
         };
 
         function submitAppointmentEdit() {
-            const selectedType = document.getElementById('editMeetingType').value;
-            const getEditBody = (scope) => {
+            const dateInput = document.getElementById('editMeetingDate');
+            const timeInput = document.getElementById('editMeetingTime');
+            const endInput = document.getElementById('editMeetingEndTime');
+            const titleInput = document.getElementById('editMeetingTitle');
+            const linkInput = document.getElementById('editMeetingLink');
+            const typeSelect = document.getElementById('editMeetingType');
+
+            if (!dateInput || !timeInput || !endInput || !titleInput || !linkInput || !typeSelect) {
+                showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
+                return;
+            }
+
+            // Snapshot values before opening the scope modal because that modal
+            // re-renders modalBody and removes edit form fields from the DOM.
+            const editSnapshot = {
+                date: dateInput.value,
+                time: timeInput.value,
+                end_time: endInput.value,
+                meeting_type: typeSelect.value,
+                meeting_link: linkInput.value || '',
+                meeting_title: titleInput.value || '',
+            };
+
+            const getEditBody = (scope, snapshot) => {
+                const selectedType = snapshot.meeting_type;
                 return new URLSearchParams({
-                    date: document.getElementById('editMeetingDate').value,
-                    time: document.getElementById('editMeetingTime').value,
-                    end_time: document.getElementById('editMeetingEndTime').value,
-                    meeting_type: selectedType,
-                    meeting_link: document.getElementById('editMeetingLink').value || '',
-                    meeting_title: document.getElementById('editMeetingTitle').value || '',
+                    date: snapshot.date,
+                    time: snapshot.time,
+                    end_time: snapshot.end_time,
+                    meeting_type: snapshot.meeting_type,
+                    meeting_link: snapshot.meeting_link,
+                    meeting_title: snapshot.meeting_title,
                     save_to_google: '0',
                     meeting_platform: (['zoom', 'google-meet'].includes(selectedType) ? selectedType : ''),
                     scope: scope,
@@ -866,7 +889,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     confirmClass: 'btn-primary'
                 }).then(scope => {
                     if (!scope) return;
-                    const body = getEditBody(scope);
+                    const body = getEditBody(scope, editSnapshot);
                     fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
                         method: 'POST',
                         headers: {
@@ -885,9 +908,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     }).catch(() => {
                         showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
                     });
+                }).catch(() => {
+                    showActionModal({ title: I18N.saveFailed, message: I18N.couldNotSaveMeetingChanges });
                 });
             } else {
-                const body = getEditBody('all');
+                const body = getEditBody('all', editSnapshot);
                 fetch(`/api/calendar/appointment/${payload.source_id}/update`, {
                     method: 'POST',
                     headers: {
