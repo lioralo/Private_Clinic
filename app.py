@@ -10836,7 +10836,10 @@ def link_gdoc(patient_id):
     creds = gcal.load_credentials(db)
     if not creds:
         return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
-    creds = gcal._refresh_and_save(db, creds)
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
     try:
         doc_id = gdocs.create_patient_doc(creds, patient['name'])
     except Exception as exc:
@@ -11143,7 +11146,11 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
     creds = gcal.load_credentials(db)
     if not creds:
         return 0, 'Google not connected — connect via Admin Profile first'
-    creds = gcal._refresh_and_save(db, creds)
+    
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+    except Exception as exc:
+        return 0, str(exc)
 
     params = [group['id']]
     where_sql = ''
@@ -11245,7 +11252,10 @@ def link_group_gdoc(group_id):
     creds = gcal.load_credentials(db)
     if not creds:
         return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
-    creds = gcal._refresh_and_save(db, creds)
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
     try:
         create_group_doc = getattr(gdocs, 'create_group_doc', None)
         group_name = (group['name'] or '').strip() or f'Group {group_id}'

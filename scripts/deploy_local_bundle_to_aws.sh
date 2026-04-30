@@ -147,6 +147,22 @@ sudo find ${REMOTE_DIR_Q} -mindepth 1 -maxdepth 1 \\
   -exec rm -rf {} +
 sudo cp -a ~/private_clinic_bundle_extract/. ${REMOTE_DIR_Q}/
 cd ${REMOTE_DIR_Q}
+if grep -q 'tls {\$TLS_EMAIL}' Caddyfile; then
+  if ! sudo grep -Eq '^TLS_EMAIL=.+$' .env.prod; then
+    domain=\$(sudo grep '^DOMAIN=' .env.prod | head -n1 | cut -d= -f2-)
+    if [[ -z "\${domain}" ]]; then
+      echo 'DOMAIN missing in .env.prod; cannot derive TLS_EMAIL' >&2
+      exit 1
+    fi
+    tls_email=\"admin@\${domain}\"
+    if sudo grep -Eq '^TLS_EMAIL=' .env.prod; then
+      sudo sed -i \"s/^TLS_EMAIL=.*/TLS_EMAIL=\${tls_email}/\" .env.prod
+    else
+      printf '\nTLS_EMAIL=%s\n' \"\${tls_email}\" | sudo tee -a .env.prod >/dev/null
+    fi
+    echo \"[deploy_local_bundle_to_aws] Added missing TLS_EMAIL=\${tls_email} to .env.prod\"
+  fi
+fi
 sudo bash scripts/deploy_prod.sh
 "
 
