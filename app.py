@@ -3211,13 +3211,18 @@ def intake_multi_select_fields():
     }
 
 
-def intake_data_from_request(form):
+def intake_data_from_request(form, existing_data=None):
     if not any(key.startswith('intake_') for key in form.keys()):
         return None
-    data = {}
+    data = normalize_intake_payload(existing_data) if isinstance(existing_data, dict) else {}
+    allowed = set(intake_form_fields())
     multi_fields = intake_multi_select_fields()
     for key in intake_form_fields():
         field_name = f'intake_{key}'
+        if key not in allowed:
+            continue
+        if field_name not in form:
+            continue
         if key in multi_fields:
             values = [value.strip() for value in form.getlist(field_name) if value and value.strip()]
             data[key] = ', '.join(values)
@@ -12248,18 +12253,27 @@ def update_patient_info(patient_id):
 
     background = request.form.get('background')
     treatment_info = request.form.get('treatment_info')
-    intake_data = intake_data_from_request(request.form)
+
+    db = get_db()
+    existing = db.execute(
+        'SELECT background, treatment_info, intake_questionnaire, intake_assessment FROM patients WHERE id = ?',
+        (patient_id,)
+    ).fetchone()
+    existing_intake_data = {}
+    if existing is not None:
+        existing_intake_data = parse_intake_questionnaire(
+            existing['intake_questionnaire'],
+            existing['intake_assessment']
+        )
+        if background is None:
+            background = existing['background'] or ''
+        if treatment_info is None:
+            treatment_info = existing['treatment_info'] or ''
+
+    intake_data = intake_data_from_request(request.form, existing_data=existing_intake_data)
     serialized_intake = json.dumps(intake_data, ensure_ascii=False, indent=2) if intake_data is not None else None
     serialized_assessment = serialize_intake_assessment(intake_data) if intake_data is not None else None
 
-    db = get_db()
-    if background is None or treatment_info is None:
-        existing = db.execute('SELECT background, treatment_info FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if existing is not None:
-            if background is None:
-                background = existing['background'] or ''
-            if treatment_info is None:
-                treatment_info = existing['treatment_info'] or ''
     background = background or ''
     treatment_info = treatment_info or ''
 

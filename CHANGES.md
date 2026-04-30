@@ -2,6 +2,42 @@
 
 ---
 
+## Session 57
+
+**Date:** 2026-04-30
+
+**Objective:** Complete intake regression debug pass, add missing partial-update protection test coverage, and prepare a clean merge-ready patch set.
+
+**Release Summary:**
+
+1. **Intake Partial-Update Data Safety (Backend)**
+- Confirmed and validated merge-safe intake updates in `update_patient_info` + `intake_data_from_request`.
+- Partial submissions now preserve untouched `intake_*` fields by merging request payload with parsed existing questionnaire state.
+
+2. **Intake Multi-Section Editing UX (Frontend)**
+- Verified the new intake section tabs and pane-switch behavior in patient detail view.
+- Verified DOCX export remains directly accessible from intake panel.
+
+3. **New Regression Test Added**
+- Added: `test_intake_partial_update_preserves_existing_fields` in `tests/test_app.py`.
+- This specifically guards against the original regression where partial saves could clear unposted intake fields.
+
+4. **Validation**
+- Targeted intake tests:
+  - `python -m unittest -v tests.test_app.ClinicTestCase.test_intake_form_save_edit_and_export_docx tests.test_app.ClinicTestCase.test_intake_partial_update_preserves_existing_fields tests.test_app.ClinicTestCase.test_legacy_plain_text_intake_can_be_loaded_edited_and_exported`
+- Full regressions:
+  - `python -m unittest discover -s tests -p 'test_*.py'` → 162 tests passed
+  - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar` → 13 tests passed
+
+5. **Merge Readiness Cleanup**
+- Removed transient `clinic.db` binary diff from working tree.
+- Remaining intentional changes are limited to:
+  - `app.py`
+  - `templates/patient_detail.html`
+  - `tests/test_app.py`
+
+---
+
 ## Session 56
 
 **Date:** 2026-04-18

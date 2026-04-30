@@ -2030,6 +2030,43 @@ class ClinicTestCase(unittest.TestCase):
         )
         export_he_rv.close()
 
+    def test_intake_partial_update_preserves_existing_fields(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Intake Partial Update Patient',
+            status='candidate',
+            patient_type='initial-intake'
+        ), follow_redirects=True)
+
+        self.client.post('/patient/1/edit_info', data=dict(
+            background='',
+            treatment_info='',
+            active_tab='intake',
+            intake_meeting_location='Clinic A',
+            intake_referral_source='Dr. Cohen',
+            intake_main_complaint='Initial complaint',
+            intake_problem_history='Initial history'
+        ), follow_redirects=False)
+
+        # Submit only a subset of intake fields; untouched fields should remain.
+        rv = self.client.post('/patient/1/edit_info', data=dict(
+            background='',
+            treatment_info='',
+            active_tab='intake',
+            intake_main_complaint='Updated complaint only'
+        ), follow_redirects=False)
+        assert rv.status_code == 302
+        assert '/patient/1?tab=intake' in rv.headers.get('Location', '')
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT intake_questionnaire FROM patients WHERE id = 1').fetchone()
+            intake_payload = json.loads(row['intake_questionnaire'])
+            assert intake_payload['main_complaint'] == 'Updated complaint only'
+            assert intake_payload['meeting_location'] == 'Clinic A'
+            assert intake_payload['referral_source'] == 'Dr. Cohen'
+            assert intake_payload['problem_history'] == 'Initial history'
+
     def test_legacy_plain_text_intake_can_be_loaded_edited_and_exported(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(

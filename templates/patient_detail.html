@@ -654,9 +654,54 @@
         </div>
 
         {% elif active_tab == 'intake' and intake_enabled %}
+        {% set intake_long_text_fields = [
+            'main_complaint', 'problem_history', 'early_anamnesis',
+            'medical_conditions', 'psychiatric_conditions',
+            'appearance_fit_note', 'appearance_ordered_note', 'cooperation_note', 'eye_contact_note',
+            'behavior_note', 'speech_note', 'mood_note', 'affect_note',
+            'referral_details', 'diag_referral_question', 'diag_test_battery', 'diag_observations',
+            'diag_differential', 'diag_impression', 'diag_recommendations', 'diag_followup_plan', 'diag_final_summary'
+        ] %}
+        {% set intake_tabs = [
+            ('intakePaneMeeting', t('Meeting & Referral'), [
+                'meeting_location', 'meeting_location_specify', 'meeting_time', 'meeting_duration', 'meeting_conductor',
+                'referral_source', 'referral_date', 'main_complaint', 'problem_history', 'early_anamnesis'
+            ]),
+            ('intakePaneSocial', t('Social & Clinical Background'), [
+                'family_status', 'guardian_status', 'guardian_by_whom', 'living_with', 'living_with_other',
+                'disability_status', 'disability_percent', 'medical_conditions', 'psychiatric_conditions'
+            ]),
+            ('intakePaneRisk', t('Risk Assessment'), [
+                'self_harm_level', 'self_harm_recent', 'self_harm_count',
+                'forced_treatment', 'substance_use', 'medical_cannabis', 'alcohol_use'
+            ]),
+            ('intakePaneMse1', t('MSE: Appearance & Affect'), [
+                'appearance_fit', 'appearance_fit_note', 'appearance_ordered', 'appearance_ordered_note',
+                'cooperation', 'cooperation_note', 'eye_contact', 'eye_contact_note',
+                'behavior_normal', 'behavior_note', 'speech_style', 'speech_note',
+                'mood', 'mood_note', 'affect_match', 'affect_state', 'affect_note'
+            ]),
+            ('intakePaneMse2', t('MSE: Cognition & Thought'), [
+                'thinking_normal', 'thinking_rate', 'thinking_sequence', 'thinking_content',
+                'perception_normal', 'perception_abnormal', 'reality_testing', 'judgment', 'self_insight',
+                'orientation', 'memory'
+            ]),
+            ('intakePanePlan', t('Treatment & Referral Plan'), [
+                'referral_target', 'referral_details', 'patient_consent',
+                'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration'
+            ]),
+            ('intakePaneDiagnostic', t('Diagnostic Summary'), [
+                'diag_referral_question', 'diag_test_battery', 'diag_observations',
+                'diag_differential', 'diag_impression', 'diag_recommendations',
+                'diag_followup_plan', 'diag_final_summary'
+            ])
+        ] %}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Intake Form') }}</h5>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Intake Form') }}</h5>
+                    <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">DOCX</a>
+                </div>
             </div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3">
@@ -665,20 +710,32 @@
                     <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
                     <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
                     <div class="col-12">
-                        <label class="form-label">{{ t('Main Complaint') }}</label>
-                        <textarea name="intake_main_complaint" class="form-control" rows="4">{{ intake_form_data.get('main_complaint', '') }}</textarea>
+                        <div class="d-flex flex-wrap gap-2" id="intakeTabsNav">
+                            {% for pane_id, pane_title, pane_fields in intake_tabs %}
+                            <button type="button" class="btn rounded-pill {% if loop.first %}btn-primary{% else %}btn-outline-secondary{% endif %} intake-tab-btn" data-intake-pane="{{ pane_id }}">{{ pane_title }}</button>
+                            {% endfor %}
+                        </div>
                     </div>
                     <div class="col-12">
-                        <label class="form-label">{{ t('Problem History') }}</label>
-                        <textarea name="intake_problem_history" class="form-control" rows="5">{{ intake_form_data.get('problem_history', '') }}</textarea>
+                        {% for pane_id, pane_title, pane_fields in intake_tabs %}
+                        <div id="{{ pane_id }}" class="intake-pane border rounded-4 p-3 bg-light-subtle {% if not loop.first %}d-none{% endif %}">
+                            <div class="row g-3">
+                                {% for field in pane_fields %}
+                                <div class="{% if field in intake_long_text_fields %}col-12{% else %}col-md-6{% endif %}">
+                                    <label class="form-label">{{ t(field.replace('_', ' ')|title) }}</label>
+                                    {% if field in intake_long_text_fields %}
+                                    <textarea name="intake_{{ field }}" class="form-control" rows="4">{{ intake_form_data.get(field, '') }}</textarea>
+                                    {% else %}
+                                    <input type="text" name="intake_{{ field }}" class="form-control" value="{{ intake_form_data.get(field, '') }}">
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">{{ t('Meeting Location') }}</label>
-                        <input type="text" name="intake_meeting_location" class="form-control" value="{{ intake_form_data.get('meeting_location', '') }}">
-                    </div>
-                    <div class="col-md-6 d-flex align-items-end justify-content-md-end gap-2">
+                    <div class="col-12 d-flex justify-content-end gap-2">
                         <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Intake') }}</button>
-                        <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">DOCX</a>
                     </div>
                 </form>
             </div>
@@ -1004,8 +1061,40 @@ function toggleStablePanel(button) {
     }
 }
 
+function initIntakeTabs() {
+    const tabs = Array.from(document.querySelectorAll('.intake-tab-btn'));
+    if (!tabs.length) {
+        return;
+    }
+
+    const panes = Array.from(document.querySelectorAll('.intake-pane'));
+    const setActivePane = function (paneId) {
+        tabs.forEach(function (tab) {
+            const isActive = tab.getAttribute('data-intake-pane') === paneId;
+            tab.classList.toggle('btn-primary', isActive);
+            tab.classList.toggle('btn-outline-secondary', !isActive);
+        });
+
+        panes.forEach(function (pane) {
+            pane.classList.toggle('d-none', pane.id !== paneId);
+        });
+    };
+
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            setActivePane(tab.getAttribute('data-intake-pane'));
+        });
+    });
+
+    const activeBtn = tabs.find(function (tab) {
+        return tab.classList.contains('btn-primary');
+    });
+    setActivePane((activeBtn || tabs[0]).getAttribute('data-intake-pane'));
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     togglePatientInfoEdit(false);
+    initIntakeTabs();
 
     const loadPreviousBtn = document.getElementById('loadPreviousMeetingsBtn');
     if (loadPreviousBtn) {
