@@ -67,6 +67,11 @@
                     <textarea id="bookNotes" class="form-control" rows="3" maxlength="500" placeholder="{{ 'אפשר להוסיף מידע חשוב לקראת המפגש' if is_he else 'Optional notes for this booking' }}"></textarea>
                 </div>
 
+                {# Honeypot — hidden from real users, catches bots that fill every field #}
+                <div style="display:none" aria-hidden="true">
+                    <input type="text" name="website" id="bookWebsite" tabindex="-1" autocomplete="off">
+                </div>
+
                 <div class="col-12">
                     <button id="submitPublicBooking" type="submit" class="btn btn-primary w-100 fw-semibold">{{ 'שליחת קביעה' if is_he else 'Submit Booking' }}</button>
                 </div>
@@ -143,7 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
             birth_date: birthDate,
             phone,
             email,
-            notes: (notesInput && notesInput.value ? notesInput.value.trim() : '')
+            notes: (notesInput && notesInput.value ? notesInput.value.trim() : ''),
+            website: (document.getElementById('bookWebsite') ? document.getElementById('bookWebsite').value : '')
         });
 
         fetch('/api/calendar/public/{{ token }}/book', {

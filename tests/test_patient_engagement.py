@@ -24,10 +24,15 @@ class PatientEngagementTestCase(unittest.TestCase):
         app.config['APP_LOG_FILE'] = self.app_log_path
         self.client = app.test_client()
 
+        # Provide known credentials so _seed_admin_user creates a predictable account.
+        os.environ.setdefault('ADMIN_USERNAME', 'lioraloni')
+        os.environ['ADMIN_PASSWORD'] = 'Flo@tingind4'
+
         with app.app_context():
             init_db()
 
     def tearDown(self):
+        os.environ.pop('ADMIN_PASSWORD', None)
         os.close(self.db_fd)
         os.unlink(self.db_path)
         os.close(self.app_log_fd)

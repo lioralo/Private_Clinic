@@ -2,7 +2,7 @@ import unittest
 import tempfile
 import os
 import pyotp
-from app import app, get_db
+from app import app, get_db, _run_db_migrations
 
 class SecurityTestCase(unittest.TestCase):
 
@@ -19,6 +19,7 @@ class SecurityTestCase(unittest.TestCase):
             with app.open_resource('schema.sql', mode='r') as f:
                 db.cursor().executescript(f.read())
             db.commit()
+            _run_db_migrations(db)
 
             from werkzeug.security import generate_password_hash
             db.execute(
@@ -248,7 +249,22 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(rv.headers.get('X-Frame-Options'), 'SAMEORIGIN')
         self.assertEqual(rv.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
 
+    def _seed_webhook_channel(self, channel_id='abc'):
+        """Insert a patient with the given gdoc_watch_channel so webhook lookups succeed."""
+        with app.app_context():
+            db = get_db()
+            try:
+                db.execute(
+                    "INSERT OR IGNORE INTO patients (name, status, gdoc_watch_channel) VALUES ('Test Patient', 'active', ?)",
+                    (channel_id,)
+                )
+                db.commit()
+            except Exception:
+                pass
+
     def test_gdoc_webhook_requires_required_headers(self):
+        self._seed_webhook_channel('abc')
+
         rv = self.client.post('/api/gdoc/webhook', headers={'X-Goog-Channel-ID': 'abc'})
         self.assertEqual(rv.status_code, 403)
 
@@ -259,6 +275,8 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(rv_ok.status_code, 200)
 
     def test_gdoc_webhook_secret_when_configured(self):
+        self._seed_webhook_channel('abc')
+
         prev_secret = app.config.get('GOOGLE_DOCS_WEBHOOK_SECRET')
         app.config['GOOGLE_DOCS_WEBHOOK_SECRET'] = 'test-secret'
         try:

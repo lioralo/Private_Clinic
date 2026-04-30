@@ -75,6 +75,15 @@ def database_backup_fingerprint(db_file_path):
         conn.close()
 
 
+def rotate_old_backups(backup_root: Path, keep: int = 30) -> None:
+    """Delete oldest encrypted backups, keeping the most recent *keep* files."""
+    enc_files = sorted(backup_root.glob('clinic_*.db.enc'), key=lambda p: p.stat().st_mtime)
+    to_delete = enc_files[:-keep] if len(enc_files) > keep else []
+    for old_file in to_delete:
+        old_file.unlink(missing_ok=True)
+        print(f"Rotated old backup: {old_file.name}")
+
+
 def backup_database():
     db_path = Path(DB_FILE)
     if not db_path.exists():
@@ -125,6 +134,7 @@ def backup_database():
         raw_path.unlink(missing_ok=True)
         verify_path.unlink(missing_ok=True)
         print(f"Encrypted backup successful: {encrypted_path}")
+        rotate_old_backups(backup_root)
         return True
     except Exception as exc:
         raw_path.unlink(missing_ok=True)

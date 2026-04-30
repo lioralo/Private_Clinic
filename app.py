@@ -67,7 +67,19 @@ app = Flask(__name__)
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
-app.secret_key = os.environ.get('SECRET_KEY', 'dev')
+
+_secret_key = os.environ.get('SECRET_KEY', '').strip()
+if not _secret_key:
+    if os.environ.get('FLASK_ENV') == 'production' or os.environ.get('FLASK_DEBUG', '0') == '0':
+        raise RuntimeError(
+            "SECRET_KEY environment variable is not set. "
+            "Set a strong random value before starting the app in production."
+        )
+    import warnings
+    warnings.warn("SECRET_KEY is not set — using an insecure default. Do not use this in production.", stacklevel=2)
+    _secret_key = 'dev-insecure-placeholder'
+app.secret_key = _secret_key
+del _secret_key
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -2761,35 +2773,54 @@ def _run_db_migrations(db):
 
 def _seed_admin_user(db):
     """Seed the default admin user and handle legacy migrations."""
+    env_username = (os.environ.get('ADMIN_USERNAME') or '').strip() or 'lioraloni'
+    env_password = (os.environ.get('ADMIN_PASSWORD') or '').strip()
+
     # Check if admin exists
     admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
     if not admin:
         print("Creating default admin user...")
-        hashed_pw = generate_password_hash('Flo@tingind4')
+        if env_password:
+            hashed_pw = generate_password_hash(env_password)
+            force_change = 0
+        else:
+            # No password configured — generate a random one and force immediate change.
+            generated = secrets.token_urlsafe(16)
+            hashed_pw = generate_password_hash(generated)
+            force_change = 1
+            print(f"ADMIN_PASSWORD not set. Temporary password: {generated!r}  (you will be required to change it on first login)")
         db.execute(
             "INSERT OR IGNORE INTO users (username, password_hash, role, force_password_change) VALUES (?, ?, ?, ?)",
-            ('lioraloni', hashed_pw, 'admin', 0)
+            (env_username, hashed_pw, 'admin', force_change)
         )
         db.commit()
-        print("Admin user created (username: lioraloni).")
+        print(f"Admin user created (username: {env_username}).")
         admin = db.execute("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC").fetchone()
 
     # One-time migration from legacy default admin credentials.
     legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
     if legacy_admin:
-        collision = db.execute("SELECT id FROM users WHERE username = 'lioraloni' AND id <> ?", (legacy_admin['id'],)).fetchone()
+        collision = db.execute("SELECT id FROM users WHERE username = ? AND id <> ?", (env_username, legacy_admin['id'])).fetchone()
         if not collision:
+            if env_password:
+                new_hash = generate_password_hash(env_password)
+                force_change = 0
+            else:
+                generated = secrets.token_urlsafe(16)
+                new_hash = generate_password_hash(generated)
+                force_change = 1
+                print(f"ADMIN_PASSWORD not set. Temporary password for migrated admin: {generated!r}")
             db.execute(
                 '''
                 UPDATE users
                 SET username = ?, password_hash = ?, force_password_change = ?
                 WHERE id = ?
                 ''',
-                ('lioraloni', generate_password_hash('Flo@tingind4'), 0, legacy_admin['id'])
+                (env_username, new_hash, force_change, legacy_admin['id'])
             )
             db.commit()
             admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
-            print('Legacy admin account migrated to lioraloni.')
+            print(f'Legacy admin account migrated to {env_username}.')
 
     if admin and not admin['display_name']:
         db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
@@ -7015,6 +7046,10 @@ def api_public_calendar_book(token):
     rate_limit_response = _check_public_rate_limit('calendar-public-book', token=token)
     if rate_limit_response is not None:
         return rate_limit_response
+
+    # Honeypot: real browsers leave this hidden field blank; bots typically fill it.
+    if (request.form.get('website') or '').strip():
+        return jsonify({'status': 'ok', 'message': 'Booking received.'}), 200
 
     db = get_db()
     link_row = db.execute(
@@ -11398,17 +11433,29 @@ def gdoc_webhook():
 
     channel_id = (request.headers.get('X-Goog-Channel-ID') or '').strip()
     db = get_db()
+    patient = None
+    group = None
     try:
         patient = db.execute(
             'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
         ).fetchone()
+        if not patient:
+            group = db.execute(
+                'SELECT * FROM groups WHERE gdoc_watch_channel = ?', (channel_id,)
+            ).fetchone()
     except sqlite3.OperationalError:
-        patient = None
+        pass
+
+    # Reject webhooks whose channel_id is not registered to any patient or group.
+    if not patient and not group:
+        return '', 404
+
     if patient and patient['gdoc_id'] and gdocs:
         try:
             _pull_gdoc_notes(db, patient)
         except Exception:
             pass
+    # group gdoc sync is handled by the auto-sync worker; no action needed here.
     return '', 200
 
 
