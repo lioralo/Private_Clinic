@@ -958,6 +958,19 @@
                     {% endif %}
                 </div>
 
+                {% if followup_status and followup_status['needs_followup'] %}
+                <div class="border rounded-4 p-3 {% if followup_status['severity'] == 'danger' %}bg-danger-subtle border-danger-subtle{% else %}bg-warning-subtle border-warning-subtle{% endif %}">
+                    <div class="fw-bold mb-2 {% if followup_status['severity'] == 'danger' %}text-danger{% else %}text-warning-emphasis{% endif %}">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t('Follow-up needed') }}
+                    </div>
+                    <div class="small {% if followup_status['severity'] == 'danger' %}text-danger{% else %}text-warning-emphasis{% endif %}">
+                        {{ t('No upcoming appointments scheduled.') }}
+                    </div>
+                    <div class="small text-muted mt-1">{{ t('Last note date:') }} {{ followup_status['last_note_date'] }}</div>
+                    <div class="small text-muted">{{ t('Days since last note:') }} {{ followup_status['days_since_last_note'] }}</div>
+                </div>
+                {% endif %}
+
                 {% if not intake_enabled %}
                 <form method="post" action="{{ url_for('enable_intake_tab', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

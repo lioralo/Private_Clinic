@@ -677,6 +677,9 @@ HEBREW_TRANSLATIONS = {
     ,"Share preferred days, urgency, or anything else the team should know": "אפשר לציין ימים מועדפים, דחיפות, או כל פרט נוסף שחשוב לצוות לדעת"
     ,"Request another meeting": "בקשה לפגישה נוספת"
     ,"Open weekly calendar": "פתיחת היומן השבועי"
+    ,"Follow-up needed": "נדרש מעקב"
+    ,"Last note date:": "תאריך הרשומה האחרונה:"
+    ,"Days since last note:": "ימים מאז הרשומה האחרונה:"
     ,"Message composer is disabled in preview mode.": "שדה כתיבת ההודעות מושבת במצב תצוגה מקדימה."
     ,"Your cancellation request was sent.": "בקשת הביטול שלך נשלחה."
     ,"Your booking request was sent.": "בקשת הקביעה שלך נשלחה."
@@ -4901,6 +4904,38 @@ def _build_patient_chart_data(notes):
     }
 
 
+def _get_patient_followup_status(db, patient_id, next_appointment):
+    row = db.execute('''
+        SELECT MAX(COALESCE(NULLIF(note_date, ''), substr(created_at, 1, 10))) AS last_note_date
+        FROM notes
+        WHERE patient_id = ?
+    ''', (patient_id,)).fetchone()
+
+    last_note_raw = row['last_note_date'] if row else None
+    last_note_date = parse_date_safe(last_note_raw)
+    if not last_note_date:
+        return {
+            'needs_followup': False,
+            'has_upcoming': bool(next_appointment),
+            'last_note_date': None,
+            'days_since_last_note': None,
+            'severity': 'warning'
+        }
+
+    today = datetime.now().date()
+    days_since_last_note = (today - last_note_date).days
+    has_upcoming = bool(next_appointment)
+    needs_followup = (not has_upcoming) and days_since_last_note >= 30
+
+    return {
+        'needs_followup': needs_followup,
+        'has_upcoming': has_upcoming,
+        'last_note_date': last_note_date.isoformat(),
+        'days_since_last_note': days_since_last_note,
+        'severity': 'danger' if days_since_last_note >= 60 else 'warning'
+    }
+
+
 @app.route('/patient/<int:patient_id>')
 @login_required
 def patient_detail(patient_id):
@@ -4937,6 +4972,7 @@ def patient_detail(patient_id):
     appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
     next_items = build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=1)
     next_appointment = next_items[0] if next_items else None
+    followup_status = _get_patient_followup_status(db, patient_id, next_appointment)
 
     group_attendance_rows, group_membership_rows, group_arrived_count = _get_patient_group_data(db, patient_id)
 
@@ -5029,7 +5065,7 @@ def patient_detail(patient_id):
     if not available_questionnaire_titles and selected_questionnaire_titles:
         available_questionnaire_titles = selected_questionnaire_titles
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url)
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, followup_status=followup_status, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])

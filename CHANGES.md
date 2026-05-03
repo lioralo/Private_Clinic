@@ -10,6 +10,42 @@
 
 ## Session 60
 
+## Session 61
+
+**Date:** 2026-05-03
+
+**Objective:** Continue roadmap implementation by adding overdue follow-up visibility in the patient detail workflow, then validate and merge.
+
+**Release Summary:**
+
+1. **Patient Detail Follow-Up Indicator (New)**
+- Added backend helper `_get_patient_followup_status(...)` to compute follow-up risk from note recency and upcoming schedule.
+- A patient is flagged when the latest note is older than 30 days and no upcoming appointment is booked.
+- Added severity grading (`warning` at 30+ days, `danger` at 60+ days) for clearer triage.
+
+2. **Patient Detail UX Update**
+- Added a follow-up warning card in the right-side actions panel of `patient_detail.html`.
+- Card includes:
+  - no-upcoming-appointment reminder,
+  - last note date,
+  - days since last note.
+
+3. **Localization**
+- Added Hebrew translations for new labels:
+  - `Follow-up needed`
+  - `Last note date:`
+  - `Days since last note:`
+
+4. **Debug / Verification**
+- Focused tests:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_add_patient tests.test_app.ClinicTestCase.test_patient_detail_sections_render tests.test_app.ClinicTestCase.test_crm_patient_view_shows_all_and_candidates_buttons`
+- Full suite:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root-level suites:
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 **Date:** 2026-05-03
 
 **Objective:** Continue the implementation roadmap by improving form maintainability and consistent user feedback UX.
