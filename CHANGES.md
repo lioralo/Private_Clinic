@@ -12,6 +12,44 @@
 
 ## Session 61
 
+## Session 62
+
+**Date:** 2026-05-03
+
+**Objective:** Continue the roadmap with an operational quick win: appointment CSV export for admins.
+
+**Release Summary:**
+
+1. **New Admin CSV Export Endpoint**
+- Added route: `/api/admin/export_appointments.csv`.
+- Admin-only access.
+- Exports appointment rows joined with patient fields in UTF-8 CSV format (Excel-friendly BOM).
+- Supports optional query filters:
+  - `from_date`
+  - `to_date`
+  - `status` (`scheduled`, `completed`, `cancelled`)
+
+2. **Dashboard Quick Action**
+- Added an `Export Appointments CSV` quick-action button to `admin_home.html`.
+- One-click export from admin dashboard without leaving workflow.
+
+3. **Localization**
+- Added translation key: `Export Appointments CSV`.
+
+4. **Regression Coverage Added**
+- New test in `tests/test_app.py`: `test_admin_can_export_appointments_csv`.
+- Verifies successful admin export response, CSV headers, and expected row content.
+
+5. **Validation**
+- Focused tests:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_admin_can_export_appointments_csv tests.test_app.ClinicTestCase.test_add_patient tests.test_app.ClinicTestCase.test_patient_detail_sections_render`
+- Full suite:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root-level suites:
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 **Date:** 2026-05-03
 
 **Objective:** Continue roadmap implementation by adding overdue follow-up visibility in the patient detail workflow, then validate and merge.

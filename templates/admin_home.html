@@ -301,6 +301,9 @@
                 <a href="{{ url_for('weekly_calendar') }}" class="btn btn-outline-secondary text-start">
                     <i class="bi bi-calendar3 me-2"></i>{{ t('Open Calendar') }}
                 </a>
+                <a href="{{ url_for('export_appointments_csv') }}" class="btn btn-outline-secondary text-start">
+                    <i class="bi bi-filetype-csv me-2"></i>{{ t('Export Appointments CSV') }}
+                </a>
                 <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary text-start">
                     <i class="bi bi-people-fill me-2"></i>{{ t('Patient Roster (CRM)') }}
                 </a>

@@ -15,7 +15,8 @@ except ImportError:
 # Never set this in production — the production .env does not include it.
 import hashlib
 import threading
-from io import BytesIO
+import csv
+from io import BytesIO, StringIO
 import shutil
 import secrets
 import zipfile
@@ -513,6 +514,7 @@ HEBREW_TRANSLATIONS = {
     "Upload File or DOCX Treatment Log": "העלאת קובץ או יומן טיפולים DOCX",
     "Calendar Actions": "פעולות יומן",
     "Export Calendar to JSON": "ייצא יומן ל-JSON",
+    "Export Appointments CSV": "ייצוא פגישות CSV",
     "Import Calendar from JSON": "ייבא יומן מ-JSON",
     "Import Calendar": "ייבא יומן",
     "Repeat until specific date:": "חזור עד תאריך מסוים:",
@@ -9252,6 +9254,90 @@ def export_calendar():
     response = Response(json.dumps(data, indent=4), mimetype='application/json')
     response.headers['Content-Disposition'] = 'attachment; filename=calendar_export.json'
     return response
+
+
+@app.route('/api/admin/export_appointments.csv')
+@login_required
+def export_appointments_csv():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    from_date = (request.args.get('from_date') or '').strip()
+    to_date = (request.args.get('to_date') or '').strip()
+    status = (request.args.get('status') or 'all').strip().lower()
+
+    where_clauses = ['COALESCE(p.is_deleted, 0) = 0']
+    params = []
+
+    if from_date:
+        parsed_from = parse_date_safe(from_date)
+        if parsed_from:
+            where_clauses.append('a.appointment_date >= ?')
+            params.append(parsed_from.isoformat())
+    if to_date:
+        parsed_to = parse_date_safe(to_date)
+        if parsed_to:
+            where_clauses.append('a.appointment_date <= ?')
+            params.append(parsed_to.isoformat())
+
+    allowed_statuses = {'scheduled', 'completed', 'cancelled'}
+    if status in allowed_statuses:
+        where_clauses.append("COALESCE(a.status, 'scheduled') = ?")
+        params.append(status)
+
+    rows = db.execute(f'''
+        SELECT a.id,
+               a.appointment_date,
+               a.appointment_time,
+               a.duration_minutes,
+               COALESCE(a.status, 'scheduled') AS status,
+               a.meeting_type,
+               a.meeting_title,
+               a.meeting_link,
+               a.is_recurring,
+               a.created_at,
+               p.id AS patient_id,
+               p.name AS patient_name,
+               p.status AS patient_status,
+               COALESCE(p.patient_type, 'private') AS patient_type
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC, a.id ASC
+    ''', tuple(params)).fetchall()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'appointment_id', 'appointment_date', 'appointment_time', 'duration_minutes',
+        'status', 'meeting_type', 'meeting_title', 'meeting_link', 'is_recurring',
+        'patient_id', 'patient_name', 'patient_status', 'patient_type', 'created_at'
+    ])
+
+    for row in rows:
+        writer.writerow([
+            row['id'],
+            row['appointment_date'],
+            row['appointment_time'],
+            row['duration_minutes'],
+            row['status'],
+            row['meeting_type'],
+            row['meeting_title'] or '',
+            row['meeting_link'] or '',
+            int(row['is_recurring'] or 0),
+            row['patient_id'],
+            row['patient_name'],
+            row['patient_status'],
+            row['patient_type'],
+            row['created_at'] or ''
+        ])
+
+    csv_content = '\ufeff' + output.getvalue()
+    response = Response(csv_content, mimetype='text/csv; charset=utf-8')
+    response.headers['Content-Disposition'] = f'attachment; filename=appointments_export_{datetime.now().strftime("%Y%m%d")}.csv'
+    return response
+
 
 def _seed_ongoing_patient(db, admin_id, today):
     db.execute(

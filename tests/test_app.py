@@ -335,6 +335,42 @@ class ClinicTestCase(unittest.TestCase):
         assert 'Noa Shapiro' in names
         assert 'Eran Mizrahi' in names
 
+    def test_admin_can_export_appointments_csv(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='CSV Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, meeting_type, meeting_title, meeting_link, is_recurring
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                1,
+                '2026-05-05',
+                '10:30',
+                60,
+                'scheduled',
+                'zoom',
+                'CSV Export Test',
+                'https://example.com/meet',
+                0
+            ))
+            db.commit()
+
+        rv = self.client.get('/api/admin/export_appointments.csv')
+        assert rv.status_code == 200
+        assert 'text/csv' in (rv.headers.get('Content-Type') or '')
+        assert 'appointments_export_' in (rv.headers.get('Content-Disposition') or '')
+        payload = rv.data.decode('utf-8-sig')
+        assert 'appointment_id,appointment_date,appointment_time' in payload
+        assert 'CSV Patient' in payload
+        assert 'CSV Export Test' in payload
+
     def test_patient_detail_sections_render(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
