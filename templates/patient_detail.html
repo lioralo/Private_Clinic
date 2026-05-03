@@ -1255,14 +1255,24 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 const payload = await response.json().catch(function () { return { error: 'Request failed' }; });
                 if (!response.ok || payload.error) {
-                    window.alert(payload.error || 'Request failed');
+                    if (typeof window.showAppToast === 'function') {
+                        window.showAppToast(payload.error || 'Request failed', {
+                            variant: 'danger',
+                            title: '{{ t('Error') }}'
+                        });
+                    }
                     return;
                 }
                 if (form.dataset.openDoc === 'true' && payload.doc_url) {
                     window.open(payload.doc_url, '_blank', 'noopener');
                 }
                 if (payload.message) {
-                    window.alert(payload.message);
+                    if (typeof window.showAppToast === 'function') {
+                        window.showAppToast(payload.message, {
+                            variant: 'success',
+                            title: '{{ t('Success') }}'
+                        });
+                    }
                 }
                 window.location.reload();
             } finally {

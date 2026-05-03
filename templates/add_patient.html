@@ -1,4 +1,5 @@
 {% extends 'layout.html' %}
+{% import 'patient_form_macros.html' as patient_form %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -16,88 +17,12 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
-                        <div class="col-md-8">
-                            <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }}</label>
-                            <input type="text" class="form-control" name="name" id="name" placeholder="{{ t('Full Name') }}" required>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label for="status" class="form-label text-uppercase smallest fw-bold">{{ t('Initial Status') }}</label>
-                            <select class="form-select" name="status" id="status" required>
-                                <option value="ongoing">{{ t('Ongoing') }}</option>
-                                <option value="candidate">{{ t('Candidate') }}</option>
-                                <option value="archived">{{ t('Archived') }}</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label for="email" class="form-label text-uppercase smallest fw-bold">{{ t('Email Address') }}</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
-                                <input type="email" class="form-control" name="email" id="email" placeholder="{{ t('Email Address') }}">
-                            </div>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label for="phone" class="form-label text-uppercase smallest fw-bold">{{ t('Phone Number') }}</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
-                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="{{ t('Phone Number') }}">
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="birth_date" class="form-label text-uppercase smallest fw-bold">{{ t('Date of Birth') }}</label>
-                            <input type="date" class="form-control" name="birth_date" id="birth_date">
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="id_number" class="form-label text-uppercase smallest fw-bold">{{ t('ID Number') }}</label>
-                            <input type="text" class="form-control" name="id_number" id="id_number" placeholder="{{ t('ID Number') }}" maxlength="20">
-                        </div>
-
-                        <input type="hidden" name="patient_type" id="patientTypeHidden" value="private">
-
-                        <div class="col-md-12">
-                            <label class="form-label text-uppercase smallest fw-bold">{{ t('Patient Type') }}</label>
-                            <div class="d-flex gap-3 mt-1">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typePrivate" value="private" checked>
-                                    <label class="form-check-label" for="typePrivate">
-                                        <i class="bi bi-person me-1"></i>{{ t('Private') }}
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typeResidency" value="residency">
-                                    <label class="form-check-label" for="typeResidency">
-                                        <i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label for="treatmentTrack" class="form-label text-uppercase smallest fw-bold">{{ t('Treatment Track') }}</label>
-                            <select class="form-select" id="treatmentTrack" name="treatment_track">
-                                <option value="standard">{{ t('Standard Treatment') }}</option>
-                                <option value="group">{{ t('Group') }}</option>
-                                <option value="initial-intake">{{ t('Initial Intake') }}</option>
-                                <option value="diagnosee">{{ t('Diagnosee') }}</option>
-                            </select>
-                            <div class="form-text">{{ t('Group, intake, and diagnosee now live under the treatment track while billing remains private or residency.') }}</div>
-                        </div>
-
-                        {% if treatment_method_options %}
-                        <div class="col-12">
-                            <label class="form-label fw-semibold small">{{ t('Treatment Method') }}</label>
-                            <select class="form-select form-select-sm" name="treatment_method">
-                                <option value="">— {{ t('Select method') }} —</option>
-                                {% for opt in treatment_method_options %}
-                                <option value="{{ opt }}">{{ opt }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endif %}
+                        {{ patient_form.patient_identity_fields(status_label='Initial Status') }}
+                        {{ patient_form.patient_contact_fields() }}
+                        {{ patient_form.patient_birth_and_id_fields() }}
+                        {{ patient_form.patient_type_fields(patient_type='private') }}
+                        {{ patient_form.treatment_track_field(patient_type='private', show_hint=True) }}
+                        {{ patient_form.treatment_method_field(treatment_method_options) }}
 
                         <div class="col-12 d-none" id="diagnoseeQuestionnairesWrap">
                             <div class="border rounded-4 p-3 bg-light-subtle">
@@ -140,12 +65,9 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/patient_form.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const statusInput = document.getElementById('status');
-    const hiddenType = document.getElementById('patientTypeHidden');
-    const trackInput = document.getElementById('treatmentTrack');
-    const baseInputs = document.querySelectorAll('input[name="patient_type_base"]');
     const diagnoseeQuestionnairesWrap = document.getElementById('diagnoseeQuestionnairesWrap');
     const syncQuestionnaireOptionsBtn = document.getElementById('syncQuestionnaireOptionsBtn');
     const questionnaireOptionsContainer = document.getElementById('diagnoseeQuestionnairesOptions');
@@ -179,17 +101,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function syncPatientType() {
-        const baseType = document.querySelector('input[name="patient_type_base"]:checked')?.value || 'private';
-        const track = trackInput.value;
-        hiddenType.value = track === 'group' ? 'group' : (track === 'initial-intake' ? 'initial-intake' : (track === 'diagnosee' ? 'diagnosee' : baseType));
-        if (track !== 'standard') {
-            statusInput.value = 'candidate';
+    window.initPatientTypeSync({
+        onTrackChange: function (track) {
+            if (diagnoseeQuestionnairesWrap) {
+                diagnoseeQuestionnairesWrap.classList.toggle('d-none', track !== 'diagnosee');
+            }
         }
-        if (diagnoseeQuestionnairesWrap) {
-            diagnoseeQuestionnairesWrap.classList.toggle('d-none', track !== 'diagnosee');
-        }
-    }
+    });
 
     if (syncQuestionnaireOptionsBtn) {
         syncQuestionnaireOptionsBtn.addEventListener('click', async function () {
@@ -219,9 +137,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    baseInputs.forEach((input) => input.addEventListener('change', syncPatientType));
-    trackInput.addEventListener('change', syncPatientType);
-    syncPatientType();
 });
 </script>
 {% endblock %}

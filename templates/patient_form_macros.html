@@ -1,0 +1,98 @@
+{% macro patient_identity_fields(name='', status='ongoing', candidate_selected=False, status_label='Initial Status') -%}
+<div class="col-md-8">
+    <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }}</label>
+    <input type="text" class="form-control" name="name" id="name" value="{{ name }}" placeholder="{{ t('Full Name') }}" required>
+</div>
+
+<div class="col-md-4">
+    <label for="status" class="form-label text-uppercase smallest fw-bold">{{ t(status_label) }}</label>
+    <select class="form-select" name="status" id="status" required>
+        <option value="ongoing" {% if status == 'ongoing' and not candidate_selected %}selected{% endif %}>{{ t('Ongoing') }}</option>
+        <option value="candidate" {% if candidate_selected %}selected{% endif %}>{{ t('Candidate') }}</option>
+        <option value="archived" {% if status == 'archived' %}selected{% endif %}>{{ t('Archived') }}</option>
+    </select>
+</div>
+{%- endmacro %}
+
+{% macro patient_contact_fields(email='', phone='', phone_input_type='tel') -%}
+<div class="col-md-12">
+    <label for="email" class="form-label text-uppercase smallest fw-bold">{{ t('Email Address') }}</label>
+    <div class="input-group">
+        <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
+        <input type="email" class="form-control" name="email" id="email" value="{{ email }}" placeholder="{{ t('Email Address') }}">
+    </div>
+</div>
+
+<div class="col-md-12">
+    <label for="phone" class="form-label text-uppercase smallest fw-bold">{{ t('Phone Number') }}</label>
+    <div class="input-group">
+        <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
+        <input type="{{ phone_input_type }}" class="form-control" name="phone" id="phone" value="{{ phone }}" placeholder="{{ t('Phone Number') }}">
+    </div>
+</div>
+{%- endmacro %}
+
+{% macro patient_birth_and_id_fields(birth_date='', id_number='') -%}
+<div class="col-md-6">
+    <label for="birth_date" class="form-label text-uppercase smallest fw-bold">{{ t('Date of Birth') }}</label>
+    <input type="date" class="form-control" name="birth_date" id="birth_date" value="{{ birth_date }}">
+</div>
+
+<div class="col-md-6">
+    <label for="id_number" class="form-label text-uppercase smallest fw-bold">{{ t('ID Number') }}</label>
+    <input type="text" class="form-control" name="id_number" id="id_number" value="{{ id_number }}" placeholder="{{ t('ID Number') }}" maxlength="20">
+</div>
+{%- endmacro %}
+
+{% macro patient_type_fields(patient_type='private') -%}
+<input type="hidden" name="patient_type" id="patientTypeHidden" value="{{ patient_type or 'private' }}">
+
+<div class="col-md-12">
+    <label class="form-label text-uppercase smallest fw-bold">{{ t('Patient Type') }}</label>
+    <div class="d-flex gap-3 mt-1">
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="patient_type_base" id="typePrivate" value="private"
+                {% if not patient_type or patient_type in ['private', 'group', 'initial-intake', 'diagnosee'] %}checked{% endif %}>
+            <label class="form-check-label" for="typePrivate">
+                <i class="bi bi-person me-1"></i>{{ t('Private') }}
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="patient_type_base" id="typeResidency" value="residency"
+                {% if patient_type == 'residency' %}checked{% endif %}>
+            <label class="form-check-label" for="typeResidency">
+                <i class="bi bi-mortarboard me-1"></i>{{ t('Residency') }}
+            </label>
+        </div>
+    </div>
+</div>
+{%- endmacro %}
+
+{% macro treatment_track_field(patient_type='private', show_hint=False) -%}
+<div class="col-md-12">
+    <label for="treatmentTrack" class="form-label text-uppercase smallest fw-bold">{{ t('Treatment Track') }}</label>
+    <select class="form-select" id="treatmentTrack" name="treatment_track">
+        <option value="standard" {% if patient_type not in ['group', 'initial-intake', 'diagnosee'] %}selected{% endif %}>{{ t('Standard Treatment') }}</option>
+        <option value="group" {% if patient_type == 'group' %}selected{% endif %}>{{ t('Group') }}</option>
+        <option value="initial-intake" {% if patient_type == 'initial-intake' %}selected{% endif %}>{{ t('Initial Intake') }}</option>
+        <option value="diagnosee" {% if patient_type == 'diagnosee' %}selected{% endif %}>{{ t('Diagnosee') }}</option>
+    </select>
+    {% if show_hint %}
+    <div class="form-text">{{ t('Group, intake, and diagnosee now live under the treatment track while billing remains private or residency.') }}</div>
+    {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro treatment_method_field(treatment_method_options, selected_value='') -%}
+{% if treatment_method_options %}
+<div class="col-12">
+    <label class="form-label fw-semibold small">{{ t('Treatment Method') }}</label>
+    <select class="form-select form-select-sm" name="treatment_method">
+        <option value="">- {{ t('Select method') }} -</option>
+        {% for opt in treatment_method_options %}
+        <option value="{{ opt }}" {% if selected_value == opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+    </select>
+</div>
+{% endif %}
+{%- endmacro %}

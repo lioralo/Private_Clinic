@@ -8,6 +8,40 @@
 
 ## Session 59
 
+## Session 60
+
+**Date:** 2026-05-03
+
+**Objective:** Continue the implementation roadmap by improving form maintainability and consistent user feedback UX.
+
+**Release Summary:**
+
+1. **Unified Flash + Toast Feedback UX**
+- Added category-aware flash rendering in shared layout to support `success`, `error/danger`, and default info styles.
+- Removed duplicated flash markup blocks in admin/patient/public layout branches by centralizing rendering through one macro.
+- Added global `window.showAppToast(...)` helper for consistent non-blocking notifications.
+- Replaced blocking alert behavior in notification mark-read flow and intake async actions with toast feedback.
+
+2. **Shared Patient Form Components**
+- Added reusable Jinja macro file: `templates/patient_form_macros.html`.
+- Refactored `templates/add_patient.html` and `templates/edit_patient.html` to use shared macros for identity/contact/core patient fields.
+- Preserved field names/IDs and route behavior while reducing duplicated template code.
+
+3. **Shared Patient Form Sync Script**
+- Added new shared JS helper: `static/js/patient_form.js` with `initPatientTypeSync(...)`.
+- Replaced duplicated patient type/treatment track sync logic in both add/edit templates with shared helper usage.
+- Kept diagnosee questionnaire visibility behavior in add form via callback hook.
+
+4. **Debug / Verification**
+- Focused route checks:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_add_patient tests.test_app.ClinicTestCase.test_patient_detail_sections_render tests.test_app.ClinicTestCase.test_crm_patient_view_shows_all_and_candidates_buttons`
+- Full regressions:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root module regressions:
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 **Date:** 2026-04-30
 
 **Objective:** Fix recurring calendar edit flow where saving with scope (`this and upcoming` / `all in series`) could appear to do nothing.

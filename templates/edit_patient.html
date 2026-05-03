@@ -1,4 +1,5 @@
 {% extends 'layout.html' %}
+{% import 'patient_form_macros.html' as patient_form %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -21,45 +22,23 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
-                        <div class="col-md-8">
-                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
-                            <input type="text" class="form-control" name="name" id="name" value="{{ patient['name'] }}" required>
-                        </div>
+                        {{ patient_form.patient_identity_fields(
+                            name=patient['name'],
+                            status=patient['status'] or 'ongoing',
+                            candidate_selected=(patient['status'] in ['candidate', 'waiting', 'waiting for scheduling']),
+                            status_label='Status'
+                        ) }}
 
-                        <div class="col-md-4">
-                            <label for="status" class="form-label text-uppercase smallest fw-bold">Status</label>
-                            <select class="form-select" name="status" id="status" required>
-                                <option value="ongoing" {% if patient['status'] == 'ongoing' %}selected{% endif %}>Ongoing</option>
-                                <option value="candidate" {% if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] %}selected{% endif %}>Candidate</option>
-                                <option value="archived" {% if patient['status'] == 'archived' %}selected{% endif %}>Archived</option>
-                            </select>
-                        </div>
+                        {{ patient_form.patient_contact_fields(
+                            email=patient['email'] or '',
+                            phone=patient['phone'] or '',
+                            phone_input_type='text'
+                        ) }}
 
-                        <div class="col-md-12">
-                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
-                                <input type="email" class="form-control" name="email" id="email" value="{{ patient['email'] or '' }}">
-                            </div>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
-                                <input type="text" class="form-control" name="phone" id="phone" value="{{ patient['phone'] or '' }}">
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="birth_date" class="form-label text-uppercase smallest fw-bold">{{ t('Date of Birth') }}</label>
-                            <input type="date" class="form-control" name="birth_date" id="birth_date" value="{{ patient['birth_date'] or '' }}">
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="id_number" class="form-label text-uppercase smallest fw-bold">{{ t('ID Number') }}</label>
-                            <input type="text" class="form-control" name="id_number" id="id_number" value="{{ patient['id_number'] or '' }}" maxlength="20">
-                        </div>
+                        {{ patient_form.patient_birth_and_id_fields(
+                            birth_date=patient['birth_date'] or '',
+                            id_number=patient['id_number'] or ''
+                        ) }}
 
                         <div class="col-md-12">
                             <div class="form-check form-switch mt-1">
@@ -71,49 +50,12 @@
                             </div>
                         </div>
 
-                        <input type="hidden" name="patient_type" id="patientTypeHidden" value="{{ patient['patient_type'] or 'private' }}">
-
-                        <div class="col-md-12">
-                            <label class="form-label text-uppercase smallest fw-bold">Patient Type</label>
-                            <div class="d-flex gap-3 mt-1">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typePrivate" value="private"
-                                        {% if not patient['patient_type'] or patient['patient_type'] in ['private', 'group', 'initial-intake', 'diagnosee'] %}checked{% endif %}>
-                                    <label class="form-check-label" for="typePrivate">
-                                        <i class="bi bi-person me-1"></i>Private
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="patient_type_base" id="typeResidency" value="residency"
-                                        {% if patient['patient_type'] == 'residency' %}checked{% endif %}>
-                                    <label class="form-check-label" for="typeResidency">
-                                        <i class="bi bi-mortarboard me-1"></i>Residency
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label for="treatmentTrack" class="form-label text-uppercase smallest fw-bold">Treatment Track</label>
-                            <select class="form-select" id="treatmentTrack" name="treatment_track">
-                                <option value="standard" {% if patient['patient_type'] not in ['group', 'initial-intake', 'diagnosee'] %}selected{% endif %}>Standard Treatment</option>
-                                <option value="group" {% if patient['patient_type'] == 'group' %}selected{% endif %}>Group</option>
-                                <option value="initial-intake" {% if patient['patient_type'] == 'initial-intake' %}selected{% endif %}>Initial Intake</option>
-                                <option value="diagnosee" {% if patient['patient_type'] == 'diagnosee' %}selected{% endif %}>Diagnosee</option>
-                            </select>
-                        </div>
-
-                        {% if treatment_method_options %}
-                        <div class="col-12">
-                            <label class="form-label fw-semibold small">{{ t('Treatment Method') }}</label>
-                            <select class="form-select form-select-sm" name="treatment_method">
-                                <option value="">— {{ t('Select method') }} —</option>
-                                {% for opt in treatment_method_options %}
-                                <option value="{{ opt }}" {% if patient['treatment_method'] == opt %}selected{% endif %}>{{ opt }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endif %}
+                        {{ patient_form.patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
+                        {{ patient_form.treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
+                        {{ patient_form.treatment_method_field(
+                            treatment_method_options,
+                            selected_value=patient['treatment_method'] or ''
+                        ) }}
 
                         <div class="col-12 mt-4">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
@@ -172,25 +114,10 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/patient_form.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const statusInput = document.getElementById('status');
-    const hiddenType = document.getElementById('patientTypeHidden');
-    const trackInput = document.getElementById('treatmentTrack');
-    const baseInputs = document.querySelectorAll('input[name="patient_type_base"]');
-
-    function syncPatientType() {
-        const baseType = document.querySelector('input[name="patient_type_base"]:checked')?.value || 'private';
-        const track = trackInput.value;
-        hiddenType.value = track === 'group' ? 'group' : (track === 'initial-intake' ? 'initial-intake' : (track === 'diagnosee' ? 'diagnosee' : baseType));
-        if (track !== 'standard') {
-            statusInput.value = 'candidate';
-        }
-    }
-
-    baseInputs.forEach((input) => input.addEventListener('change', syncPatientType));
-    trackInput.addEventListener('change', syncPatientType);
-    syncPatientType();
+    window.initPatientTypeSync();
 });
 </script>
 {% endblock %}

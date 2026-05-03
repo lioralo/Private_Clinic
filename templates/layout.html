@@ -188,6 +188,38 @@
 </head>
 <body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 
+{% macro render_flash_messages(extra_classes='') -%}
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+    {% set flash_category = (category or 'info')|lower %}
+    {% if flash_category in ['error', 'danger'] %}
+        {% set tone = {
+            'wrapper': 'bg-red-50 border-red-200 text-red-800',
+            'icon': 'bi-exclamation-triangle-fill text-red-600',
+            'button': 'text-red-600 hover:text-red-800'
+        } %}
+    {% elif flash_category in ['success', 'ok'] %}
+        {% set tone = {
+            'wrapper': 'bg-emerald-50 border-emerald-200 text-emerald-800',
+            'icon': 'bi-check-circle-fill text-emerald-600',
+            'button': 'text-emerald-600 hover:text-emerald-800'
+        } %}
+    {% else %}
+        {% set tone = {
+            'wrapper': 'bg-teal-50 border-teal-200 text-teal-800',
+            'icon': 'bi-info-circle-fill text-teal-600',
+            'button': 'text-teal-600 hover:text-teal-800'
+        } %}
+    {% endif %}
+    <div class="{{ extra_classes }} flex items-center gap-3 border rounded-xl px-4 py-3 text-sm font-medium {{ tone.wrapper }}" role="alert">
+        <i class="bi {{ tone.icon }}" style="font-size:18px"></i>
+        <span class="flex-1">{{ message }}</span>
+        <button class="{{ tone.button }} transition-colors" onclick="this.parentElement.remove()" aria-label="{{ t('Close') }}">
+            <i class="bi bi-x-lg" style="font-size:18px"></i>
+        </button>
+    </div>
+    {% endfor %}
+{%- endmacro %}
+
 {# ═══════════════════ LAYOUT SHELL (open) ══════════════════════ #}
 {# The content block is defined exactly ONCE below.               #}
 {# Conditional HTML wraps it from outside the block definition.   #}
@@ -294,15 +326,7 @@
         </header>
 
         {# Flash Messages #}
-        {% for message in get_flashed_messages() %}
-        <div class="mx-4 lg:mx-6 mt-4 flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
-            <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>
-            <span class="flex-1">{{ message }}</span>
-            <button class="text-teal-600 hover:text-teal-800 transition-colors" onclick="this.parentElement.remove()">
-                <i class="bi bi-x-lg" style="font-size:18px"></i>
-            </button>
-        </div>
-        {% endfor %}
+        {{ render_flash_messages('mx-4 lg:mx-6 mt-4') }}
 
         {# Page content wrapper #}
         <main class="mt-14 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
@@ -349,15 +373,7 @@
     </div>
 </nav>
 <main class="pt-16 px-4 pb-10 max-w-4xl mx-auto app-shell">
-    {% for message in get_flashed_messages() %}
-    <div class="mt-4 flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
-        <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>
-        <span class="flex-1">{{ message }}</span>
-        <button class="text-teal-600 hover:text-teal-800" onclick="this.parentElement.remove()">
-            <i class="bi bi-x-lg" style="font-size:18px"></i>
-        </button>
-    </div>
-    {% endfor %}
+    {{ render_flash_messages('mt-4') }}
 
 {% else %}
 {# ── PUBLIC / UNAUTHENTICATED ─────────────────────────────────── #}
@@ -392,15 +408,7 @@
     </div>
 </nav>
 <main class="pt-16 px-4 pb-10 app-shell">
-    {% for message in get_flashed_messages() %}
-    <div class="mt-4 max-w-2xl mx-auto flex items-center gap-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3 text-sm font-medium" role="alert">
-        <i class="bi bi-info-circle text-teal-600" style="font-size:18px"></i>
-        <span class="flex-1">{{ message }}</span>
-        <button class="text-teal-600 hover:text-teal-800" onclick="this.parentElement.remove()">
-            <i class="bi bi-x-lg" style="font-size:18px"></i>
-        </button>
-    </div>
-    {% endfor %}
+    {{ render_flash_messages('mt-4 max-w-2xl mx-auto') }}
 
 {% endif %}
 
@@ -420,6 +428,86 @@
     <span class="text-slate-500 text-sm">{{ t('Private Psychotherapy Clinic') }}</span>
 </footer>
 {% endif %}
+
+    <script>
+    window.showAppToast = function(message, options) {
+        if (!message) {
+            return;
+        }
+
+        const config = options || {};
+        const variant = config.variant || 'primary';
+        const title = config.title || '{{ t('Clinic Update') }}';
+        const autohide = config.autohide !== false;
+        const delay = Number(config.delay || 5000);
+
+        let container = document.getElementById('notificationContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notificationContainer';
+            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'toast border-' + variant;
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+
+        const toastHeader = document.createElement('div');
+        toastHeader.className = 'toast-header bg-' + variant + ' text-white';
+
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-bell-fill me-2';
+
+        const titleElement = document.createElement('strong');
+        titleElement.className = 'me-auto';
+        titleElement.textContent = title;
+
+        const nowLabel = document.createElement('small');
+        nowLabel.className = 'text-white-50';
+        nowLabel.textContent = '{{ t('Just now') }}';
+
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'btn-close btn-close-white';
+        closeButton.setAttribute('data-bs-dismiss', 'toast');
+        closeButton.setAttribute('aria-label', '{{ t('Close') }}');
+
+        toastHeader.appendChild(icon);
+        toastHeader.appendChild(titleElement);
+        toastHeader.appendChild(nowLabel);
+        toastHeader.appendChild(closeButton);
+
+        const toastBody = document.createElement('div');
+        toastBody.className = 'toast-body bg-light';
+        toastBody.textContent = String(message);
+
+        toast.appendChild(toastHeader);
+        toast.appendChild(toastBody);
+        container.appendChild(toast);
+
+        if (window.bootstrap && window.bootstrap.Toast) {
+            const instance = window.bootstrap.Toast.getOrCreateInstance(toast, {
+                autohide: autohide,
+                delay: delay
+            });
+            toast.addEventListener('hidden.bs.toast', function() {
+                toast.remove();
+            });
+            instance.show();
+            return;
+        }
+
+        toast.classList.add('show');
+        if (autohide) {
+            window.setTimeout(function() {
+                toast.remove();
+            }, delay);
+        }
+    };
+    </script>
 
     {% if current_user.is_authenticated %}
     <div class="offcanvas offcanvas-end" tabindex="-1" id="messagesOffcanvas" aria-labelledby="messagesOffcanvasLabel">
@@ -803,10 +891,16 @@
                     if (data.status === 'success') {
                         loadNotificationCenter();
                     } else {
-                        alert(data.message || '{{ t('Error') }}');
+                        window.showAppToast(data.message || '{{ t('Error') }}', {
+                            variant: 'danger',
+                            title: '{{ t('Error') }}'
+                        });
                     }
                 })
-                .catch(() => alert('{{ t('Error') }}'));
+                .catch(() => window.showAppToast('{{ t('Error') }}', {
+                    variant: 'danger',
+                    title: '{{ t('Error') }}'
+                }));
         }
 
         window.markNotificationRead = function(notificationId) {
