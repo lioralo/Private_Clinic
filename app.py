@@ -31,6 +31,8 @@ import re
 import pyotp
 from docx import Document
 from datetime import datetime, timedelta, timezone
+from clinic_app.routes.health import health_bp
+from clinic_app.routes.auth import register_auth_routes
 
 
 def _import_optional_module(*module_names):
@@ -64,6 +66,7 @@ gdocs = _import_optional_module('google_docs', 'scripts.google_docs')
 
 
 app = Flask(__name__)
+app.register_blueprint(health_bp)
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
@@ -1763,6 +1766,15 @@ def _login_redirect_for_user(user_row):
         return redirect(url_for('patients'))
 
     return redirect(url_for('patient_home'))
+
+
+register_auth_routes(
+    app,
+    get_db=get_db,
+    verify_totp_code=_verify_totp_code,
+    login_redirect_for_user=_login_redirect_for_user,
+    dummy_password_hash=DUMMY_PASSWORD_HASH,
+)
 
 
 def _get_or_create_backup_key():
@@ -4660,90 +4672,6 @@ def assign_resource(patient_id):
 
     return redirect_to_patient_tab(patient_id, 'info')
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if current_user.is_authenticated:
-        if current_user.role == 'admin':
-            return redirect(url_for('patients'))
-        return redirect(url_for('patient_home'))
-
-    pending_user_id = session.get('pending_2fa_user_id')
-    pending_username = session.get('pending_2fa_username', '')
-
-    if request.method == 'POST':
-        otp_code = (request.form.get('otp_code') or '').strip()
-        if pending_user_id and otp_code:
-            db = get_db()
-            pending_user = db.execute('SELECT * FROM users WHERE id = ?', (pending_user_id,)).fetchone()
-            if not pending_user or not pending_user['is_active']:
-                session.pop('pending_2fa_user_id', None)
-                session.pop('pending_2fa_username', None)
-                flash('Login session expired. Please sign in again.')
-                return redirect(url_for('login'))
-
-            if not pending_user['totp_enabled'] or not pending_user['totp_secret']:
-                session.pop('pending_2fa_user_id', None)
-                session.pop('pending_2fa_username', None)
-                flash('Authenticator is not configured for this admin account.')
-                return redirect(url_for('login'))
-
-            if _verify_totp_code(pending_user['totp_secret'], otp_code):
-                session.pop('pending_2fa_user_id', None)
-                session.pop('pending_2fa_username', None)
-                return _login_redirect_for_user(pending_user)
-
-            flash('Invalid authenticator code.')
-            return render_template('login.html', requires_otp=True, pending_username=pending_username)
-
-        session.pop('pending_2fa_user_id', None)
-        session.pop('pending_2fa_username', None)
-
-        username = request.form['username']
-        password = request.form['password']
-
-        client_ip = request.remote_addr or ''
-        db = get_db()
-        user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-
-        if user:
-            password_correct = check_password_hash(user['password_hash'], password)
-        else:
-            check_password_hash(DUMMY_PASSWORD_HASH, password)
-            password_correct = False
-
-        if user and password_correct:
-            if not user['is_active']:
-                 flash('Account is disabled. Contact administrator.')
-                 return render_template('login.html')
-
-            # REQUIRE 2FA for all admin accounts in PRODUCTION
-            # IN TESTING: Allow bypass for admin logins
-            if user['role'] == 'admin' and not app.config.get('TESTING'):
-                # Ensure admin has TOTP configured
-                if not user['totp_enabled'] or not user['totp_secret']:
-                    return _login_redirect_for_user(user)
-                
-                session['pending_2fa_user_id'] = int(user['id'])
-                session['pending_2fa_username'] = user['username']
-                flash('Two-factor authentication required. Check your authenticator app.')
-                return render_template('login.html', requires_otp=True, pending_username=user['username'])
-
-            return _login_redirect_for_user(user)
-        else:
-            flash('Invalid username or password')
-
-    if pending_user_id:
-        return render_template('login.html', requires_otp=True, pending_username=pending_username)
-
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
-
-
 @app.route('/patients')
 @login_required
 def patients():
@@ -4830,26 +4758,6 @@ def add_patient():
         treatment_method_options=treatment_method_options,
         questionnaire_options=questionnaire_options,
     )
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        name = request.form['name']
-        email = request.form.get('email')
-        phone = request.form.get('phone')
-
-        if not name:
-            flash('Name is required!')
-        else:
-            db = get_db()
-            db.execute('INSERT INTO patients (name, status, email, phone) VALUES (?, ?, ?, ?)',
-                       (name, 'candidate', email, phone))
-            db.commit()
-            flash('Registration successful! We will contact you soon.')
-            return redirect(url_for('login'))
-
-    return render_template('register.html')
-
 
 def _get_patient_notes(db, patient_id):
     notes = db.execute('''

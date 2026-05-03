@@ -70,6 +70,22 @@ python -m unittest discover -s tests -p 'test_*.py'
 python -m unittest -v test_export_data test_import_clinic_data test_google_calendar
 ```
 
+### Refactor Safety Checks
+When splitting large modules (for example, moving routes out of app.py), run the refactor guard before and after each move:
+
+```bash
+# One-time baseline snapshot (update intentionally after approved route changes)
+python verification/refactor_guard.py snapshot
+
+# Route contract + smoke checks
+python verification/refactor_guard.py check
+
+# Shortcut wrapper
+bash scripts/refactor_check.sh
+```
+
+The guard fails if any existing route is removed or if HTTP methods change unexpectedly.
+
 ## Deploy Live
 - Use [LIVE_DEPLOYMENT.md](LIVE_DEPLOYMENT.md) for a production deployment with Docker, Gunicorn, HTTPS, and persistent storage.
 - For AWS EC2 in Israel (`il-central-1`), the guide now includes an exact launch checklist and a one-command Ubuntu Docker setup helper.

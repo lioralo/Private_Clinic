@@ -80,6 +80,26 @@ class ClinicTestCase(unittest.TestCase):
     def logout(self):
         return self.client.get('/logout', follow_redirects=True)
 
+    def test_healthz_returns_ok_when_db_available(self):
+        rv = self.client.get('/healthz')
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload.get('status'), 'ok')
+        self.assertEqual(payload.get('database'), 'ok')
+        self.assertIn('timestamp', payload)
+
+    def test_healthz_returns_503_when_db_unavailable(self):
+        original_db = app.config.get('DATABASE')
+        app.config['DATABASE'] = '/tmp/private_clinic_does_not_exist/clinic.db'
+        try:
+            rv = self.client.get('/healthz')
+            self.assertEqual(rv.status_code, 503)
+            payload = rv.get_json()
+            self.assertEqual(payload.get('status'), 'degraded')
+            self.assertEqual(payload.get('database'), 'error')
+        finally:
+            app.config['DATABASE'] = original_db
+
     def next_allowed_booking_slot(self, preferred_times=None):
         allowed_by_day = {
             0: ['14:00'],

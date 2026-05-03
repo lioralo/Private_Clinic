@@ -1,0 +1,1034 @@
+{
+  "route_count": 146,
+  "routes": [
+    {
+      "endpoint": "index",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/"
+    },
+    {
+      "endpoint": "about_page",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/about"
+    },
+    {
+      "endpoint": "add_patient",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/add_patient"
+    },
+    {
+      "endpoint": "backup_now",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/backup_now"
+    },
+    {
+      "endpoint": "admin_change_password",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/change_password"
+    },
+    {
+      "endpoint": "admin_dashboard",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/dashboard"
+    },
+    {
+      "endpoint": "google_calendar_callback",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/google-calendar/callback"
+    },
+    {
+      "endpoint": "google_calendar_connect",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/google-calendar/connect"
+    },
+    {
+      "endpoint": "google_calendar_disconnect",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/google-calendar/disconnect"
+    },
+    {
+      "endpoint": "google_calendar_set_calendar",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/google-calendar/set-calendar"
+    },
+    {
+      "endpoint": "google_calendar_status",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/google-calendar/status"
+    },
+    {
+      "endpoint": "google_docs_auto_sync_now",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/google-docs/auto-sync-now"
+    },
+    {
+      "endpoint": "google_docs_auto_sync_status",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/google-docs/auto-sync-status/<job_id>"
+    },
+    {
+      "endpoint": "send_admin_notification",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/notifications/send"
+    },
+    {
+      "endpoint": "admin_portal_preview",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/patient/<int:patient_id>/portal_preview"
+    },
+    {
+      "endpoint": "admin_profile",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/admin/profile"
+    },
+    {
+      "endpoint": "update_admin_profile_name",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/profile/name"
+    },
+    {
+      "endpoint": "admin_questionnaire_options",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/questionnaires/options"
+    },
+    {
+      "endpoint": "reset_test_patients",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/reset_test_patients"
+    },
+    {
+      "endpoint": "manage_resources",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/admin/resources"
+    },
+    {
+      "endpoint": "delete_resource",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/resources/<int:resource_id>/delete"
+    },
+    {
+      "endpoint": "edit_resource",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/resources/<int:resource_id>/edit"
+    },
+    {
+      "endpoint": "restore_backup_now",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/restore_backup"
+    },
+    {
+      "endpoint": "seed_data",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/seed_data"
+    },
+    {
+      "endpoint": "setup_authenticator",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/setup_authenticator"
+    },
+    {
+      "endpoint": "admin_reply_message",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin_reply_message/<int:patient_id>"
+    },
+    {
+      "endpoint": "export_calendar",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/admin/export_calendar"
+    },
+    {
+      "endpoint": "import_calendar",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/admin/import_calendar"
+    },
+    {
+      "endpoint": "api_upcoming_appointments",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/appointments/upcoming"
+    },
+    {
+      "endpoint": "api_calendar_appointment_delete",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/appointment/<int:appointment_id>/delete"
+    },
+    {
+      "endpoint": "api_calendar_appointment_update",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/appointment/<int:appointment_id>/update"
+    },
+    {
+      "endpoint": "api_calendar_block",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/block"
+    },
+    {
+      "endpoint": "api_calendar_block_delete",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/block/<int:block_id>/delete"
+    },
+    {
+      "endpoint": "api_calendar_block_update",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/block/<int:block_id>/update"
+    },
+    {
+      "endpoint": "api_calendar_book",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/book"
+    },
+    {
+      "endpoint": "api_calendar_bookings",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/calendar/bookings"
+    },
+    {
+      "endpoint": "api_open_slot_book",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/open/<token>/book"
+    },
+    {
+      "endpoint": "api_create_public_booking_link",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/public-link"
+    },
+    {
+      "endpoint": "api_public_calendar_book",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/public/<token>/book"
+    },
+    {
+      "endpoint": "api_calendar_snapshot",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/calendar/snapshot"
+    },
+    {
+      "endpoint": "api_calendar_vacancies",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/calendar/vacancies"
+    },
+    {
+      "endpoint": "api_calendar_vacancy",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/vacancy"
+    },
+    {
+      "endpoint": "api_calendar_vacancy_delete",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/vacancy/<int:override_id>/delete"
+    },
+    {
+      "endpoint": "api_calendar_vacancy_occupy",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/calendar/vacancy/<int:override_id>/occupy"
+    },
+    {
+      "endpoint": "api_engagement_stats",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/engagement/stats"
+    },
+    {
+      "endpoint": "gdoc_webhook",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/gdoc/webhook"
+    },
+    {
+      "endpoint": "api_google_calendar_status",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/google_calendar/status"
+    },
+    {
+      "endpoint": "api_delete_group_session",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/groups/sessions/<int:session_id>/delete"
+    },
+    {
+      "endpoint": "api_link_group_session_supervision",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/groups/sessions/<int:session_id>/link_supervision"
+    },
+    {
+      "endpoint": "api_update_group_session",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/groups/sessions/<int:session_id>/update"
+    },
+    {
+      "endpoint": "api_get_messages",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/messages"
+    },
+    {
+      "endpoint": "api_send_message",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/messages/send"
+    },
+    {
+      "endpoint": "notification_recipients",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/notification_recipients"
+    },
+    {
+      "endpoint": "get_notifications",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/notifications"
+    },
+    {
+      "endpoint": "mark_notifications_read",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/notifications/mark_read"
+    },
+    {
+      "endpoint": "api_patients_reorder",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/patients/reorder"
+    },
+    {
+      "endpoint": "api_treatment_method_options_add",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/treatment_method_options"
+    },
+    {
+      "endpoint": "api_treatment_method_options_get",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/treatment_method_options"
+    },
+    {
+      "endpoint": "api_treatment_method_options_delete",
+      "methods": [
+        "DELETE"
+      ],
+      "rule": "/api/treatment_method_options/<int:option_id>"
+    },
+    {
+      "endpoint": "delete_appointment",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/appointment/<int:appointment_id>/delete"
+    },
+    {
+      "endpoint": "export_ical",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/appointment/<int:appointment_id>/ical"
+    },
+    {
+      "endpoint": "set_appointment_status",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/appointment/<int:appointment_id>/set_status"
+    },
+    {
+      "endpoint": "weekly_calendar",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/calendar"
+    },
+    {
+      "endpoint": "open_booking_page",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/calendar/open/<token>"
+    },
+    {
+      "endpoint": "open_public_booking_calendar",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/calendar/public/<token>"
+    },
+    {
+      "endpoint": "contact_admin",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/contact_admin"
+    },
+    {
+      "endpoint": "crm_dashboard",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/crm"
+    },
+    {
+      "endpoint": "patient_dashboard",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/dashboard"
+    },
+    {
+      "endpoint": "export_ics",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/export_ics/<int:appointment_id>"
+    },
+    {
+      "endpoint": "delete_goal",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/goal/<int:goal_id>/delete"
+    },
+    {
+      "endpoint": "edit_goal",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/goal/<int:goal_id>/edit"
+    },
+    {
+      "endpoint": "toggle_goal_status",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/goal/<int:goal_id>/toggle_status"
+    },
+    {
+      "endpoint": "groups_dashboard",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/groups"
+    },
+    {
+      "endpoint": "group_detail",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/groups/<int:group_id>"
+    },
+    {
+      "endpoint": "attach_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/attach-gdoc"
+    },
+    {
+      "endpoint": "delete_group",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/delete"
+    },
+    {
+      "endpoint": "detach_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/detach-gdoc"
+    },
+    {
+      "endpoint": "link_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/link-gdoc"
+    },
+    {
+      "endpoint": "add_group_member",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/members"
+    },
+    {
+      "endpoint": "remove_group_member",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/members/<int:patient_id>/remove"
+    },
+    {
+      "endpoint": "open_group_gdoc",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/groups/<int:group_id>/open-gdoc"
+    },
+    {
+      "endpoint": "pull_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/pull-gdoc"
+    },
+    {
+      "endpoint": "push_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/push-gdoc"
+    },
+    {
+      "endpoint": "add_group_session",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/sessions"
+    },
+    {
+      "endpoint": "add_group_supervision",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/supervision"
+    },
+    {
+      "endpoint": "delete_group_supervision",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/supervision/<int:sup_id>/delete"
+    },
+    {
+      "endpoint": "sync_group_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/sync-gdoc"
+    },
+    {
+      "endpoint": "update_group_info",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/<int:group_id>/update"
+    },
+    {
+      "endpoint": "update_group_member_history_dates",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/history/<int:history_id>/dates"
+    },
+    {
+      "endpoint": "delete_group_session",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/sessions/<int:session_id>/delete"
+    },
+    {
+      "endpoint": "record_group_session",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/groups/sessions/<int:session_id>/record"
+    },
+    {
+      "endpoint": "health.healthz",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/healthz"
+    },
+    {
+      "endpoint": "login",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/login"
+    },
+    {
+      "endpoint": "logout",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/logout"
+    },
+    {
+      "endpoint": "delete_note",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/note/<int:note_id>/delete"
+    },
+    {
+      "endpoint": "edit_note",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/note/<int:note_id>/edit"
+    },
+    {
+      "endpoint": "patient_detail",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/<int:patient_id>"
+    },
+    {
+      "endpoint": "manage_access",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/access"
+    },
+    {
+      "endpoint": "add_appointment",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/add_appointment"
+    },
+    {
+      "endpoint": "add_file",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/add_file"
+    },
+    {
+      "endpoint": "add_goal",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/add_goal"
+    },
+    {
+      "endpoint": "add_note",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/add_note"
+    },
+    {
+      "endpoint": "add_receipt",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/add_receipt"
+    },
+    {
+      "endpoint": "assign_resource",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/assign_resource"
+    },
+    {
+      "endpoint": "attach_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/attach-gdoc"
+    },
+    {
+      "endpoint": "convert_patient",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/convert"
+    },
+    {
+      "endpoint": "delete_patient",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/delete"
+    },
+    {
+      "endpoint": "detach_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/detach-gdoc"
+    },
+    {
+      "endpoint": "delete_diagnosis_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/diagnosis_documents/<int:doc_id>/delete"
+    },
+    {
+      "endpoint": "download_diagnosis_document",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/<int:patient_id>/diagnosis_documents/<int:doc_id>/download"
+    },
+    {
+      "endpoint": "add_diagnosis_document",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/diagnosis_documents/add"
+    },
+    {
+      "endpoint": "edit_patient",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/edit"
+    },
+    {
+      "endpoint": "update_patient_info",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/edit_info"
+    },
+    {
+      "endpoint": "enable_intake_tab",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/enable_intake_tab"
+    },
+    {
+      "endpoint": "enable_questionnaire_tab",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/enable_questionnaire_tab"
+    },
+    {
+      "endpoint": "add_patient_encounter_log",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/encounter-log"
+    },
+    {
+      "endpoint": "delete_patient_encounter_log",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/encounter-log/<int:log_id>/delete"
+    },
+    {
+      "endpoint": "export_patient_history",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/<int:patient_id>/export"
+    },
+    {
+      "endpoint": "generate_patient_background",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/generate_background"
+    },
+    {
+      "endpoint": "update_patient_group_attendance",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/group_attendance/<int:session_id>/update"
+    },
+    {
+      "endpoint": "import_patient_history",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/import"
+    },
+    {
+      "endpoint": "export_patient_intake_docx",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/<int:patient_id>/intake_docx"
+    },
+    {
+      "endpoint": "link_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/link-gdoc"
+    },
+    {
+      "endpoint": "open_gdoc",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/<int:patient_id>/open-gdoc"
+    },
+    {
+      "endpoint": "quick_book_patient_appointment",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/quick_book"
+    },
+    {
+      "endpoint": "save_patient_questionnaires",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/save_questionnaires"
+    },
+    {
+      "endpoint": "send_message",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/send_message"
+    },
+    {
+      "endpoint": "add_patient_supervision",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/supervision"
+    },
+    {
+      "endpoint": "delete_patient_supervision",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/supervision/<int:sup_id>/delete"
+    },
+    {
+      "endpoint": "sync_from_gdoc",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/sync-from-gdoc"
+    },
+    {
+      "endpoint": "toggle_access",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/toggle_access"
+    },
+    {
+      "endpoint": "toggle_self_booking",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/toggle_self_booking"
+    },
+    {
+      "endpoint": "unassign_resource",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/unassign_resource/<int:resource_id>"
+    },
+    {
+      "endpoint": "upload_patient_photo",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/upload-photo"
+    },
+    {
+      "endpoint": "request_cancel_appointment",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/appointment/<int:appointment_id>/request_cancel"
+    },
+    {
+      "endpoint": "patient_home",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/home"
+    },
+    {
+      "endpoint": "download_receipt",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patient/receipt/<int:receipt_id>/download"
+    },
+    {
+      "endpoint": "request_booking_access",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/request_booking_access"
+    },
+    {
+      "endpoint": "patients",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/patients"
+    },
+    {
+      "endpoint": "register",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/register"
+    },
+    {
+      "endpoint": "download_resource_link",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/resource/<int:resource_id>/download"
+    },
+    {
+      "endpoint": "open_resource_link",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/resource/<int:resource_id>/open"
+    },
+    {
+      "endpoint": "public_resources",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/resources"
+    },
+    {
+      "endpoint": "set_density",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/set_density/<density>"
+    },
+    {
+      "endpoint": "set_lang",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/set_lang/<lang>"
+    },
+    {
+      "endpoint": "download_file",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/uploads/<name>"
+    }
+  ]
+}
