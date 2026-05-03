@@ -2,15 +2,38 @@
 
 ---
 
-## Session 57
+## Session 63
 
-## Session 58
+**Date:** 2026-05-03
 
-## Session 59
+**Objective:** Add a bulk "mark past appointments as completed" admin action to improve data hygiene and reduce manual status cleanup.
 
-## Session 60
+**Release Summary:**
 
-## Session 61
+1. **New Bulk Complete Endpoint**
+- Added route: `/api/admin/bulk_complete_past_appointments` (POST, admin-only).
+- Updates all `scheduled` appointments where `appointment_date < DATE('now')` to `status = 'completed'`.
+- Returns JSON `{updated: N}` with the count of rows changed.
+- Writes an audit log entry for the bulk operation.
+
+2. **Dashboard Quick Action Button**
+- Added `Mark Past Appointments as Completed` button in the Quick Actions panel of `admin_home.html`.
+- Confirms before executing via `confirm()` dialog.
+- Shows a toast (or alert fallback) with the number of appointments updated.
+
+3. **Localization**
+- Added translation keys: `Mark Past Appointments as Completed`, `past appointments marked as completed.`, `Mark all past scheduled appointments as completed?`.
+
+4. **Regression Coverage Added**
+- New test: `test_bulk_complete_past_appointments` in `tests/test_app.py`.
+- Inserts a past scheduled appointment, calls the endpoint, verifies `updated >= 1` and that no past scheduled appointments remain.
+
+5. **Validation**
+- Focused tests: `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_bulk_complete_past_appointments`
+- Full suite: `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root-level suites: `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
 
 ## Session 62
 

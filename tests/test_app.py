@@ -371,6 +371,31 @@ class ClinicTestCase(unittest.TestCase):
         assert 'CSV Patient' in payload
         assert 'CSV Export Test' in payload
 
+    def test_bulk_complete_past_appointments(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        with app.app_context():
+            db = get_db()
+            # Insert a past scheduled appointment
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, status
+                ) VALUES (?, ?, ?, ?)
+            ''', (1, '2020-01-01', '09:00', 'scheduled'))
+            db.commit()
+
+        rv = self.client.post('/api/admin/bulk_complete_past_appointments')
+        assert rv.status_code == 200
+        data = rv.get_json()
+        assert 'updated' in data
+        assert data['updated'] >= 1
+
+        with app.app_context():
+            db = get_db()
+            still_scheduled = db.execute(
+                "SELECT COUNT(*) FROM appointments WHERE status = 'scheduled' AND appointment_date < DATE('now')"
+            ).fetchone()[0]
+            assert still_scheduled == 0
+
     def test_patient_detail_sections_render(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(

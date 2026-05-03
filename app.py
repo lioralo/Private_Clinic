@@ -515,6 +515,8 @@ HEBREW_TRANSLATIONS = {
     "Calendar Actions": "פעולות יומן",
     "Export Calendar to JSON": "ייצא יומן ל-JSON",
     "Export Appointments CSV": "ייצוא פגישות CSV",
+    "Mark Past Appointments as Completed": "סמן פגישות עבר כהושלמו",
+    "past appointments marked as completed.": "פגישות עבר סומנו כהושלמו.",
     "Import Calendar from JSON": "ייבא יומן מ-JSON",
     "Import Calendar": "ייבא יומן",
     "Repeat until specific date:": "חזור עד תאריך מסוים:",
@@ -9337,6 +9339,26 @@ def export_appointments_csv():
     response = Response(csv_content, mimetype='text/csv; charset=utf-8')
     response.headers['Content-Disposition'] = f'attachment; filename=appointments_export_{datetime.now().strftime("%Y%m%d")}.csv'
     return response
+
+
+@app.route('/api/admin/bulk_complete_past_appointments', methods=['POST'])
+@login_required
+def bulk_complete_past_appointments():
+    """Mark all past scheduled appointments as completed."""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    result = db.execute(
+        "UPDATE appointments SET status = 'completed' WHERE status = 'scheduled' AND appointment_date < DATE('now')"
+    )
+    updated = result.rowcount
+    if updated:
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (None, 'bulk-complete-appointments', f'Bulk marked {updated} past scheduled appointments as completed')
+        )
+    db.commit()
+    return jsonify({'updated': updated})
 
 
 def _seed_ongoing_patient(db, admin_id, today):
