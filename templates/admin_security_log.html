@@ -10,9 +10,15 @@
         </h2>
         <p class="text-slate-500 text-sm mb-0">{{ t('Authentication and security events (auth_* actions)') }}</p>
     </div>
-    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
-        <i class="bi bi-arrow-left me-1"></i>{{ t('Dashboard') }}
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('admin_security_log_export', action=action_filter, q=search) }}"
+           class="btn btn-outline-success btn-sm rounded-pill">
+            <i class="bi bi-download me-1"></i>{{ t('Export CSV') }}
+        </a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-arrow-left me-1"></i>{{ t('Dashboard') }}
+        </a>
+    </div>
 </div>
 
 {# ── Filters ── #}

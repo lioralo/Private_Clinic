@@ -611,5 +611,78 @@ class SecurityTestCase(unittest.TestCase):
         )
         self.assertEqual(errors, [])
 
+    # ── TOTP disable bumps session_version ──────────────────────────────
+    def test_totp_disable_bumps_session_version(self):
+        """Disabling TOTP must increment session_version to force re-login."""
+        import pyotp
+        with app.app_context():
+            db = get_db()
+            secret = pyotp.random_base32()
+            db.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role, is_active, totp_secret, totp_enabled, force_password_change) VALUES (?, ?, 'admin', 1, ?, 1, 0)",
+                ('totp_disable_test', __import__('werkzeug.security', fromlist=['generate_password_hash']).generate_password_hash('admin'), secret),
+            )
+            db.commit()
+            user = db.execute("SELECT * FROM users WHERE username = 'totp_disable_test'").fetchone()
+            original_version = user['session_version'] or 0
+
+        with app.test_client() as client:
+            # Authenticate admin (TESTING mode skips 2FA)
+            client.post('/login', data={'username': 'totp_disable_test', 'password': 'admin'},
+                        follow_redirects=True)
+            rv = client.post('/admin/setup_authenticator',
+                             data={'csrf_token': 'test', 'action': 'disable'},
+                             follow_redirects=True)
+            self.assertIn(rv.status_code, (200, 302))
+
+        with app.app_context():
+            db = get_db()
+            user = db.execute("SELECT * FROM users WHERE username = 'totp_disable_test'").fetchone()
+            new_version = user['session_version'] or 0
+            self.assertGreater(new_version, original_version,
+                               'session_version must increment when TOTP is disabled')
+            self.assertEqual(user['totp_enabled'], 0)
+            self.assertIsNone(user['totp_secret'])
+
+    # ── CSV export ──────────────────────────────────────────────────────
+    def test_security_log_export_requires_admin(self):
+        """Non-admin users must not access the CSV export."""
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT OR IGNORE INTO patients (id, name, status) VALUES (9992, 'ExportTestPatient', 'ongoing')"
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO users (username, password_hash, role, is_active, patient_id) VALUES (?, ?, 'patient', 1, 9992)",
+                ('export_test_patient', __import__('werkzeug.security', fromlist=['generate_password_hash']).generate_password_hash('TestPass123!')),
+            )
+            db.commit()
+
+        with app.test_client() as client:
+            client.post('/login', data={'username': 'export_test_patient', 'password': 'TestPass123!'},
+                        follow_redirects=True)
+            rv = client.get('/admin/security-log/export')
+            self.assertNotEqual(rv.status_code, 200,
+                                'Patient role must not access security log export')
+
+    def test_security_log_export_returns_csv_for_admin(self):
+        """Admin accessing CSV export gets text/csv content-type."""
+        # Seed one auth event so output is non-empty
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO audit_logs (patient_id, action, details) VALUES (NULL, 'auth_login_password_failed', 'username=test')"
+            )
+            db.commit()
+
+        # Log in as admin (TESTING=True bypasses 2FA)
+        self.client.post('/login', data={'username': 'admin', 'password': 'admin'},
+                         follow_redirects=True)
+        rv = self.client.get('/admin/security-log/export')
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('text/csv', rv.content_type)
+        self.assertIn(b'action', rv.data)   # header row
+        self.assertIn(b'auth_login_password_failed', rv.data)
+
 if __name__ == '__main__':
     unittest.main()

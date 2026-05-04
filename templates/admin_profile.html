@@ -158,12 +158,17 @@
                             <input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required>
                         </div>
                         <div class="col-md-6">
-                            <input type="password" class="form-control" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
+                            <input type="password" class="form-control" id="adminConfirmPasswordInput" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
                         </div>
                         <div class="col-12">
-                            <small id="adminPasswordStrengthHint" class="text-muted">
-                                Use at least 10 characters with uppercase, lowercase, number, and special symbol.
-                            </small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-len">10+ chars</span>
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-upper">Uppercase</span>
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-lower">Lowercase</span>
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-digit">Number</span>
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-special">Special char</span>
+                                <span class="ms-2 small" id="adminPwMatchMsg" style="min-height:1.2em"></span>
+                            </div>
                         </div>
                         <div class="col-12">
                             <button class="btn btn-primary rounded-pill px-4" type="submit">
@@ -705,6 +710,33 @@
             }
         });
     }
+})();
+</script>
+
+<style>
+.admin-pw-check { font-size:.75rem; background:#f1f5f9; color:#64748b; border-color:#e2e8f0 !important; transition:background .2s,color .2s; }
+.admin-pw-check.ok  { background:#dcfce7; color:#166534; border-color:#86efac !important; }
+.admin-pw-check.bad { background:#fee2e2; color:#991b1b; border-color:#fca5a5 !important; }
+</style>
+<script>
+(function () {
+    var np = document.getElementById('adminNewPasswordInput');
+    var cp = document.getElementById('adminConfirmPasswordInput');
+    var mm = document.getElementById('adminPwMatchMsg');
+    var ids = { len:'apwc-len', upper:'apwc-upper', lower:'apwc-lower', digit:'apwc-digit', special:'apwc-special' };
+    function upd() {
+        if (!np) return;
+        var v = np.value;
+        var res = { len: v.length>=10, upper:/[A-Z]/.test(v), lower:/[a-z]/.test(v), digit:/[0-9]/.test(v), special:/[^A-Za-z0-9]/.test(v) };
+        Object.keys(ids).forEach(function(k){ var el=document.getElementById(ids[k]); if(el){ el.classList.toggle('ok',!!res[k]); el.classList.toggle('bad',v.length>0&&!res[k]); } });
+        if (cp && mm) {
+            var match = cp.value.length>0 && cp.value===v;
+            mm.textContent = cp.value.length>0 ? (match?'✓ Match':'✗ Mismatch') : '';
+            mm.style.color = match ? '#166534' : '#991b1b';
+        }
+    }
+    if (np) np.addEventListener('input', upd);
+    if (cp) cp.addEventListener('input', upd);
 })();
 </script>
 {% endblock %}

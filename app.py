@@ -319,6 +319,7 @@ def _security_retention_cleanup(db):
     try:
         audit_days = int(app.config.get('AUDIT_LOG_RETENTION_DAYS', 365) or 365)
         reset_days = int(app.config.get('PASSWORD_RESET_TOKEN_RETENTION_DAYS', 30) or 30)
+        candidate_days = int(app.config.get('CANDIDATE_PURGE_DAYS', 0) or 0)
 
         db.execute(
             "DELETE FROM audit_logs WHERE created_at < datetime('now', ?)",
@@ -332,6 +333,17 @@ def _security_retention_cleanup(db):
             """,
             (f'-{max(1, reset_days)} days', f'-{max(1, reset_days)} days'),
         )
+        # Purge stale candidate patients (opt-in — only when CANDIDATE_PURGE_DAYS > 0)
+        if candidate_days > 0:
+            db.execute(
+                """
+                DELETE FROM patients
+                WHERE status = 'candidate'
+                  AND created_at IS NOT NULL
+                  AND created_at < datetime('now', ?)
+                """,
+                (f'-{candidate_days} days',),
+            )
         db.commit()
         _SECURITY_RETENTION_LAST_CHECK_TS = now_ts
     except Exception:
@@ -12183,6 +12195,58 @@ def admin_security_log():
     )
 
 
+@app.route('/admin/security-log/export')
+@login_required
+def admin_security_log_export():
+    """Download all matching auth events as a CSV file."""
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    import csv
+    import io
+
+    db = get_db()
+    action_filter = request.args.get('action', '').strip()
+    search = request.args.get('q', '').strip()
+
+    where_clauses = ["action LIKE 'auth_%'"]
+    params = []
+    if action_filter:
+        where_clauses.append('action = ?')
+        params.append(action_filter)
+    if search:
+        where_clauses.append('(action LIKE ? OR details LIKE ?)')
+        params.extend([f'%{search}%', f'%{search}%'])
+    where_sql = ' AND '.join(where_clauses)
+
+    rows = db.execute(
+        f'''
+        SELECT id, action, details, created_at
+        FROM audit_logs
+        WHERE {where_sql}
+        ORDER BY created_at DESC
+        LIMIT 10000
+        ''',
+        params,
+    ).fetchall()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['id', 'action', 'details', 'created_at'])
+    for row in rows:
+        writer.writerow([row['id'], row['action'], row['details'] or '', row['created_at'] or ''])
+
+    csv_bytes = output.getvalue().encode('utf-8')
+    return app.response_class(
+        csv_bytes,
+        mimetype='text/csv',
+        headers={
+            'Content-Disposition': 'attachment; filename="security_events.csv"',
+            'Content-Length': len(csv_bytes),
+        },
+    )
+
+
 @app.route('/admin/smtp/test', methods=['POST'])
 @login_required
 def admin_smtp_send_test():
@@ -12242,14 +12306,23 @@ def setup_authenticator():
         return redirect(url_for('admin_profile'))
 
     if action == 'disable':
-        db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?', (current_user.id,))
+        db.execute(
+            '''
+            UPDATE users
+            SET totp_secret = NULL,
+                totp_enabled = 0,
+                session_version = COALESCE(session_version, 0) + 1
+            WHERE id = ?
+            ''',
+            (current_user.id,),
+        )
         db.execute(
             'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
             (None, 'auth_totp_disabled', f'user_id={current_user.id}'),
         )
         db.commit()
         session.pop('pending_totp_secret', None)
-        flash('Authenticator login has been disabled.')
+        flash('Authenticator login has been disabled. All existing sessions have been signed out.')
         return redirect(url_for('admin_profile'))
 
     if action == 'verify':
