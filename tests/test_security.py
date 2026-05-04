@@ -55,6 +55,80 @@ class SecurityTestCase(unittest.TestCase):
         ), follow_redirects=True)
         self.assertIn(b'Invalid username or password', rv.data)
 
+    def test_login_rate_limit_blocks_after_repeated_failures(self):
+        prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
+        prev_max = app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS')
+        prev_window = app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS')
+        prev_lockout = app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS')
+
+        app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
+        app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = 2
+        app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
+        app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
+
+        try:
+            first = self.client.post('/login', data=dict(
+                username='admin',
+                password='wrong-password'
+            ), follow_redirects=True)
+            self.assertIn(b'Invalid username or password', first.data)
+
+            second = self.client.post('/login', data=dict(
+                username='admin',
+                password='wrong-password'
+            ), follow_redirects=True)
+            self.assertIn(b'Too many failed login attempts', second.data)
+
+            blocked = self.client.post('/login', data=dict(
+                username='admin',
+                password='admin'
+            ), follow_redirects=True)
+            self.assertIn(b'Too many failed login attempts', blocked.data)
+            self.assertNotIn(b'Set up two-factor authentication from the admin profile before continuing.', blocked.data)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
+            app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = prev_max
+            app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
+            app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = prev_lockout
+
+    def test_login_rate_limit_resets_after_successful_login(self):
+        prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
+        prev_max = app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS')
+        prev_window = app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS')
+        prev_lockout = app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS')
+
+        app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
+        app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = 2
+        app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
+        app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
+
+        try:
+            fail_once = self.client.post('/login', data=dict(
+                username='admin',
+                password='wrong-password'
+            ), follow_redirects=True)
+            self.assertIn(b'Invalid username or password', fail_once.data)
+
+            success = self.client.post('/login', data=dict(
+                username='admin',
+                password='admin'
+            ), follow_redirects=True)
+            self.assertIn(b'Set up two-factor authentication from the admin profile before continuing.', success.data)
+
+            self.client.get('/logout', follow_redirects=True)
+
+            fail_after_success = self.client.post('/login', data=dict(
+                username='admin',
+                password='wrong-password'
+            ), follow_redirects=True)
+            self.assertIn(b'Invalid username or password', fail_after_success.data)
+            self.assertNotIn(b'Too many failed login attempts', fail_after_success.data)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
+            app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = prev_max
+            app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
+            app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = prev_lockout
+
     def test_disabled_account_cannot_login(self):
         rv = self.client.post('/login', data=dict(
             username='disabled_admin',

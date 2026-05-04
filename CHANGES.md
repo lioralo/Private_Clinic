@@ -2,6 +2,44 @@
 
 ---
 
+## Session 66
+
+**Date:** 2026-05-04
+
+**Objective:** Start roadmap implementation with authentication hardening: add login brute-force protection while preserving current inactivity timeout behavior.
+
+**Release Summary:**
+
+1. **Login Rate-Limit / Lockout (New)**
+- Added login brute-force protections in `clinic_app/routes/auth.py`.
+- Protection key combines client IP and normalized username.
+- Added configurable controls:
+  - `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` (default `5`)
+  - `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (default `300`)
+  - `LOGIN_RATE_LIMIT_LOCKOUT_SECONDS` (default `900`)
+- Behavior:
+  - Blocks new login attempts while lockout is active.
+  - Clears failure bucket on successful credential validation.
+
+2. **Configuration Surface Added**
+- Added the three login rate-limit config values in `app.py` from environment variables so production tuning does not require code edits.
+
+3. **Regression Coverage Added**
+- Added tests in `tests/test_security.py`:
+  - `test_login_rate_limit_blocks_after_repeated_failures`
+  - `test_login_rate_limit_resets_after_successful_login`
+
+4. **Debug / Verification**
+- Confirmed inactivity timeout was already implemented and covered by existing tests.
+- Attempted local test execution with:
+  - `python3 -m unittest tests/test_security.py`
+- Local environment blocker observed:
+  - `ModuleNotFoundError: No module named 'pyotp'`
+  - `python3 -m pip` unavailable on this host (`No module named pip`)
+- Static diagnostics for modified files reported no editor/lint errors.
+
+---
+
 ## Session 65
 
 **Date:** 2026-05-04
