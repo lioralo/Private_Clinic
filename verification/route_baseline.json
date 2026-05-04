@@ -1,5 +1,5 @@
 {
-  "route_count": 146,
+  "route_count": 148,
   "routes": [
     {
       "endpoint": "index",
@@ -650,6 +650,14 @@
       "rule": "/healthz"
     },
     {
+      "endpoint": "forgot_password",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/forgot-password"
+    },
+    {
       "endpoint": "login",
       "methods": [
         "GET",
@@ -987,6 +995,14 @@
         "POST"
       ],
       "rule": "/register"
+    },
+    {
+      "endpoint": "reset_password",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/reset-password/<token>"
     },
     {
       "endpoint": "download_resource_link",

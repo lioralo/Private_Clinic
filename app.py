@@ -95,6 +95,12 @@ app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = int(os.environ.get('LOGIN_RATE_
 app.config['PASSWORD_RESET_TOKEN_TTL_SECONDS'] = int(os.environ.get('PASSWORD_RESET_TOKEN_TTL_SECONDS', '1800') or 1800)
 app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_MAX', '5') or 5)
 app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', '900') or 900)
+app.config['SMTP_HOST'] = (os.environ.get('SMTP_HOST') or '').strip()
+app.config['SMTP_PORT'] = int(os.environ.get('SMTP_PORT', '587') or 587)
+app.config['SMTP_USERNAME'] = (os.environ.get('SMTP_USERNAME') or '').strip()
+app.config['SMTP_PASSWORD'] = os.environ.get('SMTP_PASSWORD', '')
+app.config['SMTP_FROM_EMAIL'] = (os.environ.get('SMTP_FROM_EMAIL') or '').strip()
+app.config['SMTP_USE_TLS'] = str(os.environ.get('SMTP_USE_TLS', '1')).strip().lower() in {'1', 'true', 'yes', 'on'}
 app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 csrf = CSRFProtect(app)
@@ -1636,6 +1642,38 @@ def enforce_inactivity_timeout():
 
 
 @app.before_request
+def enforce_session_version_match():
+    if request.path.startswith('/static/'):
+        return
+
+    if not current_user.is_authenticated:
+        session.pop('session_version', None)
+        return
+
+    db = get_db()
+    row = db.execute('SELECT session_version FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if not row:
+        logout_user()
+        session.pop('session_version', None)
+        flash('Session expired. Please log in again.')
+        return redirect(url_for('login'))
+
+    db_version = int((row['session_version'] if row['session_version'] is not None else 0) or 0)
+    session_version = session.get('session_version')
+    try:
+        session_version = int(session_version if session_version is not None else -1)
+    except (TypeError, ValueError):
+        session_version = -1
+
+    if session_version != db_version:
+        logout_user()
+        session.pop('session_version', None)
+        session.pop('last_activity_at', None)
+        flash('Your session was invalidated after a security change. Please sign in again.')
+        return redirect(url_for('login'))
+
+
+@app.before_request
 def routine_backup_guard():
     if request.path.startswith('/static/'):
         return
@@ -1745,19 +1783,27 @@ def ensure_gdocs_auto_sync_worker_started():
         _GDOC_AUTO_SYNC_WORKER_STARTED = True
 
 class User(UserMixin):
-    def __init__(self, id, username, role, patient_id=None, display_name=None):
+    def __init__(self, id, username, role, patient_id=None, display_name=None, session_version=0):
         self.id = id
         self.username = username
         self.role = role
         self.patient_id = patient_id
         self.display_name = display_name or username
+        self.session_version = int(session_version or 0)
 
 @login_manager.user_loader
 def load_user(user_id):
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
     if user:
-        return User(user['id'], user['username'], user['role'], user['patient_id'], user['display_name'])
+        return User(
+            user['id'],
+            user['username'],
+            user['role'],
+            user['patient_id'],
+            user['display_name'],
+            user['session_version'],
+        )
     return None
 
 def get_db():
@@ -1796,9 +1842,11 @@ def _login_redirect_for_user(user_row):
         user_row['username'],
         user_row['role'],
         user_row['patient_id'],
-        user_row['display_name']
+        user_row['display_name'],
+        user_row['session_version'],
     )
     login_user(user_obj)
+    session['session_version'] = int(user_row['session_version'] or 0)
 
     if user_row['role'] == 'admin':
         if not user_row['totp_enabled'] or not user_row['totp_secret']:
@@ -2431,6 +2479,10 @@ def _run_db_migrations(db):
         pass
     try:
         db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 0')
     except sqlite3.OperationalError:
         pass
     try:
@@ -11905,7 +11957,13 @@ def admin_change_password():
         return redirect(url_for('admin_profile'))
 
     db.execute(
-        'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
+        '''
+        UPDATE users
+        SET password_hash = ?,
+            force_password_change = 0,
+            session_version = COALESCE(session_version, 0) + 1
+        WHERE id = ?
+        ''',
         (generate_password_hash(new_password), current_user.id)
     )
     db.execute(

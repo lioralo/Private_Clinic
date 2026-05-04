@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 import hashlib
+import smtplib
 import secrets
 import threading
+from email.message import EmailMessage
 
 from flask import redirect, render_template, request, session, url_for, flash
 from flask_login import current_user, login_required, logout_user
@@ -12,6 +14,8 @@ _LOGIN_RATE_LIMIT_LOCK = threading.Lock()
 _LOGIN_RATE_LIMIT_BUCKETS = {}
 _PASSWORD_RESET_RATE_LIMIT_LOCK = threading.Lock()
 _PASSWORD_RESET_RATE_LIMIT_BUCKETS = {}
+_PASSWORD_RESET_CLEANUP_LOCK = threading.Lock()
+_PASSWORD_RESET_LAST_CLEANUP_TS = 0.0
 
 
 def _request_client_ip():
@@ -145,6 +149,62 @@ def _build_reset_generic_message():
     return 'If the account exists and is eligible, a password reset link has been generated.'
 
 
+def _cleanup_password_reset_tokens(db):
+    global _PASSWORD_RESET_LAST_CLEANUP_TS
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    cadence_seconds = 300
+    if now_ts - float(_PASSWORD_RESET_LAST_CLEANUP_TS or 0.0) < cadence_seconds:
+        return
+
+    if not _PASSWORD_RESET_CLEANUP_LOCK.acquire(blocking=False):
+        return
+
+    try:
+        db.execute(
+            '''
+            DELETE FROM password_reset_tokens
+            WHERE used_at IS NOT NULL
+               OR expires_at <= CURRENT_TIMESTAMP
+            '''
+        )
+        db.commit()
+        _PASSWORD_RESET_LAST_CLEANUP_TS = now_ts
+    finally:
+        _PASSWORD_RESET_CLEANUP_LOCK.release()
+
+
+def _send_password_reset_email(app, recipient_email, reset_url):
+    smtp_host = (app.config.get('SMTP_HOST') or '').strip()
+    smtp_port = int(app.config.get('SMTP_PORT', 587) or 587)
+    smtp_username = (app.config.get('SMTP_USERNAME') or '').strip()
+    smtp_password = app.config.get('SMTP_PASSWORD') or ''
+    smtp_from = (app.config.get('SMTP_FROM_EMAIL') or smtp_username).strip()
+    smtp_use_tls = bool(app.config.get('SMTP_USE_TLS', True))
+
+    if not smtp_host or not smtp_from:
+        return False
+
+    message = EmailMessage()
+    message['Subject'] = 'Private Clinic password reset'
+    message['From'] = smtp_from
+    message['To'] = recipient_email
+    message.set_content(
+        'A password reset was requested for your admin account.\n\n'
+        f'Use this secure link to set a new password:\n{reset_url}\n\n'
+        'This link expires soon and can only be used once.\n'
+        'If you did not request this, you can ignore this email.'
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
+        if smtp_use_tls:
+            smtp.starttls()
+        if smtp_username:
+            smtp.login(smtp_username, smtp_password)
+        smtp.send_message(message)
+    return True
+
+
 def register_auth_routes(
     app,
     *,
@@ -265,6 +325,7 @@ def register_auth_routes(
                 return render_template('forgot_password.html')
 
             db = get_db()
+            _cleanup_password_reset_tokens(db)
             user = db.execute(
                 '''
                 SELECT * FROM users
@@ -282,6 +343,7 @@ def register_auth_routes(
             if user:
                 raw_token = secrets.token_urlsafe(32)
                 token_hash = _hash_reset_token(raw_token)
+                reset_url = url_for('reset_password', token=raw_token, _external=True)
                 expires_at = datetime.now(timezone.utc).timestamp() + int(
                     app.config.get('PASSWORD_RESET_TOKEN_TTL_SECONDS', 1800) or 1800
                 )
@@ -297,13 +359,24 @@ def register_auth_routes(
 
                 flash(_build_reset_generic_message())
                 if app.config.get('TESTING'):
-                    flash(f"Reset link: {url_for('reset_password', token=raw_token, _external=True)}")
+                    flash(f"Reset link: {reset_url}")
                 else:
-                    app.logger.info(
-                        'Password reset link generated for user_id=%s url=%s',
-                        user['id'],
-                        url_for('reset_password', token=raw_token, _external=True),
-                    )
+                    recipient_email = (user['email'] or '').strip()
+                    if recipient_email:
+                        try:
+                            if _send_password_reset_email(app, recipient_email, reset_url):
+                                _log_auth_audit(db, 'auth_password_reset_email_sent', f"user_id={user['id']}")
+                                db.commit()
+                            else:
+                                _log_auth_audit(db, 'auth_password_reset_email_not_configured', f"user_id={user['id']}")
+                                db.commit()
+                        except Exception:
+                            _log_auth_audit(db, 'auth_password_reset_email_failed', f"user_id={user['id']}")
+                            db.commit()
+                            app.logger.exception('Password reset email send failed for user_id=%s', user['id'])
+                    else:
+                        _log_auth_audit(db, 'auth_password_reset_missing_email', f"user_id={user['id']}")
+                        db.commit()
                 return redirect(url_for('login'))
 
             _log_auth_audit(db, 'auth_password_reset_unknown_account', f"identifier={identifier}")
@@ -316,6 +389,7 @@ def register_auth_routes(
     def reset_password(token):
         token_hash = _hash_reset_token(token)
         db = get_db()
+        _cleanup_password_reset_tokens(db)
 
         token_row = db.execute(
             '''
@@ -362,7 +436,13 @@ def register_auth_routes(
                 return render_template('reset_password.html', token=token)
 
             db.execute(
-                'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
+                '''
+                UPDATE users
+                SET password_hash = ?,
+                    force_password_change = 0,
+                    session_version = COALESCE(session_version, 0) + 1
+                WHERE id = ?
+                ''',
                 (generate_password_hash(new_password), token_row['user_id'])
             )
             db.execute(

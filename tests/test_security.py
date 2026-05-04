@@ -211,6 +211,39 @@ class SecurityTestCase(unittest.TestCase):
             app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = prev_max
             app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
 
+    def test_password_reset_does_not_expose_link_when_not_testing(self):
+        previous_testing = app.config.get('TESTING')
+        app.config['TESTING'] = False
+
+        try:
+            rv = self.client.post('/forgot-password', data={
+                'username_or_email': 'admin'
+            }, follow_redirects=True)
+        finally:
+            app.config['TESTING'] = previous_testing
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'If the account exists and is eligible, a password reset link has been generated.', rv.data)
+        self.assertNotIn(b'Reset link:', rv.data)
+
+    def test_session_invalidated_after_session_version_change(self):
+        self.client.post('/login', data={
+            'username': 'admin',
+            'password': 'admin',
+        }, follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                'UPDATE users SET session_version = COALESCE(session_version, 0) + 1 WHERE username = ?',
+                ('admin',),
+            )
+            db.commit()
+
+        rv = self.client.get('/patients', follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Your session was invalidated after a security change. Please sign in again.', rv.data)
+
     def test_admin_totp_login_prompts_second_step(self):
         app.config['TESTING'] = False
         try:

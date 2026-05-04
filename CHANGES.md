@@ -2,6 +2,38 @@
 
 ---
 
+## Session 68
+
+**Date:** 2026-05-04
+
+**Objective:** Continue security roadmap with delivery-ready password reset handling and session revocation hardening.
+
+**Release Summary:**
+
+1. **SMTP-Based Password Reset Delivery**
+- Added SMTP configuration support (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_USE_TLS`).
+- Password reset links are no longer written to logs in normal runtime.
+- In `TESTING` mode only, reset link remains flashed to support deterministic tests.
+
+2. **Reset Token Lifecycle Cleanup**
+- Added periodic cleanup for used/expired password reset tokens.
+- Cleanup runs opportunistically during reset request/reset flows with a guard cadence.
+
+3. **Session Revocation Model**
+- Added `users.session_version` to schema and runtime migration path.
+- Session now stores version at login and validates it on each authenticated request.
+- Password changes/resets increment `session_version`, forcing all older sessions to re-authenticate.
+
+4. **Additional Security Tests**
+- Added tests ensuring:
+  - reset link is not exposed when not in testing mode,
+  - active session is invalidated when `session_version` changes.
+
+5. **Baseline Contract Update**
+- Updated route baseline to include password reset endpoints.
+
+---
+
 ## Session 67
 
 **Date:** 2026-05-04
