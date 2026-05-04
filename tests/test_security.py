@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import os
+import re
 import pyotp
 from app import app, get_db, _run_db_migrations
 
@@ -135,6 +136,80 @@ class SecurityTestCase(unittest.TestCase):
             password='admin'
         ), follow_redirects=True)
         self.assertIn(b'Account is disabled. Contact administrator.', rv.data)
+
+    def test_password_reset_request_generates_token_for_admin(self):
+        rv = self.client.post('/forgot-password', data={
+            'username_or_email': 'admin'
+        }, follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'If the account exists and is eligible, a password reset link has been generated.', rv.data)
+        self.assertIn(b'Reset link:', rv.data)
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT user_id, token_hash FROM password_reset_tokens ORDER BY id DESC LIMIT 1').fetchone()
+            self.assertIsNotNone(row)
+
+    def test_password_reset_token_updates_password(self):
+        requested = self.client.post('/forgot-password', data={
+            'username_or_email': 'admin'
+        }, follow_redirects=True)
+        self.assertEqual(requested.status_code, 200)
+
+        html = requested.data.decode('utf-8')
+        match = re.search(r'/reset-password/[A-Za-z0-9_\-]+', html)
+        self.assertIsNotNone(match)
+        reset_path = match.group(0)
+
+        posted = self.client.post(reset_path, data={
+            'new_password': 'new-admin-password',
+            'confirm_password': 'new-admin-password',
+        }, follow_redirects=True)
+        self.assertEqual(posted.status_code, 200)
+        self.assertIn(b'Password updated successfully. Please sign in.', posted.data)
+
+        login = self.client.post('/login', data={
+            'username': 'admin',
+            'password': 'new-admin-password',
+        }, follow_redirects=False)
+        self.assertEqual(login.status_code, 302)
+        self.assertIn('/admin/profile', login.headers.get('Location', ''))
+
+        with app.app_context():
+            db = get_db()
+            used = db.execute(
+                'SELECT COUNT(*) AS count FROM password_reset_tokens WHERE used_at IS NOT NULL'
+            ).fetchone()
+            self.assertGreaterEqual(int(used['count'] or 0), 1)
+
+    def test_password_reset_rejects_invalid_token(self):
+        rv = self.client.get('/reset-password/not-a-real-token', follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Password reset link is invalid or expired.', rv.data)
+
+    def test_password_reset_request_rate_limit(self):
+        prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
+        prev_max = app.config.get('PASSWORD_RESET_RATE_LIMIT_MAX')
+        prev_window = app.config.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS')
+
+        app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
+        app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = 1
+        app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = 120
+
+        try:
+            first = self.client.post('/forgot-password', data={
+                'username_or_email': 'admin'
+            }, follow_redirects=True)
+            self.assertIn(b'If the account exists and is eligible, a password reset link has been generated.', first.data)
+
+            second = self.client.post('/forgot-password', data={
+                'username_or_email': 'admin'
+            }, follow_redirects=True)
+            self.assertIn(b'Too many reset attempts. Please try again in', second.data)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
+            app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = prev_max
+            app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
 
     def test_admin_totp_login_prompts_second_step(self):
         app.config['TESTING'] = False

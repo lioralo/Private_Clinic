@@ -2,6 +2,55 @@
 
 ---
 
+## Session 67
+
+**Date:** 2026-05-04
+
+**Objective:** Implement the next security and robustness tranche: password reset flow, auth audit coverage, and safe error handling.
+
+**Release Summary:**
+
+1. **Password Reset Flow (New)**
+- Added `/forgot-password` and `/reset-password/<token>` routes.
+- Added secure reset token storage in DB (`password_reset_tokens`) with:
+  - token hash (SHA-256, no plaintext storage)
+  - expiry timestamp
+  - single-use marker (`used_at`)
+  - requester IP tracking
+- Added request throttling for password reset attempts with configurable limits.
+- Added login-page entry point (`Forgot password?`) and dedicated reset templates.
+
+2. **Authentication Audit Events (Expanded)**
+- Added auth-related audit entries for:
+  - login password success/failure
+  - 2FA success/failure
+  - logout
+  - password reset requested/completed/invalid
+  - authenticator setup start/enable/disable
+  - admin password change
+
+3. **Production-Safe Error Handling (New)**
+- Added global 404 and 500 handlers.
+- JSON responses are returned for API-style requests.
+- User-friendly HTML error pages added for browser requests (`404.html`, `500.html`).
+
+4. **Schema & Migration Updates**
+- Added `password_reset_tokens` table to `schema.sql` for fresh installs.
+- Added same table and indexes in runtime migration routine for existing deployments.
+
+5. **Regression Coverage Added**
+- Extended `tests/test_security.py` with tests for:
+  - reset request token generation
+  - reset token password update flow
+  - invalid token rejection
+  - reset request throttling
+
+6. **Debug / Verification Notes**
+- Static editor diagnostics for modified files showed no syntax/lint issues.
+- Runtime tests still require project dependencies installed in the execution environment.
+
+---
+
 ## Session 66
 
 **Date:** 2026-05-04

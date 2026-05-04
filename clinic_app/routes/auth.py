@@ -1,13 +1,17 @@
 from datetime import datetime, timezone
+import hashlib
+import secrets
 import threading
 
 from flask import redirect, render_template, request, session, url_for, flash
 from flask_login import current_user, login_required, logout_user
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 _LOGIN_RATE_LIMIT_LOCK = threading.Lock()
 _LOGIN_RATE_LIMIT_BUCKETS = {}
+_PASSWORD_RESET_RATE_LIMIT_LOCK = threading.Lock()
+_PASSWORD_RESET_RATE_LIMIT_BUCKETS = {}
 
 
 def _request_client_ip():
@@ -90,6 +94,57 @@ def _clear_login_failures(username):
         _LOGIN_RATE_LIMIT_BUCKETS.pop(key, None)
 
 
+def _reset_rate_limit_key(identifier):
+    normalized_identifier = (identifier or '').strip().lower()[:128]
+    return f"{_request_client_ip()}:{normalized_identifier}"
+
+
+def _check_password_reset_rate_limit(app, identifier):
+    if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
+        return None
+
+    max_requests = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_MAX', 5) or 5)
+    window_seconds = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', 900) or 900)
+    if max_requests <= 0 or window_seconds <= 0:
+        return None
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    key = _reset_rate_limit_key(identifier)
+    cutoff_ts = now_ts - window_seconds
+
+    with _PASSWORD_RESET_RATE_LIMIT_LOCK:
+        timestamps = _PASSWORD_RESET_RATE_LIMIT_BUCKETS.get(key, [])
+        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
+
+        if len(timestamps) >= max_requests:
+            _PASSWORD_RESET_RATE_LIMIT_BUCKETS[key] = timestamps
+            return max(1, int(window_seconds - (now_ts - timestamps[0])))
+
+        timestamps.append(now_ts)
+        _PASSWORD_RESET_RATE_LIMIT_BUCKETS[key] = timestamps
+
+    return None
+
+
+def _hash_reset_token(token):
+    return hashlib.sha256((token or '').encode('utf-8')).hexdigest()
+
+
+def _log_auth_audit(db, action, details):
+    try:
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (None, action, details),
+        )
+    except Exception:
+        # Never block auth flows on audit logging failures.
+        pass
+
+
+def _build_reset_generic_message():
+    return 'If the account exists and is eligible, a password reset link has been generated.'
+
+
 def register_auth_routes(
     app,
     *,
@@ -125,11 +180,15 @@ def register_auth_routes(
                     return redirect(url_for('login'))
 
                 if verify_totp_code(pending_user['totp_secret'], otp_code):
+                    _log_auth_audit(db, 'auth_login_2fa_success', f"username={pending_user['username']}")
                     session.pop('pending_2fa_user_id', None)
                     session.pop('pending_2fa_username', None)
+                    db.commit()
                     return login_redirect_for_user(pending_user)
 
                 flash('Invalid authenticator code.')
+                _log_auth_audit(db, 'auth_login_2fa_failed', f"username={pending_user['username']}")
+                db.commit()
                 return render_template('login.html', requires_otp=True, pending_username=pending_username)
 
             session.pop('pending_2fa_user_id', None)
@@ -155,9 +214,13 @@ def register_auth_routes(
             if user and password_correct:
                 if not user['is_active']:
                     flash('Account is disabled. Contact administrator.')
+                    _log_auth_audit(db, 'auth_login_disabled_account', f"username={username}")
+                    db.commit()
                     return render_template('login.html')
 
                 _clear_login_failures(username)
+                _log_auth_audit(db, 'auth_login_password_success', f"username={username}")
+                db.commit()
 
                 # REQUIRE 2FA for all admin accounts in PRODUCTION
                 # IN TESTING: Allow bypass for admin logins
@@ -173,6 +236,8 @@ def register_auth_routes(
                 return login_redirect_for_user(user)
 
             lockout_triggered, retry_after = _record_login_failure(app, username)
+            _log_auth_audit(db, 'auth_login_password_failed', f"username={username}")
+            db.commit()
             if lockout_triggered and retry_after is not None:
                 flash(f'Too many failed login attempts. Please try again in {retry_after} seconds.')
             else:
@@ -185,8 +250,134 @@ def register_auth_routes(
 
     @login_required
     def logout():
+        db = get_db()
+        _log_auth_audit(db, 'auth_logout', f"user_id={current_user.id}")
+        db.commit()
         logout_user()
         return redirect(url_for('login'))
+
+    def forgot_password():
+        if request.method == 'POST':
+            identifier = (request.form.get('username_or_email') or '').strip()
+            retry_after = _check_password_reset_rate_limit(app, identifier)
+            if retry_after is not None:
+                flash(f'Too many reset attempts. Please try again in {retry_after} seconds.')
+                return render_template('forgot_password.html')
+
+            db = get_db()
+            user = db.execute(
+                '''
+                SELECT * FROM users
+                WHERE is_active = 1
+                  AND role = 'admin'
+                  AND (
+                        LOWER(username) = LOWER(?)
+                        OR LOWER(COALESCE(email, '')) = LOWER(?)
+                  )
+                LIMIT 1
+                ''',
+                (identifier, identifier),
+            ).fetchone()
+
+            if user:
+                raw_token = secrets.token_urlsafe(32)
+                token_hash = _hash_reset_token(raw_token)
+                expires_at = datetime.now(timezone.utc).timestamp() + int(
+                    app.config.get('PASSWORD_RESET_TOKEN_TTL_SECONDS', 1800) or 1800
+                )
+                db.execute(
+                    '''
+                    INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, requested_ip)
+                    VALUES (?, ?, datetime(?, 'unixepoch'), ?)
+                    ''',
+                    (user['id'], token_hash, expires_at, _request_client_ip()),
+                )
+                _log_auth_audit(db, 'auth_password_reset_requested', f"username={user['username']}")
+                db.commit()
+
+                flash(_build_reset_generic_message())
+                if app.config.get('TESTING'):
+                    flash(f"Reset link: {url_for('reset_password', token=raw_token, _external=True)}")
+                else:
+                    app.logger.info(
+                        'Password reset link generated for user_id=%s url=%s',
+                        user['id'],
+                        url_for('reset_password', token=raw_token, _external=True),
+                    )
+                return redirect(url_for('login'))
+
+            _log_auth_audit(db, 'auth_password_reset_unknown_account', f"identifier={identifier}")
+            db.commit()
+            flash(_build_reset_generic_message())
+            return redirect(url_for('login'))
+
+        return render_template('forgot_password.html')
+
+    def reset_password(token):
+        token_hash = _hash_reset_token(token)
+        db = get_db()
+
+        token_row = db.execute(
+            '''
+            SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.username
+            FROM password_reset_tokens prt
+            JOIN users u ON u.id = prt.user_id
+            WHERE prt.token_hash = ?
+            LIMIT 1
+            ''',
+            (token_hash,),
+        ).fetchone()
+
+        if not token_row:
+            flash('Password reset link is invalid or expired.')
+            return redirect(url_for('login'))
+
+        used_at = token_row['used_at']
+        expires_at = token_row['expires_at']
+        is_expired = False
+        try:
+            expires_dt = datetime.fromisoformat(str(expires_at).replace(' ', 'T'))
+            if expires_dt.tzinfo is None:
+                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+            is_expired = expires_dt <= datetime.now(timezone.utc)
+        except Exception:
+            is_expired = True
+
+        if used_at or is_expired:
+            flash('Password reset link is invalid or expired.')
+            _log_auth_audit(db, 'auth_password_reset_invalid_or_expired', f"username={token_row['username']}")
+            db.commit()
+            return redirect(url_for('login'))
+
+        if request.method == 'POST':
+            new_password = (request.form.get('new_password') or '').strip()
+            confirm_password = (request.form.get('confirm_password') or '').strip()
+
+            if len(new_password) < 8:
+                flash('New password must include at least 8 characters.')
+                return render_template('reset_password.html', token=token)
+
+            if new_password != confirm_password:
+                flash('New password confirmation does not match.')
+                return render_template('reset_password.html', token=token)
+
+            db.execute(
+                'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
+                (generate_password_hash(new_password), token_row['user_id'])
+            )
+            db.execute(
+                'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL',
+                (token_row['user_id'],)
+            )
+            session.pop('pending_2fa_user_id', None)
+            session.pop('pending_2fa_username', None)
+            _clear_login_failures(token_row['username'])
+            _log_auth_audit(db, 'auth_password_reset_completed', f"username={token_row['username']}")
+            db.commit()
+            flash('Password updated successfully. Please sign in.')
+            return redirect(url_for('login'))
+
+        return render_template('reset_password.html', token=token)
 
     def register():
         if request.method == 'POST':
@@ -211,3 +402,5 @@ def register_auth_routes(
     app.add_url_rule('/login', endpoint='login', view_func=login, methods=['GET', 'POST'])
     app.add_url_rule('/logout', endpoint='logout', view_func=logout, methods=['GET'])
     app.add_url_rule('/register', endpoint='register', view_func=register, methods=['GET', 'POST'])
+    app.add_url_rule('/forgot-password', endpoint='forgot_password', view_func=forgot_password, methods=['GET', 'POST'])
+    app.add_url_rule('/reset-password/<token>', endpoint='reset_password', view_func=reset_password, methods=['GET', 'POST'])

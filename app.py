@@ -92,6 +92,9 @@ app.config['SESSION_COOKIE_SECURE'] = str(os.environ.get('SESSION_COOKIE_SECURE'
 app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = int(os.environ.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', '5') or 5)
 app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', '300') or 300)
 app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = int(os.environ.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS', '900') or 900)
+app.config['PASSWORD_RESET_TOKEN_TTL_SECONDS'] = int(os.environ.get('PASSWORD_RESET_TOKEN_TTL_SECONDS', '1800') or 1800)
+app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_MAX', '5') or 5)
+app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', '900') or 900)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 csrf = CSRFProtect(app)
@@ -1693,6 +1696,27 @@ def apply_security_headers(response):
     return response
 
 
+def _request_expects_json_error():
+    if request.path.startswith('/api/'):
+        return True
+    return request.accept_mimetypes.best == 'application/json'
+
+
+@app.errorhandler(404)
+def handle_not_found(error):
+    if _request_expects_json_error():
+        return jsonify({'status': 'error', 'message': 'Not found'}), 404
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def handle_internal_error(error):
+    app.logger.exception('Unhandled server error: %s', error)
+    if _request_expects_json_error():
+        return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
+    return render_template('500.html'), 500
+
+
 def _gdocs_auto_sync_worker_loop():
     while not _GDOC_AUTO_SYNC_STOP_EVENT.is_set():
         if _GDOC_AUTO_SYNC_STOP_EVENT.wait(timeout=60):
@@ -2453,6 +2477,28 @@ def _run_db_migrations(db):
             details TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            requested_ip TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )''')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id)')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute('CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at)')
     except sqlite3.OperationalError:
         pass
 
@@ -11765,11 +11811,20 @@ def setup_authenticator():
     action = (request.form.get('action') or '').strip().lower()
     if action == 'start':
         session['pending_totp_secret'] = pyotp.random_base32()
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (None, 'auth_totp_setup_started', f'user_id={current_user.id}'),
+        )
+        db.commit()
         flash('Authenticator setup started. Scan the QR code and verify with a code.')
         return redirect(url_for('admin_profile'))
 
     if action == 'disable':
         db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?', (current_user.id,))
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (None, 'auth_totp_disabled', f'user_id={current_user.id}'),
+        )
         db.commit()
         session.pop('pending_totp_secret', None)
         flash('Authenticator login has been disabled.')
@@ -11786,6 +11841,10 @@ def setup_authenticator():
             return redirect(url_for('admin_profile'))
 
         db.execute('UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?', (pending_secret, current_user.id))
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (None, 'auth_totp_enabled', f'user_id={current_user.id}'),
+        )
         db.commit()
         session.pop('pending_totp_secret', None)
         flash('Authenticator has been enabled for admin login.')
@@ -11848,6 +11907,10 @@ def admin_change_password():
     db.execute(
         'UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?',
         (generate_password_hash(new_password), current_user.id)
+    )
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (None, 'auth_password_changed', f'user_id={current_user.id}'),
     )
     db.commit()
     flash('Admin password updated successfully.')
