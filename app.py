@@ -2066,6 +2066,9 @@ def _login_redirect_for_user(user_row):
             return redirect(url_for('admin_profile'))
         return redirect(url_for('patients'))
 
+    if user_row['role'] == 'patient' and user_row['force_password_change']:
+        return redirect(url_for('patient_change_password'))
+
     return redirect(url_for('patient_home'))
 
 
@@ -4537,6 +4540,42 @@ def api_treatment_method_options_delete(option_id):
     db.execute('DELETE FROM treatment_method_options WHERE id = ?', (option_id,))
     db.commit()
     return jsonify({'ok': True})
+
+
+@app.route('/patient/change-password', methods=['GET', 'POST'])
+@login_required
+def patient_change_password():
+    if current_user.role != 'patient':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+
+    if not user or not user['force_password_change']:
+        return redirect(url_for('patient_home'))
+
+    if request.method == 'POST':
+        new_password = (request.form.get('new_password') or '').strip()
+        confirm_password = (request.form.get('confirm_password') or '').strip()
+
+        ok, err = _validate_password_strength(new_password, username=user['username'])
+        if not ok:
+            flash(err)
+            return render_template('patient_change_password.html')
+
+        if new_password != confirm_password:
+            flash('New password confirmation does not match.')
+            return render_template('patient_change_password.html')
+
+        db.execute(
+            'UPDATE users SET password_hash = ?, force_password_change = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?',
+            (generate_password_hash(new_password), current_user.id)
+        )
+        db.commit()
+        flash('Password updated successfully.')
+        return redirect(url_for('patient_home'))
+
+    return render_template('patient_change_password.html')
 
 
 @app.route('/patient/home')
@@ -13147,27 +13186,100 @@ def manage_access(patient_id):
 
     db = get_db()
 
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient is None:
+        flash('Patient not found.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
     # Check if user exists for this patient
     existing_user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
 
     hashed_pw = generate_password_hash(password)
+    action = None
 
     if existing_user:
         try:
-            db.execute('UPDATE users SET username = ?, password_hash = ? WHERE id = ?',
-                       (username, hashed_pw, existing_user['id']))
+            db.execute(
+                'UPDATE users SET username = ?, password_hash = ?, force_password_change = 1, is_active = 1 WHERE id = ?',
+                (username, hashed_pw, existing_user['id'])
+            )
             db.commit()
-            flash('User access updated.')
-        except sqlite3.IntegrityError:
-             flash('Username already taken.')
-    else:
-        try:
-            db.execute('INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, ?, ?)',
-                       (username, hashed_pw, 'patient', patient_id))
-            db.commit()
-            flash('User access granted.')
+            flash('User access updated. Patient will be required to change their password on first login.')
+            action = 'updated'
         except sqlite3.IntegrityError:
             flash('Username already taken.')
+    else:
+        try:
+            db.execute(
+                'INSERT INTO users (username, password_hash, role, patient_id, force_password_change) VALUES (?, ?, ?, ?, 1)',
+                (username, hashed_pw, 'patient', patient_id)
+            )
+            db.commit()
+            flash('User access granted. Patient will be required to change their password on first login.')
+            action = 'created'
+        except sqlite3.IntegrityError:
+            flash('Username already taken.')
+
+    if action and patient and patient['email']:
+        try:
+            subject = 'Access to Patient Portal'
+            body = (
+                f"Hello {patient['name']},\n\n"
+                f"Your access to the patient portal has been {'set up' if action == 'created' else 'updated'}.\n\n"
+                f"Username: {username}\n"
+                f"Temporary password: {password}\n\n"
+                f"You will be asked to change your password when you first sign in.\n\n"
+                f"Please keep your credentials secure and do not share them with anyone."
+            )
+            _send_smtp_email(patient['email'], subject, body)
+        except Exception:
+            pass  # Email failure is non-fatal
+
+    return redirect_to_patient_tab(patient_id, 'info')
+
+
+@app.route('/patient/<int:patient_id>/reset_portal_password', methods=('POST',))
+@login_required
+def reset_portal_password(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if patient is None:
+        flash('Patient not found.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    user = db.execute('SELECT * FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
+    if not user:
+        flash('No portal account exists for this patient. Use "Grant Access" to create one first.')
+        return redirect_to_patient_tab(patient_id, 'info')
+
+    import secrets as _secrets
+    new_password = _secrets.token_urlsafe(12)
+    hashed_pw = generate_password_hash(new_password)
+
+    db.execute(
+        'UPDATE users SET password_hash = ?, force_password_change = 1, is_active = 1 WHERE id = ?',
+        (hashed_pw, user['id'])
+    )
+    db.commit()
+    flash('Portal password has been reset. Patient will be required to change their password on next login.')
+
+    if patient['email']:
+        try:
+            subject = 'Patient Portal Password Reset'
+            body = (
+                f"Hello {patient['name']},\n\n"
+                f"Your patient portal password has been reset by the clinic admin.\n\n"
+                f"Username: {user['username']}\n"
+                f"Temporary password: {new_password}\n\n"
+                f"You will be required to choose a new password when you sign in.\n\n"
+                f"Please keep your credentials secure and do not share them with anyone."
+            )
+            _send_smtp_email(patient['email'], subject, body)
+        except Exception:
+            pass  # Email failure is non-fatal
 
     return redirect_to_patient_tab(patient_id, 'info')
 

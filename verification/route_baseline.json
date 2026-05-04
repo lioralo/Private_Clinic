@@ -1,5 +1,5 @@
 {
-  "route_count": 152,
+  "route_count": 157,
   "routes": [
     {
       "endpoint": "index",
@@ -215,6 +215,20 @@
       "rule": "/admin_reply_message/<int:patient_id>"
     },
     {
+      "endpoint": "bulk_complete_past_appointments",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/admin/bulk_complete_past_appointments"
+    },
+    {
+      "endpoint": "export_appointments_csv",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/api/admin/export_appointments.csv"
+    },
+    {
       "endpoint": "export_calendar",
       "methods": [
         "GET"
@@ -227,6 +241,13 @@
         "POST"
       ],
       "rule": "/api/admin/import_calendar"
+    },
+    {
+      "endpoint": "api_set_appointment_status",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/api/appointment/<int:appointment_id>/status"
     },
     {
       "endpoint": "api_upcoming_appointments",
@@ -919,6 +940,13 @@
       "rule": "/patient/<int:patient_id>/quick_book"
     },
     {
+      "endpoint": "reset_portal_password",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/patient/<int:patient_id>/reset_portal_password"
+    },
+    {
       "endpoint": "save_patient_questionnaires",
       "methods": [
         "POST"
@@ -987,6 +1015,14 @@
         "POST"
       ],
       "rule": "/patient/appointment/<int:appointment_id>/request_cancel"
+    },
+    {
+      "endpoint": "patient_change_password",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/patient/change-password"
     },
     {
       "endpoint": "patient_home",

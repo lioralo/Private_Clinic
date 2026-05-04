@@ -2,6 +2,56 @@
 
 ---
 
+## Session 72
+
+**Date:** 2026-05-04
+
+**Objective:** About-page contact improvements and patient portal access management by admin.
+
+**Release Summary:**
+
+1. **About Page — Clickable Phone & Email (Improved)**
+   - Phone number is now a WhatsApp link (`wa.me/...`) with a secondary `tel:` "Call" link and WhatsApp icon.
+   - Email address is now a `mailto:` link.
+
+2. **About Page — Google Maps Embed Fix (Improved)**
+   - The map section now auto-detects whether the stored URL is a proper embed URL (containing `maps/embed`).
+   - If it is, the `<iframe>` is rendered as before.
+   - If not, a "Open in Google Maps" button is shown instead — avoiding the `X-Frame-Options` / "refused to connect" error that occurs with standard map share links.
+
+3. **About Page — Messaging Button for Patients (New)**
+   - Logged-in patients now see a "Message the clinic" button that opens the existing in-app messaging offcanvas panel directly from the about page.
+
+4. **Patient Portal Access Management — Admin UI (Improved)**
+   - The Portal Access card on `patient_detail` now shows: account username, active/disabled badge, "Must change password" warning badge.
+   - Three action buttons: **Disable/Enable Access** (existing toggle), **Change Credentials** (collapsible inline form), **Reset Password** (new).
+   - Patients without a portal account see an inline "Grant Portal Access" form.
+
+5. **Grant Portal Access — Force Password Change on First Login (New)**
+   - When admin grants or updates patient portal credentials via `manage_access`, `force_password_change = 1` is set.
+   - An email notification is sent to the patient's email address with their username and temporary password, informing them they must change it on first login.
+
+6. **Reset Portal Password Route (New)**
+   - New `POST /patient/<id>/reset_portal_password` route.
+   - Generates a cryptographically random temporary password (`secrets.token_urlsafe(12)`), stores it hashed, sets `force_password_change = 1`.
+   - Sends an email to the patient with their username and new temporary password.
+
+7. **Patient Force-Password-Change Enforcement (New)**
+   - `_login_redirect_for_user` now checks `force_password_change` for patient-role users.
+   - Patients with the flag set are redirected to `/patient/change-password` instead of their home page.
+   - New `GET/POST /patient/change-password` route validates password strength (via existing `_validate_password_strength`), clears the flag, and bumps `session_version` to invalidate any concurrent sessions.
+
+8. **Patient Change Password Template (New)**
+   - New `templates/patient_change_password.html`: clean card-based form prompting for new password and confirmation.
+
+9. **Route Baseline Updated**
+   - Increased from 152 to 157 routes (added `patient_change_password`, `reset_portal_password`).
+
+10. **Tests**
+    - All 205 tests pass (192 in `tests/` + 13 root-level).
+
+---
+
 ## Session 70 (WIP - not merged)
 
 **Date:** 2026-05-04
