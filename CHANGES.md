@@ -2,6 +2,35 @@
 
 ---
 
+## Session 64
+
+**Date:** 2026-05-04
+
+**Objective:** Improve admin dashboard focus on load by keeping only Today’s Agenda expanded and collapsing all other dashboard cards by default.
+
+**Release Summary:**
+
+1. **Dashboard Load Behavior (Improved)**
+- Updated `admin_home.html` dashboard scripts so all `details.dashboard-fold` sections are collapsed on initial load, except `today-schedule`.
+- This keeps the first screen focused and reduces visual noise when opening the dashboard.
+
+2. **Safer Quick Action Handler**
+- Wrapped the `bulkCompletePastBtn` click binding with a null-check guard to avoid runtime JS errors if the button is absent in future template variations.
+
+3. **Regression Coverage Added**
+- New test: `test_admin_dashboard_defaults_to_today_section_open` in `tests/test_app.py`.
+- Verifies `/admin/dashboard` renders `today-schedule` as open and key other sections as closed by default.
+
+4. **Validation**
+- Focused tests:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_admin_dashboard_defaults_to_today_section_open tests.test_app.ClinicTestCase.test_bulk_complete_past_appointments tests.test_app.ClinicTestCase.test_admin_can_export_appointments_csv`
+- Full suite:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root-level suites:
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 63
 
 **Date:** 2026-05-03

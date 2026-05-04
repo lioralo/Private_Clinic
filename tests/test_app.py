@@ -2858,6 +2858,18 @@ class ClinicTestCase(unittest.TestCase):
         assert b'upcoming-reminders-section' in rv.data
         assert b'Reminder Patient' in rv.data
 
+    def test_admin_dashboard_defaults_to_today_section_open(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        rv = self.client.get('/admin/dashboard')
+        assert rv.status_code == 200
+
+        html = rv.data.decode('utf-8')
+        assert 'data-section="today-schedule" open' in html
+        assert 'data-section="gdocs-sync" open' not in html
+        assert 'data-section="quick-actions" open' not in html
+        assert 'data-section="recent-patients" open' not in html
+        assert 'data-section="recent-activity" open' not in html
+
     def test_send_appointment_reminders_returns_today_and_tomorrow(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
