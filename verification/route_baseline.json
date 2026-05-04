@@ -1,5 +1,5 @@
 {
-  "route_count": 148,
+  "route_count": 151,
   "routes": [
     {
       "endpoint": "index",
@@ -166,6 +166,13 @@
       "rule": "/admin/restore_backup"
     },
     {
+      "endpoint": "admin_security_log",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/security-log"
+    },
+    {
       "endpoint": "seed_data",
       "methods": [
         "POST"
@@ -178,6 +185,20 @@
         "POST"
       ],
       "rule": "/admin/setup_authenticator"
+    },
+    {
+      "endpoint": "admin_smtp_health",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/smtp/health"
+    },
+    {
+      "endpoint": "admin_smtp_send_test",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/smtp/test"
     },
     {
       "endpoint": "admin_reply_message",
@@ -488,6 +509,14 @@
       "rule": "/export_ics/<int:appointment_id>"
     },
     {
+      "endpoint": "forgot_password",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "rule": "/forgot-password"
+    },
+    {
       "endpoint": "delete_goal",
       "methods": [
         "POST"
@@ -648,14 +677,6 @@
         "GET"
       ],
       "rule": "/healthz"
-    },
-    {
-      "endpoint": "forgot_password",
-      "methods": [
-        "GET",
-        "POST"
-      ],
-      "rule": "/forgot-password"
     },
     {
       "endpoint": "login",

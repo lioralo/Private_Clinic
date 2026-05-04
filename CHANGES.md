@@ -2,6 +2,92 @@
 
 ---
 
+## Session 70 (WIP - not merged)
+
+**Date:** 2026-05-04
+
+**Objective:** Continue security hardening and UX improvements — security metrics dashboard widget, audit log viewer, rate-limited registration, patient field validation, and appointment duration bounds.
+
+**Release Summary:**
+
+1. **Security Metrics Dashboard Widget (New)**
+- Added `_get_dashboard_security_metrics(db)` helper that queries the last 24 h of `auth_*` audit events.
+- Admin dashboard now shows a security strip with: failed logins, failed 2FA attempts, password-reset requests, and disabled-account login attempts.
+- Widget highlights counts in red when thresholds are exceeded.
+- Expandable list of recent failures for quick triage.
+- "Full log" button links to new `/admin/security-log` viewer.
+
+2. **Admin Security Audit Log Viewer (New)**
+- New route `/admin/security-log` (GET) with paginated, filterable view of all `auth_*` audit events.
+- Filters: event type dropdown + keyword search on action/details.
+- Color-coded event badges (red = failures, green = success, yellow = resets).
+- Added to admin sidebar as "Security Log" nav entry.
+- Route baseline updated to 151 routes.
+
+3. **Registration Rate Limiting (New)**
+- Added per-IP sliding-window rate limit on the public `/register` endpoint.
+- Configurable via: `REGISTER_RATE_LIMIT_MAX` (default 5) and `REGISTER_RATE_LIMIT_WINDOW_SECONDS` (default 3600).
+- Returns HTTP 429 with friendly flash message when exceeded.
+
+4. **Patient Field Input Validation (New)**
+- Added `_validate_patient_fields(name, phone, birth_date, email)` helper.
+- Validates: phone number format (7–15 digits, `+` prefix allowed), email format, birth date as YYYY-MM-DD.
+- Applied at: `add_patient` POST and `edit_patient` POST.
+
+5. **Appointment Duration Bounds Validation (New)**
+- Added `_validate_appointment_duration(duration_minutes)` helper.
+- Enforces: minimum 5 minutes, maximum 480 minutes (8 h).
+- Applied at the main `/api/calendar/book` endpoint.
+
+6. **Tests Updated**
+- New tests: `test_admin_security_log_accessible_by_admin`, `test_admin_security_log_redirects_non_admin`, `test_registration_rate_limit_blocks_excess_registrations`, `test_validate_patient_fields_rejects_bad_phone`, `test_validate_patient_fields_rejects_bad_email`, `test_validate_patient_fields_rejects_bad_birth_date`, `test_validate_patient_fields_accepts_valid_data`.
+
+---
+
+## Session 69 (WIP - not merged)
+
+**Date:** 2026-05-04
+
+**Objective:** Continue security/ops improvements with admin SMTP diagnostics, stronger password policy enforcement, and automated retention cleanup.
+
+**Release Summary:**
+
+1. **Admin SMTP Diagnostics (New)**
+- Added admin endpoints:
+  - `/admin/smtp/health` (connectivity/configuration status)
+  - `/admin/smtp/test` (send a test message to an admin-selected address)
+- Added SMTP diagnostics panel to Admin Profile UI with status badges and test-send action.
+
+2. **Stronger Password Policy (Expanded)**
+- Added centralized password policy validation (minimum length + composition checks + username/email overlap guard).
+- Applied policy to:
+  - password reset completion
+  - admin password change flow
+- Added inline password-strength hint feedback in admin profile form.
+
+3. **Retention and Cleanup Guard (New)**
+- Added periodic retention cleanup guard for security-related records.
+- Configurable retention controls:
+  - `SECURITY_RETENTION_CHECK_INTERVAL_SECONDS`
+  - `AUDIT_LOG_RETENTION_DAYS`
+  - `PASSWORD_RESET_TOKEN_RETENTION_DAYS`
+- Cleanup covers stale audit rows and old reset tokens.
+
+4. **Admin Security Visibility (New)**
+- Admin profile now shows recent `auth_*` audit events for quick security triage.
+
+5. **Contract/Test Updates (WIP)**
+- Added/updated tests for:
+  - SMTP health endpoint behavior
+  - weak password rejection in reset/change flows
+- Updated route baseline for new SMTP endpoints.
+
+6. **Debug / Verification Notes**
+- Static diagnostics are clean on modified files.
+- Runtime unit execution in this environment is still blocked by missing `pyotp` dependency.
+
+---
+
 ## Session 68
 
 **Date:** 2026-05-04

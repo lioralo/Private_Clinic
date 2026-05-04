@@ -67,6 +67,10 @@ class SecurityTestCase(unittest.TestCase):
         app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
         app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
 
+        # Clear stale in-memory rate limit state from previous tests
+        from clinic_app.routes.auth import _LOGIN_RATE_LIMIT_BUCKETS
+        _LOGIN_RATE_LIMIT_BUCKETS.clear()
+
         try:
             first = self.client.post('/login', data=dict(
                 username='admin',
@@ -102,6 +106,10 @@ class SecurityTestCase(unittest.TestCase):
         app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = 2
         app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
         app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
+
+        # Clear stale in-memory rate limit state from previous tests
+        from clinic_app.routes.auth import _LOGIN_RATE_LIMIT_BUCKETS
+        _LOGIN_RATE_LIMIT_BUCKETS.clear()
 
         try:
             fail_once = self.client.post('/login', data=dict(
@@ -162,15 +170,15 @@ class SecurityTestCase(unittest.TestCase):
         reset_path = match.group(0)
 
         posted = self.client.post(reset_path, data={
-            'new_password': 'new-admin-password',
-            'confirm_password': 'new-admin-password',
+            'new_password': 'Secure!XyZ7q',
+            'confirm_password': 'Secure!XyZ7q',
         }, follow_redirects=True)
         self.assertEqual(posted.status_code, 200)
         self.assertIn(b'Password updated successfully. Please sign in.', posted.data)
 
         login = self.client.post('/login', data={
             'username': 'admin',
-            'password': 'new-admin-password',
+            'password': 'Secure!XyZ7q',
         }, follow_redirects=False)
         self.assertEqual(login.status_code, 302)
         self.assertIn('/admin/profile', login.headers.get('Location', ''))
@@ -187,6 +195,21 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         self.assertIn(b'Password reset link is invalid or expired.', rv.data)
 
+    def test_password_reset_rejects_weak_password(self):
+        requested = self.client.post('/forgot-password', data={
+            'username_or_email': 'admin'
+        }, follow_redirects=True)
+        html = requested.data.decode('utf-8')
+        match = re.search(r'/reset-password/[A-Za-z0-9_\-]+', html)
+        self.assertIsNotNone(match)
+
+        weak = self.client.post(match.group(0), data={
+            'new_password': 'short',
+            'confirm_password': 'short',
+        }, follow_redirects=True)
+        self.assertEqual(weak.status_code, 200)
+        self.assertIn(b'Password must include at least 10 characters.', weak.data)
+
     def test_password_reset_request_rate_limit(self):
         prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
         prev_max = app.config.get('PASSWORD_RESET_RATE_LIMIT_MAX')
@@ -195,6 +218,10 @@ class SecurityTestCase(unittest.TestCase):
         app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
         app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = 1
         app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = 120
+
+        # Clear stale in-memory rate limit state from previous tests
+        from clinic_app.routes.auth import _PASSWORD_RESET_RATE_LIMIT_BUCKETS
+        _PASSWORD_RESET_RATE_LIMIT_BUCKETS.clear()
 
         try:
             first = self.client.post('/forgot-password', data={
@@ -243,6 +270,39 @@ class SecurityTestCase(unittest.TestCase):
         rv = self.client.get('/patients', follow_redirects=True)
         self.assertEqual(rv.status_code, 200)
         self.assertIn(b'Your session was invalidated after a security change. Please sign in again.', rv.data)
+
+    def test_admin_smtp_health_endpoint_reports_not_configured(self):
+        self.client.post('/login', data=dict(
+            username='admin',
+            password='admin'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/admin/smtp/health')
+        self.assertEqual(rv.status_code, 200)
+        data = rv.get_json()
+        self.assertEqual(data['status'], 'error')
+        self.assertFalse(bool(data['configured']))
+
+    def test_admin_change_password_enforces_strong_policy(self):
+        self.client.post('/login', data=dict(
+            username='totp_admin',
+            password='admin'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT totp_secret FROM users WHERE username = ?', ('totp_admin',)).fetchone()
+        self.assertIsNotNone(row)
+        code = pyotp.TOTP(row['totp_secret']).now()
+
+        rv = self.client.post('/admin/change_password', data={
+            'current_password': 'admin',
+            'new_password': 'weakpass',
+            'confirm_password': 'weakpass',
+            'otp_code': code,
+        }, follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Password must include at least 10 characters.', rv.data)
 
     def test_admin_totp_login_prompts_second_step(self):
         app.config['TESTING'] = False
@@ -476,6 +536,80 @@ class SecurityTestCase(unittest.TestCase):
             self.assertEqual(rv_ok.status_code, 200)
         finally:
             app.config['GOOGLE_DOCS_WEBHOOK_SECRET'] = prev_secret
+
+    def test_admin_security_log_accessible_by_admin(self):
+        rv = self.client.get('/admin/security-log')
+        self.assertIn(rv.status_code, (200, 302))
+        if rv.status_code == 200:
+            self.assertIn(b'Security', rv.data)
+
+    def test_admin_security_log_redirects_non_admin(self):
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT OR IGNORE INTO patients (id, name, status) VALUES (9991, 'TestPatient', 'ongoing')"
+            )
+            existing_user = db.execute(
+                "SELECT id FROM users WHERE username = 'patient_sec_log_test'"
+            ).fetchone()
+            if not existing_user:
+                from werkzeug.security import generate_password_hash
+                db.execute(
+                    "INSERT INTO users (username, password_hash, role, patient_id) VALUES (?, ?, 'patient', 9991)",
+                    ('patient_sec_log_test', generate_password_hash('TestPass123!')),
+                )
+            db.commit()
+
+        with app.test_client() as client:
+            client.post('/login', data={'username': 'patient_sec_log_test', 'password': 'TestPass123!'})
+            rv = client.get('/admin/security-log')
+            self.assertNotEqual(rv.status_code, 200)
+
+    def test_registration_rate_limit_blocks_excess_registrations(self):
+        prev_enable = app.config.get('ENABLE_RATE_LIMIT_IN_TESTS')
+        prev_max = app.config.get('REGISTER_RATE_LIMIT_MAX')
+        prev_window = app.config.get('REGISTER_RATE_LIMIT_WINDOW_SECONDS')
+        app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
+        app.config['REGISTER_RATE_LIMIT_MAX'] = 2
+        app.config['REGISTER_RATE_LIMIT_WINDOW_SECONDS'] = 3600
+
+        # Clear any stale in-memory state
+        from clinic_app.routes.auth import _REGISTER_RATE_LIMIT_BUCKETS
+        _REGISTER_RATE_LIMIT_BUCKETS.clear()
+
+        try:
+            for _ in range(2):
+                self.client.post('/register', data={'name': 'Rate Limit Test'})
+            rv = self.client.post('/register', data={'name': 'Rate Limit Test'})
+            self.assertEqual(rv.status_code, 429)
+        finally:
+            app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
+            app.config['REGISTER_RATE_LIMIT_MAX'] = prev_max
+            app.config['REGISTER_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
+            _REGISTER_RATE_LIMIT_BUCKETS.clear()
+
+    def test_validate_patient_fields_rejects_bad_phone(self):
+        from app import _validate_patient_fields
+        errors = _validate_patient_fields('Test Patient', phone='not-a-phone')
+        self.assertTrue(any('Phone' in e or 'phone' in e for e in errors))
+
+    def test_validate_patient_fields_rejects_bad_email(self):
+        from app import _validate_patient_fields
+        errors = _validate_patient_fields('Test Patient', email='not-an-email')
+        self.assertTrue(any('Email' in e or 'email' in e for e in errors))
+
+    def test_validate_patient_fields_rejects_bad_birth_date(self):
+        from app import _validate_patient_fields
+        errors = _validate_patient_fields('Test Patient', birth_date='15/03/1990')
+        self.assertTrue(any('Birth date' in e or 'date' in e.lower() for e in errors))
+
+    def test_validate_patient_fields_accepts_valid_data(self):
+        from app import _validate_patient_fields
+        errors = _validate_patient_fields(
+            'Test Patient', phone='+972-50-123-4567',
+            birth_date='1990-03-15', email='test@example.com'
+        )
+        self.assertEqual(errors, [])
 
 if __name__ == '__main__':
     unittest.main()

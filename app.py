@@ -16,6 +16,8 @@ except ImportError:
 import hashlib
 import threading
 import csv
+import smtplib
+from email.message import EmailMessage
 from io import BytesIO, StringIO
 import shutil
 import secrets
@@ -101,6 +103,9 @@ app.config['SMTP_USERNAME'] = (os.environ.get('SMTP_USERNAME') or '').strip()
 app.config['SMTP_PASSWORD'] = os.environ.get('SMTP_PASSWORD', '')
 app.config['SMTP_FROM_EMAIL'] = (os.environ.get('SMTP_FROM_EMAIL') or '').strip()
 app.config['SMTP_USE_TLS'] = str(os.environ.get('SMTP_USE_TLS', '1')).strip().lower() in {'1', 'true', 'yes', 'on'}
+app.config['SECURITY_RETENTION_CHECK_INTERVAL_SECONDS'] = int(os.environ.get('SECURITY_RETENTION_CHECK_INTERVAL_SECONDS', '3600') or 3600)
+app.config['AUDIT_LOG_RETENTION_DAYS'] = int(os.environ.get('AUDIT_LOG_RETENTION_DAYS', '365') or 365)
+app.config['PASSWORD_RESET_TOKEN_RETENTION_DAYS'] = int(os.environ.get('PASSWORD_RESET_TOKEN_RETENTION_DAYS', '30') or 30)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 csrf = CSRFProtect(app)
@@ -129,6 +134,8 @@ _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
 _GDOC_MANUAL_SYNC_MAX_JOBS = 40
 _PUBLIC_RATE_LIMIT_LOCK = threading.Lock()
 _PUBLIC_RATE_LIMIT_BUCKETS = {}
+_SECURITY_RETENTION_LOCK = threading.Lock()
+_SECURITY_RETENTION_LAST_CHECK_TS = 0.0
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
@@ -156,6 +163,181 @@ def _request_client_ip():
         if first_ip:
             return first_ip
     return request.remote_addr or 'unknown'
+
+
+def _smtp_settings_summary():
+    host = (app.config.get('SMTP_HOST') or '').strip()
+    port = int(app.config.get('SMTP_PORT', 587) or 587)
+    username = (app.config.get('SMTP_USERNAME') or '').strip()
+    from_email = (app.config.get('SMTP_FROM_EMAIL') or username).strip()
+    use_tls = bool(app.config.get('SMTP_USE_TLS', True))
+    configured = bool(host and from_email)
+    return {
+        'configured': configured,
+        'host': host,
+        'port': port,
+        'username': username,
+        'from_email': from_email,
+        'use_tls': use_tls,
+    }
+
+
+def _smtp_health_check():
+    settings = _smtp_settings_summary()
+    if not settings['configured']:
+        return {
+            'configured': False,
+            'ok': False,
+            'message': 'SMTP is not configured (missing SMTP_HOST or SMTP_FROM_EMAIL).',
+        }
+
+    try:
+        with smtplib.SMTP(settings['host'], settings['port'], timeout=10) as smtp:
+            smtp.ehlo()
+            if settings['use_tls']:
+                smtp.starttls()
+                smtp.ehlo()
+            if settings['username']:
+                smtp.login(settings['username'], app.config.get('SMTP_PASSWORD') or '')
+        return {
+            'configured': True,
+            'ok': True,
+            'message': 'SMTP connection is healthy.',
+        }
+    except Exception as exc:
+        return {
+            'configured': True,
+            'ok': False,
+            'message': f'SMTP connection failed: {exc}',
+        }
+
+
+def _send_smtp_email(recipient_email, subject, body_text):
+    settings = _smtp_settings_summary()
+    if not settings['configured']:
+        return False, 'SMTP is not configured.'
+
+    message = EmailMessage()
+    message['Subject'] = subject
+    message['From'] = settings['from_email']
+    message['To'] = recipient_email
+    message.set_content(body_text)
+
+    try:
+        with smtplib.SMTP(settings['host'], settings['port'], timeout=15) as smtp:
+            smtp.ehlo()
+            if settings['use_tls']:
+                smtp.starttls()
+                smtp.ehlo()
+            if settings['username']:
+                smtp.login(settings['username'], app.config.get('SMTP_PASSWORD') or '')
+            smtp.send_message(message)
+    except Exception as exc:
+        return False, str(exc)
+
+    return True, 'sent'
+
+
+def _validate_patient_fields(name, phone=None, birth_date=None, email=None):
+    """Return a list of validation error strings for patient form fields."""
+    errors = []
+    if not (name or '').strip():
+        errors.append('Name is required.')
+
+    if phone:
+        # Strip whitespace and common separators, then check remaining chars are digits/+
+        cleaned = re.sub(r'[\s\-().]+', '', phone)
+        if not re.fullmatch(r'\+?[0-9]{7,15}', cleaned):
+            errors.append('Phone number appears invalid. Use digits, spaces, or dashes only (7–15 digits).')
+
+    if birth_date:
+        try:
+            datetime.strptime(birth_date, '%Y-%m-%d')
+        except ValueError:
+            errors.append('Birth date must be in YYYY-MM-DD format.')
+
+    if email:
+        if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+            errors.append('Email address appears invalid.')
+
+    return errors
+
+
+_APPOINTMENT_DURATION_MIN = 5
+_APPOINTMENT_DURATION_MAX = 480  # 8 hours
+
+
+def _validate_appointment_duration(duration_minutes):
+    """Return (int_value, error_string_or_None). Clamps invalid to None."""
+    try:
+        val = int(duration_minutes)
+    except (TypeError, ValueError):
+        return None, 'Appointment duration must be a whole number of minutes.'
+    if val < _APPOINTMENT_DURATION_MIN:
+        return None, f'Appointment duration must be at least {_APPOINTMENT_DURATION_MIN} minutes.'
+    if val > _APPOINTMENT_DURATION_MAX:
+        return None, f'Appointment duration cannot exceed {_APPOINTMENT_DURATION_MAX} minutes (8 hours).'
+    return val, None
+
+
+def _validate_password_strength(password, username=None, email=None):
+    candidate = str(password or '')
+    if len(candidate) < 10:
+        return False, 'Password must include at least 10 characters.'
+    if not re.search(r'[A-Z]', candidate):
+        return False, 'Password must include at least one uppercase letter.'
+    if not re.search(r'[a-z]', candidate):
+        return False, 'Password must include at least one lowercase letter.'
+    if not re.search(r'\d', candidate):
+        return False, 'Password must include at least one number.'
+    if not re.search(r'[^A-Za-z0-9]', candidate):
+        return False, 'Password must include at least one special character.'
+
+    lowered = candidate.lower()
+    for source in (username or '', email or ''):
+        token = str(source).strip().lower()
+        if token and len(token) >= 3 and token in lowered:
+            return False, 'Password should not include your username or email.'
+
+    return True, ''
+
+
+def _security_retention_cleanup(db):
+    global _SECURITY_RETENTION_LAST_CHECK_TS
+
+    if app.config.get('TESTING'):
+        return
+
+    now_ts = datetime.now(timezone.utc).timestamp()
+    interval_seconds = int(app.config.get('SECURITY_RETENTION_CHECK_INTERVAL_SECONDS', 3600) or 3600)
+    if now_ts - float(_SECURITY_RETENTION_LAST_CHECK_TS or 0.0) < max(60, interval_seconds):
+        return
+
+    if not _SECURITY_RETENTION_LOCK.acquire(blocking=False):
+        return
+
+    try:
+        audit_days = int(app.config.get('AUDIT_LOG_RETENTION_DAYS', 365) or 365)
+        reset_days = int(app.config.get('PASSWORD_RESET_TOKEN_RETENTION_DAYS', 30) or 30)
+
+        db.execute(
+            "DELETE FROM audit_logs WHERE created_at < datetime('now', ?)",
+            (f'-{max(1, audit_days)} days',),
+        )
+        db.execute(
+            """
+            DELETE FROM password_reset_tokens
+            WHERE expires_at < datetime('now', ?)
+               OR (used_at IS NOT NULL AND used_at < datetime('now', ?))
+            """,
+            (f'-{max(1, reset_days)} days', f'-{max(1, reset_days)} days'),
+        )
+        db.commit()
+        _SECURITY_RETENTION_LAST_CHECK_TS = now_ts
+    except Exception:
+        app.logger.exception('Security retention cleanup failed')
+    finally:
+        _SECURITY_RETENTION_LOCK.release()
 
 
 def _check_public_rate_limit(scope_key, token=''):
@@ -1674,6 +1856,21 @@ def enforce_session_version_match():
 
 
 @app.before_request
+def security_retention_guard():
+    if request.path.startswith('/static/'):
+        return
+
+    if app.config.get('TESTING'):
+        return
+
+    try:
+        db = get_db()
+        _security_retention_cleanup(db)
+    except Exception:
+        app.logger.exception('Security retention guard failed')
+
+
+@app.before_request
 def routine_backup_guard():
     if request.path.startswith('/static/'):
         return
@@ -1866,6 +2063,8 @@ register_auth_routes(
     verify_totp_code=_verify_totp_code,
     login_redirect_for_user=_login_redirect_for_user,
     dummy_password_hash=DUMMY_PASSWORD_HASH,
+    send_smtp_email=_send_smtp_email,
+    validate_password_strength=_validate_password_strength,
 )
 
 
@@ -4195,6 +4394,42 @@ def _get_dashboard_missing_recurring(db):
     ''').fetchall()
 
 
+def _get_dashboard_security_metrics(db):
+    """Fetch 24-hour security event counts and recent failed-login list."""
+    try:
+        row = db.execute('''
+            SELECT
+                SUM(action = 'auth_login_password_failed')    AS failed_logins,
+                SUM(action = 'auth_login_2fa_failed')         AS failed_2fa,
+                SUM(action = 'auth_password_reset_requested') AS reset_requests,
+                SUM(action = 'auth_login_disabled_account')   AS disabled_attempts
+            FROM audit_logs
+            WHERE created_at >= datetime('now', '-1 day')
+        ''').fetchone()
+        recent_failures = db.execute('''
+            SELECT details, created_at
+            FROM audit_logs
+            WHERE action IN ('auth_login_password_failed', 'auth_login_2fa_failed',
+                             'auth_login_disabled_account')
+              AND created_at >= datetime('now', '-1 day')
+            ORDER BY created_at DESC
+            LIMIT 5
+        ''').fetchall()
+        return {
+            'failed_logins': int(row['failed_logins'] or 0),
+            'failed_2fa': int(row['failed_2fa'] or 0),
+            'reset_requests': int(row['reset_requests'] or 0),
+            'disabled_attempts': int(row['disabled_attempts'] or 0),
+            'recent_failures': [dict(r) for r in recent_failures],
+        }
+    except Exception:  # table may not exist yet on old schema
+        return {
+            'failed_logins': 0, 'failed_2fa': 0,
+            'reset_requests': 0, 'disabled_attempts': 0,
+            'recent_failures': [],
+        }
+
+
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
@@ -4216,6 +4451,7 @@ def admin_dashboard():
     recent_activity = _get_dashboard_recent_activity(db)
     missing_recurring = _get_dashboard_missing_recurring(db)
     gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
+    security_metrics = _get_dashboard_security_metrics(db)
 
     return render_template('admin_home.html',
                            today=today,
@@ -4228,7 +4464,8 @@ def admin_dashboard():
                            recent_patients=recent_patients,
                            recent_activity=recent_activity,
                            missing_recurring=missing_recurring,
-                           gdocs_auto_sync_health=gdocs_auto_sync_health)
+                           gdocs_auto_sync_health=gdocs_auto_sync_health,
+                           security_metrics=security_metrics)
 
 
 @app.route('/api/patients/reorder', methods=['POST'])
@@ -4828,42 +5065,46 @@ def add_patient():
         if not name:
             flash('Name is required!')
         else:
-            db = get_db()
-            cursor = db.execute('''INSERT INTO patients
-                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, has_questionnaire_tab, intake_assessment, intake_questionnaire, treatment_method)
-                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                              (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
-                               has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method))
+            field_errors = _validate_patient_fields(name, phone=phone, birth_date=birth_date, email=email)
+            for err in field_errors:
+                flash(err)
+            if not field_errors:
+                db = get_db()
+                cursor = db.execute('''INSERT INTO patients
+                                      (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab, has_questionnaire_tab, intake_assessment, intake_questionnaire, treatment_method)
+                                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  (name, status, email, phone, birth_date, id_number, patient_type, has_intake_tab,
+                                   has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method))
 
-            created_patient_id = int(cursor.lastrowid)
-            if patient_type == 'diagnosee' and selected_questionnaires:
-                result, create_err = _create_diagnosee_questionnaires_sheet(db, name, selected_questionnaires)
-                if create_err:
-                    db.rollback()
-                    flash(f'Failed to create diagnosee questionnaires file: {create_err}')
-                    tabs, _ = _list_questionnaire_tabs(db)
-                    treatment_method_options = [r['label'] for r in db.execute(
-                        'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
-                    ).fetchall()]
-                    return render_template(
-                        'add_patient.html',
-                        treatment_method_options=treatment_method_options,
-                        questionnaire_options=[item['title'] for item in tabs],
-                    )
+                created_patient_id = int(cursor.lastrowid)
+                if patient_type == 'diagnosee' and selected_questionnaires:
+                    result, create_err = _create_diagnosee_questionnaires_sheet(db, name, selected_questionnaires)
+                    if create_err:
+                        db.rollback()
+                        flash(f'Failed to create diagnosee questionnaires file: {create_err}')
+                        tabs, _ = _list_questionnaire_tabs(db)
+                        treatment_method_options = [r['label'] for r in db.execute(
+                            'SELECT label FROM treatment_method_options ORDER BY display_order ASC, label ASC'
+                        ).fetchall()]
+                        return render_template(
+                            'add_patient.html',
+                            treatment_method_options=treatment_method_options,
+                            questionnaire_options=[item['title'] for item in tabs],
+                        )
 
-                db.execute('''
-                    UPDATE patients
-                    SET questionnaires_file_id = ?, questionnaires_file_url = ?, questionnaires_selected = ?
-                    WHERE id = ?
-                ''', (
-                    result['spreadsheet_id'],
-                    result['spreadsheet_url'],
-                    json.dumps(result['selected_titles'], ensure_ascii=False),
-                    created_patient_id,
-                ))
+                    db.execute('''
+                        UPDATE patients
+                        SET questionnaires_file_id = ?, questionnaires_file_url = ?, questionnaires_selected = ?
+                        WHERE id = ?
+                    ''', (
+                        result['spreadsheet_id'],
+                        result['spreadsheet_url'],
+                        json.dumps(result['selected_titles'], ensure_ascii=False),
+                        created_patient_id,
+                    ))
 
-            db.commit()
-            return redirect(url_for('patients', status=status))
+                db.commit()
+                return redirect(url_for('patients', status=status))
 
     db = get_db()
     treatment_method_options = [r['label'] for r in db.execute(
@@ -8790,6 +9031,11 @@ def api_calendar_book():
         if computed > 0:
             duration = computed
 
+    valid_duration, dur_error = _validate_appointment_duration(duration)
+    if dur_error:
+        return jsonify({'status': 'error', 'message': dur_error}), 400
+    duration = valid_duration
+
     if current_user.role == 'admin':
         patient_id_raw = request.form.get('patient_id', '').strip()
         if booking_type != 'special' and not patient_id_raw.isdigit():
@@ -11834,6 +12080,16 @@ def admin_profile():
     gdocs_auto_sync_state = _get_google_docs_auto_sync_state(db, connected_docs=connected_google_docs)
     gdocs_sync_history = _get_recent_gdocs_sync_history(db, limit=12)
     gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
+    smtp_health = _smtp_health_check()
+    recent_auth_events = db.execute(
+        '''
+        SELECT action, details, created_at
+        FROM audit_logs
+        WHERE action LIKE 'auth_%'
+        ORDER BY created_at DESC
+        LIMIT 8
+        '''
+    ).fetchall()
     return render_template(
         'admin_profile.html',
         admin=admin,
@@ -11845,8 +12101,122 @@ def admin_profile():
         gdocs_auto_sync_state=gdocs_auto_sync_state,
         gdocs_sync_history=gdocs_sync_history,
         gdocs_auto_sync_health=gdocs_auto_sync_health,
+        smtp_health=smtp_health,
+        recent_auth_events=recent_auth_events,
         totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
     )
+
+
+@app.route('/admin/smtp/health', methods=['GET'])
+@login_required
+def admin_smtp_health():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    health = _smtp_health_check()
+    return jsonify({
+        'status': 'ok' if health.get('ok') else 'error',
+        'configured': bool(health.get('configured')),
+        'smtp_ok': bool(health.get('ok')),
+        'message': health.get('message') or '',
+    })
+
+
+@app.route('/admin/security-log')
+@login_required
+def admin_security_log():
+    """Paginated viewer for auth-related audit events."""
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 50
+    action_filter = request.args.get('action', '').strip()
+    search = request.args.get('q', '').strip()
+
+    where_clauses = ["action LIKE 'auth_%'"]
+    params = []
+
+    if action_filter:
+        where_clauses.append('action = ?')
+        params.append(action_filter)
+
+    if search:
+        where_clauses.append('(action LIKE ? OR details LIKE ?)')
+        params.extend([f'%{search}%', f'%{search}%'])
+
+    where_sql = ' AND '.join(where_clauses)
+
+    total = db.execute(
+        f'SELECT COUNT(*) FROM audit_logs WHERE {where_sql}', params
+    ).fetchone()[0]
+
+    events = db.execute(
+        f'''
+        SELECT id, action, details, created_at
+        FROM audit_logs
+        WHERE {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        ''',
+        params + [per_page, (page - 1) * per_page],
+    ).fetchall()
+
+    # Distinct action names for the filter dropdown
+    action_names = db.execute(
+        "SELECT DISTINCT action FROM audit_logs WHERE action LIKE 'auth_%' ORDER BY action"
+    ).fetchall()
+
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    return render_template(
+        'admin_security_log.html',
+        events=events,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        action_filter=action_filter,
+        action_names=[r['action'] for r in action_names],
+        search=search,
+    )
+
+
+@app.route('/admin/smtp/test', methods=['POST'])
+@login_required
+def admin_smtp_send_test():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+
+    db = get_db()
+    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if not admin:
+        return 'Admin not found', 404
+
+    target_email = (request.form.get('test_email') or admin['email'] or '').strip()
+    if not target_email:
+        flash('No destination email provided. Add an admin email first.')
+        return redirect(url_for('admin_profile'))
+
+    ok, message = _send_smtp_email(
+        target_email,
+        subject='Private Clinic SMTP test message',
+        body_text='This is a test email from Private Clinic admin SMTP diagnostics.',
+    )
+
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (None, 'auth_smtp_test_email', f'user_id={current_user.id}; target={target_email}; ok={1 if ok else 0}'),
+    )
+    db.commit()
+
+    if ok:
+        flash(f'Test email sent to {target_email}.')
+    else:
+        flash(f'SMTP test failed: {message}')
+
+    return redirect(url_for('admin_profile'))
 
 
 @app.route('/admin/setup_authenticator', methods=['POST'])
@@ -11940,8 +12310,13 @@ def admin_change_password():
         flash('Current password is incorrect.')
         return redirect(url_for('admin_profile'))
 
-    if len(new_password) < 5:
-        flash('New password must include at least 5 characters.')
+    password_ok, password_error = _validate_password_strength(
+        new_password,
+        username=admin['username'],
+        email=admin['email'],
+    )
+    if not password_ok:
+        flash(password_error)
         return redirect(url_for('admin_profile'))
 
     if new_password != confirm_password:
@@ -12662,17 +13037,21 @@ def edit_patient(patient_id):
         if not name:
             flash('Name is required!')
         else:
-            treatment_method = request.form.get('treatment_method', '').strip() or None
-            db.execute('''UPDATE patients
-                          SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
-                              patient_type = ?, has_intake_tab = ?, has_questionnaire_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
-                              treatment_method = ?
-                          WHERE id = ?''',
-                       (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
-                        has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
-            db.commit()
-            flash('Patient updated successfully.')
-            return redirect(url_for('patient_detail', patient_id=patient_id))
+            field_errors = _validate_patient_fields(name, phone=phone, birth_date=birth_date, email=email)
+            for err in field_errors:
+                flash(err)
+            if not field_errors:
+                treatment_method = request.form.get('treatment_method', '').strip() or None
+                db.execute('''UPDATE patients
+                              SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
+                                  patient_type = ?, has_intake_tab = ?, has_questionnaire_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
+                                  treatment_method = ?
+                              WHERE id = ?''',
+                           (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
+                            has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
+                db.commit()
+                flash('Patient updated successfully.')
+                return redirect(url_for('patient_detail', patient_id=patient_id))
 
     db_r = get_db()
     treatment_method_options = [r['label'] for r in db_r.execute(

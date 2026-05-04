@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
 import hashlib
-import smtplib
 import secrets
 import threading
-from email.message import EmailMessage
 
 from flask import redirect, render_template, request, session, url_for, flash
 from flask_login import current_user, login_required, logout_user
@@ -16,6 +14,36 @@ _PASSWORD_RESET_RATE_LIMIT_LOCK = threading.Lock()
 _PASSWORD_RESET_RATE_LIMIT_BUCKETS = {}
 _PASSWORD_RESET_CLEANUP_LOCK = threading.Lock()
 _PASSWORD_RESET_LAST_CLEANUP_TS = 0.0
+_REGISTER_RATE_LIMIT_LOCK = threading.Lock()
+_REGISTER_RATE_LIMIT_BUCKETS = {}
+
+
+def _check_register_rate_limit(app):
+    """Return seconds to retry-after if IP exceeded registration limit, else None."""
+    if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
+        return None
+
+    max_requests = int(app.config.get('REGISTER_RATE_LIMIT_MAX', 5) or 5)
+    window_seconds = int(app.config.get('REGISTER_RATE_LIMIT_WINDOW_SECONDS', 3600) or 3600)
+    if max_requests <= 0 or window_seconds <= 0:
+        return None
+
+    ip = _request_client_ip()
+    now_ts = datetime.now(timezone.utc).timestamp()
+    cutoff_ts = now_ts - window_seconds
+
+    with _REGISTER_RATE_LIMIT_LOCK:
+        timestamps = _REGISTER_RATE_LIMIT_BUCKETS.get(ip, [])
+        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
+
+        if len(timestamps) >= max_requests:
+            _REGISTER_RATE_LIMIT_BUCKETS[ip] = timestamps
+            return max(1, int(window_seconds - (now_ts - timestamps[0])))
+
+        timestamps.append(now_ts)
+        _REGISTER_RATE_LIMIT_BUCKETS[ip] = timestamps
+
+    return None
 
 
 def _request_client_ip():
@@ -174,37 +202,6 @@ def _cleanup_password_reset_tokens(db):
         _PASSWORD_RESET_CLEANUP_LOCK.release()
 
 
-def _send_password_reset_email(app, recipient_email, reset_url):
-    smtp_host = (app.config.get('SMTP_HOST') or '').strip()
-    smtp_port = int(app.config.get('SMTP_PORT', 587) or 587)
-    smtp_username = (app.config.get('SMTP_USERNAME') or '').strip()
-    smtp_password = app.config.get('SMTP_PASSWORD') or ''
-    smtp_from = (app.config.get('SMTP_FROM_EMAIL') or smtp_username).strip()
-    smtp_use_tls = bool(app.config.get('SMTP_USE_TLS', True))
-
-    if not smtp_host or not smtp_from:
-        return False
-
-    message = EmailMessage()
-    message['Subject'] = 'Private Clinic password reset'
-    message['From'] = smtp_from
-    message['To'] = recipient_email
-    message.set_content(
-        'A password reset was requested for your admin account.\n\n'
-        f'Use this secure link to set a new password:\n{reset_url}\n\n'
-        'This link expires soon and can only be used once.\n'
-        'If you did not request this, you can ignore this email.'
-    )
-
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
-        if smtp_use_tls:
-            smtp.starttls()
-        if smtp_username:
-            smtp.login(smtp_username, smtp_password)
-        smtp.send_message(message)
-    return True
-
-
 def register_auth_routes(
     app,
     *,
@@ -212,6 +209,8 @@ def register_auth_routes(
     verify_totp_code,
     login_redirect_for_user,
     dummy_password_hash,
+    send_smtp_email,
+    validate_password_strength,
 ):
     def login():
         if current_user.is_authenticated:
@@ -364,12 +363,21 @@ def register_auth_routes(
                     recipient_email = (user['email'] or '').strip()
                     if recipient_email:
                         try:
-                            if _send_password_reset_email(app, recipient_email, reset_url):
+                            sent_ok, send_message = send_smtp_email(
+                                recipient_email,
+                                subject='Private Clinic password reset',
+                                body_text=(
+                                    'A password reset was requested for your admin account.\n\n'
+                                    f'Use this secure link to set a new password:\n{reset_url}\n\n'
+                                    'This link expires soon and can only be used once.\n'
+                                    'If you did not request this, you can ignore this email.'
+                                ),
+                            )
+                            if sent_ok:
                                 _log_auth_audit(db, 'auth_password_reset_email_sent', f"user_id={user['id']}")
-                                db.commit()
                             else:
-                                _log_auth_audit(db, 'auth_password_reset_email_not_configured', f"user_id={user['id']}")
-                                db.commit()
+                                _log_auth_audit(db, 'auth_password_reset_email_not_configured', f"user_id={user['id']}; reason={send_message}")
+                            db.commit()
                         except Exception:
                             _log_auth_audit(db, 'auth_password_reset_email_failed', f"user_id={user['id']}")
                             db.commit()
@@ -393,7 +401,7 @@ def register_auth_routes(
 
         token_row = db.execute(
             '''
-            SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.username
+            SELECT prt.id, prt.user_id, prt.expires_at, prt.used_at, u.username, u.email
             FROM password_reset_tokens prt
             JOIN users u ON u.id = prt.user_id
             WHERE prt.token_hash = ?
@@ -427,8 +435,13 @@ def register_auth_routes(
             new_password = (request.form.get('new_password') or '').strip()
             confirm_password = (request.form.get('confirm_password') or '').strip()
 
-            if len(new_password) < 8:
-                flash('New password must include at least 8 characters.')
+            password_ok, password_error = validate_password_strength(
+                new_password,
+                username=token_row['username'],
+                email=token_row['email'],
+            )
+            if not password_ok:
+                flash(password_error)
                 return render_template('reset_password.html', token=token)
 
             if new_password != confirm_password:
@@ -461,6 +474,11 @@ def register_auth_routes(
 
     def register():
         if request.method == 'POST':
+            retry_after = _check_register_rate_limit(app)
+            if retry_after is not None:
+                flash(f'Too many registration attempts. Please try again in {retry_after // 60 + 1} minute(s).')
+                return render_template('register.html'), 429
+
             name = request.form['name']
             email = request.form.get('email')
             phone = request.form.get('phone')

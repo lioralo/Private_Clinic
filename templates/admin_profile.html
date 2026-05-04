@@ -155,10 +155,15 @@
                             <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code') }}" required>
                         </div>
                         <div class="col-md-6">
-                            <input type="password" class="form-control" name="new_password" placeholder="{{ t('New Password') }}" required>
+                            <input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required>
                         </div>
                         <div class="col-md-6">
                             <input type="password" class="form-control" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
+                        </div>
+                        <div class="col-12">
+                            <small id="adminPasswordStrengthHint" class="text-muted">
+                                Use at least 10 characters with uppercase, lowercase, number, and special symbol.
+                            </small>
                         </div>
                         <div class="col-12">
                             <button class="btn btn-primary rounded-pill px-4" type="submit">
@@ -166,6 +171,67 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#smtpSecurityCollapse" aria-expanded="false" aria-controls="smtpSecurityCollapse">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-envelope-check me-2 text-primary"></i>SMTP & Security Diagnostics</h5>
+                <i class="bi bi-chevron-down text-muted"></i>
+            </button>
+            <div class="collapse" id="smtpSecurityCollapse">
+                <div class="card-body p-4">
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                        <span class="small fw-semibold">SMTP status:</span>
+                        {% if smtp_health and smtp_health.ok %}
+                        <span class="badge bg-success">Connected</span>
+                        {% elif smtp_health and smtp_health.configured %}
+                        <span class="badge bg-warning text-dark">Configured but unreachable</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Not configured</span>
+                        {% endif %}
+                        <span class="small text-muted">{{ smtp_health.message if smtp_health else 'SMTP status unavailable.' }}</span>
+                    </div>
+
+                    <form method="post" action="{{ url_for('admin_smtp_send_test') }}" class="row g-2 align-items-end mb-4">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Test destination email</label>
+                            <input type="email" class="form-control" name="test_email" value="{{ admin['email'] or '' }}" placeholder="admin@example.com">
+                        </div>
+                        <div class="col-md-4 d-grid">
+                            <button class="btn btn-outline-primary rounded-pill" type="submit">
+                                <i class="bi bi-send me-1"></i>Send SMTP Test Email
+                            </button>
+                        </div>
+                    </form>
+
+                    <h6 class="fw-bold mb-2">Recent Auth Security Events</h6>
+                    {% if recent_auth_events %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Action</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in recent_auth_events %}
+                                <tr>
+                                    <td class="small text-nowrap">{{ item.created_at }}</td>
+                                    <td class="small"><code>{{ item.action }}</code></td>
+                                    <td class="small text-muted">{{ item.details or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="small text-muted">No auth events recorded yet.</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -477,6 +543,35 @@
         if (autoSyncProgressLabel) {
             autoSyncProgressLabel.textContent = labelText || '';
         }
+    }
+
+    const adminPasswordInput = document.getElementById('adminNewPasswordInput');
+    const adminPasswordHint = document.getElementById('adminPasswordStrengthHint');
+    if (adminPasswordInput && adminPasswordHint) {
+        adminPasswordInput.addEventListener('input', function () {
+            const value = String(adminPasswordInput.value || '');
+            const checks = [
+                value.length >= 10,
+                /[A-Z]/.test(value),
+                /[a-z]/.test(value),
+                /\d/.test(value),
+                /[^A-Za-z0-9]/.test(value)
+            ];
+            const score = checks.filter(Boolean).length;
+            if (!value) {
+                adminPasswordHint.className = 'text-muted';
+                adminPasswordHint.textContent = 'Use at least 10 characters with uppercase, lowercase, number, and special symbol.';
+            } else if (score < 3) {
+                adminPasswordHint.className = 'text-danger';
+                adminPasswordHint.textContent = 'Weak password: add more character variety.';
+            } else if (score < 5) {
+                adminPasswordHint.className = 'text-warning';
+                adminPasswordHint.textContent = 'Moderate password: add remaining requirements for stronger security.';
+            } else {
+                adminPasswordHint.className = 'text-success';
+                adminPasswordHint.textContent = 'Strong password format.';
+            }
+        });
     }
 
     if (runAutoSyncBtn) {

@@ -1,0 +1,131 @@
+{% extends 'layout.html' %}
+
+{% block page_title %}{{ t('Security Audit Log') }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 font-headline flex items-center gap-2 mb-1">
+            <i class="bi bi-shield-lock text-[28px]"></i> {{ t('Security Audit Log') }}
+        </h2>
+        <p class="text-slate-500 text-sm mb-0">{{ t('Authentication and security events (auth_* actions)') }}</p>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+        <i class="bi bi-arrow-left me-1"></i>{{ t('Dashboard') }}
+    </a>
+</div>
+
+{# ── Filters ── #}
+<form method="get" class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small fw-semibold mb-1">{{ t('Search') }}</label>
+                <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm"
+                       placeholder="{{ t('Search action or details…') }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">{{ t('Event type') }}</label>
+                <select name="action" class="form-select form-select-sm">
+                    <option value="">{{ t('All events') }}</option>
+                    {% for name in action_names %}
+                    <option value="{{ name }}" {% if action_filter == name %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill flex-fill">
+                    <i class="bi bi-search me-1"></i>{{ t('Filter') }}
+                </button>
+                <a href="{{ url_for('admin_security_log') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+                    {{ t('Clear') }}
+                </a>
+            </div>
+        </div>
+    </div>
+</form>
+
+{# ── Results summary ── #}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="text-muted small">{{ total }} {{ t('event(s) total') }}</span>
+    <span class="text-muted small">{{ t('Page') }} {{ page }} / {{ total_pages }}</span>
+</div>
+
+{# ── Events table ── #}
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        {% if events %}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3" style="width:170px">{{ t('Timestamp') }}</th>
+                        <th style="width:260px">{{ t('Event') }}</th>
+                        <th>{{ t('Details') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for ev in events %}
+                <tr>
+                    <td class="ps-3 text-muted small" style="white-space:nowrap">{{ ev['created_at'][:19] if ev['created_at'] else '' }}</td>
+                    <td>
+                        {% set action = ev['action'] %}
+                        {% if 'failed' in action or 'invalid' in action or 'disabled' in action %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                            <i class="bi bi-x-circle me-1"></i>{{ action }}
+                        </span>
+                        {% elif 'success' in action or 'completed' in action %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                            <i class="bi bi-check-circle me-1"></i>{{ action }}
+                        </span>
+                        {% elif 'reset' in action or 'requested' in action %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>{{ action }}
+                        </span>
+                        {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary border">{{ action }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ ev['details'] or '' }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-shield-check display-4 d-block mb-2 text-success"></i>
+            {{ t('No security events found matching your filters.') }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Pagination ── #}
+{% if total_pages > 1 %}
+<nav class="mt-4 d-flex justify-content-center">
+    <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin_security_log', page=page-1, action=action_filter, q=search) }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+        {% for p in range([1, page-2]|max, [total_pages+1, page+3]|min) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('admin_security_log', page=p, action=action_filter, q=search) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page < total_pages %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('admin_security_log', page=page+1, action=action_filter, q=search) }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% endblock %}
