@@ -501,13 +501,27 @@
             </div>
             <div class="card-body d-grid gap-2">
                 {% for appt in appointments %}
+                {% set appointment_status = appt['status'] or 'scheduled' %}
                 <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                    <div>
+                    <div class="flex-grow-1">
                         <div class="fw-semibold">{{ appt['appointment_date'] }} {{ appt['appointment_time'] }}</div>
-                        <div class="small text-muted">
+                        <div class="small text-muted d-flex gap-2 flex-wrap align-items-center mt-1">
                             {{ appt['meeting_type'] or t('In-person') }}
-                            {% if appt['cost'] %}<span class="mx-2">•</span>${{ '%.2f'|format(appt['cost']) }}{% endif %}
-                            {% if appt['status'] %}<span class="mx-2">•</span>{{ appt['status'] }}{% endif %}
+                            {% if appt['cost'] %}<span>•</span><span>${{ '%.2f'|format(appt['cost']) }}</span>{% endif %}
+                            <span class="badge {% if appointment_status == 'completed' %}bg-success-subtle text-success{% elif appointment_status == 'cancelled' %}bg-danger-subtle text-danger{% elif appointment_status == 'no_show' %}bg-warning-subtle text-warning-emphasis{% else %}bg-primary-subtle text-primary{% endif %} border">
+                                {% if appointment_status == 'no_show' %}{{ t('No Show') }}{% else %}{{ t(appointment_status|replace('_', ' ')|title) }}{% endif %}
+                            </span>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap mt-3 appointment-inline-actions">
+                            <button type="button" class="btn btn-sm btn-outline-success rounded-pill" data-appointment-status-action data-appointment-id="{{ appt['id'] }}" data-status="completed">
+                                {{ t('Mark Complete') }}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning rounded-pill" data-appointment-status-action data-appointment-id="{{ appt['id'] }}" data-status="no_show">
+                                {{ t('Mark No Show') }}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-appointment-status-action data-appointment-id="{{ appt['id'] }}" data-status="cancelled">
+                                {{ t('Mark Cancelled') }}
+                            </button>
                         </div>
                     </div>
                     <form method="post" action="{{ url_for('delete_appointment', appointment_id=appt['id']) }}" onsubmit="return confirm('{{ t('Delete appointment?') }}');">
@@ -1228,6 +1242,7 @@ document.addEventListener('DOMContentLoaded', function () {
     togglePatientInfoEdit(false);
     initIntakeTabs();
     initIntakeDraftProtection();
+    const appointmentStatusToken = '{{ csrf_token() }}';
 
     const loadPreviousBtn = document.getElementById('loadPreviousMeetingsBtn');
     if (loadPreviousBtn) {
@@ -1293,6 +1308,59 @@ document.addEventListener('DOMContentLoaded', function () {
                     submitButton.disabled = false;
                     submitButton.innerHTML = originalLabel;
                 }
+            }
+        });
+    });
+
+    document.querySelectorAll('[data-appointment-status-action]').forEach(function (button) {
+        button.addEventListener('click', async function () {
+            if (!window.confirm('{{ t('Update appointment status?') }}')) {
+                return;
+            }
+
+            const appointmentId = button.getAttribute('data-appointment-id');
+            const status = button.getAttribute('data-status');
+            const siblingButtons = button.parentElement ? button.parentElement.querySelectorAll('[data-appointment-status-action]') : [];
+
+            siblingButtons.forEach(function (node) {
+                node.disabled = true;
+            });
+
+            try {
+                const response = await fetch(`/api/appointment/${appointmentId}/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'X-CSRFToken': appointmentStatusToken
+                    },
+                    body: new URLSearchParams({ status: status, csrf_token: appointmentStatusToken }).toString()
+                });
+
+                const payload = await response.json().catch(function () {
+                    return { error: '{{ t('Could not update appointment status.') }}' };
+                });
+
+                if (!response.ok || payload.error) {
+                    if (typeof window.showAppToast === 'function') {
+                        window.showAppToast(payload.error || '{{ t('Could not update appointment status.') }}', {
+                            variant: 'danger',
+                            title: '{{ t('Error') }}'
+                        });
+                    }
+                    return;
+                }
+
+                if (typeof window.showAppToast === 'function') {
+                    window.showAppToast('{{ t('Appointment status updated.') }}', {
+                        variant: 'success',
+                        title: '{{ t('Success') }}'
+                    });
+                }
+                window.location.reload();
+            } finally {
+                siblingButtons.forEach(function (node) {
+                    node.disabled = false;
+                });
             }
         });
     });

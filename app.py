@@ -517,6 +517,16 @@ HEBREW_TRANSLATIONS = {
     "Export Appointments CSV": "ייצוא פגישות CSV",
     "Mark Past Appointments as Completed": "סמן פגישות עבר כהושלמו",
     "past appointments marked as completed.": "פגישות עבר סומנו כהושלמו.",
+    "Mark Complete": "סמן כהושלם",
+    "Mark No Show": "סמן כאי-הגעה",
+    "Mark Cancelled": "סמן כמבוטל",
+    "Completed": "הושלם",
+    "Cancelled": "בוטל",
+    "Scheduled": "מתוכנן",
+    "No Show": "אי-הגעה",
+    "Appointment status updated.": "סטטוס הפגישה עודכן.",
+    "Could not update appointment status.": "לא ניתן לעדכן את סטטוס הפגישה.",
+    "Update appointment status?": "לעדכן את סטטוס הפגישה?",
     "Import Calendar from JSON": "ייבא יומן מ-JSON",
     "Import Calendar": "ייבא יומן",
     "Repeat until specific date:": "חזור עד תאריך מסוים:",
@@ -9941,6 +9951,35 @@ def set_appointment_status(appointment_id):
     )
     db.commit()
     return redirect_to_patient_tab(appt['patient_id'], 'notes')
+
+
+@app.route('/api/appointment/<int:appointment_id>/status', methods=['POST'])
+@login_required
+def api_set_appointment_status(appointment_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    status = (request.form.get('status') or '').strip()
+    allowed_statuses = {'completed', 'no_show', 'scheduled', 'cancelled'}
+    if status not in allowed_statuses:
+        return jsonify({'error': 'Invalid status'}), 400
+
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return jsonify({'error': 'Appointment not found'}), 404
+
+    db.execute('UPDATE appointments SET status = ? WHERE id = ?', (status, appointment_id))
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (appt['patient_id'], 'appointment-status', f'Appointment {appointment_id} marked {status}')
+    )
+    db.commit()
+    return jsonify({
+        'message': 'Appointment status updated.',
+        'new_status': status,
+        'patient_id': appt['patient_id']
+    })
 
 @app.route('/uploads/<name>')
 @login_required

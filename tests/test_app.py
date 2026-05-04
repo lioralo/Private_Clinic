@@ -396,6 +396,52 @@ class ClinicTestCase(unittest.TestCase):
             ).fetchone()[0]
             assert still_scheduled == 0
 
+    def test_api_appointment_status_update_inline(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Inline Status Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/add_appointment', data=dict(
+            date='2026-05-10',
+            time='09:00',
+            cost='100.00'
+        ), follow_redirects=True)
+
+        rv = self.client.post('/api/appointment/1/status', data={'status': 'completed'})
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload['new_status'] == 'completed'
+
+        with app.app_context():
+            db = get_db()
+            appt = db.execute('SELECT status FROM appointments WHERE id = 1').fetchone()
+            assert appt['status'] == 'completed'
+            audit = db.execute(
+                "SELECT details FROM audit_logs WHERE action = 'appointment-status' ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            assert audit is not None
+            assert 'Appointment 1 marked completed' in audit['details']
+
+    def test_patient_detail_appointment_shows_status_badge(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Badge Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/add_appointment', data=dict(
+            date='2026-05-11',
+            time='10:30',
+            cost='90.00'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/patient/1?tab=notes', follow_redirects=True)
+        assert rv.status_code == 200
+        html = rv.data.decode('utf-8')
+        assert 'Mark Complete' in html
+        assert 'data-appointment-status-action' in html
+        assert 'bg-primary-subtle text-primary' in html
+
     def test_patient_detail_sections_render(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(

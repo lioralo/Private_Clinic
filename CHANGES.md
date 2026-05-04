@@ -2,6 +2,43 @@
 
 ---
 
+## Session 65
+
+**Date:** 2026-05-04
+
+**Objective:** Reduce appointment-management friction by letting admins update appointment status directly from the patient detail page.
+
+**Release Summary:**
+
+1. **Inline Appointment Status Update API**
+- Added route: `/api/appointment/<appointment_id>/status` (POST, admin-only).
+- Accepts `completed`, `no_show`, `scheduled`, and `cancelled`.
+- Reuses the existing appointment status validation and audit-log behavior.
+
+2. **Patient Detail Appointment Controls**
+- Updated the appointment list in `patient_detail.html` to show status badges inline.
+- Added one-click actions for `Mark Complete`, `Mark No Show`, and `Mark Cancelled`.
+- Added confirmation before mutation and success/error toast feedback through the existing toast helper.
+
+3. **Localization**
+- Added appointment-related translation keys for the new inline controls and badge labels.
+
+4. **Regression Coverage Added**
+- New tests in `tests/test_app.py`:
+  - `test_api_appointment_status_update_inline`
+  - `test_patient_detail_appointment_shows_status_badge`
+- Confirms DB update, audit log insert, and patient-detail rendering of the new controls.
+
+5. **Validation**
+- Focused tests:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest -v tests.test_app.ClinicTestCase.test_api_appointment_status_update_inline tests.test_app.ClinicTestCase.test_patient_detail_appointment_shows_status_badge tests.test_app.ClinicTestCase.test_patient_detail_sections_render`
+- Full suite:
+  - `SECRET_KEY=test-secret-key WTF_CSRF_ENABLED=False /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'`
+- Root-level suites:
+  - `/usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
+
+---
+
 ## Session 64
 
 **Date:** 2026-05-04
