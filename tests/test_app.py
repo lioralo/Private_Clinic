@@ -3387,6 +3387,60 @@ class ClinicTestCase(unittest.TestCase):
         self.assertIn('Warm and welcoming clinic care.', html)
         self.assertIn('050-2222222', html)
         self.assertIn('care@example.com', html)
+        self.assertIn('href="mailto:care@example.com"', html)
+
+    def test_notification_center_includes_linkify_helper(self):
+        self.login('lioraloni', 'Flo@tingind4')
+
+        rv = self.client.get('/crm', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('function linkifyText(value)', html)
+        self.assertIn('mailto:${escapeAttribute(match)}', html)
+
+    def test_patient_detail_portal_access_controls_render_for_existing_user_and_toggle(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Portal Toggle Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+        self.client.post('/patient/1/access', data=dict(
+            username='portal_toggle',
+            password='password123'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/patient/1', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('Update Portal Credentials', html)
+        self.assertIn('Disable Portal Access', html)
+        self.assertIn('Portal Active', html)
+
+        rv = self.client.post('/patient/1/toggle_access', follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Access disabled.', rv.data)
+
+        with app.app_context():
+            db = get_db()
+            user = db.execute('SELECT is_active FROM users WHERE patient_id = 1').fetchone()
+            self.assertIsNotNone(user)
+            self.assertEqual(int(user['is_active'] or 0), 0)
+
+    def test_patient_detail_portal_access_create_controls_render_without_user(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Portal Create Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        rv = self.client.get('/patient/1', follow_redirects=True)
+        html = rv.data.decode('utf-8')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn('Create Portal Access', html)
+        self.assertIn('placeholder="Username"', html)
+        self.assertIn('No patient portal account yet.', html)
 
     def test_patient_photo_upload_persists_profile_image(self):
         self.login('lioraloni', 'Flo@tingind4')

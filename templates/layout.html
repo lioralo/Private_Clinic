@@ -806,6 +806,31 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function escapeAttribute(value) {
+            return escapeHtml(value).replace(/`/g, '&#96;');
+        }
+
+        function linkifyText(value) {
+            const text = String(value || '');
+            const tokenPattern = /(https?:\/\/[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
+            let html = '';
+            let lastIndex = 0;
+
+            text.replace(tokenPattern, function(match, _token, offset) {
+                html += escapeHtml(text.slice(lastIndex, offset));
+                if (/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(match)) {
+                    html += `<a href="mailto:${escapeAttribute(match)}" class="text-decoration-none">${escapeHtml(match)}</a>`;
+                } else {
+                    html += `<a href="${escapeAttribute(match)}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${escapeHtml(match)}</a>`;
+                }
+                lastIndex = offset + match.length;
+                return match;
+            });
+
+            html += escapeHtml(text.slice(lastIndex));
+            return html.replace(/\n/g, '<br>');
+        }
+
         function applyNotificationRecipientFilter(filterName) {
             activeNotificationRecipientFilter = filterName || 'all';
             document.querySelectorAll('.notification-recipient-item').forEach((node) => {
@@ -927,7 +952,7 @@
                     notificationHistoryList.innerHTML = items.map(item => {
                         const badgeLabel = escapeHtml(item.audience ? String(item.audience).replace(/-/g, ' ') : '{{ t('Update') }}');
                         const title = escapeHtml(item.title || '{{ t('Clinic Update') }}');
-                        const message = escapeHtml(item.message || '');
+                        const message = linkifyText(item.message || '');
                         const createdAt = escapeHtml(item.created_at || '');
                         const notificationId = Number(item.id || 0);
                         const isUnread = Number(item.is_read || 0) === 0;
