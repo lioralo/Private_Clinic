@@ -3413,9 +3413,9 @@ class ClinicTestCase(unittest.TestCase):
         rv = self.client.get('/patient/1', follow_redirects=True)
         html = rv.data.decode('utf-8')
         self.assertEqual(rv.status_code, 200)
-        self.assertIn('Update Portal Credentials', html)
-        self.assertIn('Disable Portal Access', html)
-        self.assertIn('Portal Active', html)
+        self.assertIn('Change Credentials', html)
+        self.assertIn('Reset Password', html)
+        self.assertIn('Active', html)
 
         rv = self.client.post('/patient/1/toggle_access', follow_redirects=True)
         self.assertEqual(rv.status_code, 200)
@@ -3438,7 +3438,7 @@ class ClinicTestCase(unittest.TestCase):
         html = rv.data.decode('utf-8')
 
         self.assertEqual(rv.status_code, 200)
-        self.assertIn('Create Portal Access', html)
+        self.assertIn('Grant Portal Access', html)
         self.assertIn('placeholder="Username"', html)
         self.assertIn('No patient portal account yet.', html)
 
