@@ -2,6 +2,40 @@
 
 ---
 
+## Session 73
+
+**Date:** 2026-05-05
+
+**Objective:** Resolve live visibility issues for portal access controls and stabilize about-page messaging/map behavior.
+
+**Release Summary:**
+
+1. **Portal Access Visibility Fix (UI)**
+  - Kept the Portal Access section as an always-visible standalone card in the patient detail sidebar (not hidden in the collapsed Actions accordion).
+  - Verified visually that "Grant Portal Access" appears for patients with no account and that status/action buttons appear after granting access.
+
+2. **About Page Messaging CTA Reliability (UI)**
+  - Message action is now role-aware and always visible on the About page:
+    - patient: opens messages offcanvas,
+    - admin: links to CRM/Message Center,
+    - logged-out visitor: links to login.
+
+3. **Google Maps Link Normalization (Logic + UI)**
+  - Added server-side normalization for About map URLs via `_build_about_map_urls`.
+  - Supports regular Google Maps links and converts common URL patterns (`q`, `query`, `destination`, `/maps/place/...`) into embeddable URLs.
+  - Falls back to "Open in Google Maps" when embedding cannot be derived.
+
+4. **Admin Settings Guidance (UX)**
+  - Added helper text in About settings indicating regular Google Maps links are accepted and auto-embedded when possible.
+
+5. **Verification**
+  - Visual verification completed locally:
+    - About page shows working WhatsApp, mailto, messaging CTA, and embedded map.
+    - Patient detail shows working grant access flow and post-grant portal status/actions.
+  - Tests: `192/192` in `tests/` and `13/13` root-level tests passed.
+
+---
+
 ## Session 72
 
 **Date:** 2026-05-04

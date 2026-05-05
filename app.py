@@ -24,7 +24,7 @@ import secrets
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus, parse_qs, urlparse
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -979,6 +979,40 @@ def get_site_settings(db=None):
 
     settings['about_enabled'] = '1' if str(settings.get('about_enabled') or '0') in {'1', 'true', 'yes', 'on'} else '0'
     return settings
+
+
+def _build_about_map_urls(raw_url):
+    map_url = (raw_url or '').strip()
+    if not map_url:
+        return {'open_url': '', 'embed_url': ''}
+
+    if not re.match(r'^https?://', map_url, flags=re.IGNORECASE):
+        map_url = 'https://' + map_url.lstrip('/')
+
+    open_url = map_url
+    parsed = urlparse(map_url)
+    lower_url = map_url.lower()
+
+    if '/maps/embed' in lower_url or 'output=embed' in lower_url:
+        return {'open_url': open_url, 'embed_url': map_url}
+
+    query = parse_qs(parsed.query or '', keep_blank_values=True)
+    location_hint = ''
+    for key in ('q', 'query', 'destination'):
+        values = query.get(key) or []
+        if values and str(values[0]).strip():
+            location_hint = str(values[0]).strip()
+            break
+
+    path = parsed.path or ''
+    if not location_hint and '/maps/place/' in path:
+        location_hint = path.split('/maps/place/', 1)[1].split('/', 1)[0].replace('+', ' ').strip()
+
+    if location_hint:
+        embed_url = f"https://www.google.com/maps?q={quote_plus(location_hint)}&output=embed"
+        return {'open_url': open_url, 'embed_url': embed_url}
+
+    return {'open_url': open_url, 'embed_url': ''}
 
 
 def save_site_settings(db, updates):
@@ -3218,7 +3252,14 @@ def about_page():
     is_admin_preview = current_user.is_authenticated and current_user.role == 'admin'
     if settings.get('about_enabled') != '1' and not is_admin_preview:
         return 'Page not found', 404
-    return render_template('about.html', site_settings=settings, is_admin_preview=is_admin_preview)
+    map_urls = _build_about_map_urls(settings.get('about_map_url'))
+    return render_template(
+        'about.html',
+        site_settings=settings,
+        is_admin_preview=is_admin_preview,
+        about_map_open_url=map_urls['open_url'],
+        about_map_embed_url=map_urls['embed_url'],
+    )
 
 
 HEBREW_NUMBER_WORDS = {

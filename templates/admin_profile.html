@@ -127,6 +127,7 @@
                             <div class="col-md-8">
                                 <p class="small mb-2">{{ t('Scan the QR with Google Authenticator or enter this setup key manually:') }}</p>
                                 <code class="d-block small mb-3 p-2 bg-white border rounded">{{ pending_totp_secret }}</code>
+                                <div class="form-text">{{ t('You can paste a regular Google Maps link; the system will auto-embed it when possible.') }}</div>
                                 <form method="post" action="{{ url_for('setup_authenticator') }}" class="row g-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action" value="verify">
