@@ -14,6 +14,7 @@ Optional:
   --ssh-key PATH           PEM/private key path for SSH/SCP
   --remote-dir PATH        Remote repo path (default: /opt/Private_Clinic)
   --repo-url URL           Repo clone URL (default: https://github.com/lioralo/Private_Clinic.git)
+  --git-branch NAME        Branch to deploy on the remote host (default: main)
   --secret-key VALUE       SECRET_KEY for .env.prod (default: generated locally)
   --backup-file PATH       Encrypted backup to migrate (default: latest secure_backups/clinic_*.db.enc)
   --skip-docker-setup      Skip Docker installation on the remote host
@@ -68,6 +69,7 @@ run_ssh_script() {
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_DIR="/opt/Private_Clinic"
 REPO_URL="https://github.com/lioralo/Private_Clinic.git"
+GIT_BRANCH="main"
 SSH_TARGET=""
 SSH_KEY=""
 DOMAIN=""
@@ -97,6 +99,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --repo-url)
       REPO_URL="${2:-}"
+      shift 2
+      ;;
+    --git-branch)
+      GIT_BRANCH="${2:-}"
       shift 2
       ;;
     --secret-key)
@@ -205,6 +211,7 @@ SSH_CMD+=("${SSH_TARGET}")
 BACKUP_BASENAME="$(basename "${BACKUP_FILE}")"
 REMOTE_DIR_Q="$(printf '%q' "${REMOTE_DIR}")"
 REPO_URL_Q="$(printf '%q' "${REPO_URL}")"
+GIT_BRANCH_Q="$(printf '%q' "${GIT_BRANCH}")"
 BACKUP_BASENAME_Q="$(printf '%q' "${BACKUP_BASENAME}")"
 
 log "Preparing remote staging area on ${SSH_TARGET}"
@@ -219,10 +226,13 @@ fi
 if [[ ! -d ${REMOTE_DIR_Q}/.git ]]; then
   sudo mkdir -p ${REMOTE_DIR_Q}
   sudo chown \"\$USER\":\"\$USER\" ${REMOTE_DIR_Q}
-  git clone ${REPO_URL_Q} ${REMOTE_DIR_Q}
+  git clone --branch ${GIT_BRANCH_Q} ${REPO_URL_Q} ${REMOTE_DIR_Q}
 else
-  git -C ${REMOTE_DIR_Q} pull --ff-only
+  git -C ${REMOTE_DIR_Q} fetch origin ${GIT_BRANCH_Q}
+  git -C ${REMOTE_DIR_Q} checkout ${GIT_BRANCH_Q}
+  git -C ${REMOTE_DIR_Q} pull --ff-only origin ${GIT_BRANCH_Q}
 fi
+git -C ${REMOTE_DIR_Q} rev-parse HEAD
 "
 
 if [[ "${SKIP_DOCKER_SETUP}" == "0" ]]; then

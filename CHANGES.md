@@ -2,6 +2,32 @@
 
 ---
 
+## Session 74
+
+**Date:** 2026-05-05
+
+**Objective:** Fix deployment helpers so AWS receives the intended latest branch and the current local checkout.
+
+**Release Summary:**
+
+1. **Branch-Pinned Remote Update (Deployment)**
+  - `scripts/migrate_to_aws.sh` now accepts `--git-branch`.
+  - Remote deployment no longer updates whichever branch happens to be checked out on the server.
+  - The script now explicitly clones, fetches, checks out, and fast-forwards the requested branch before deploying.
+
+2. **Current Local Checkout Deployment (Deployment)**
+  - `deploy_now.sh` now detects the active local branch and prints the exact local commit being deployed.
+  - After the migration step, it runs `scripts/deploy_local_bundle_to_aws.sh` so the live server receives the current local checkout rather than relying only on the server-side repo state.
+
+3. **Backup Path Fix (Deployment)**
+  - `deploy_now.sh` now calls `python3 scripts/backup_db.py`, matching the actual repository layout.
+
+4. **Verification**
+  - Shell syntax validation passed for the updated deployment scripts.
+  - Dry-run output confirmed that the AWS migration flow now targets the requested branch explicitly and prints the deployed commit.
+
+---
+
 ## Session 73
 
 **Date:** 2026-05-05
