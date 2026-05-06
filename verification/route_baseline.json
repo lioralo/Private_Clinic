@@ -1,5 +1,5 @@
 {
-  "route_count": 157,
+  "route_count": 161,
   "routes": [
     {
       "endpoint": "index",
@@ -36,6 +36,27 @@
         "POST"
       ],
       "rule": "/admin/change_password"
+    },
+    {
+      "endpoint": "admin_contact_inquiries",
+      "methods": [
+        "GET"
+      ],
+      "rule": "/admin/contact-inquiries"
+    },
+    {
+      "endpoint": "delete_contact_inquiry",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/contact-inquiries/<int:inquiry_id>/delete"
+    },
+    {
+      "endpoint": "mark_contact_inquiry_read",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/admin/contact-inquiries/<int:inquiry_id>/read"
     },
     {
       "endpoint": "admin_dashboard",
@@ -507,6 +528,13 @@
         "GET"
       ],
       "rule": "/calendar/public/<token>"
+    },
+    {
+      "endpoint": "contact_inquiry",
+      "methods": [
+        "POST"
+      ],
+      "rule": "/contact-inquiry"
     },
     {
       "endpoint": "contact_admin",

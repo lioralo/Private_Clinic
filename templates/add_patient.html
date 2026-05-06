@@ -1,5 +1,5 @@
 {% extends 'layout.html' %}
-{% import 'patient_form_macros.html' as patient_form %}
+{% from 'patient_form_macros.html' import patient_identity_fields, patient_contact_fields, patient_birth_and_id_fields, patient_type_fields, treatment_track_field, treatment_method_field with context %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -17,12 +17,12 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
-                        {{ patient_form.patient_identity_fields(status_label='Initial Status') }}
-                        {{ patient_form.patient_contact_fields() }}
-                        {{ patient_form.patient_birth_and_id_fields() }}
-                        {{ patient_form.patient_type_fields(patient_type='private') }}
-                        {{ patient_form.treatment_track_field(patient_type='private', show_hint=True) }}
-                        {{ patient_form.treatment_method_field(treatment_method_options) }}
+                        {{ patient_identity_fields(status_label='Initial Status') }}
+                        {{ patient_contact_fields() }}
+                        {{ patient_birth_and_id_fields() }}
+                        {{ patient_type_fields(patient_type='private') }}
+                        {{ treatment_track_field(patient_type='private', show_hint=True) }}
+                        {{ treatment_method_field(treatment_method_options) }}
 
                         <div class="col-12 d-none" id="diagnoseeQuestionnairesWrap">
                             <div class="border rounded-4 p-3 bg-light-subtle">

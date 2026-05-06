@@ -3548,5 +3548,185 @@ class TestParseIntakeQuestionnaire(unittest.TestCase):
         self.assertEqual(result.get("main_complaint"), "Pain in left arm")
 
 
+class ContactInquiryTests(ClinicTestCase):
+    """Tests for the public contact inquiry form on the About page."""
+
+    def _enable_about_page(self):
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT OR REPLACE INTO site_settings (setting_key, setting_value) VALUES ('about_enabled', '1')")
+            db.commit()
+
+    def _login_admin(self):
+        with app.app_context():
+            db = get_db()
+            admin = db.execute("SELECT * FROM users WHERE role='admin'").fetchone()
+            with self.client.session_transaction() as sess:
+                sess['_user_id'] = str(admin['id'])
+                sess['session_version'] = int(admin['session_version'] or 0)
+
+    # --- About page visibility ---
+
+    def test_about_page_shows_contact_form_for_anonymous(self):
+        """Unauthenticated users should see the contact form."""
+        self._enable_about_page()
+        rv = self.client.get('/about')
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'contact-form', rv.data)
+        self.assertIn(b'inquiry_name', rv.data)
+        self.assertIn(b'inquiry_message', rv.data)
+
+    def test_about_page_hides_contact_form_for_patient(self):
+        """Logged-in patients should NOT see the public contact form."""
+        self._enable_about_page()
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO patients (name, status) VALUES ('P1', 'ongoing')")
+            db.commit()
+            patient = db.execute("SELECT * FROM patients WHERE name='P1'").fetchone()
+            from werkzeug.security import generate_password_hash
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, patient_id, is_active) VALUES (?,?,?,?,?)",
+                ('p1user', generate_password_hash('T3st@123'), 'patient', patient['id'], 1)
+            )
+            db.commit()
+            u = db.execute("SELECT * FROM users WHERE username='p1user'").fetchone()
+            with self.client.session_transaction() as sess:
+                sess['_user_id'] = str(u['id'])
+                sess['session_version'] = int(u['session_version'] or 0)
+        rv = self.client.get('/about')
+        self.assertEqual(rv.status_code, 200)
+        self.assertNotIn(b'inquiry_name', rv.data)
+
+    # --- Submission ---
+
+    def test_contact_inquiry_submit_success(self):
+        """Valid form data should create an inquiry and redirect."""
+        rv = self.client.post('/contact-inquiry', data={
+            'inquiry_name': 'Jane Doe',
+            'inquiry_email': 'jane@example.com',
+            'inquiry_phone': '',
+            'inquiry_message': 'I would like to book a session.',
+        })
+        self.assertEqual(rv.status_code, 302)
+        with app.app_context():
+            db = get_db()
+            inq = db.execute("SELECT * FROM contact_inquiries WHERE name='Jane Doe'").fetchone()
+            self.assertIsNotNone(inq)
+            self.assertEqual(inq['email'], 'jane@example.com')
+            self.assertEqual(inq['message'], 'I would like to book a session.')
+
+    def test_contact_inquiry_phone_only(self):
+        """Submission with phone only (no email) should succeed."""
+        rv = self.client.post('/contact-inquiry', data={
+            'inquiry_name': 'Bob',
+            'inquiry_email': '',
+            'inquiry_phone': '+972501234567',
+            'inquiry_message': 'Please call me.',
+        })
+        self.assertEqual(rv.status_code, 302)
+        with app.app_context():
+            db = get_db()
+            inq = db.execute("SELECT * FROM contact_inquiries WHERE name='Bob'").fetchone()
+            self.assertIsNotNone(inq)
+            self.assertEqual(inq['phone'], '+972501234567')
+            self.assertIsNone(inq['email'])
+
+    def test_contact_inquiry_missing_name(self):
+        """Submission without a name should fail validation."""
+        rv = self.client.post('/contact-inquiry', data={
+            'inquiry_name': '',
+            'inquiry_email': 'x@example.com',
+            'inquiry_phone': '',
+            'inquiry_message': 'Hello.',
+        })
+        # Should redirect (validation error flashed, no DB row inserted)
+        self.assertEqual(rv.status_code, 302)
+        with app.app_context():
+            db = get_db()
+            count = db.execute("SELECT COUNT(*) FROM contact_inquiries").fetchone()[0]
+            self.assertEqual(count, 0)
+
+    def test_contact_inquiry_missing_message(self):
+        """Submission without a message should fail validation."""
+        rv = self.client.post('/contact-inquiry', data={
+            'inquiry_name': 'Alice',
+            'inquiry_email': 'alice@example.com',
+            'inquiry_phone': '',
+            'inquiry_message': '',
+        })
+        self.assertEqual(rv.status_code, 302)
+        with app.app_context():
+            db = get_db()
+            count = db.execute("SELECT COUNT(*) FROM contact_inquiries").fetchone()[0]
+            self.assertEqual(count, 0)
+
+    def test_contact_inquiry_missing_contact_method(self):
+        """Submission without email or phone should fail validation."""
+        rv = self.client.post('/contact-inquiry', data={
+            'inquiry_name': 'Alice',
+            'inquiry_email': '',
+            'inquiry_phone': '',
+            'inquiry_message': 'Hello.',
+        })
+        self.assertEqual(rv.status_code, 302)
+        with app.app_context():
+            db = get_db()
+            count = db.execute("SELECT COUNT(*) FROM contact_inquiries").fetchone()[0]
+            self.assertEqual(count, 0)
+
+    # --- Admin views ---
+
+    def test_admin_contact_inquiries_page(self):
+        """Admin should be able to view the contact inquiries page."""
+        self._login_admin()
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO contact_inquiries (name, email, phone, message) VALUES ('Eve','e@x.com',NULL,'Hi')")
+            db.commit()
+        rv = self.client.get('/admin/contact-inquiries')
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Eve', rv.data)
+
+    def test_admin_mark_inquiry_read(self):
+        """Admin can mark an inquiry as read."""
+        self._login_admin()
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO contact_inquiries (name, email, message) VALUES ('Zoe','z@x.com','test')")
+            db.commit()
+            inq = db.execute("SELECT id FROM contact_inquiries WHERE name='Zoe'").fetchone()
+            inq_id = inq['id']
+        rv = self.client.post(f'/admin/contact-inquiries/{inq_id}/read', follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        with app.app_context():
+            db = get_db()
+            updated = db.execute("SELECT is_read FROM contact_inquiries WHERE id=?", (inq_id,)).fetchone()
+            self.assertEqual(updated['is_read'], 1)
+
+    def test_admin_delete_inquiry(self):
+        """Admin can delete a contact inquiry."""
+        self._login_admin()
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO contact_inquiries (name, email, message) VALUES ('Del','d@x.com','bye')")
+            db.commit()
+            inq = db.execute("SELECT id FROM contact_inquiries WHERE name='Del'").fetchone()
+            inq_id = inq['id']
+        rv = self.client.post(f'/admin/contact-inquiries/{inq_id}/delete', follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+        with app.app_context():
+            db = get_db()
+            gone = db.execute("SELECT * FROM contact_inquiries WHERE id=?", (inq_id,)).fetchone()
+            self.assertIsNone(gone)
+
+    def test_non_admin_cannot_access_inquiries_page(self):
+        """Non-admin users cannot access the admin inquiries page."""
+        # Unauthenticated
+        rv = self.client.get('/admin/contact-inquiries')
+        self.assertEqual(rv.status_code, 302)
+        self.assertIn('/login', rv.headers['Location'])
+
+
 if __name__ == '__main__':
     unittest.main()

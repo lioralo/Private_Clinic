@@ -3157,6 +3157,17 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
 
+    # Public contact inquiries submitted from the About page by unauthenticated visitors
+    db.execute('''CREATE TABLE IF NOT EXISTS contact_inquiries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+
     db.commit()
 
 def _seed_admin_user(db):
@@ -10741,6 +10752,83 @@ def contact_admin():
         flash('Message sent to your therapist.')
 
     return redirect(url_for('patient_home'))
+
+
+@app.route('/contact-inquiry', methods=('POST',))
+def contact_inquiry():
+    """Handle public contact form submissions from the About page (no login required)."""
+    name = (request.form.get('inquiry_name') or '').strip()
+    email = (request.form.get('inquiry_email') or '').strip() or None
+    phone = (request.form.get('inquiry_phone') or '').strip() or None
+    message = (request.form.get('inquiry_message') or '').strip()
+
+    errors = []
+    if not name:
+        errors.append('Name is required.')
+    if not message:
+        errors.append('Message is required.')
+    if not email and not phone:
+        errors.append('Please provide at least one contact method (email or phone).')
+    if email and len(email) > 254:
+        errors.append('Email address is too long.')
+    if phone and len(phone) > 30:
+        errors.append('Phone number is too long.')
+
+    redirect_target = (request.referrer or '') or url_for('about_page')
+    # Ensure the referrer belongs to our own app (avoid open redirect)
+    if not redirect_target.startswith(request.host_url):
+        redirect_target = url_for('about_page')
+
+    if errors:
+        for err in errors:
+            flash(err)
+        return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
+
+    db = get_db()
+    db.execute(
+        'INSERT INTO contact_inquiries (name, email, phone, message) VALUES (?, ?, ?, ?)',
+        (name, email, phone, message),
+    )
+    db.commit()
+    flash('Your message has been sent. We will get back to you soon.')
+    return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
+
+
+@app.route('/admin/contact-inquiries')
+@login_required
+def admin_contact_inquiries():
+    """Admin view for public contact form submissions."""
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    inquiries = db.execute(
+        'SELECT * FROM contact_inquiries ORDER BY is_read ASC, created_at DESC'
+    ).fetchall()
+    return render_template('admin_contact_inquiries.html', inquiries=inquiries)
+
+
+@app.route('/admin/contact-inquiries/<int:inquiry_id>/read', methods=['POST'])
+@login_required
+def mark_contact_inquiry_read(inquiry_id):
+    """Mark a contact inquiry as read."""
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    db.execute('UPDATE contact_inquiries SET is_read = 1 WHERE id = ?', (inquiry_id,))
+    db.commit()
+    return redirect(url_for('admin_contact_inquiries'))
+
+
+@app.route('/admin/contact-inquiries/<int:inquiry_id>/delete', methods=['POST'])
+@login_required
+def delete_contact_inquiry(inquiry_id):
+    """Delete a contact inquiry."""
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    db.execute('DELETE FROM contact_inquiries WHERE id = ?', (inquiry_id,))
+    db.commit()
+    return redirect(url_for('admin_contact_inquiries'))
 
 
 @app.route('/groups/sessions/<int:session_id>/delete', methods=['POST'])

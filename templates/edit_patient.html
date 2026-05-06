@@ -1,5 +1,5 @@
 {% extends 'layout.html' %}
-{% import 'patient_form_macros.html' as patient_form %}
+{% from 'patient_form_macros.html' import patient_identity_fields, patient_contact_fields, patient_birth_and_id_fields, patient_type_fields, treatment_track_field, treatment_method_field with context %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -22,20 +22,20 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
-                        {{ patient_form.patient_identity_fields(
+                        {{ patient_identity_fields(
                             name=patient['name'],
                             status=patient['status'] or 'ongoing',
                             candidate_selected=(patient['status'] in ['candidate', 'waiting', 'waiting for scheduling']),
                             status_label='Status'
                         ) }}
 
-                        {{ patient_form.patient_contact_fields(
+                        {{ patient_contact_fields(
                             email=patient['email'] or '',
                             phone=patient['phone'] or '',
                             phone_input_type='text'
                         ) }}
 
-                        {{ patient_form.patient_birth_and_id_fields(
+                        {{ patient_birth_and_id_fields(
                             birth_date=patient['birth_date'] or '',
                             id_number=patient['id_number'] or ''
                         ) }}
@@ -50,9 +50,9 @@
                             </div>
                         </div>
 
-                        {{ patient_form.patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
-                        {{ patient_form.treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
-                        {{ patient_form.treatment_method_field(
+                        {{ patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
+                        {{ treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
+                        {{ treatment_method_field(
                             treatment_method_options,
                             selected_value=patient['treatment_method'] or ''
                         ) }}
