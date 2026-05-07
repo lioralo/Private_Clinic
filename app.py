@@ -89,7 +89,12 @@ del _secret_key
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB upload limit
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = (os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax') or 'Lax').strip() or 'Lax'
+_session_cookie_samesite = (os.environ.get('SESSION_COOKIE_SAMESITE', 'Lax') or 'Lax').strip() or 'Lax'
+# OAuth callbacks arrive from accounts.google.com; SameSite=Strict drops the
+# session cookie on that cross-site return and breaks the flow.
+if _session_cookie_samesite.lower() == 'strict':
+    _session_cookie_samesite = 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = _session_cookie_samesite
 app.config['SESSION_COOKIE_SECURE'] = str(os.environ.get('SESSION_COOKIE_SECURE', '0')).strip().lower() in {'1', 'true', 'yes', 'on'}
 app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = int(os.environ.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', '5') or 5)
 app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', '300') or 300)
@@ -11022,7 +11027,15 @@ def google_calendar_callback():
         return redirect(url_for('admin_profile'))
     code = request.args.get('code')
     state = request.args.get('state')
+    oauth_error = (request.args.get('error') or '').strip()
+    oauth_error_description = (request.args.get('error_description') or '').strip()
     stored_state = session.pop('gcal_oauth_state', None)
+    if oauth_error:
+        if oauth_error_description:
+            flash(f'Google authorisation failed: {oauth_error} - {oauth_error_description}')
+        else:
+            flash(f'Google authorisation failed: {oauth_error}')
+        return redirect(url_for('admin_profile'))
     if not code:
         flash('Google authorisation was cancelled or failed.')
         return redirect(url_for('admin_profile'))

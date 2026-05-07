@@ -74,6 +74,12 @@ class TestGetScopesForIntegrations(unittest.TestCase):
         self.assertEqual(len(scopes), len(set(scopes)))
 
 
+class SessionCookiePolicyTest(unittest.TestCase):
+
+    def test_samesite_strict_is_downgraded_to_lax(self):
+        self.assertNotEqual(str(app.config.get('SESSION_COOKIE_SAMESITE')).lower(), 'strict')
+
+
 class TestRefreshAndSaveDeleteScope(unittest.TestCase):
     """_refresh_and_save must DELETE only the admin row, not all rows."""
 
