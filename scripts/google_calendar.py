@@ -28,6 +28,7 @@ try:
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
+# Full scope list (kept for backward-compat; prefer INTEGRATION_SCOPES below)
 SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/drive.file',
@@ -35,8 +36,38 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
 ]
 
+# Per-integration scope mapping.  Keys are the short names shown in the UI.
+INTEGRATION_SCOPES = {
+    'calendar': ['https://www.googleapis.com/auth/calendar'],
+    'docs': [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/documents',
+    ],
+    'sheets': ['https://www.googleapis.com/auth/spreadsheets'],
+}
+ALL_INTEGRATIONS = list(INTEGRATION_SCOPES.keys())  # ['calendar', 'docs', 'sheets']
+
 DB_TOKEN_TABLE = 'google_calendar_tokens'
 DEFAULT_USER_LABEL = 'admin'   # stored as "owner" in the tokens table
+
+
+def get_scopes_for_integrations(integrations) -> list:
+    """Return the OAuth scope list for the given integration names.
+
+    ``integrations`` may be a list/set of strings like ['calendar', 'docs'].
+    Unknown names are silently ignored.  Falls back to ALL SCOPES when the
+    supplied list is empty or None.
+    """
+    if not integrations:
+        return list(SCOPES)
+    result = []
+    seen = set()
+    for name in integrations:
+        for scope in INTEGRATION_SCOPES.get(name, []):
+            if scope not in seen:
+                seen.add(scope)
+                result.append(scope)
+    return result if result else list(SCOPES)
 
 
 # ---------------------------------------------------------------------------
@@ -166,29 +197,34 @@ def is_connected(db: sqlite3.Connection) -> bool:
 # OAuth flow
 # ---------------------------------------------------------------------------
 
-def create_oauth_flow(state: str = None) -> 'Flow':
+def create_oauth_flow(state: str = None, scopes=None) -> 'Flow':
     if not GOOGLE_LIBS_AVAILABLE:
         raise RuntimeError('Google API libraries are not installed.')
     if not _client_secrets_available():
         raise RuntimeError('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are not set.')
     flow = Flow.from_client_config(
         _client_config(),
-        scopes=SCOPES,
+        scopes=scopes if scopes else SCOPES,
         state=state,
         redirect_uri=_redirect_uri(),
     )
     return flow
 
 
-def get_authorization_url() -> tuple:
-    """Return (auth_url, state, code_verifier). code_verifier may be None."""
-    flow = create_oauth_flow()
+def get_authorization_url(integrations=None) -> tuple:
+    """Return (auth_url, state, code_verifier). code_verifier may be None.
+
+    ``integrations`` is an optional list of integration names (e.g.
+    ['calendar', 'docs']).  When supplied only the matching OAuth scopes
+    are requested.  When omitted all scopes are requested.
+    """
+    scopes = get_scopes_for_integrations(integrations)
+    flow = create_oauth_flow(scopes=scopes)
     auth_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
         prompt='consent',
     )
-    # PKCE: code_verifier is set on the flow when a code_challenge was added
     code_verifier = getattr(flow, 'code_verifier', None)
     return auth_url, state, code_verifier
 
@@ -196,10 +232,7 @@ def get_authorization_url() -> tuple:
 def exchange_code_for_tokens(code: str, state: str, code_verifier: str = None):
     """Exchange the OAuth code for credentials. Returns Credentials."""
     flow = create_oauth_flow(state=state)
-    fetch_kwargs = {'code': code}
-    if code_verifier:
-        fetch_kwargs['code_verifier'] = code_verifier
-    flow.fetch_token(**fetch_kwargs)
+    flow.fetch_token(code=code)
     return flow.credentials
 
 
@@ -228,11 +261,11 @@ def _refresh_and_save(db, creds):
             error_args = str(e.args) if hasattr(e, 'args') else ''
             
             # Check for invalid_grant in multiple places
-            if ('invalid_grant' in error_str or 
-                'invalid_grant' in error_args or 
+            if ('invalid_grant' in error_str or
+                'invalid_grant' in error_args or
                 'revoked' in error_str.lower()):
                 # Clear the invalid token so user must reconnect
-                db.execute('DELETE FROM google_calendar_tokens')
+                db.execute('DELETE FROM google_calendar_tokens WHERE owner = ?', (DEFAULT_USER_LABEL,))
                 db.commit()
                 raise Exception('Google authentication expired. Please reconnect via Admin Profile → Google Calendar.')
             raise

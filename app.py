@@ -972,6 +972,7 @@ DEFAULT_SITE_SETTINGS = {
     'gdocs_auto_sync_targets_json': '[]',
     'gdocs_auto_sync_targets_config_json': '[]',
     'gdocs_auto_sync_last_run_at': '',
+    'google_enabled_integrations': '["calendar","docs","sheets"]',
 }
 
 
@@ -10917,6 +10918,11 @@ def google_calendar_status():
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
     db = get_db()
+    settings = get_site_settings(db)
+    try:
+        enabled_integrations = json.loads(settings.get('google_enabled_integrations') or '["calendar","docs","sheets"]')
+    except (ValueError, TypeError):
+        enabled_integrations = ['calendar', 'docs', 'sheets']
     if not gcal:
         return jsonify({
             'connected': False,
@@ -10924,6 +10930,7 @@ def google_calendar_status():
             'client_configured': False,
             'calendar_id': None,
             'calendars': [],
+            'enabled_integrations': enabled_integrations,
             'reason': 'Google libraries not installed.',
         })
     try:
@@ -10940,6 +10947,7 @@ def google_calendar_status():
         'client_configured': bool(gcal._client_secrets_available()) if gcal else False,
         'calendar_id': calendar_id,
         'calendars': calendars,
+        'enabled_integrations': enabled_integrations,
     })
 
 
@@ -10949,7 +10957,7 @@ def api_google_calendar_status():
     return google_calendar_status()
 
 
-@app.route('/admin/google-calendar/connect')
+@app.route('/admin/google-calendar/connect', methods=['GET', 'POST'])
 @login_required
 def google_calendar_connect():
     if current_user.role != 'admin':
@@ -10961,14 +10969,29 @@ def google_calendar_connect():
     if not gcal._client_secrets_available():
         flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
         return redirect(url_for('admin_profile'))
+    db = get_db()
+    # On POST the form includes integration checkboxes; save the selection before OAuth.
+    if request.method == 'POST':
+        selected = request.form.getlist('google_integration')
+        valid_options = list(gcal.INTEGRATION_SCOPES.keys()) if gcal else ['calendar', 'docs', 'sheets']
+        integrations = [i for i in selected if i in valid_options] or valid_options
+        save_site_settings(db, {'google_enabled_integrations': json.dumps(integrations)})
+        db.commit()
+    else:
+        # GET: use previously saved setting
+        settings = get_site_settings(db)
+        try:
+            integrations = json.loads(settings.get('google_enabled_integrations') or '[]') or list(gcal.INTEGRATION_SCOPES.keys())
+        except (ValueError, TypeError):
+            integrations = list(gcal.INTEGRATION_SCOPES.keys())
     try:
-        auth_url, state, code_verifier = gcal.get_authorization_url()
+        auth_url, state, code_verifier = gcal.get_authorization_url(integrations=integrations)
         session['gcal_oauth_state'] = state
         if code_verifier:
             session['gcal_code_verifier'] = code_verifier
         return redirect(auth_url)
     except Exception as exc:
-        flash(f'Failed to initiate Google Calendar connection: {exc}')
+        flash(f'Failed to initiate Google connection: {exc}')
         return redirect(url_for('admin_profile'))
 
 
@@ -10984,7 +11007,7 @@ def google_calendar_callback():
     if not code:
         flash('Google authorisation was cancelled or failed.')
         return redirect(url_for('admin_profile'))
-    if stored_state and state != stored_state:
+    if not stored_state or state != stored_state:
         flash('OAuth state mismatch – please try connecting again.')
         return redirect(url_for('admin_profile'))
     try:

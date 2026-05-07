@@ -75,7 +75,8 @@
     {
       "endpoint": "google_calendar_connect",
       "methods": [
-        "GET"
+        "GET",
+        "POST"
       ],
       "rule": "/admin/google-calendar/connect"
     },

@@ -284,14 +284,36 @@
                     <div id="gcalStatus" class="mb-3">
                         <span class="text-muted small"><i class="bi bi-hourglass me-1"></i>{{ t('Checking Google Calendar connection...') }}</span>
                     </div>
+                    {# Integration selector + connect form #}
+                    <div id="gcalConnectWrap" class="mb-3">
+                        <form method="post" action="{{ url_for('google_calendar_connect') }}" id="gcalConnectForm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="small fw-semibold mb-2">{{ t('Request access for:') }}</div>
+                            <div class="d-flex flex-wrap gap-3 mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="calendar" id="gcalIntCalendar" checked>
+                                    <label class="form-check-label small" for="gcalIntCalendar"><i class="bi bi-calendar2-check me-1 text-success"></i>{{ t('Google Calendar') }}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="docs" id="gcalIntDocs" checked>
+                                    <label class="form-check-label small" for="gcalIntDocs"><i class="bi bi-file-earmark-text me-1 text-primary"></i>{{ t('Google Docs') }}</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="sheets" id="gcalIntSheets" checked>
+                                    <label class="form-check-label small" for="gcalIntSheets"><i class="bi bi-table me-1 text-success"></i>{{ t('Google Sheets') }}</label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
+                                <i class="bi bi-google me-1"></i>{{ t('Connect with Google') }}
+                            </button>
+                        </form>
+                    </div>
+                    <div id="gcalActiveIntegrations" class="d-none mb-2"></div>
                     <div id="gcalActions" class="d-flex flex-wrap gap-2">
-                        <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
-                            <i class="bi bi-google me-1"></i>{{ t('Connect Google Calendar') }}
-                        </a>
                         <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="d-none" id="gcalDisconnectForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
-                                <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect') }}
+                                <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect Google') }}
                             </button>
                         </form>
                     </div>
@@ -448,9 +470,18 @@
         .then(data => {
             const statusDiv = document.getElementById('gcalStatus');
             const disconnectForm = document.getElementById('gcalDisconnectForm');
-            const connectBtn = document.getElementById('gcalConnectBtn');
+            const connectWrap = document.getElementById('gcalConnectWrap');
+            const activeIntDiv = document.getElementById('gcalActiveIntegrations');
             const calSelector = document.getElementById('gcalCalendarSelector');
             const calSelect = document.getElementById('gcalCalendarSelect');
+
+            // Pre-fill integration checkboxes from server setting
+            if (data.enabled_integrations && Array.isArray(data.enabled_integrations)) {
+                ['calendar','docs','sheets'].forEach(function(key) {
+                    const cb = document.getElementById('gcalInt' + key.charAt(0).toUpperCase() + key.slice(1));
+                    if (cb) cb.checked = data.enabled_integrations.indexOf(key) !== -1;
+                });
+            }
 
             if (!statusDiv) {
                 return;
@@ -461,14 +492,23 @@
             }
             if (!data.client_configured) {
                 statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>';
-                if (connectBtn) connectBtn.style.display = 'none';
+                if (connectWrap) connectWrap.style.display = 'none';
                 return;
             }
             if (data.connected) {
                 statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>' +
                     (data.calendar_id ? ' <span class="text-muted small ms-1">{{ t('Calendar') }}: ' + data.calendar_id + '</span>' : '');
                 if (disconnectForm) disconnectForm.classList.remove('d-none');
-                if (connectBtn) connectBtn.style.display = 'none';
+                if (connectWrap) connectWrap.classList.add('d-none');
+                // Show active integrations
+                if (activeIntDiv && data.enabled_integrations && data.enabled_integrations.length) {
+                    const labels = {'calendar': '{{ t('Calendar') }}', 'docs': '{{ t('Docs') }}', 'sheets': '{{ t('Sheets') }}'};
+                    const badges = data.enabled_integrations.map(function(k) {
+                        return '<span class="badge bg-light text-dark border me-1">' + (labels[k] || k) + '</span>';
+                    }).join('');
+                    activeIntDiv.innerHTML = '<span class="small text-muted">{{ t('Active integrations:') }} </span>' + badges;
+                    activeIntDiv.classList.remove('d-none');
+                }
                 if (calSelector && data.calendars && data.calendars.length) {
                     calSelector.classList.remove('d-none');
                     data.calendars.forEach(c => {
