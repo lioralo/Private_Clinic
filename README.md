@@ -70,6 +70,12 @@ python -m unittest discover -s tests -p 'test_*.py'
 python -m unittest -v test_export_data test_import_clinic_data test_google_calendar
 ```
 
+## Google Calendar Notes
+- OAuth callback handling accepts either the matching session state or a fresh signed fallback state, which helps when the callback returns through a proxy or the browser drops the original session state.
+- Token exchange now forwards the PKCE code verifier when Google requires it.
+- Appointment create, update, and delete operations now report Google Calendar sync failures back to the UI while still saving the local clinic data.
+- If Google authentication has expired, the stored token is cleared and the admin is prompted to reconnect from the Admin Profile page.
+
 ### Refactor Safety Checks
 When splitting large modules (for example, moving routes out of app.py), run the refactor guard before and after each move:
 

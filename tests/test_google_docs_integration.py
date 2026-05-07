@@ -583,6 +583,105 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(health['last_synced_total'], 7)
         self.assertEqual(health['last_status'], 'success')
 
+    def test_admin_questionnaire_options_returns_sheet_titles(self):
+        self._login_admin()
+
+        with patch.object(app_module, '_list_questionnaire_tabs', return_value=([
+            {'sheet_id': 101, 'title': 'Initial Intake'},
+            {'sheet_id': 102, 'title': 'Mood Tracker'},
+        ], None)):
+            rv = self.client.get('/admin/questionnaires/options')
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload.get('status'), 'ok')
+        self.assertEqual(payload.get('options'), ['Initial Intake', 'Mood Tracker'])
+
+    def test_save_questionnaires_updates_existing_linked_sheet(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                UPDATE patients
+                SET has_questionnaire_tab = 1,
+                    questionnaires_file_id = ?,
+                    questionnaires_file_url = ?,
+                    questionnaires_selected = ?
+                WHERE id = 1
+            ''', (
+                'linked-sheet-123',
+                'https://docs.google.com/spreadsheets/d/linked-sheet-123/edit',
+                json.dumps(['Initial Intake'])
+            ))
+            db.commit()
+
+        copy_result = {
+            'copied_titles': ['Mood Tracker'],
+            'skipped_existing_titles': ['Initial Intake'],
+            'missing_titles': [],
+        }
+        with patch.object(app_module, '_copy_questionnaire_tabs_to_spreadsheet', return_value=(copy_result, None)):
+            rv = self.client.post(
+                '/patient/1/save_questionnaires',
+                data={'questionnaire_titles': ['Initial Intake', 'Mood Tracker']},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        with app.app_context():
+            db = get_db()
+            row = db.execute(
+                'SELECT questionnaires_file_id, questionnaires_selected FROM patients WHERE id = 1'
+            ).fetchone()
+
+        self.assertEqual(row['questionnaires_file_id'], 'linked-sheet-123')
+        self.assertEqual(
+            json.loads(row['questionnaires_selected']),
+            ['Initial Intake', 'Mood Tracker']
+        )
+
+    def test_save_questionnaires_creates_and_links_new_sheet_when_missing(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                UPDATE patients
+                SET has_questionnaire_tab = 1,
+                    questionnaires_file_id = NULL,
+                    questionnaires_file_url = NULL,
+                    questionnaires_selected = NULL
+                WHERE id = 1
+            ''')
+            db.commit()
+
+        create_result = {
+            'spreadsheet_id': 'new-sheet-456',
+            'spreadsheet_url': 'https://docs.google.com/spreadsheets/d/new-sheet-456/edit',
+            'selected_titles': ['Initial Intake', 'Mood Tracker'],
+        }
+        with patch.object(app_module, '_create_diagnosee_questionnaires_sheet', return_value=(create_result, None)):
+            rv = self.client.post(
+                '/patient/1/save_questionnaires',
+                data={'questionnaire_titles': ['Initial Intake', 'Mood Tracker']},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        with app.app_context():
+            db = get_db()
+            row = db.execute(
+                'SELECT questionnaires_file_id, questionnaires_file_url, questionnaires_selected FROM patients WHERE id = 1'
+            ).fetchone()
+
+        self.assertEqual(row['questionnaires_file_id'], 'new-sheet-456')
+        self.assertEqual(row['questionnaires_file_url'], 'https://docs.google.com/spreadsheets/d/new-sheet-456/edit')
+        self.assertEqual(
+            json.loads(row['questionnaires_selected']),
+            ['Initial Intake', 'Mood Tracker']
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -5826,6 +5826,49 @@ def build_external_public_url(endpoint, **values):
     return f'{scheme}://{host}{forwarded_prefix}{path}'
 
 
+def _google_oauth_state_max_age_seconds() -> int:
+    return int(os.environ.get('GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS', '900') or 900)
+
+
+def _google_oauth_state_signature(payload: str) -> str:
+    key = str(app.secret_key or '').encode('utf-8')
+    return hmac.new(key, payload.encode('utf-8'), hashlib.sha256).hexdigest()
+
+
+def _generate_google_oauth_state() -> str:
+    now_ts = str(int(datetime.now(timezone.utc).timestamp()))
+    nonce = secrets.token_urlsafe(24)
+    payload = f'{now_ts}.{nonce}'
+    signature = _google_oauth_state_signature(payload)
+    return f'{payload}.{signature}'
+
+
+def _is_valid_google_oauth_state(state_value: str) -> bool:
+    raw = (state_value or '').strip()
+    if not raw:
+        return False
+    parts = raw.split('.')
+    if len(parts) < 3:
+        return False
+    ts = parts[0]
+    signature = parts[-1]
+    nonce = '.'.join(parts[1:-1])
+    if not ts.isdigit() or not nonce or not signature:
+        return False
+
+    payload = f'{ts}.{nonce}'
+    expected_signature = _google_oauth_state_signature(payload)
+    if not hmac.compare_digest(signature, expected_signature):
+        return False
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    issued_ts = int(ts)
+    max_age = max(60, _google_oauth_state_max_age_seconds())
+    if issued_ts > now_ts + 60:
+        return False
+    return (now_ts - issued_ts) <= max_age
+
+
 @app.route('/patient/<int:patient_id>/toggle_self_booking', methods=('POST',))
 @login_required
 def toggle_self_booking(patient_id):
@@ -9114,26 +9157,126 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
     ''', (booked_label, datetime.now().isoformat(), booking_date, parsed_booking_time.strftime('%H:%M')))
     db.commit()
 
-    # Sync to Google Calendar if save_to_google flag is set and admin is connected
-    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
-
-    if save_to_google and gcal_ref and patient_id:
-        new_appt = db.execute('SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
-                              (patient_id, booking_date, parsed_booking_time.strftime('%H:%M'))).fetchone()
+    response_payload = {'status': 'success'}
+    if patient_id:
+        new_appt = db.execute(
+            'SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
+            (patient_id, booking_date, parsed_booking_time.strftime('%H:%M')),
+        ).fetchone()
         if new_appt:
-            patient_row = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-            gcal_ref.sync_appointment_to_google(
-                db,
-                appointment_id=new_appt['id'],
-                patient_name=(patient_row['name'] if patient_row else booked_label),
-                date_iso=booking_date,
-                time_str=parsed_booking_time.strftime('%H:%M'),
-                duration_minutes=duration,
-                meeting_type=meeting_type,
-                meeting_link=meeting_link or '',
-            )
+            sync_message = _sync_appointment_with_google(db, int(new_appt['id']))
+            if sync_message:
+                response_payload['message'] = sync_message
 
-    return jsonify({'status': 'success'})
+    return jsonify(response_payload)
+
+
+def _combine_google_sync_messages(*messages):
+    ordered = []
+    for message in messages:
+        normalized = (message or '').strip()
+        if normalized and normalized not in ordered:
+            ordered.append(normalized)
+    return ' '.join(ordered) if ordered else None
+
+
+def _delete_google_events(db, google_event_ids):
+    event_ids = []
+    for event_id in google_event_ids or []:
+        normalized = str(event_id or '').strip()
+        if normalized and normalized not in event_ids:
+            event_ids.append(normalized)
+    if not event_ids:
+        return None
+
+    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
+    if not gcal_ref or not getattr(gcal_ref, 'GOOGLE_LIBS_AVAILABLE', False):
+        return 'Google Calendar sync is unavailable because the Google libraries are not installed.'
+    if not getattr(gcal_ref, 'is_connected', lambda _db: False)(db):
+        return 'Google Calendar is not connected, so linked Google events could not be removed.'
+
+    failed_ids = []
+    for event_id in event_ids:
+        try:
+            deleted = bool(gcal_ref.delete_event_from_google(db, event_id))
+        except Exception:
+            deleted = False
+        if not deleted:
+            failed_ids.append(event_id)
+
+    if failed_ids:
+        return 'Google Calendar removal failed for one or more linked events.'
+    return None
+
+
+def _sync_appointment_with_google(db, appointment_id):
+    appointment = db.execute(
+        '''
+        SELECT a.id,
+               a.patient_id,
+               a.appointment_date,
+               a.appointment_time,
+               a.duration_minutes,
+               a.meeting_type,
+               a.meeting_link,
+               a.save_to_google,
+               a.google_event_id,
+               p.name AS patient_name
+        FROM appointments a
+        LEFT JOIN patients p ON p.id = a.patient_id
+        WHERE a.id = ?
+        ''',
+        (appointment_id,),
+    ).fetchone()
+    if not appointment:
+        return None
+
+    save_to_google = int(appointment['save_to_google'] or 0) if 'save_to_google' in appointment.keys() else 0
+    google_event_id = str(appointment['google_event_id'] or '').strip() if 'google_event_id' in appointment.keys() else ''
+    if not save_to_google and not google_event_id:
+        return None
+
+    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
+    if not gcal_ref or not getattr(gcal_ref, 'GOOGLE_LIBS_AVAILABLE', False):
+        return 'Google Calendar sync is unavailable because the Google libraries are not installed.'
+    if not getattr(gcal_ref, 'is_connected', lambda _db: False)(db):
+        return 'Google Calendar is not connected. The appointment was saved locally only.'
+
+    try:
+        if google_event_id and not save_to_google:
+            deleted = bool(gcal_ref.delete_event_from_google(db, google_event_id))
+            if not deleted:
+                return 'Google Calendar removal failed. The appointment was updated locally, but the old Google event could not be removed.'
+            db.execute('UPDATE appointments SET google_event_id = NULL WHERE id = ?', (appointment_id,))
+            db.commit()
+            return None
+
+        event_id = gcal_ref.sync_appointment_to_google(
+            db,
+            appointment_id=appointment_id,
+            patient_name=(appointment['patient_name'] or 'Appointment'),
+            date_iso=appointment['appointment_date'],
+            time_str=appointment['appointment_time'],
+            duration_minutes=appointment['duration_minutes'] or 60,
+            meeting_type=(appointment['meeting_type'] or 'in-person'),
+            meeting_link=appointment['meeting_link'] or '',
+            google_event_id=google_event_id or None,
+        )
+    except Exception as exc:
+        return f'Google Calendar sync failed: {exc}'
+
+    if not event_id:
+        return 'Google Calendar sync failed. The appointment was saved locally only.'
+    return None
+
+
+def _sync_multiple_appointments_with_google(db, appointment_ids):
+    messages = []
+    for appointment_id in appointment_ids or []:
+        message = _sync_appointment_with_google(db, int(appointment_id))
+        if message:
+            messages.append(message)
+    return _combine_google_sync_messages(*messages)
 
 
 @app.route('/api/calendar/book', methods=['POST'])
@@ -9346,12 +9489,17 @@ def api_calendar_appointment_delete(appointment_id):
             ).fetchall()
 
     if not is_recurring or scope == 'all':
+        deleted_google_event_ids = [row['google_event_id'] for row in related_rows if 'google_event_id' in row.keys()]
         if is_recurring and recurrence_group_id:
             db.execute('DELETE FROM appointments WHERE recurrence_group_id = ?', (recurrence_group_id,))
         else:
             db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
         db.commit()
-        return jsonify({'status': 'success'})
+        sync_message = _delete_google_events(db, deleted_google_event_ids)
+        response = {'status': 'success'}
+        if sync_message:
+            response['message'] = sync_message
+        return jsonify(response)
 
     if scope == 'one':
         occ_date = parse_date_safe(occurrence_date_raw)
@@ -9372,13 +9520,19 @@ def api_calendar_appointment_delete(appointment_id):
     if scope == 'upcoming':
         occ_date = parse_date_safe(occurrence_date_raw)
         if not occ_date:
+            deleted_google_event_ids = [row['google_event_id'] for row in related_rows if 'google_event_id' in row.keys()]
             if recurrence_group_id:
                 db.execute('DELETE FROM appointments WHERE recurrence_group_id = ?', (recurrence_group_id,))
             else:
                 db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
             db.commit()
-            return jsonify({'status': 'success'})
+            sync_message = _delete_google_events(db, deleted_google_event_ids)
+            response = {'status': 'success'}
+            if sync_message:
+                response['message'] = sync_message
+            return jsonify(response)
 
+        deleted_google_event_ids = []
         for row in related_rows:
             base_date = parse_date_safe(row['appointment_date'])
             if not base_date:
@@ -9394,19 +9548,30 @@ def api_calendar_appointment_delete(appointment_id):
             if is_occurrence_in_series:
                 if base_date >= occ_date:
                     # Truncating to occ_date-1 would make end < start — delete instead.
+                    deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
                     db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
                 else:
                     cutoff = (occ_date - timedelta(days=1)).isoformat()
                     db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
             elif base_date >= occ_date:
+                deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
                 db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
         db.commit()
-        return jsonify({'status': 'success'})
+        sync_message = _delete_google_events(db, deleted_google_event_ids)
+        response = {'status': 'success'}
+        if sync_message:
+            response['message'] = sync_message
+        return jsonify(response)
 
     # Fallback
+    deleted_google_event_ids = [appt['google_event_id']] if 'google_event_id' in appt.keys() else []
     db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
     db.commit()
-    return jsonify({'status': 'success'})
+    sync_message = _delete_google_events(db, deleted_google_event_ids)
+    response = {'status': 'success'}
+    if sync_message:
+        response['message'] = sync_message
+    return jsonify(response)
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -11007,8 +11172,9 @@ def google_calendar_connect():
         # Build redirect URI using forwarded headers/public base URL when present,
         # so OAuth callback matches externally reachable https URL behind proxies.
         redirect_uri = build_external_public_url('google_calendar_callback')
+        oauth_state = _generate_google_oauth_state()
         auth_url, state, code_verifier = gcal.get_authorization_url(
-            integrations=integrations, redirect_uri=redirect_uri)
+            integrations=integrations, redirect_uri=redirect_uri, state=oauth_state)
         session['gcal_oauth_state'] = state
         session['gcal_redirect_uri'] = redirect_uri
         if code_verifier:
@@ -11039,7 +11205,9 @@ def google_calendar_callback():
     if not code:
         flash('Google authorisation was cancelled or failed.')
         return redirect(url_for('admin_profile'))
-    if not stored_state or state != stored_state:
+    state_matches_session = bool(stored_state and state == stored_state)
+    state_matches_signed_token = _is_valid_google_oauth_state(state)
+    if not (state_matches_session or state_matches_signed_token):
         flash('OAuth state mismatch – please try connecting again.')
         return redirect(url_for('admin_profile'))
     try:
@@ -12899,7 +13067,7 @@ def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw
             excluded_list.append(new_day.isoformat())
     db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
                (','.join(excluded_list), appointment_id))
-    db.execute('''
+    new_row = db.execute('''
         INSERT INTO appointments
         (patient_id, appointment_date, appointment_time, duration_minutes,
          is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
@@ -12909,7 +13077,11 @@ def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw
           meeting_type, meeting_link or None, meeting_platform or None,
           meeting_title or None, save_to_google))
     db.commit()
-    return jsonify({'status': 'success'})
+    sync_message = _sync_appointment_with_google(db, int(new_row.lastrowid))
+    response = {'status': 'success'}
+    if sync_message:
+        response['message'] = sync_message
+    return jsonify(response)
 
 def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id):
     occ_date = parse_date_safe(occurrence_date_raw)
@@ -12919,6 +13091,7 @@ def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_
     affects_series = False
     inherited_end = None
     cutoff = (occ_date - timedelta(days=1)).isoformat()
+    deleted_google_event_ids = []
     for row in related_rows:
         row_base = parse_date_safe(row['appointment_date'])
         if not row_base:
@@ -12930,6 +13103,7 @@ def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_
 
         if row_base >= occ_date:
             affects_series = True
+            deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
             db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
             continue
 
@@ -12954,7 +13128,7 @@ def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_
     )
     rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
     rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
-    db.execute('''
+    new_row = db.execute('''
         INSERT INTO appointments
         (patient_id, appointment_date, appointment_time, duration_minutes,
          is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
@@ -12966,7 +13140,14 @@ def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_
           meeting_type, meeting_link or None, meeting_platform or None,
           meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
     db.commit()
-    return jsonify({'status': 'success'})
+    sync_message = _combine_google_sync_messages(
+        _delete_google_events(db, deleted_google_event_ids),
+        _sync_appointment_with_google(db, int(new_row.lastrowid)),
+    )
+    response = {'status': 'success'}
+    if sync_message:
+        response['message'] = sync_message
+    return jsonify(response)
 
 def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
     new_day = parse_date_safe(booking_date)
@@ -13008,7 +13189,11 @@ def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, 
               meeting_type, meeting_link or None, meeting_platform or None,
               meeting_title or None, save_to_google, new_rec_days, row['id']))
     db.commit()
-    return jsonify({'status': 'success'})
+    sync_message = _sync_multiple_appointments_with_google(db, [row['id'] for row in related_rows])
+    response = {'status': 'success'}
+    if sync_message:
+        response['message'] = sync_message
+    return jsonify(response)
 
 
 @app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
@@ -13092,7 +13277,11 @@ def api_calendar_appointment_update(appointment_id):
           meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None,
           save_to_google, new_rec_days, appointment_id))
     db.commit()
-    return jsonify({'status': 'success'})
+    sync_message = _sync_appointment_with_google(db, appointment_id)
+    response = {'status': 'success'}
+    if sync_message:
+        response['message'] = sync_message
+    return jsonify(response)
 
 
 @app.route('/api/groups/sessions/<int:session_id>/update', methods=['POST'])
@@ -13685,7 +13874,7 @@ def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurr
                            recurrence_interval, recurrence_days, meeting_type, meeting_link,
                            recurrence_end_date, recurrence_count, meeting_title, save_to_google):
     if is_recurring:
-        db.execute('''INSERT INTO appointments
+        cursor = db.execute('''INSERT INTO appointments
                       (patient_id, appointment_date, appointment_time, cost, duration_minutes,
                                 is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
                                                                     recurrence_end_date, recurrence_count, meeting_title, save_to_google, recurrence_group_id)
@@ -13694,7 +13883,7 @@ def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurr
                             recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
                                                             meeting_title or None, save_to_google, build_recurrence_group_id()))
     else:
-        db.execute('''INSERT INTO appointments
+        cursor = db.execute('''INSERT INTO appointments
                       (patient_id, appointment_date, appointment_time, cost, duration_minutes,
                                 meeting_type, meeting_link, meeting_title, save_to_google)
                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -13708,6 +13897,7 @@ def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurr
         details = f"Patient {patient['name']} has scheduled a {appt_type} appointment on {date} at {time}."
         db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
                    (patient_id, 'schedule', details))
+    return cursor.lastrowid
 
 @app.route('/patient/<int:patient_id>/add_appointment', methods=('POST',))
 @login_required
@@ -13756,12 +13946,15 @@ def add_appointment(patient_id):
             return redirect(url_for('patient_detail', patient_id=patient_id))
 
     try:
-        _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
-                               recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                               recurrence_end_date, recurrence_count, meeting_title, save_to_google)
+        appointment_id = _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
+                                                recurrence_interval, recurrence_days, meeting_type, meeting_link,
+                                                recurrence_end_date, recurrence_count, meeting_title, save_to_google)
         db.commit()
         appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
         flash(appt_msg)
+        sync_message = _sync_appointment_with_google(db, appointment_id)
+        if sync_message:
+            flash(sync_message, 'warning')
     except sqlite3.IntegrityError as e:
         flash(f'Error adding appointment: {str(e)}', 'error')
     except Exception as e:
@@ -14073,9 +14266,13 @@ def delete_appointment(appointment_id):
             details = f"Patient {patient['name']} appointment on {appt['appointment_date']} at {appt['appointment_time']} was deleted."
             db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (appt['patient_id'], 'delete', details))
 
+        deleted_google_event_ids = [appt['google_event_id']] if 'google_event_id' in appt.keys() else []
         db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
         db.commit()
         flash('Appointment deleted.')
+        sync_message = _delete_google_events(db, deleted_google_event_ids)
+        if sync_message:
+            flash(sync_message, 'warning')
         return redirect(url_for('patient_detail', patient_id=appt['patient_id']))
 
     return "Appointment not found", 404

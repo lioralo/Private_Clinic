@@ -107,6 +107,24 @@ class TestRefreshAndSaveDeleteScope(unittest.TestCase):
                         f'DELETE call must include a WHERE clause, got: {delete_calls}')
 
 
+class TestExchangeCodeForTokens(unittest.TestCase):
+
+    def test_exchange_passes_code_verifier_when_available(self):
+        flow = MagicMock()
+        creds = MagicMock()
+        flow.credentials = creds
+        with patch.object(gcal_module, 'create_oauth_flow', return_value=flow):
+            result = gcal_module.exchange_code_for_tokens(
+                code='code-123',
+                state='state-123',
+                code_verifier='verifier-123',
+                redirect_uri='https://example.com/callback',
+            )
+
+        self.assertIs(result, creds)
+        flow.fetch_token.assert_called_once_with(code='code-123', code_verifier='verifier-123')
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (Flask test client)
 # ---------------------------------------------------------------------------
@@ -284,6 +302,26 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
                 '/admin/google-calendar/callback?code=abc&state=good-state',
                 follow_redirects=True,
             )
+        self.assertEqual(rv.status_code, 200)
+        gcal_mock.exchange_code_for_tokens.assert_called_once()
+
+    def test_callback_proceeds_with_valid_signed_state_without_session(self):
+        self._login()
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        mock_creds = MagicMock()
+        gcal_mock.exchange_code_for_tokens.return_value = mock_creds
+        gcal_mock.save_credentials.return_value = None
+
+        signed_state = app_module._generate_google_oauth_state()
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get(
+                f'/admin/google-calendar/callback?code=abc&state={signed_state}',
+                follow_redirects=True,
+            )
+
         self.assertEqual(rv.status_code, 200)
         gcal_mock.exchange_code_for_tokens.assert_called_once()
 

@@ -211,7 +211,7 @@ def create_oauth_flow(state: str = None, scopes=None, redirect_uri: str = None) 
     return flow
 
 
-def get_authorization_url(integrations=None, redirect_uri: str = None) -> tuple:
+def get_authorization_url(integrations=None, redirect_uri: str = None, state: str = None) -> tuple:
     """Return (auth_url, state, code_verifier). code_verifier may be None.
 
     ``integrations`` is an optional list of integration names (e.g.
@@ -222,7 +222,7 @@ def get_authorization_url(integrations=None, redirect_uri: str = None) -> tuple:
     This should be the full URL of the callback endpoint for the current request.
     """
     scopes = get_scopes_for_integrations(integrations)
-    flow = create_oauth_flow(scopes=scopes, redirect_uri=redirect_uri)
+    flow = create_oauth_flow(state=state, scopes=scopes, redirect_uri=redirect_uri)
     auth_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
@@ -240,7 +240,11 @@ def exchange_code_for_tokens(code: str, state: str, code_verifier: str = None,
     Google's token endpoint accepts the exchange.
     """
     flow = create_oauth_flow(state=state, redirect_uri=redirect_uri)
-    flow.fetch_token(code=code)
+    fetch_kwargs = {'code': code}
+    if code_verifier:
+        # Some Google OAuth clients enforce PKCE; include verifier when present.
+        fetch_kwargs['code_verifier'] = code_verifier
+    flow.fetch_token(**fetch_kwargs)
     return flow.credentials
 
 

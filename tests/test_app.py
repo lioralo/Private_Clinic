@@ -320,6 +320,30 @@ class ClinicTestCase(unittest.TestCase):
             assert appt is not None
             assert appt['appointment_date'] == '2024-01-01'
 
+    def test_add_appointment_syncs_google_when_requested(self):
+        totp = pyotp.TOTP(self.admin_otp_secret)
+        self.login('lioraloni', 'Flo@tingind4', otp_token=totp.now())
+        self.client.post('/add_patient', data=dict(
+            name='Google Sync Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.is_connected.return_value = True
+        gcal_mock.sync_appointment_to_google.return_value = 'evt-123'
+
+        with patch.object(app_module, '_import_optional_module', return_value=gcal_mock):
+            rv = self.client.post('/patient/1/add_appointment', data=dict(
+                date='2024-01-08',
+                time='11:00',
+                cost='100.00',
+                save_to_google='1'
+            ), follow_redirects=True)
+
+        assert b'Single appointment added.' in rv.data
+        gcal_mock.sync_appointment_to_google.assert_called_once()
+
     def test_seed_example_patients(self):
         self.login('lioraloni', 'Flo@tingind4')
         rv = self.client.post('/admin/seed_data', data={}, follow_redirects=True)
@@ -856,6 +880,34 @@ class ClinicTestCase(unittest.TestCase):
             assert row['recurrence_end_date'] is not None
             assert row['recurrence_group_id'] is not None
 
+    def test_calendar_booking_returns_google_sync_warning(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Warning Booking Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        booking_date = (datetime.now().date() + timedelta(days=1)).isoformat()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.is_connected.return_value = True
+        gcal_mock.sync_appointment_to_google.return_value = None
+
+        with patch.object(app_module, '_import_optional_module', return_value=gcal_mock):
+            rv = self.client.post('/api/calendar/book', data=dict(
+                patient_id='1',
+                date=booking_date,
+                time='11:00',
+                end_time='12:00',
+                meeting_type='in-person',
+                save_to_google='1'
+            ))
+
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload.get('status') == 'success'
+        assert 'Google Calendar sync failed' in payload.get('message', '')
+
     def test_recurring_delete_all_removes_related_split_series_without_group_id(self):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(
@@ -1205,6 +1257,76 @@ class ClinicTestCase(unittest.TestCase):
             new_row = next((r for r in rows if r['appointment_date'] == '2026-02-02'), None)
             assert new_row is not None
             assert new_row['appointment_time'] == '11:00'
+
+    def test_api_calendar_appointment_update_returns_google_sync_warning(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Update Warning Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, meeting_type, save_to_google
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 'in-person', 1)
+            ''')
+            db.commit()
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.is_connected.return_value = True
+        gcal_mock.sync_appointment_to_google.return_value = None
+
+        with patch.object(app_module, '_import_optional_module', return_value=gcal_mock):
+            rv = self.client.post('/api/calendar/appointment/1/update', data={
+                'scope': 'all',
+                'date': '2026-01-05',
+                'time': '11:00',
+                'end_time': '12:00',
+                'meeting_type': 'in-person',
+                'meeting_link': '',
+                'meeting_title': '',
+                'save_to_google': '1',
+                'meeting_platform': ''
+            })
+
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload.get('status') == 'success'
+        assert 'Google Calendar sync failed' in payload.get('message', '')
+
+    def test_api_calendar_appointment_delete_returns_google_sync_warning(self):
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Delete Warning Patient',
+            status='ongoing'
+        ), follow_redirects=True)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, meeting_type, google_event_id
+                ) VALUES (1, '2026-01-05', '10:00', 60, 'scheduled', 'in-person', 'evt-delete-1')
+            ''')
+            db.commit()
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.is_connected.return_value = True
+        gcal_mock.delete_event_from_google.return_value = False
+
+        with patch.object(app_module, '_import_optional_module', return_value=gcal_mock):
+            rv = self.client.post('/api/calendar/appointment/1/delete')
+
+        assert rv.status_code == 200
+        payload = rv.get_json()
+        assert payload.get('status') == 'success'
+        assert 'Google Calendar removal failed' in payload.get('message', '')
 
     def test_recurring_update_scope_one_creates_standalone_and_excludes_date(self):
         """scope=one edit must exclude the occurrence from the series and create

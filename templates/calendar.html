@@ -805,6 +805,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 if (data.status === 'success') {
                                     loadSnapshot();
                                     loadBookingManagement();
+                                    if (data.message) {
+                                        showActionModal({ title: 'Deleted with Warning', message: data.message });
+                                    }
                                 } else {
                                     showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
                                 }
@@ -823,6 +826,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             actionModal.hide();
                             loadSnapshot();
                             loadBookingManagement();
+                            if (data.message) {
+                                showActionModal({ title: 'Deleted with Warning', message: data.message });
+                            }
                         } else {
                             showActionModal({ title: I18N.deleteFailed, message: data.message || I18N.couldNotDeleteMeeting });
                         }
@@ -902,6 +908,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             actionModal.hide();
                             loadSnapshot();
                             loadBookingManagement();
+                            if (data.message) {
+                                showActionModal({ title: 'Saved with Warning', message: data.message });
+                            }
                         } else {
                             showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
                         }
@@ -925,6 +934,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         actionModal.hide();
                         loadSnapshot();
                         loadBookingManagement();
+                        if (data.message) {
+                            showActionModal({ title: 'Saved with Warning', message: data.message });
+                        }
                     } else {
                         showActionModal({ title: I18N.saveFailed, message: data.message || I18N.couldNotSaveMeetingChanges });
                     }
@@ -2284,7 +2296,7 @@ document.addEventListener('DOMContentLoaded', function() {
             body: new URLSearchParams(formData)
         }).then(r => r.json()).then(data => {
             if (data.status === 'success') {
-                showActionModal({ title: 'Booking Saved', message: 'The booking was saved successfully.' });
+                showActionModal({ title: 'Booking Saved', message: data.message || 'The booking was saved successfully.' });
                 loadSnapshot();
             } else {
                 showActionModal({ title: 'Booking Failed', message: data.message || 'Booking failed.' });
