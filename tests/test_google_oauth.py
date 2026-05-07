@@ -303,6 +303,36 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
         self.assertIn('sheets', data['enabled_integrations'])
         self.assertNotIn('docs', data['enabled_integrations'])
 
+    def test_admin_profile_server_renders_disconnect_when_connected(self):
+        self._login()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock._client_secrets_available.return_value = True
+        gcal_mock.is_connected.return_value = True
+        gcal_mock.get_calendar_id.return_value = 'primary'
+        gcal_mock.list_calendars.return_value = [{'id': 'primary', 'summary': 'Primary'}]
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get('/admin/profile')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Disconnect Google', rv.data)
+
+    def test_admin_profile_server_renders_connect_when_disconnected(self):
+        self._login()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock._client_secrets_available.return_value = True
+        gcal_mock.is_connected.return_value = False
+        gcal_mock.get_calendar_id.return_value = None
+        gcal_mock.list_calendars.return_value = []
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get('/admin/profile')
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'Connect with Google', rv.data)
+
 
 if __name__ == '__main__':
     unittest.main()

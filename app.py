@@ -1315,6 +1315,20 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto', progress_
         return {'ran': False, 'reason': 'not-due'}
 
     selected_targets = list(state['selected_targets'])
+    if not selected_targets and force:
+        connected_docs = state.get('connected_docs') or []
+        for doc in connected_docs:
+            target_type, target_id = _parse_gdoc_target_key(doc.get('target_key'))
+            if not target_type:
+                continue
+            selected_targets.append({
+                'target_key': doc.get('target_key'),
+                'target_type': target_type,
+                'target_id': target_id,
+                'mode': 'pull' if target_type == 'patient' else 'pull',
+                'label': doc.get('label') or doc.get('target_key'),
+            })
+
     if not selected_targets:
         emit_progress(status='failed', message='No connected Google Docs are selected for sync.', percent=100)
         return {'ran': False, 'reason': 'no-connected-targets'}
@@ -12292,6 +12306,40 @@ def admin_profile():
         flash('Admin profile updated.')
         return redirect(url_for('admin_profile'))
 
+    site_settings = get_site_settings(db)
+    try:
+        raw_enabled_integrations = json.loads(site_settings.get('google_enabled_integrations') or '["calendar","docs","sheets"]')
+        if not isinstance(raw_enabled_integrations, list):
+            raise ValueError('enabled integrations must be a list')
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raw_enabled_integrations = ['calendar', 'docs', 'sheets']
+
+    valid_integrations = {'calendar', 'docs', 'sheets'}
+    enabled_integrations = [key for key in raw_enabled_integrations if key in valid_integrations]
+
+    google_calendar_ui = {
+        'google_libs': bool(gcal and getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', False)),
+        'client_configured': False,
+        'connected': False,
+        'calendar_id': None,
+        'calendars': [],
+        'enabled_integrations': enabled_integrations,
+        'error': None,
+    }
+
+    if gcal:
+        try:
+            google_calendar_ui['client_configured'] = bool(gcal._client_secrets_available())
+            if google_calendar_ui['client_configured']:
+                google_calendar_ui['connected'] = bool(gcal.is_connected(db))
+                if google_calendar_ui['connected']:
+                    calendar_id_raw = gcal.get_calendar_id(db)
+                    google_calendar_ui['calendar_id'] = str(calendar_id_raw) if calendar_id_raw is not None else None
+                    calendars_raw = gcal.list_calendars(db)
+                    google_calendar_ui['calendars'] = calendars_raw if isinstance(calendars_raw, list) else []
+        except Exception as exc:
+            google_calendar_ui['error'] = str(exc)
+
     backup_files = list_encrypted_backups()
     pending_secret = session.get('pending_totp_secret')
     totp_uri = _admin_totp_uri(admin, pending_secret) if pending_secret else None
@@ -12315,7 +12363,8 @@ def admin_profile():
         backup_files=backup_files,
         pending_totp_secret=pending_secret,
         totp_uri=totp_uri,
-        site_settings=get_site_settings(db),
+        site_settings=site_settings,
+        google_calendar_ui=google_calendar_ui,
         connected_google_docs=connected_google_docs,
         gdocs_auto_sync_state=gdocs_auto_sync_state,
         gdocs_sync_history=gdocs_sync_history,

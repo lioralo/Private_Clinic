@@ -422,6 +422,39 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(payload['patients'], 1)
         self.assertEqual(payload['groups'], 1)
 
+    def test_auto_sync_now_without_selected_targets_syncs_all_connected_docs(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('patient-doc-fallback',))
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_enabled', '1')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_json', json.dumps([]))
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_config_json', json.dumps([]))
+            )
+            db.commit()
+
+        with patch.object(app_module, '_google_docs_dependency_error', return_value=None), \
+             patch.object(app_module, '_pull_gdoc_notes', return_value=(2, None)):
+            rv = self.client.post('/admin/google-docs/auto-sync-now', data={})
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+        self.assertEqual(payload['synced'], 2)
+        self.assertEqual(payload['patients'], 1)
+
     def test_auto_sync_now_group_two_way_mode_pushes_and_writes_history(self):
         self._login_admin()
 

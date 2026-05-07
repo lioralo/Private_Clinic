@@ -275,31 +275,41 @@
         </div>
 
         <div class="card border-0 shadow-sm rounded-4">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#gcalCollapse" aria-expanded="false" aria-controls="gcalCollapse">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#gcalCollapse" aria-expanded="true" aria-controls="gcalCollapse">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-check me-2 text-success"></i>{{ t('Google Calendar Integration') }}</h5>
                 <i class="bi bi-chevron-down text-muted"></i>
             </button>
-            <div class="collapse" id="gcalCollapse">
+            <div class="collapse show" id="gcalCollapse">
                 <div class="card-body p-4">
                     <div id="gcalStatus" class="mb-3">
-                        <span class="text-muted small"><i class="bi bi-hourglass me-1"></i>{{ t('Checking Google Calendar connection...') }}</span>
+                        {% if not google_calendar_ui.google_libs %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>
+                        {% elif not google_calendar_ui.client_configured %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>
+                        {% elif google_calendar_ui.connected %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>{% if google_calendar_ui.calendar_id %} <span class="text-muted small ms-1">{{ t('Calendar') }}: {{ google_calendar_ui.calendar_id }}</span>{% endif %}
+                        {% elif google_calendar_ui.error %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Status check error') }}: {{ google_calendar_ui.error }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>
+                        {% endif %}
                     </div>
                     {# Integration selector + connect form #}
-                    <div id="gcalConnectWrap" class="mb-3">
+                    <div id="gcalConnectWrap" class="mb-3{% if google_calendar_ui.connected or not google_calendar_ui.client_configured %} d-none{% endif %}">
                         <form method="post" action="{{ url_for('google_calendar_connect') }}" id="gcalConnectForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="small fw-semibold mb-2">{{ t('Request access for:') }}</div>
                             <div class="d-flex flex-wrap gap-3 mb-3">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="calendar" id="gcalIntCalendar" checked>
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="calendar" id="gcalIntCalendar" {% if 'calendar' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
                                     <label class="form-check-label small" for="gcalIntCalendar"><i class="bi bi-calendar2-check me-1 text-success"></i>{{ t('Google Calendar') }}</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="docs" id="gcalIntDocs" checked>
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="docs" id="gcalIntDocs" {% if 'docs' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
                                     <label class="form-check-label small" for="gcalIntDocs"><i class="bi bi-file-earmark-text me-1 text-primary"></i>{{ t('Google Docs') }}</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="sheets" id="gcalIntSheets" checked>
+                                    <input class="form-check-input" type="checkbox" name="google_integration" value="sheets" id="gcalIntSheets" {% if 'sheets' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
                                     <label class="form-check-label small" for="gcalIntSheets"><i class="bi bi-table me-1 text-success"></i>{{ t('Google Sheets') }}</label>
                                 </div>
                             </div>
@@ -308,19 +318,30 @@
                             </button>
                         </form>
                     </div>
-                    <div id="gcalActiveIntegrations" class="d-none mb-2"></div>
+                    <div id="gcalActiveIntegrations" class="mb-2{% if not (google_calendar_ui.connected and google_calendar_ui.enabled_integrations) %} d-none{% endif %}">
+                        {% if google_calendar_ui.connected and google_calendar_ui.enabled_integrations %}
+                        <span class="small text-muted">{{ t('Active integrations:') }} </span>
+                        {% for integration_key in google_calendar_ui.enabled_integrations %}
+                        <span class="badge bg-light text-dark border me-1">{{ t('Calendar') if integration_key == 'calendar' else (t('Docs') if integration_key == 'docs' else t('Sheets')) }}</span>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
                     <div id="gcalActions" class="d-flex flex-wrap gap-2">
-                        <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="d-none" id="gcalDisconnectForm">
+                        <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="{% if not google_calendar_ui.connected %}d-none{% endif %}" id="gcalDisconnectForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
                                 <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect Google') }}
                             </button>
                         </form>
                     </div>
-                    <div class="d-none mt-3" id="gcalCalendarSelector">
+                    <div class="mt-3{% if not (google_calendar_ui.connected and google_calendar_ui.calendars) %} d-none{% endif %}" id="gcalCalendarSelector">
                         <label class="form-label small fw-semibold">{{ t('Choose calendar to sync to') }}</label>
                         <div class="d-flex gap-2">
-                            <select id="gcalCalendarSelect" class="form-select form-select-sm"></select>
+                            <select id="gcalCalendarSelect" class="form-select form-select-sm">
+                                {% for calendar_item in google_calendar_ui.calendars %}
+                                <option value="{{ calendar_item.id }}" {% if calendar_item.id == google_calendar_ui.calendar_id %}selected{% endif %}>{{ calendar_item.summary }}</option>
+                                {% endfor %}
+                            </select>
                             <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
                         </div>
                     </div>
@@ -559,10 +580,7 @@
             toggleGoogleUiForConnectionState(data);
         })
         .catch(() => {
-            const statusDiv = document.getElementById('gcalStatus');
-            if (statusDiv) {
-                statusDiv.innerHTML = '<span class="text-muted small">{{ t('Could not load Google Calendar status.') }}</span>';
-            }
+            // Keep server-rendered state as fallback when dynamic refresh fails.
         });
 
     const saveBtn = document.getElementById('gcalSaveCalendarBtn');

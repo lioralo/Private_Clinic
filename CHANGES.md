@@ -2,6 +2,36 @@
 
 ---
 
+## Session 76
+
+**Date:** 2026-05-07
+
+**Objective:** Resolve persistent production issues where Google Connect/Disconnect controls were not visible and Docs Sync did not run reliably.
+
+**Release Summary:**
+
+1. **Server-rendered Google Integration State (Reliability)**
+  - `admin_profile` now computes Google integration status server-side and injects it into the template.
+  - The profile page now renders Connect/Disconnect controls correctly even if client-side status fetch fails.
+
+2. **Always-Visible Integration Panel (UX)**
+  - Google integration accordion now opens by default to keep controls immediately visible.
+  - Initial status badge, active integrations, and calendar selector are rendered from server state.
+
+3. **Manual Docs Sync Fallback (Behavior)**
+  - Manual `Sync Now` now falls back to syncing all connected docs when no specific sync targets were selected.
+  - Prevents the common “nothing runs” case when docs are connected but selection list is empty.
+
+4. **Dynamic Refresh Fallback (Frontend)**
+  - If async status refresh fails, UI preserves server-rendered state instead of replacing it with an empty/error-only placeholder.
+
+5. **Verification**
+  - Added regression tests for server-rendered Connect/Disconnect visibility.
+  - Added regression test for manual sync fallback with empty target selection.
+  - Test results: `341/341` passing in `tests/`.
+
+---
+
 ## Session 75
 
 **Date:** 2026-05-07
