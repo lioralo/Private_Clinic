@@ -197,7 +197,7 @@ def is_connected(db: sqlite3.Connection) -> bool:
 # OAuth flow
 # ---------------------------------------------------------------------------
 
-def create_oauth_flow(state: str = None, scopes=None) -> 'Flow':
+def create_oauth_flow(state: str = None, scopes=None, redirect_uri: str = None) -> 'Flow':
     if not GOOGLE_LIBS_AVAILABLE:
         raise RuntimeError('Google API libraries are not installed.')
     if not _client_secrets_available():
@@ -206,20 +206,23 @@ def create_oauth_flow(state: str = None, scopes=None) -> 'Flow':
         _client_config(),
         scopes=scopes if scopes else SCOPES,
         state=state,
-        redirect_uri=_redirect_uri(),
+        redirect_uri=redirect_uri or _redirect_uri(),
     )
     return flow
 
 
-def get_authorization_url(integrations=None) -> tuple:
+def get_authorization_url(integrations=None, redirect_uri: str = None) -> tuple:
     """Return (auth_url, state, code_verifier). code_verifier may be None.
 
     ``integrations`` is an optional list of integration names (e.g.
     ['calendar', 'docs']).  When supplied only the matching OAuth scopes
     are requested.  When omitted all scopes are requested.
+
+    Pass ``redirect_uri`` to override the default APP_BASE_URL-derived URI.
+    This should be the full URL of the callback endpoint for the current request.
     """
     scopes = get_scopes_for_integrations(integrations)
-    flow = create_oauth_flow(scopes=scopes)
+    flow = create_oauth_flow(scopes=scopes, redirect_uri=redirect_uri)
     auth_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
@@ -229,9 +232,14 @@ def get_authorization_url(integrations=None) -> tuple:
     return auth_url, state, code_verifier
 
 
-def exchange_code_for_tokens(code: str, state: str, code_verifier: str = None):
-    """Exchange the OAuth code for credentials. Returns Credentials."""
-    flow = create_oauth_flow(state=state)
+def exchange_code_for_tokens(code: str, state: str, code_verifier: str = None,
+                             redirect_uri: str = None):
+    """Exchange the OAuth code for credentials. Returns Credentials.
+
+    Pass the same ``redirect_uri`` that was used in get_authorization_url so
+    Google's token endpoint accepts the exchange.
+    """
+    flow = create_oauth_flow(state=state, redirect_uri=redirect_uri)
     flow.fetch_token(code=code)
     return flow.credentials
 
