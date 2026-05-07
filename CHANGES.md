@@ -2,6 +2,30 @@
 
 ---
 
+## Session 75
+
+**Date:** 2026-05-07
+
+**Objective:** Fix Google integration connect/disconnect state visibility so admin actions always match active connection status.
+
+**Release Summary:**
+
+1. **Google Connect/Disconnect State Rendering (UI)**
+  - Updated admin profile integration script to render a complete state on every status response.
+  - UI now explicitly toggles both directions:
+    - connected: show **Disconnect Google**, hide connect form
+    - disconnected: show connect form, hide disconnect action
+  - Clears and rebuilds active integrations and calendar selector each refresh to avoid stale UI.
+
+2. **Status Fetch Freshness (UI Reliability)**
+  - Added cache-busting query parameter to the Google status request to avoid stale cached responses after OAuth redirects.
+
+3. **Verification**
+  - Google OAuth tests still pass, including disconnect behavior and enabled integrations coverage.
+  - Full test suite remains green.
+
+---
+
 ## Session 74
 
 **Date:** 2026-05-05

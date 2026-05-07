@@ -465,16 +465,90 @@
 
 <script>
 (function() {
-    fetch('/admin/google-calendar/status')
+    function toggleGoogleUiForConnectionState(data) {
+        const statusDiv = document.getElementById('gcalStatus');
+        const disconnectForm = document.getElementById('gcalDisconnectForm');
+        const connectWrap = document.getElementById('gcalConnectWrap');
+        const activeIntDiv = document.getElementById('gcalActiveIntegrations');
+        const calSelector = document.getElementById('gcalCalendarSelector');
+        const calSelect = document.getElementById('gcalCalendarSelect');
+
+        if (!statusDiv) {
+            return;
+        }
+
+        if (disconnectForm) {
+            disconnectForm.classList.add('d-none');
+            disconnectForm.style.display = 'none';
+        }
+        if (connectWrap) {
+            connectWrap.classList.remove('d-none');
+            connectWrap.style.display = '';
+        }
+        if (activeIntDiv) {
+            activeIntDiv.classList.add('d-none');
+            activeIntDiv.innerHTML = '';
+        }
+        if (calSelector) {
+            calSelector.classList.add('d-none');
+        }
+        if (calSelect) {
+            calSelect.innerHTML = '';
+        }
+
+        if (!data.google_libs) {
+            statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>';
+            return;
+        }
+        if (!data.client_configured) {
+            statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>';
+            if (connectWrap) {
+                connectWrap.classList.add('d-none');
+                connectWrap.style.display = 'none';
+            }
+            return;
+        }
+
+        if (data.connected) {
+            statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>' +
+                (data.calendar_id ? ' <span class="text-muted small ms-1">{{ t('Calendar') }}: ' + data.calendar_id + '</span>' : '');
+
+            if (disconnectForm) {
+                disconnectForm.classList.remove('d-none');
+                disconnectForm.style.display = '';
+            }
+            if (connectWrap) {
+                connectWrap.classList.add('d-none');
+                connectWrap.style.display = 'none';
+            }
+
+            if (activeIntDiv && data.enabled_integrations && data.enabled_integrations.length) {
+                const labels = {'calendar': '{{ t('Calendar') }}', 'docs': '{{ t('Docs') }}', 'sheets': '{{ t('Sheets') }}'};
+                const badges = data.enabled_integrations.map(function(k) {
+                    return '<span class="badge bg-light text-dark border me-1">' + (labels[k] || k) + '</span>';
+                }).join('');
+                activeIntDiv.innerHTML = '<span class="small text-muted">{{ t('Active integrations:') }} </span>' + badges;
+                activeIntDiv.classList.remove('d-none');
+            }
+            if (calSelector && data.calendars && data.calendars.length) {
+                calSelector.classList.remove('d-none');
+                data.calendars.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.summary;
+                    if (c.id === data.calendar_id) opt.selected = true;
+                    calSelect.appendChild(opt);
+                });
+            }
+            return;
+        }
+
+        statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>';
+    }
+
+    fetch('/admin/google-calendar/status?_=' + Date.now())
         .then(r => r.json())
         .then(data => {
-            const statusDiv = document.getElementById('gcalStatus');
-            const disconnectForm = document.getElementById('gcalDisconnectForm');
-            const connectWrap = document.getElementById('gcalConnectWrap');
-            const activeIntDiv = document.getElementById('gcalActiveIntegrations');
-            const calSelector = document.getElementById('gcalCalendarSelector');
-            const calSelect = document.getElementById('gcalCalendarSelect');
-
             // Pre-fill integration checkboxes from server setting
             if (data.enabled_integrations && Array.isArray(data.enabled_integrations)) {
                 ['calendar','docs','sheets'].forEach(function(key) {
@@ -482,46 +556,7 @@
                     if (cb) cb.checked = data.enabled_integrations.indexOf(key) !== -1;
                 });
             }
-
-            if (!statusDiv) {
-                return;
-            }
-            if (!data.google_libs) {
-                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>';
-                return;
-            }
-            if (!data.client_configured) {
-                statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>';
-                if (connectWrap) connectWrap.style.display = 'none';
-                return;
-            }
-            if (data.connected) {
-                statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>' +
-                    (data.calendar_id ? ' <span class="text-muted small ms-1">{{ t('Calendar') }}: ' + data.calendar_id + '</span>' : '');
-                if (disconnectForm) disconnectForm.classList.remove('d-none');
-                if (connectWrap) connectWrap.classList.add('d-none');
-                // Show active integrations
-                if (activeIntDiv && data.enabled_integrations && data.enabled_integrations.length) {
-                    const labels = {'calendar': '{{ t('Calendar') }}', 'docs': '{{ t('Docs') }}', 'sheets': '{{ t('Sheets') }}'};
-                    const badges = data.enabled_integrations.map(function(k) {
-                        return '<span class="badge bg-light text-dark border me-1">' + (labels[k] || k) + '</span>';
-                    }).join('');
-                    activeIntDiv.innerHTML = '<span class="small text-muted">{{ t('Active integrations:') }} </span>' + badges;
-                    activeIntDiv.classList.remove('d-none');
-                }
-                if (calSelector && data.calendars && data.calendars.length) {
-                    calSelector.classList.remove('d-none');
-                    data.calendars.forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c.id;
-                        opt.textContent = c.summary;
-                        if (c.id === data.calendar_id) opt.selected = true;
-                        calSelect.appendChild(opt);
-                    });
-                }
-            } else {
-                statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>';
-            }
+            toggleGoogleUiForConnectionState(data);
         })
         .catch(() => {
             const statusDiv = document.getElementById('gcalStatus');
