@@ -1499,6 +1499,9 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto', progress_
         run_status = 'partial' if processed else 'failed'
     elif warnings:
         run_status = 'partial'
+    elif selected_targets and not processed:
+        # All selected targets were skipped (e.g. gdoc_id removed between state load and sync)
+        run_status = 'partial'
     else:
         run_status = 'success'
 
@@ -1586,7 +1589,9 @@ def _get_gdocs_auto_sync_health(db):
     age_seconds = int((now - last_run).total_seconds()) if last_run else None
 
     recent_history = _get_recent_gdocs_sync_history(db, limit=1)
-    last_status = recent_history[0]['status'] if recent_history else None
+    last_record = recent_history[0] if recent_history else None
+    last_status = last_record['status'] if last_record else None
+    last_synced_total = last_record['synced_total'] if last_record else None
 
     return {
         'enabled': state['enabled'],
@@ -1597,6 +1602,7 @@ def _get_gdocs_auto_sync_health(db):
         'last_run_age_seconds': age_seconds,
         'overdue': overdue,
         'last_status': last_status,
+        'last_synced_total': last_synced_total,
     }
 
 

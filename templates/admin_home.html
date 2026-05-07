@@ -255,7 +255,12 @@
                     <span class="badge bg-danger">{{ t('Overdue') }}</span>
                     {% endif %}
                     {% if gdocs_auto_sync_health.last_status %}
-                    <span class="badge bg-light text-dark border">{{ t('Last status') }}: {{ gdocs_auto_sync_health.last_status }}</span>
+                    {% set _status = gdocs_auto_sync_health.last_status %}
+                    {% set _badge = 'bg-success' if _status == 'success' else ('bg-warning text-dark' if _status == 'partial' else 'bg-danger') %}
+                    <span class="badge {{ _badge }} border">{{ t('Last status') }}: {{ _status }}</span>
+                    {% if gdocs_auto_sync_health.last_synced_total is not none %}
+                    <span class="badge bg-light text-dark border ms-1">{{ gdocs_auto_sync_health.last_synced_total }} {{ t('synced') }}</span>
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>

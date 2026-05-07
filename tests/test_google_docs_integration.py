@@ -469,6 +469,87 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertEqual(int(history['synced_total'] or 0), 6)
         self.assertEqual(int(history['pushed_groups'] or 0), 1)
 
+    def test_auto_sync_all_targets_skipped_records_partial_not_success(self):
+        """When all selected targets lose their gdoc_id between state load and sync, status must not be 'success'."""
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            # Patient has NO gdoc_id — will be skipped by the sync loop's DB re-check
+            db.execute("UPDATE patients SET gdoc_id = NULL WHERE id = 1")
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_enabled', '1')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_json', json.dumps(['patient:1']))
+            )
+            db.commit()
+
+        with patch.object(app_module, '_google_docs_dependency_error', return_value=None), \
+             patch.object(app_module, '_get_google_docs_auto_sync_state') as mock_state:
+            # State resolves selected_targets so the sync loop runs, but DB has no gdoc_id
+            mock_state.return_value = {
+                'enabled': True,
+                'interval_key': 'daily',
+                'selected_target_keys': ['patient:1'],
+                'selected_targets': [{'target_key': 'patient:1', 'target_type': 'patient', 'target_id': 1, 'mode': 'pull', 'label': 'Test Patient'}],
+                'last_run_at': None,
+                'last_run_at_raw': '',
+                'connected_docs': [],
+            }
+            rv = self.client.post('/admin/google-docs/auto-sync-now', data={})
+
+        self.assertEqual(rv.status_code, 200)
+        payload = rv.get_json()
+        self.assertEqual(payload['status'], 'ok')
+
+        with app.app_context():
+            db = get_db()
+            history = db.execute('SELECT status, synced_total FROM gdocs_sync_history ORDER BY id DESC LIMIT 1').fetchone()
+        self.assertIsNotNone(history)
+        # Must NOT be 'success' when nothing was actually processed
+        self.assertNotEqual(history['status'], 'success')
+        self.assertEqual(int(history['synced_total'] or 0), 0)
+
+    def test_gdocs_auto_sync_health_includes_last_synced_total(self):
+        """_get_gdocs_auto_sync_health must include last_synced_total from history."""
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = 'patient-doc-health' WHERE id = 1")
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_enabled', '1')
+            )
+            db.execute(
+                'INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) '
+                'ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value',
+                ('gdocs_auto_sync_targets_json', json.dumps(['patient:1']))
+            )
+            # Insert a fake history row
+            db.execute(
+                '''INSERT INTO gdocs_sync_history
+                   (trigger_source, status, interval_key, targets_total, targets_processed,
+                    synced_total, synced_patients, synced_groups, pushed_groups, errors_json, details_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                ('manual', 'success', 'daily', 1, 1, 7, 1, 0, 0, '[]', '[]')
+            )
+            db.commit()
+
+        with app.app_context():
+            db = get_db()
+            health = app_module._get_gdocs_auto_sync_health(db)
+
+        self.assertIn('last_synced_total', health)
+        self.assertEqual(health['last_synced_total'], 7)
+        self.assertEqual(health['last_status'], 'success')
+
 
 if __name__ == '__main__':
     unittest.main()
