@@ -192,6 +192,31 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
         call_kwargs = gcal_mock.get_authorization_url.call_args[1]
         self.assertEqual(call_kwargs.get('integrations'), ['calendar'])
 
+    def test_connect_uses_forwarded_headers_for_redirect_uri(self):
+        self._login()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock._client_secrets_available.return_value = True
+        gcal_mock.get_authorization_url.return_value = ('https://accounts.google.com/auth', 'st', None)
+        gcal_mock.INTEGRATION_SCOPES = gcal_module.INTEGRATION_SCOPES
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            self.client.post(
+                '/admin/google-calendar/connect',
+                data={'google_integration': ['calendar']},
+                headers={
+                    'X-Forwarded-Proto': 'https',
+                    'X-Forwarded-Host': 'clinic.lior-clinic.org',
+                },
+                follow_redirects=False,
+            )
+
+        call_kwargs = gcal_mock.get_authorization_url.call_args[1]
+        self.assertEqual(
+            call_kwargs.get('redirect_uri'),
+            'https://clinic.lior-clinic.org/admin/google-calendar/callback',
+        )
+
     def test_connect_get_uses_saved_integrations_setting(self):
         self._login()
         with app.app_context():

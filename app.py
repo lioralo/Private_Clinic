@@ -10999,9 +10999,9 @@ def google_calendar_connect():
         except (ValueError, TypeError):
             integrations = list(gcal.INTEGRATION_SCOPES.keys())
     try:
-        # Build redirect URI from the live request so it always matches the current
-        # server URL (correct port, scheme, and hostname — even in Codespaces/proxies).
-        redirect_uri = url_for('google_calendar_callback', _external=True)
+        # Build redirect URI using forwarded headers/public base URL when present,
+        # so OAuth callback matches externally reachable https URL behind proxies.
+        redirect_uri = build_external_public_url('google_calendar_callback')
         auth_url, state, code_verifier = gcal.get_authorization_url(
             integrations=integrations, redirect_uri=redirect_uri)
         session['gcal_oauth_state'] = state
@@ -11032,7 +11032,7 @@ def google_calendar_callback():
     try:
         code_verifier = session.pop('gcal_code_verifier', None)
         # Reuse the exact redirect_uri that was sent during authorization.
-        redirect_uri = session.pop('gcal_redirect_uri', None) or url_for('google_calendar_callback', _external=True)
+        redirect_uri = session.pop('gcal_redirect_uri', None) or build_external_public_url('google_calendar_callback')
         creds = gcal.exchange_code_for_tokens(
             code, state, code_verifier=code_verifier, redirect_uri=redirect_uri)
         db = get_db()
