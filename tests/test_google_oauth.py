@@ -325,6 +325,80 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
         self.assertEqual(rv.status_code, 200)
         gcal_mock.exchange_code_for_tokens.assert_called_once()
 
+    def test_callback_recovers_after_session_loss_using_pending_oauth_state(self):
+        self._login()
+        signed_state = app_module._generate_google_oauth_state()
+
+        connect_mock = MagicMock()
+        connect_mock.GOOGLE_LIBS_AVAILABLE = True
+        connect_mock._client_secrets_available.return_value = True
+        connect_mock.get_authorization_url.return_value = (
+            'https://accounts.google.com/auth',
+            signed_state,
+            'verifier-123',
+        )
+        connect_mock.INTEGRATION_SCOPES = gcal_module.INTEGRATION_SCOPES
+
+        with patch.object(app_module, 'gcal', connect_mock):
+            rv = self.client.post(
+                '/admin/google-calendar/connect',
+                data={'google_integration': ['calendar']},
+                headers={
+                    'X-Forwarded-Proto': 'https',
+                    'X-Forwarded-Host': 'clinic.lior-clinic.org',
+                },
+                follow_redirects=False,
+            )
+
+        self.assertIn(rv.status_code, (301, 302, 303))
+
+        with app.app_context():
+            db = get_db()
+            pending_row = db.execute(
+                'SELECT user_id, redirect_uri, code_verifier FROM google_oauth_pending_states WHERE state = ?',
+                (signed_state,),
+            ).fetchone()
+
+        self.assertIsNotNone(pending_row)
+        self.assertEqual(pending_row['user_id'], 1)
+        self.assertEqual(
+            pending_row['redirect_uri'],
+            'https://clinic.lior-clinic.org/admin/google-calendar/callback',
+        )
+        self.assertEqual(pending_row['code_verifier'], 'verifier-123')
+
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        callback_mock = MagicMock()
+        callback_mock.GOOGLE_LIBS_AVAILABLE = True
+        mock_creds = MagicMock()
+        callback_mock.exchange_code_for_tokens.return_value = mock_creds
+        callback_mock.save_credentials.return_value = None
+
+        with patch.object(app_module, 'gcal', callback_mock):
+            rv = self.client.get(
+                f'/admin/google-calendar/callback?code=abc&state={signed_state}',
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        callback_mock.exchange_code_for_tokens.assert_called_once_with(
+            'abc',
+            signed_state,
+            code_verifier='verifier-123',
+            redirect_uri='https://clinic.lior-clinic.org/admin/google-calendar/callback',
+        )
+
+        with app.app_context():
+            db = get_db()
+            consumed_row = db.execute(
+                'SELECT state FROM google_oauth_pending_states WHERE state = ?',
+                (signed_state,),
+            ).fetchone()
+
+        self.assertIsNone(consumed_row)
+
     # ------------------------------------------------------------------
     # disconnect
     # ------------------------------------------------------------------

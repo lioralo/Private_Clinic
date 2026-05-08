@@ -181,6 +181,17 @@ CREATE TABLE IF NOT EXISTS site_settings (
     setting_value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS google_oauth_pending_states (
+    state TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    code_verifier TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_oauth_pending_created_at ON google_oauth_pending_states(created_at);
+
 CREATE TABLE IF NOT EXISTS gdocs_sync_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

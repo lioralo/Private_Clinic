@@ -2588,6 +2588,18 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute('''CREATE TABLE IF NOT EXISTS google_oauth_pending_states (
+            state TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            redirect_uri TEXT NOT NULL,
+            code_verifier TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )''')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_google_oauth_pending_created_at ON google_oauth_pending_states(created_at)')
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute('''CREATE TABLE IF NOT EXISTS gdocs_sync_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -5867,6 +5879,76 @@ def _is_valid_google_oauth_state(state_value: str) -> bool:
     if issued_ts > now_ts + 60:
         return False
     return (now_ts - issued_ts) <= max_age
+
+
+def _ensure_google_oauth_pending_table(db):
+    db.execute(
+        '''
+        CREATE TABLE IF NOT EXISTS google_oauth_pending_states (
+            state TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            redirect_uri TEXT NOT NULL,
+            code_verifier TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        '''
+    )
+    db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_google_oauth_pending_created_at '
+        'ON google_oauth_pending_states(created_at)'
+    )
+
+
+def _prune_google_oauth_pending_states(db):
+    max_age = max(60, _google_oauth_state_max_age_seconds())
+    db.execute(
+        "DELETE FROM google_oauth_pending_states WHERE created_at < datetime('now', ?)",
+        (f'-{max_age} seconds',),
+    )
+
+
+def _store_google_oauth_pending_state(db, state_value: str, user_id: int, redirect_uri: str, code_verifier: str = None):
+    _ensure_google_oauth_pending_table(db)
+    _prune_google_oauth_pending_states(db)
+    db.execute(
+        '''
+        INSERT INTO google_oauth_pending_states (state, user_id, redirect_uri, code_verifier, created_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(state) DO UPDATE SET
+            user_id = excluded.user_id,
+            redirect_uri = excluded.redirect_uri,
+            code_verifier = excluded.code_verifier,
+            created_at = CURRENT_TIMESTAMP
+        ''',
+        (state_value, int(user_id), redirect_uri, code_verifier),
+    )
+
+
+def _pop_google_oauth_pending_state(db, state_value: str):
+    _ensure_google_oauth_pending_table(db)
+    _prune_google_oauth_pending_states(db)
+    row = db.execute(
+        'SELECT state, user_id, redirect_uri, code_verifier, created_at '
+        'FROM google_oauth_pending_states WHERE state = ?',
+        ((state_value or '').strip(),),
+    ).fetchone()
+    if not row:
+        return None
+    db.execute('DELETE FROM google_oauth_pending_states WHERE state = ?', (row['state'],))
+    db.commit()
+    return row
+
+
+def _load_active_admin_user(user_id):
+    user = load_user(user_id)
+    if not user:
+        return None
+    db = get_db()
+    row = db.execute('SELECT is_active FROM users WHERE id = ?', (user_id,)).fetchone()
+    if not row or not bool(row['is_active']) or user.role != 'admin':
+        return None
+    return user
 
 
 @app.route('/patient/<int:patient_id>/toggle_self_booking', methods=('POST',))
@@ -11175,6 +11257,8 @@ def google_calendar_connect():
         oauth_state = _generate_google_oauth_state()
         auth_url, state, code_verifier = gcal.get_authorization_url(
             integrations=integrations, redirect_uri=redirect_uri, state=oauth_state)
+        _store_google_oauth_pending_state(db, state, current_user.id, redirect_uri, code_verifier)
+        db.commit()
         session['gcal_oauth_state'] = state
         session['gcal_redirect_uri'] = redirect_uri
         if code_verifier:
@@ -11186,15 +11270,13 @@ def google_calendar_connect():
 
 
 @app.route('/admin/google-calendar/callback')
-@login_required
 def google_calendar_callback():
-    if current_user.role != 'admin':
-        flash('Unauthorized.')
-        return redirect(url_for('admin_profile'))
     code = request.args.get('code')
     state = request.args.get('state')
     oauth_error = (request.args.get('error') or '').strip()
     oauth_error_description = (request.args.get('error_description') or '').strip()
+    db = get_db()
+    pending_oauth = _pop_google_oauth_pending_state(db, state)
     stored_state = session.pop('gcal_oauth_state', None)
     if oauth_error:
         if oauth_error_description:
@@ -11210,13 +11292,31 @@ def google_calendar_callback():
     if not (state_matches_session or state_matches_signed_token):
         flash('OAuth state mismatch – please try connecting again.')
         return redirect(url_for('admin_profile'))
+
+    callback_user = current_user if current_user.is_authenticated else None
+    if callback_user and callback_user.role != 'admin':
+        callback_user = None
+    if pending_oauth and callback_user and int(callback_user.id) != int(pending_oauth['user_id']):
+        flash('OAuth state mismatch – please try connecting again.')
+        return redirect(url_for('login'))
+    if not callback_user and pending_oauth:
+        callback_user = _load_active_admin_user(pending_oauth['user_id'])
+        if callback_user:
+            login_user(callback_user)
+    if not callback_user or callback_user.role != 'admin':
+        flash('Google authorisation session expired. Please sign in and try again.')
+        return redirect(url_for('login'))
+
     try:
-        code_verifier = session.pop('gcal_code_verifier', None)
+        code_verifier = session.pop('gcal_code_verifier', None) or (pending_oauth['code_verifier'] if pending_oauth else None)
         # Reuse the exact redirect_uri that was sent during authorization.
-        redirect_uri = session.pop('gcal_redirect_uri', None) or build_external_public_url('google_calendar_callback')
+        redirect_uri = (
+            session.pop('gcal_redirect_uri', None)
+            or (pending_oauth['redirect_uri'] if pending_oauth else None)
+            or build_external_public_url('google_calendar_callback')
+        )
         creds = gcal.exchange_code_for_tokens(
             code, state, code_verifier=code_verifier, redirect_uri=redirect_uri)
-        db = get_db()
         calendar_id = request.args.get('calendar_id', 'primary')
         gcal.save_credentials(db, creds, calendar_id=calendar_id)
         flash('Google Calendar connected successfully!')
