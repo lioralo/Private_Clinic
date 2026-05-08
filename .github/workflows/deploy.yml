@@ -1,0 +1,80 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DOMAIN,SECRET_KEY,BACKUP_ENCRYPTION_KEY,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET
+          script: |
+            set -euo pipefail
+
+            REMOTE_DIR="/opt/Private_Clinic"
+
+            # ── Install Docker if missing ──────────────────────────────────────
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "[deploy] Docker not found — installing..."
+              sudo apt-get update -qq
+              sudo apt-get install -y ca-certificates curl gnupg git
+              sudo install -m 0755 -d /etc/apt/keyrings
+              curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+                | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+              sudo chmod a+r /etc/apt/keyrings/docker.gpg
+              echo \
+                "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+                https://download.docker.com/linux/ubuntu \
+                $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+                | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+              sudo apt-get update -qq
+              sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+                docker-buildx-plugin docker-compose-plugin
+            fi
+
+            # ── Clone or update repo ───────────────────────────────────────────
+            if [[ ! -d "${REMOTE_DIR}/.git" ]]; then
+              echo "[deploy] Cloning repository..."
+              sudo mkdir -p "${REMOTE_DIR}"
+              sudo chown "$USER":"$USER" "${REMOTE_DIR}"
+              git clone https://github.com/lioralo/Private_Clinic.git "${REMOTE_DIR}"
+            else
+              echo "[deploy] Pulling latest changes..."
+              git -C "${REMOTE_DIR}" pull --ff-only
+            fi
+
+            # ── Write .env.prod from CI secrets ───────────────────────────────
+            cat > "${REMOTE_DIR}/.env.prod" <<EOF
+            DOMAIN=${DOMAIN}
+            SECRET_KEY=${SECRET_KEY}
+            BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY}
+            GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+            GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+            EOF
+            chmod 600 "${REMOTE_DIR}/.env.prod"
+
+            # ── Deploy ────────────────────────────────────────────────────────
+            echo "[deploy] Starting production stack..."
+            cd "${REMOTE_DIR}"
+            bash scripts/deploy_prod.sh
+
+            # ── Verify ────────────────────────────────────────────────────────
+            echo "[deploy] Stack status:"
+            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
