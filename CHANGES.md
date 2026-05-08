@@ -2,6 +2,37 @@
 
 ---
 
+## Session 77
+
+**Date:** 2026-05-08
+
+**Objective:** Harden Google OAuth callback handling and expand verification around real production return paths.
+
+**Release Summary:**
+
+1. **Server-Side Pending OAuth Recovery (Reliability)**
+  - Google OAuth connect now stores the pending handshake server-side, including the initiating admin, redirect URI, and PKCE verifier.
+  - The callback can now complete successfully even when the browser loses the clinic session cookie during the return from Google.
+
+2. **Anonymous Signed-State Guard (Security)**
+  - A valid signed OAuth state alone no longer authorizes an anonymous callback.
+  - The callback now requires either the current authenticated admin session or a matching stored pending OAuth record for an active admin.
+
+3. **Expanded Google OAuth Regression Coverage (Tests)**
+  - Added tests for:
+    - defaulting to all integrations when none are selected,
+    - recovering the callback after session loss,
+    - declined consent from Google,
+    - missing-code cancellation returns,
+    - rejecting anonymous callbacks that only present a signed state.
+
+4. **Verification**
+  - Passed: `SECRET_KEY=test-secret FLASK_DEBUG=1 /usr/bin/python3 -m unittest tests.test_google_oauth -v` (`28` tests)
+  - Passed: `SECRET_KEY=test-secret FLASK_DEBUG=1 /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py'` (`361` tests)
+  - Passed: `SECRET_KEY=test-secret FLASK_DEBUG=1 /usr/bin/python3 -m unittest -v test_export_data test_import_clinic_data test_google_calendar` (`13` tests)
+
+---
+
 ## Session 76
 
 **Date:** 2026-05-07

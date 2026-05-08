@@ -216,6 +216,21 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
         call_kwargs = gcal_mock.get_authorization_url.call_args[1]
         self.assertEqual(call_kwargs.get('integrations'), ['calendar'])
 
+    def test_connect_post_defaults_to_all_integrations_when_none_selected(self):
+        self._login()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock._client_secrets_available.return_value = True
+        gcal_mock.get_authorization_url.return_value = ('https://accounts.google.com/auth', 'st', None)
+        gcal_mock.INTEGRATION_SCOPES = gcal_module.INTEGRATION_SCOPES
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            self.client.post('/admin/google-calendar/connect', data={}, follow_redirects=False)
+
+        gcal_mock.get_authorization_url.assert_called_once()
+        call_kwargs = gcal_mock.get_authorization_url.call_args[1]
+        self.assertEqual(call_kwargs.get('integrations'), list(gcal_module.INTEGRATION_SCOPES.keys()))
+
     def test_connect_uses_forwarded_headers_for_redirect_uri(self):
         self._login()
         gcal_mock = MagicMock()
@@ -398,6 +413,95 @@ class GoogleOAuthRoutesTest(unittest.TestCase):
             ).fetchone()
 
         self.assertIsNone(consumed_row)
+
+    def test_callback_with_google_error_skips_exchange_and_consumes_pending_state(self):
+        self._login()
+        signed_state = app_module._generate_google_oauth_state()
+
+        with app.app_context():
+            db = get_db()
+            app_module._store_google_oauth_pending_state(
+                db,
+                signed_state,
+                1,
+                'https://clinic.lior-clinic.org/admin/google-calendar/callback',
+                'verifier-123',
+            )
+            db.commit()
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get(
+                f'/admin/google-calendar/callback?state={signed_state}&error=access_denied&error_description=Consent%20denied',
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'google authorisation failed', rv.data.lower())
+        gcal_mock.exchange_code_for_tokens.assert_not_called()
+
+        with app.app_context():
+            db = get_db()
+            consumed_row = db.execute(
+                'SELECT state FROM google_oauth_pending_states WHERE state = ?',
+                (signed_state,),
+            ).fetchone()
+
+        self.assertIsNone(consumed_row)
+
+    def test_callback_without_code_shows_cancelled_and_consumes_pending_state(self):
+        self._login()
+        signed_state = app_module._generate_google_oauth_state()
+
+        with app.app_context():
+            db = get_db()
+            app_module._store_google_oauth_pending_state(
+                db,
+                signed_state,
+                1,
+                'https://clinic.lior-clinic.org/admin/google-calendar/callback',
+                'verifier-123',
+            )
+            db.commit()
+
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get(
+                f'/admin/google-calendar/callback?state={signed_state}',
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'cancelled or failed', rv.data.lower())
+        gcal_mock.exchange_code_for_tokens.assert_not_called()
+
+        with app.app_context():
+            db = get_db()
+            consumed_row = db.execute(
+                'SELECT state FROM google_oauth_pending_states WHERE state = ?',
+                (signed_state,),
+            ).fetchone()
+
+        self.assertIsNone(consumed_row)
+
+    def test_callback_valid_signed_state_without_session_or_pending_redirects_to_login(self):
+        signed_state = app_module._generate_google_oauth_state()
+        gcal_mock = MagicMock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+
+        with patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.get(
+                f'/admin/google-calendar/callback?code=abc&state={signed_state}',
+                follow_redirects=True,
+            )
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertIn(b'google authorisation session expired', rv.data.lower())
+        gcal_mock.exchange_code_for_tokens.assert_not_called()
 
     # ------------------------------------------------------------------
     # disconnect
