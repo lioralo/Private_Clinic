@@ -3,6 +3,7 @@ services:
     build: .
     container_name: private_clinic_app
     restart: unless-stopped
+    env_file: .env
     environment:
       SECRET_KEY: ${SECRET_KEY}
       PUBLIC_BASE_URL: https://${DOMAIN}
@@ -23,6 +24,7 @@ services:
     image: caddy:2
     container_name: private_clinic_caddy
     restart: unless-stopped
+    env_file: .env
     environment:
       DOMAIN: ${DOMAIN}
       TLS_EMAIL: ${TLS_EMAIL}

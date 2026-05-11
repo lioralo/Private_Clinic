@@ -1,6 +1,4 @@
 {$DOMAIN} {
-  encode gzip
-
   # Force public ACME cert management with an operator email for renewal notices.
   tls {$TLS_EMAIL}
 
