@@ -67,12 +67,23 @@ p {
     line-height: 1.75;
 }
 
+:dir(rtl) body,
 [dir="rtl"] body {
     font-family: 'Heebo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    letter-spacing: normal;
+    word-spacing: 0.05em;
     font-weight: 500;
-    text-align: right;
+    text-align: start;
 }
 
+:dir(rtl) h1,
+:dir(rtl) h2,
+:dir(rtl) h3,
+:dir(rtl) h4,
+:dir(rtl) h5,
+:dir(rtl) h6,
 [dir="rtl"] h1,
 [dir="rtl"] h2,
 [dir="rtl"] h3,
@@ -81,7 +92,7 @@ p {
 [dir="rtl"] h6 {
     font-weight: 700;
     letter-spacing: -0.01em;
-    text-align: right;
+    text-align: start;
 }
 
 /*  ── Admin sidebar shell ─────────────────────────────────── */
@@ -239,6 +250,13 @@ input.form-control[type="password"] {
     opacity: 1;
 }
 
+:dir(rtl) textarea.form-control,
+:dir(rtl) input.form-control[type="text"],
+:dir(rtl) input.form-control[type="email"],
+:dir(rtl) input.form-control[type="url"],
+:dir(rtl) input.form-control[type="tel"],
+:dir(rtl) input.form-control[type="search"],
+:dir(rtl) input.form-control[type="password"],
 [dir="rtl"] textarea.form-control,
 [dir="rtl"] input.form-control[type="text"],
 [dir="rtl"] input.form-control[type="email"],
@@ -246,23 +264,31 @@ input.form-control[type="password"] {
 [dir="rtl"] input.form-control[type="tel"],
 [dir="rtl"] input.form-control[type="search"],
 [dir="rtl"] input.form-control[type="password"] {
-    text-align: right;
+    text-align: start;
 }
 
+:dir(rtl) input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="number"]),
+:dir(rtl) textarea,
+:dir(rtl) select,
+:dir(rtl) .form-select,
 [dir="rtl"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="number"]),
 [dir="rtl"] textarea,
 [dir="rtl"] select,
 [dir="rtl"] .form-select {
-    text-align: right;
+    text-align: start;
     direction: rtl;
 }
 
 /* date/time/number: right-align text but do NOT reverse direction (breaks pickers) */
+:dir(rtl) input[type="date"],
+:dir(rtl) input[type="time"],
+:dir(rtl) input[type="datetime-local"],
+:dir(rtl) input[type="number"],
 [dir="rtl"] input[type="date"],
 [dir="rtl"] input[type="time"],
 [dir="rtl"] input[type="datetime-local"],
 [dir="rtl"] input[type="number"] {
-    text-align: right;
+    text-align: end;
 }
 
 .treatment-log-form textarea[name="content"] {
@@ -968,12 +994,32 @@ body.admin-user * {
     margin-bottom: 1rem;
 }
 
-[dir="rtl"] .me-1 { margin-inline-end: 0.25rem !important; margin-right: 0 !important; }
-[dir="rtl"] .me-2 { margin-inline-end: 0.5rem !important; margin-right: 0 !important; }
-[dir="rtl"] .me-3 { margin-inline-end: 1rem !important; margin-right: 0 !important; }
-[dir="rtl"] .ms-1 { margin-inline-start: 0.25rem !important; margin-left: 0 !important; }
-[dir="rtl"] .ms-2 { margin-inline-start: 0.5rem !important; margin-left: 0 !important; }
-[dir="rtl"] .ms-3 { margin-inline-start: 1rem !important; margin-left: 0 !important; }
+:dir(rtl) .me-1, [dir="rtl"] .me-1 { margin-inline-end: 0.25rem !important; margin-right: 0 !important; }
+:dir(rtl) .me-2, [dir="rtl"] .me-2 { margin-inline-end: 0.5rem !important; margin-right: 0 !important; }
+:dir(rtl) .me-3, [dir="rtl"] .me-3 { margin-inline-end: 1rem !important; margin-right: 0 !important; }
+:dir(rtl) .ms-1, [dir="rtl"] .ms-1 { margin-inline-start: 0.25rem !important; margin-left: 0 !important; }
+:dir(rtl) .ms-2, [dir="rtl"] .ms-2 { margin-inline-start: 0.5rem !important; margin-left: 0 !important; }
+:dir(rtl) .ms-3, [dir="rtl"] .ms-3 { margin-inline-start: 1rem !important; margin-left: 0 !important; }
+
+.skip-link {
+    position: absolute;
+    inset-block-start: 0.5rem;
+    inset-inline-start: 0.5rem;
+    z-index: 2000;
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #0f172a;
+    border-radius: 999px;
+    padding: 0.5rem 0.85rem;
+    text-decoration: none;
+    transform: translateY(-200%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
+    outline: 2px solid #0f172a;
+    outline-offset: 2px;
+}
 
 .smaller { font-size: 0.8rem; }
 .smallest { font-size: 0.75rem; }

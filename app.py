@@ -3321,6 +3321,12 @@ def about_page():
     )
 
 
+@app.route('/accessibility-statement')
+def accessibility_statement():
+    settings = get_site_settings()
+    return render_template('accessibility_statement.html', site_settings=settings)
+
+
 HEBREW_NUMBER_WORDS = {
     'אחד': '1',
     'אחת': '1',

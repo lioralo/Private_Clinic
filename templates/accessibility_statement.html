@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+
+{% block title %}
+{{ 'הצהרת נגישות' if lang == 'he' else 'Accessibility Statement' }}
+{% endblock %}
+
+{% block page_title %}
+{{ 'הצהרת נגישות' if lang == 'he' else 'Accessibility Statement' }}
+{% endblock %}
+
+{% block content %}
+<section class="max-w-4xl mx-auto mt-4">
+    <article class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            {% if lang == 'he' %}
+            <h1 class="h3 mb-3">הצהרת נגישות</h1>
+            <p class="text-muted mb-4">אנו פועלים להנגשת האתר בהתאם לתקן הישראלי IS 5568, המעוגן ב-WCAG 2.0 ברמה AA.</p>
+
+            <h2 class="h5 mt-4">מה יישמנו באתר</h2>
+            <ul class="mb-4">
+                <li>תמיכה בכיוון כתיבה מימין לשמאל (RTL) והצהרת שפה תקינה.</li>
+                <li>ניווט במקלדת, כולל קישור "דלג לתוכן הראשי".</li>
+                <li>תיוג שדות טופס והודעות שגיאה ברורות.</li>
+                <li>תמיכה בקוראי מסך והתאמה לתוכן עברי/אנגלי משולב.</li>
+                <li>שיפור קריאות טקסט וניגודיות בממשק.</li>
+            </ul>
+
+            <h2 class="h5 mt-4">יצירת קשר בנושא נגישות</h2>
+            <p class="mb-1">בכל בעיית נגישות ניתן לפנות אלינו ונשמח לסייע.</p>
+            <p class="mb-1">
+                <strong>טלפון:</strong>
+                {% if site_settings.get('about_phone') %}
+                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
+                {% else %}
+                <span dir="ltr">+972-50-000-0000</span>
+                {% endif %}
+            </p>
+            <p class="mb-4">
+                <strong>דוא"ל:</strong>
+                {% if site_settings.get('about_email') %}
+                <a href="mailto:{{ site_settings.get('about_email') }}" dir="ltr">{{ site_settings.get('about_email') }}</a>
+                {% else %}
+                <a href="mailto:accessibility@clinic.example" dir="ltr">accessibility@clinic.example</a>
+                {% endif %}
+            </p>
+
+            <p class="small text-muted mb-0">תאריך עדכון אחרון: 18/05/2026</p>
+            {% else %}
+            <h1 class="h3 mb-3">Accessibility Statement</h1>
+            <p class="text-muted mb-4">We continuously improve this site to align with Israeli Standard IS 5568 (WCAG 2.0 AA baseline).</p>
+
+            <h2 class="h5 mt-4">What we implemented</h2>
+            <ul class="mb-4">
+                <li>Proper language and RTL/LTR direction handling.</li>
+                <li>Keyboard navigation support, including a skip-to-content link.</li>
+                <li>Clear form labels and validation feedback.</li>
+                <li>Better screen-reader compatibility for mixed Hebrew/English content.</li>
+                <li>Improved readability and contrast in core views.</li>
+            </ul>
+
+            <h2 class="h5 mt-4">Accessibility contact</h2>
+            <p class="mb-1">If you encounter any accessibility issue, please contact us and we will assist.</p>
+            <p class="mb-1">
+                <strong>Phone:</strong>
+                {% if site_settings.get('about_phone') %}
+                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
+                {% else %}
+                <span dir="ltr">+972-50-000-0000</span>
+                {% endif %}
+            </p>
+            <p class="mb-4">
+                <strong>Email:</strong>
+                {% if site_settings.get('about_email') %}
+                <a href="mailto:{{ site_settings.get('about_email') }}" dir="ltr">{{ site_settings.get('about_email') }}</a>
+                {% else %}
+                <a href="mailto:accessibility@clinic.example" dir="ltr">accessibility@clinic.example</a>
+                {% endif %}
+            </p>
+
+            <p class="small text-muted mb-0">Last updated: 18/05/2026</p>
+            {% endif %}
+        </div>
+    </article>
+</section>
+{% endblock %}

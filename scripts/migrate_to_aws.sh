@@ -272,6 +272,8 @@ if [[ -f .env.prod ]]; then
   sudo cp .env.prod .env.prod.pre_migration_\${timestamp}
 fi
 sudo install -m 600 ~/migration_staging/.env.prod .env.prod
+sudo cp .env.prod .env
+sudo chmod 600 .env
 sudo mkdir -p data/secure_backups data/uploads data/patients_logs
 sudo cp ~/migration_staging/${BACKUP_BASENAME_Q} data/secure_backups/${BACKUP_BASENAME_Q}
 if [[ -d ~/migration_staging/uploads ]]; then

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ lang }}" data-density="{{ ui_density or 'balanced' }}" {% if lang == 'he' %}dir="rtl"{% endif %}>
+<html lang="{{ lang }}" dir="{{ 'rtl' if lang == 'he' else 'ltr' }}" data-density="{{ ui_density or 'balanced' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -74,6 +74,14 @@
 
     <style>
         /* Hebrew body font */
+        :dir(rtl) body,
+        :dir(rtl) button,
+        :dir(rtl) input,
+        :dir(rtl) select,
+        :dir(rtl) textarea,
+        :dir(rtl) .btn,
+        :dir(rtl) .form-control,
+        :dir(rtl) .form-select,
         [dir="rtl"] body,
         [dir="rtl"] button,
         [dir="rtl"] input,
@@ -82,7 +90,7 @@
         [dir="rtl"] .btn,
         [dir="rtl"] .form-control,
         [dir="rtl"] .form-select {
-            font-family: 'Assistant', sans-serif !important;
+            font-family: 'Heebo', 'Assistant', 'Rubik', 'Noto Sans Hebrew', sans-serif !important;
         }
         /* Sidebar active link */
         .sidebar-link-active {
@@ -94,6 +102,11 @@
             width: 16rem;
             max-width: 85vw;
             will-change: transform;
+            border-inline-end: 1px solid rgb(226 232 240);
+        }
+
+        .admin-header {
+            inset-inline: 0;
         }
 
         .notification-recipient-list {
@@ -158,12 +171,12 @@
                 transition: transform 0.28s ease, opacity 0.28s ease;
                 box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
             }
-            html:not([dir="rtl"]) .admin-sidebar {
-                left: 0;
+            .admin-sidebar {
+                inset-inline-start: 0;
                 transform: translateX(-105%);
             }
+            html:dir(rtl) .admin-sidebar,
             html[dir="rtl"] .admin-sidebar {
-                right: 0;
                 transform: translateX(105%);
             }
             .admin-sidebar.is-open {
@@ -174,6 +187,15 @@
         }
 
         @media (min-width: 1024px) {
+            .admin-header {
+                inset-inline-start: 16rem;
+                inset-inline-end: 0;
+            }
+            html:dir(rtl) .admin-header,
+            html[dir="rtl"] .admin-header {
+                inset-inline-end: 16rem;
+                inset-inline-start: 0;
+            }
             .admin-sidebar {
                 position: static !important;
                 inset: auto !important;
@@ -187,6 +209,7 @@
     </style>
 </head>
 <body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
+<a href="#main-content" class="skip-link">{{ 'דלג לתוכן הראשי' if lang == 'he' else 'Skip to main content' }}</a>
 
 {% macro render_flash_messages(extra_classes='') -%}
     {% for category, message in get_flashed_messages(with_categories=true) %}
@@ -231,7 +254,7 @@
     <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar #}
-    <aside id="adminSidebar" aria-hidden="true" class="admin-sidebar h-screen flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-4 overflow-y-auto">
+    <aside id="adminSidebar" aria-hidden="true" class="admin-sidebar h-screen flex-shrink-0 bg-slate-50 flex flex-col p-4 overflow-y-auto">
 
         {# Brand #}
         <div class="flex flex-col items-center mb-8 pt-2 px-2 flex-shrink-0">
@@ -298,7 +321,7 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {# Top Header #}
-        <header class="fixed top-0 {% if lang == 'he' %}left-0 lg:right-64{% else %}right-0 lg:left-64{% endif %} bg-white/88 backdrop-blur-md z-30 flex justify-between items-center flex-wrap px-3 lg:px-6 py-2.5 shadow-sm border-b border-slate-200 gap-2">
+        <header class="admin-header fixed top-0 bg-white/88 backdrop-blur-md z-30 flex justify-between items-center flex-wrap px-3 lg:px-6 py-2.5 shadow-sm border-b border-slate-200 gap-2">
             <div class="flex items-center gap-6">
                 <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
                     <i class="bi bi-list" style="font-size:20px"></i>
@@ -311,12 +334,12 @@
                 <button type="button" class="p-2 text-slate-500 hover:text-primary transition-colors relative" data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas" title="{{ t('Notifications') }}">
                     <i class="bi bi-bell-fill" style="font-size:20px"></i>
                     {% if notification_unread_count is defined and notification_unread_count > 0 %}
-                    <span class="notification-badge absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white rounded-full border-2 border-white text-[10px] leading-[14px] text-center">{{ notification_unread_count }}</span>
+                    <span class="notification-badge absolute -top-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white rounded-full border-2 border-white text-[10px] leading-[14px] text-center" style="inset-inline-end:-0.125rem;">{{ notification_unread_count }}</span>
                     {% endif %}
                 </button>
                 <div class="h-8 w-[1px] bg-slate-200 mx-1 lg:mx-2"></div>
                 <a href="{{ url_for('admin_profile') }}" class="flex items-center gap-3 text-decoration-none hover:opacity-80 transition-opacity">
-                    <div class="text-right">
+                    <div class="text-start">
                         <p class="text-sm font-bold text-teal-900 leading-none">{{ current_user.display_name or current_user.username }}</p>
                         <p class="text-[10px] text-slate-500 font-medium">{% if lang == 'he' %}מנהל{% else %}Admin{% endif %}</p>
                     </div>
@@ -331,7 +354,7 @@
         {{ render_flash_messages('mx-4 lg:mx-6 mt-4') }}
 
         {# Page content wrapper #}
-        <main class="mt-14 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
+        <main id="main-content" tabindex="-1" class="mt-14 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}
@@ -350,7 +373,7 @@
            title="{{ t('Notifications') }}">
             <i class="bi bi-bell-fill" style="font-size:22px"></i>
             {% if notification_unread_count is defined and notification_unread_count > 0 %}
-            <span class="notification-badge absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            <span class="notification-badge absolute top-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" style="inset-inline-end:0.25rem;"></span>
             {% endif %}
         </a>
         <a href="#" class="p-2 text-slate-500 hover:text-teal-700 transition-colors"
@@ -374,7 +397,7 @@
            class="text-slate-500 hover:text-teal-700 font-medium text-sm transition-colors">{{ t('Logout') }}</a>
     </div>
 </nav>
-<main class="pt-16 px-4 pb-10 max-w-4xl mx-auto app-shell">
+<main id="main-content" tabindex="-1" class="pt-16 px-4 pb-10 max-w-4xl mx-auto app-shell">
     {{ render_flash_messages('mt-4') }}
 
 {% else %}
@@ -409,7 +432,7 @@
         </a>
     </div>
 </nav>
-<main class="pt-16 px-4 pb-10 app-shell">
+<main id="main-content" tabindex="-1" class="pt-16 px-4 pb-10 app-shell">
     {{ render_flash_messages('mt-4 max-w-2xl mx-auto') }}
 
 {% endif %}
@@ -428,6 +451,10 @@
 </main>
 <footer class="py-6 border-t border-slate-200 text-center">
     <span class="text-slate-500 text-sm">{{ t('Private Psychotherapy Clinic') }}</span>
+    <span class="text-slate-300 mx-2">•</span>
+    <a href="{{ url_for('accessibility_statement') }}" class="text-slate-600 text-sm hover:text-teal-700 transition-colors">
+        {{ 'הצהרת נגישות' if lang == 'he' else 'Accessibility Statement' }}
+    </a>
 </footer>
 {% endif %}
 

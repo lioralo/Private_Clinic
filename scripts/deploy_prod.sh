@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env.prod"
+RUNTIME_ENV_FILE="${ROOT_DIR}/.env"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose.prod.yml"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -10,6 +11,11 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Create it first with: cp .env.prod.example .env.prod"
   exit 1
 fi
+
+# Compose currently references ".env" via env_file.
+# Keep it in sync from .env.prod for production deployments.
+cp "${ENV_FILE}" "${RUNTIME_ENV_FILE}"
+chmod 600 "${RUNTIME_ENV_FILE}" || true
 
 required_vars=(DOMAIN SECRET_KEY BACKUP_ENCRYPTION_KEY)
 for key in "${required_vars[@]}"; do

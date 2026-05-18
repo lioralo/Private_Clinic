@@ -16,7 +16,7 @@ Optional:
   --dry-run                Print actions without executing them
 
 This script deploys the current local checkout to the AWS host while preserving
-all runtime data under <remote-dir>/data as well as .env.prod and .git.
+all runtime data under <remote-dir>/data as well as .env/.env.prod and .git.
 EOF
 }
 
@@ -143,10 +143,14 @@ rm -rf ~/private_clinic_bundle_extract/*
 tar -xzf ~/private_clinic_bundle.tar.gz -C ~/private_clinic_bundle_extract
 sudo mkdir -p ${REMOTE_DIR_Q}
 sudo find ${REMOTE_DIR_Q} -mindepth 1 -maxdepth 1 \\
-  ! -name '.git' ! -name '.env.prod' ! -name 'data' \\
+  ! -name '.git' ! -name '.env' ! -name '.env.prod' ! -name 'data' \\
   -exec rm -rf {} +
 sudo cp -a ~/private_clinic_bundle_extract/. ${REMOTE_DIR_Q}/
 cd ${REMOTE_DIR_Q}
+if [[ ! -f .env && -f .env.prod ]]; then
+  sudo cp .env.prod .env
+  sudo chmod 600 .env
+fi
 if grep -q 'tls {\$TLS_EMAIL}' Caddyfile; then
   if ! sudo grep -Eq '^TLS_EMAIL=.+$' .env.prod; then
     domain=\$(sudo grep '^DOMAIN=' .env.prod | head -n1 | cut -d= -f2-)
