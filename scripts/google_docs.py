@@ -73,10 +73,28 @@ _SESSION_RE = re.compile(
 _NOTE_ID_RE = re.compile(r'\[note:id=(\d+)\]')
 
 
+def _extract_name_and_note(text):
+    """Split 'Name - inline note' into (name, note). Requires space around the separator."""
+    m = re.match(r'^(.*?)\s+[-–—:]+\s+(.+)$', text.strip(), re.DOTALL)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+    return text.strip(), ''
+
+
 def _split_hebrew_group_sections(block_text):
-    """Parse a group-session block into participants, missing, and content sections."""
+    """Parse a group-session block into participants, missing, and content sections.
+
+    Returns:
+        participants – list of names (backward-compatible)
+        missing      – list of names (backward-compatible)
+        content      – plain-text string
+        participant_entries – list of {'name': str, 'note': str}
+        missing_entries – list of {'name': str, 'note': str}
+    """
     participants = []
     missing = []
+    participant_entries = []
+    missing_entries = []
     content_parts = []
 
     def _normalized_section_header(raw_line):
@@ -104,25 +122,36 @@ def _split_hebrew_group_sections(block_text):
             continue
 
         if current_section == 'participants':
-            for token in re.split(r'[,;]', line):
-                cleaned = token.strip().strip('-').strip()
-                if not cleaned:
-                    continue
-
-                split_by_and = re.split(r'\s+ו(?=[\u0590-\u05FFA-Za-z])', cleaned)
-                if len(split_by_and) > 1:
-                    for part in split_by_and:
-                        item = part.strip().strip('-').strip()
-                        if item:
-                            participants.append(item)
-                else:
-                    participants.append(cleaned)
+            line_no_bullet = line.lstrip('-•*').strip()
+            if re.search(r'\s+[-–—:]\s+', line_no_bullet):
+                name, note = _extract_name_and_note(line_no_bullet)
+                if name:
+                    participants.append(name)
+                    participant_entries.append({'name': name, 'note': note})
+            else:
+                # May be comma/semicolon-separated or ו-separated names with no notes.
+                for token in re.split(r'[,;]', line_no_bullet):
+                    cleaned = token.strip().strip('-').strip()
+                    if not cleaned:
+                        continue
+                    split_by_and = re.split(r'\s+ו(?=[\u0590-\u05FFA-Za-z])', cleaned)
+                    if len(split_by_and) > 1:
+                        for part in split_by_and:
+                            item = part.strip().strip('-').strip()
+                            if item:
+                                participants.append(item)
+                                participant_entries.append({'name': item, 'note': ''})
+                    else:
+                        participants.append(cleaned)
+                        participant_entries.append({'name': cleaned, 'note': ''})
             continue
 
         if current_section == 'missing':
-            cleaned = line.lstrip('-').strip()
+            cleaned = line.lstrip('-•*').strip()
             if cleaned:
-                missing.append(cleaned)
+                name, note = _extract_name_and_note(cleaned)
+                missing.append(name)
+                missing_entries.append({'name': name, 'note': note})
             continue
 
         if current_section == 'content':
@@ -151,7 +180,7 @@ def _split_hebrew_group_sections(block_text):
     elif not has_structured_headers:
         content = (block_text or '').strip()
 
-    return participants, missing, content
+    return participants, missing, content, participant_entries, missing_entries
 
 
 def _parse_date(iso_group, slash_group):
@@ -199,7 +228,7 @@ def parse_doc_into_notes(text):
         block_start = m.end()
         block_end   = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         block_text  = text[block_start:block_end].strip()
-        participants, missing, content = _split_hebrew_group_sections(block_text)
+        participants, missing, content, participant_entries, missing_entries = _split_hebrew_group_sections(block_text)
 
         if '[note:new]' in raw_tag:
             note_tag = 'new'
@@ -213,6 +242,8 @@ def parse_doc_into_notes(text):
             'content':        content,
             'participants':   participants,
             'missing':        missing,
+            'participant_entries': participant_entries,
+            'missing_entries': missing_entries,
             'meeting_title':  meeting_title,
             'note_tag':       note_tag,
         })

@@ -2,6 +2,29 @@
 
 ---
 
+## Session 78
+
+**Date:** 2026-05-27
+
+**Objective:** Improve CRM appointment visibility and make group Google Docs sync populate patient notes more completely.
+
+**Release Summary:**
+
+1. **CRM next-appointment display fix**
+  - Added a fallback for recurring patients so the CRM table now fills `next_appointment_date` and `next_appointment_time` when the base appointment row is past-dated or incomplete.
+
+2. **Group Docs attendance parsing**
+  - Kept the Google Docs parser backward-compatible for existing tests while also preserving inline notes from `משתתפים` and `חסרים` as structured metadata.
+  - Group sync now uses that metadata to mark attendees present, record missed reasons, and carry the session note text into the patient-side note.
+
+3. **Patient private note migration**
+  - Group sync now writes/updates patient private notes with the group session id, group name, session date, and session time so the patient page shows the related context alongside the imported note.
+
+4. **Verification**
+  - Passed: `python -m unittest tests.test_google_docs_integration` (`19` tests)
+  - Passed: `python -m unittest tests.test_app.ClinicTestCase.test_group_recurrence_update_future_and_attendance_missed_reason tests.test_app.ClinicTestCase.test_individual_treatment_note_can_record_missed_reason`
+  - Passed: `python -m unittest tests.test_app.ClinicTestCase.test_group_recurrence_update_future_and_attendance_missed_reason tests.test_app.ClinicTestCase.test_individual_treatment_note_can_record_missed_reason tests.test_google_docs_integration` (`21` tests)
+
 ## Session 77
 
 **Date:** 2026-05-08

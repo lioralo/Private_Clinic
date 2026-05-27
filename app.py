@@ -4381,7 +4381,40 @@ def crm_dashboard():
     
     # Calculate average wait time (placeholder for now)
     avg_wait_time = '18 min'
-    
+
+    # For patients with recurring appointments whose base date is in the past,
+    # compute the actual next occurrence date dynamically.
+    if not show_deleted:
+        recurrence_range_end = today + timedelta(days=365)
+        patients_needing_check = [p for p in patients
+                                   if p['has_recurring'] and (not p['next_appointment_date'] or not p['next_appointment_time'])]
+        if patients_needing_check:
+            pid_list = [p['id'] for p in patients_needing_check]
+            placeholders = ','.join('?' * len(pid_list))
+            recurring_appts = db.execute(
+                f'''SELECT * FROM appointments
+                    WHERE patient_id IN ({placeholders})
+                      AND COALESCE(is_recurring, 0) = 1
+                      AND COALESCE(status, 'scheduled') = 'scheduled'
+                    ORDER BY appointment_date ASC''',
+                pid_list
+            ).fetchall()
+            next_occurrences = {}
+            for appt in recurring_appts:
+                pid = appt['patient_id']
+                occurrences = recurring_occurrences_between(appt, today, recurrence_range_end)
+                if occurrences:
+                    next_occ = occurrences[0]
+                    if pid not in next_occurrences or next_occ < next_occurrences[pid][0]:
+                        next_occurrences[pid] = (next_occ, appt['appointment_time'])
+            patients = [
+                dict(p, next_appointment_date=next_occurrences[p['id']][0].isoformat(),
+                        next_appointment_time=next_occurrences[p['id']][1])
+                if (p['has_recurring'] and (not p['next_appointment_date'] or not p['next_appointment_time']) and p['id'] in next_occurrences)
+                else dict(p)
+                for p in patients
+            ]
+
     reminders = send_appointment_reminders(db)
     return render_template('crm.html', patients=patients, status=status, counts=counts,
                            clinic_type=clinic_type, search_query=search_query, sort_by=sort_by,
@@ -11959,7 +11992,59 @@ def _pull_group_gdoc_notes(db, group):
         content_body = (parsed_item.get('content') or '').strip()
         return content_body
 
-    def _apply_attendance_from_doc(session_id, participants, missing_entries):
+    def _upsert_patient_group_note(patient_id, session_id, note_date, session_time, note_content, is_missed, missed_reason, group_name, session_title):
+        """Create or update a private note for a group-session participant."""
+        marker = f'[Group Session #{session_id}]'
+        session_date_label = note_date or ''
+        session_time_label = session_time or ''
+        details = []
+        if session_date_label and session_time_label:
+            details.append(f'group session on {session_date_label} ({session_time_label})')
+        elif session_date_label:
+            details.append(f'group session on {session_date_label}')
+        elif session_time_label:
+            details.append(f'group session at {session_time_label}')
+        else:
+            details.append('group session')
+        if group_name:
+            details.append(f'Group: {group_name}')
+        if session_title:
+            details.append(f'Title: {session_title}')
+        if is_missed:
+            body = f"{marker} Missed {' '.join(details)}."
+            if missed_reason:
+                body = f"{body} Reason: {missed_reason}"
+            if note_content:
+                body = f"{body} Member note: {note_content}"
+        else:
+            body = f"{marker} Present {' '.join(details)}."
+            if note_content:
+                body = f"{body} Member note: {note_content}"
+
+        existing = db.execute(
+            '''SELECT id FROM notes
+               WHERE patient_id = ?
+                 AND COALESCE(note_date, '') = COALESCE(?, '')
+                 AND content LIKE ?
+               ORDER BY id DESC LIMIT 1''',
+            (patient_id, note_date, f'{marker}%')
+        ).fetchone()
+        if existing:
+            db.execute(
+                '''UPDATE notes SET note_date = ?, content = ?, is_missed_meeting = ?, missed_reason = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?''',
+                (note_date, body, 1 if is_missed else 0, missed_reason or None, existing['id'])
+            )
+        else:
+            db.execute(
+                '''INSERT INTO notes (patient_id, note_date, content, is_missed_meeting, missed_reason)
+                   VALUES (?, ?, ?, ?, ?)''',
+                (patient_id, note_date, body, 1 if is_missed else 0, missed_reason or None)
+            )
+
+    group_name = group['name'] if 'name' in group.keys() else ''
+
+    def _apply_attendance_from_doc(session_id, participants, missing_entries, session_date=None, session_time=None, session_title=None):
         if not session_id:
             return
 
@@ -11989,25 +12074,35 @@ def _pull_group_gdoc_notes(db, group):
                     return value
             return None
 
-        for raw_name in participants:
+        for entry in participants:
+            raw_name = entry['name'] if isinstance(entry, dict) else entry
+            inline_note = entry.get('note', '') if isinstance(entry, dict) else ''
             matched = find_member(raw_name)
             if not matched:
                 continue
             db.execute('''
                 INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
-                VALUES (?, ?, 'present', NULL, 0, NULL, CURRENT_TIMESTAMP)
+                VALUES (?, ?, 'present', NULL, 0, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(session_id, patient_id)
                 DO UPDATE SET attendance_status = 'present',
                               absence_reason = NULL,
+                              attendance_note = excluded.attendance_note,
                               notified_on_time = 0,
                               updated_at = CURRENT_TIMESTAMP
-            ''', (session_id, matched['patient_id']))
+            ''', (session_id, matched['patient_id'], inline_note or None))
+            _upsert_patient_group_note(
+                matched['patient_id'], session_id, session_date, session_time, inline_note,
+                is_missed=False, missed_reason=None, group_name=group_name, session_title=session_title
+            )
 
-        for raw_entry in missing_entries:
+        # missing_entries is now a list of {'name': str, 'note': str}
+        for entry in missing_entries:
+            raw_entry = entry['name'] if isinstance(entry, dict) else entry
+            absence_note = entry.get('note', '') if isinstance(entry, dict) else ''
             matched = find_member(raw_entry)
             if not matched:
                 continue
-            reason = _extract_missing_reason(raw_entry, matched['patient_name'])
+            reason = absence_note or _extract_missing_reason(raw_entry if not isinstance(entry, dict) else '', matched['patient_name'])
             db.execute('''
                 INSERT INTO group_session_attendance (session_id, patient_id, attendance_status, absence_reason, notified_on_time, attendance_note, updated_at)
                 VALUES (?, ?, 'missed', ?, 0, NULL, CURRENT_TIMESTAMP)
@@ -12017,6 +12112,10 @@ def _pull_group_gdoc_notes(db, group):
                               notified_on_time = 0,
                               updated_at = CURRENT_TIMESTAMP
             ''', (session_id, matched['patient_id'], reason or None))
+            _upsert_patient_group_note(
+                matched['patient_id'], session_id, session_date, session_time, absence_note or reason,
+                is_missed=True, missed_reason=reason or None, group_name=group_name, session_title=session_title
+            )
 
     synced = 0
     try:
@@ -12036,6 +12135,8 @@ def _pull_group_gdoc_notes(db, group):
             content = (item.get('content') or '').strip()
             participants = item.get('participants') or []
             missing_entries = item.get('missing') or []
+            participant_entries = item.get('participant_entries') or []
+            missing_note_entries = item.get('missing_entries') or []
             meeting_title = (item.get('meeting_title') or '').strip()
             note_date = (item.get('note_date') or '').strip() or None
             session_number = _normalize_session_number(item.get('session_number'))
@@ -12047,7 +12148,7 @@ def _pull_group_gdoc_notes(db, group):
             target = None
             if isinstance(note_tag, int):
                 target = db.execute(
-                    'SELECT id, session_summary FROM group_sessions WHERE id = ? AND group_id = ?',
+                    'SELECT id, session_date, session_time, title, session_summary FROM group_sessions WHERE id = ? AND group_id = ?',
                     (note_tag, group['id'])
                 ).fetchone()
 
@@ -12056,7 +12157,7 @@ def _pull_group_gdoc_notes(db, group):
 
             if target is None and note_date:
                 target = db.execute('''
-                    SELECT id, session_summary
+                    SELECT id, session_date, session_time, title, session_summary
                     FROM group_sessions
                     WHERE group_id = ? AND session_date = ?
                     ORDER BY session_time ASC, id ASC
@@ -12080,7 +12181,16 @@ def _pull_group_gdoc_notes(db, group):
                         'UPDATE group_sessions SET title = ? WHERE id = ?',
                         (meeting_title, target['id'])
                     )
-                _apply_attendance_from_doc(int(target['id']), participants, missing_entries)
+                target_date = note_date or (target['session_date'] if 'session_date' in target.keys() else None)
+                target_time = target['session_time'] if 'session_time' in target.keys() else None
+                _apply_attendance_from_doc(
+                    int(target['id']),
+                    participant_entries or participants,
+                    missing_note_entries or missing_entries,
+                    session_date=target_date,
+                    session_time=target_time,
+                    session_title=meeting_title or (target['title'] if 'title' in target.keys() else None),
+                )
                 continue
 
             inferred_date = note_date or datetime.now().date().isoformat()
@@ -12091,7 +12201,14 @@ def _pull_group_gdoc_notes(db, group):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', structured_summary or content))
             created_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
-            _apply_attendance_from_doc(int(created_id), participants, missing_entries)
+            _apply_attendance_from_doc(
+                int(created_id),
+                participant_entries or participants,
+                missing_note_entries or missing_entries,
+                session_date=inferred_date,
+                session_time='00:00',
+                session_title=title,
+            )
             synced += 1
 
         db.commit()
