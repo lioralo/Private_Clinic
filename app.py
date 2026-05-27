@@ -11997,29 +11997,28 @@ def _pull_group_gdoc_notes(db, group):
         marker = f'[Group Session #{session_id}]'
         session_date_label = note_date or ''
         session_time_label = session_time or ''
-        details = []
-        if session_date_label and session_time_label:
-            details.append(f'group session on {session_date_label} ({session_time_label})')
-        elif session_date_label:
-            details.append(f'group session on {session_date_label}')
-        elif session_time_label:
-            details.append(f'group session at {session_time_label}')
-        else:
-            details.append('group session')
+        lines = [marker, 'תיעוד מקבוצת טיפול']
         if group_name:
-            details.append(f'Group: {group_name}')
+            lines.append(f'קבוצה: {group_name}')
         if session_title:
-            details.append(f'Title: {session_title}')
+            lines.append(f'מפגש: {session_title}')
+        if session_date_label and session_time_label:
+            lines.append(f'מועד: {session_date_label} {session_time_label}')
+        elif session_date_label:
+            lines.append(f'מועד: {session_date_label}')
+        elif session_time_label:
+            lines.append(f'שעה: {session_time_label}')
         if is_missed:
-            body = f"{marker} Missed {' '.join(details)}."
+            lines.append('סטטוס: חסר')
             if missed_reason:
-                body = f"{body} Reason: {missed_reason}"
+                lines.append(f'סיבת היעדרות: {missed_reason}')
             if note_content:
-                body = f"{body} Member note: {note_content}"
+                lines.append(f'הערה: {note_content}')
         else:
-            body = f"{marker} Present {' '.join(details)}."
+            lines.append('סטטוס: נוכח')
             if note_content:
-                body = f"{body} Member note: {note_content}"
+                lines.append(f'הערה: {note_content}')
+        body = '\n'.join(line for line in lines if line).strip()
 
         existing = db.execute(
             '''SELECT id FROM notes
@@ -12140,6 +12139,7 @@ def _pull_group_gdoc_notes(db, group):
             meeting_title = (item.get('meeting_title') or '').strip()
             note_date = (item.get('note_date') or '').strip() or None
             session_number = _normalize_session_number(item.get('session_number'))
+            session_number_index = int(session_number) if isinstance(session_number, str) and session_number.isdigit() else None
             note_tag = item.get('note_tag')
             structured_summary = _build_structured_summary(item)
             if not content and not structured_summary:
@@ -12164,8 +12164,8 @@ def _pull_group_gdoc_notes(db, group):
                     LIMIT 1
                 ''', (group['id'], note_date)).fetchone()
 
-            if target is None and session_number and session_number <= len(ordered_sessions):
-                target = ordered_sessions[session_number - 1]
+            if target is None and session_number_index and session_number_index <= len(ordered_sessions):
+                target = ordered_sessions[session_number_index - 1]
 
             if target is not None:
                 final_summary = structured_summary or content

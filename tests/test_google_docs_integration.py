@@ -266,6 +266,26 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.assertIn('אופיר לא הגיע לקבוצה ולא הודיע', parsed[0]['missing'])
         self.assertIn('השיח בקבוצה התחיל בשתיקה', parsed[0]['content'])
 
+    def test_parse_doc_into_notes_accepts_semicolon_separated_inline_entries(self):
+        text = (
+            'פגישה 17- 02/07/26\n'
+            '* משתתפים\n'
+            'משה שטרן - שיתף מעט על בדידות; אבינועם קאה - תיאר קושי במגע קרוב; שי בראגין - הביא עומס רגשי\n'
+            '* חסרים\n'
+            'מיכאל שפורן - הודיע שלא יוכל להגיע; אופיר כתפי - איחר ולכן לא נכח ברוב המפגש\n'
+            '* תוכן\n'
+            'הקבוצה עסקה במתח בין קרבה לבין הסתגרות.\n'
+        )
+
+        parsed = parse_doc_into_notes(text)
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]['session_number'], 17)
+        self.assertEqual(parsed[0]['participants'], ['משה שטרן', 'אבינועם קאה', 'שי בראגין'])
+        self.assertEqual(parsed[0]['missing'], ['מיכאל שפורן', 'אופיר כתפי'])
+        self.assertEqual(parsed[0]['participant_entries'][1]['note'], 'תיאר קושי במגע קרוב')
+        self.assertEqual(parsed[0]['missing_entries'][0]['note'], 'הודיע שלא יוכל להגיע')
+
     def test_group_sync_pulls_hebrew_group_template_into_matching_history(self):
         self._login_admin()
 
@@ -321,6 +341,81 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             self.assertNotIn('|משתתפים', row['session_summary'])
             self.assertNotIn('|חסרים', row['session_summary'])
             self.assertNotIn('|תוכן', row['session_summary'])
+
+    def test_group_sync_writes_hebrew_private_notes_for_participants(self):
+        self._login_admin()
+
+        with app.app_context():
+            db = get_db()
+            db.execute("INSERT INTO patients (name, status, patient_type) VALUES (?, ?, ?)", ('משה שטרן', 'ongoing', 'group'))
+            present_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute("INSERT INTO patients (name, status, patient_type) VALUES (?, ?, ?)", ('מיכאל שפורן', 'ongoing', 'group'))
+            missed_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Hebrew Notes Group', 'therapy', 'Group docs', 'group-doc-hebrew-notes')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute(
+                "INSERT INTO group_member_history (group_id, patient_id, role) VALUES (?, ?, 'member')",
+                (group_id, present_id)
+            )
+            db.execute(
+                "INSERT INTO group_member_history (group_id, patient_id, role) VALUES (?, ?, 'member')",
+                (group_id, missed_id)
+            )
+            db.commit()
+
+        hebrew_text = (
+            'פגישה 16- 25/06/26\n'
+            '* משתתפים\n'
+            'משה שטרן - שיתף בתחושת בדידות חריפה\n'
+            '* חסרים\n'
+            'מיכאל שפורן - לא הודיע על היעדרות\n'
+            '* תוכן\n'
+            'השיח עסק בבדידות ובקשר.\n'
+        )
+
+        docs_api = Mock()
+        docs_api.get.return_value.execute.return_value = {'body': {'content': [{'endIndex': 2}]}}
+        docs_api.batchUpdate.return_value.execute.return_value = {}
+        docs_service = Mock()
+        docs_service.documents.return_value = docs_api
+
+        gdocs_mock = Mock()
+        gdocs_mock.GDOCS_LIBS_AVAILABLE = True
+        gdocs_mock.read_doc_text.return_value = hebrew_text
+        gdocs_mock._docs_service.return_value = docs_service
+        gdocs_mock.parse_doc_into_notes.side_effect = parse_doc_into_notes
+
+        gcal_mock = Mock()
+        gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+        gcal_mock.load_credentials.return_value = object()
+        gcal_mock._refresh_and_save.return_value = object()
+
+        with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
+            rv = self.client.post(f'/groups/{group_id}/pull-gdoc', data={})
+
+        self.assertEqual(rv.status_code, 200)
+
+        with app.app_context():
+            db = get_db()
+            present_note = db.execute(
+                "SELECT content FROM notes WHERE patient_id = ? ORDER BY id DESC LIMIT 1",
+                (present_id,)
+            ).fetchone()
+            missed_note = db.execute(
+                "SELECT content, missed_reason, is_missed_meeting FROM notes WHERE patient_id = ? ORDER BY id DESC LIMIT 1",
+                (missed_id,)
+            ).fetchone()
+
+        self.assertIn('תיעוד מקבוצת טיפול', present_note['content'])
+        self.assertIn('סטטוס: נוכח', present_note['content'])
+        self.assertIn('הערה: שיתף בתחושת בדידות חריפה', present_note['content'])
+        self.assertIn('סטטוס: חסר', missed_note['content'])
+        self.assertIn('סיבת היעדרות: לא הודיע על היעדרות', missed_note['content'])
+        self.assertEqual(missed_note['missed_reason'], 'לא הודיע על היעדרות')
+        self.assertEqual(int(missed_note['is_missed_meeting'] or 0), 1)
 
     def test_parse_doc_into_notes_two_hebrew_meetings_with_sections(self):
         text = (

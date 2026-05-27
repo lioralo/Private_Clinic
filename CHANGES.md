@@ -2,6 +2,28 @@
 
 ---
 
+## Session 79
+
+**Date:** 2026-05-27
+
+**Objective:** Make group Google Docs parsing closer to the real clinic format, improve imported private-note wording, and add a fuller verification sample.
+
+**Release Summary:**
+
+1. **Closer-to-real group-doc parsing**
+  - Extended the Google Docs group parser to accept semicolon-separated one-line participant and missing-entry lists with inline notes, in addition to the previous per-line format.
+  - Kept the existing parser behavior for plain comma-separated name lists and the older structured Hebrew templates.
+
+2. **Cleaner imported patient notes**
+  - Reworked imported private notes from group sessions into a clearer Hebrew block that includes group name, meeting title, date/time, status, and the participant note or absence reason.
+
+3. **Expanded verification sample**
+  - Added a multi-session dummy group-doc sample covering per-line notes, semicolon-separated inline entries, and plain participant lists so the import behavior can be reviewed in the site.
+
+4. **Verification**
+  - Passed: `python -m unittest tests.test_google_docs_integration` (`21` tests)
+  - Confirmed local import into the verification group created three completed group sessions with attendance rows and patient private notes.
+
 ## Session 78
 
 **Date:** 2026-05-27

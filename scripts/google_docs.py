@@ -81,6 +81,20 @@ def _extract_name_and_note(text):
     return text.strip(), ''
 
 
+def _split_named_entries(text):
+    """Split a participant/missing line into logical entries.
+
+    Semicolons are the preferred delimiter for multiple name+note entries on one line.
+    Commas remain supported for plain name lists with no inline notes.
+    """
+    raw_text = (text or '').strip()
+    if not raw_text:
+        return []
+    if ';' in raw_text:
+        return [part.strip() for part in raw_text.split(';') if part.strip()]
+    return [raw_text]
+
+
 def _split_hebrew_group_sections(block_text):
     """Parse a group-session block into participants, missing, and content sections.
 
@@ -123,14 +137,16 @@ def _split_hebrew_group_sections(block_text):
 
         if current_section == 'participants':
             line_no_bullet = line.lstrip('-•*').strip()
-            if re.search(r'\s+[-–—:]\s+', line_no_bullet):
-                name, note = _extract_name_and_note(line_no_bullet)
-                if name:
-                    participants.append(name)
-                    participant_entries.append({'name': name, 'note': note})
-            else:
-                # May be comma/semicolon-separated or ו-separated names with no notes.
-                for token in re.split(r'[,;]', line_no_bullet):
+            for raw_entry in _split_named_entries(line_no_bullet):
+                if re.search(r'\s+[-–—:]\s+', raw_entry):
+                    name, note = _extract_name_and_note(raw_entry)
+                    if name:
+                        participants.append(name)
+                        participant_entries.append({'name': name, 'note': note})
+                    continue
+
+                # May be comma-separated or ו-separated names with no inline note.
+                for token in re.split(r'[,]', raw_entry):
                     cleaned = token.strip().strip('-').strip()
                     if not cleaned:
                         continue
@@ -148,10 +164,11 @@ def _split_hebrew_group_sections(block_text):
 
         if current_section == 'missing':
             cleaned = line.lstrip('-•*').strip()
-            if cleaned:
-                name, note = _extract_name_and_note(cleaned)
-                missing.append(name)
-                missing_entries.append({'name': name, 'note': note})
+            for raw_entry in _split_named_entries(cleaned):
+                name, note = _extract_name_and_note(raw_entry)
+                if name:
+                    missing.append(name)
+                    missing_entries.append({'name': name, 'note': note})
             continue
 
         if current_section == 'content':
