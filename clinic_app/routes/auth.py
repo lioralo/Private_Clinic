@@ -7,6 +7,8 @@ from flask import redirect, render_template, request, session, url_for, flash
 from flask_login import current_user, login_required, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from clinic_app.utils import _request_client_ip
+
 
 _LOGIN_RATE_LIMIT_LOCK = threading.Lock()
 _LOGIN_RATE_LIMIT_BUCKETS = {}
@@ -44,15 +46,6 @@ def _check_register_rate_limit(app):
         _REGISTER_RATE_LIMIT_BUCKETS[ip] = timestamps
 
     return None
-
-
-def _request_client_ip():
-    forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
-    if forwarded_for:
-        first_ip = forwarded_for.split(',')[0].strip()
-        if first_ip:
-            return first_ip
-    return request.remote_addr or 'unknown'
 
 
 def _rate_limit_key(username):

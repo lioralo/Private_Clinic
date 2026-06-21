@@ -2,7 +2,6 @@ import os
 import sqlite3
 import socket
 import json
-import ast
 import importlib
 import sys
 import hmac
@@ -36,6 +35,8 @@ from docx import Document
 from datetime import datetime, timedelta, timezone
 from clinic_app.routes.health import health_bp
 from clinic_app.routes.auth import register_auth_routes
+from clinic_app.routes.patients import patients_bp
+from clinic_app.routes.calendar import calendar_bp
 
 
 def _import_optional_module(*module_names):
@@ -70,20 +71,18 @@ gdocs = _import_optional_module('google_docs', 'scripts.google_docs')
 
 app = Flask(__name__)
 app.register_blueprint(health_bp)
+app.register_blueprint(patients_bp)
+app.register_blueprint(calendar_bp)
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 
 _secret_key = os.environ.get('SECRET_KEY', '').strip()
 if not _secret_key:
-    if os.environ.get('FLASK_ENV') == 'production' or os.environ.get('FLASK_DEBUG', '0') == '0':
-        raise RuntimeError(
-            "SECRET_KEY environment variable is not set. "
-            "Set a strong random value before starting the app in production."
-        )
-    import warnings
-    warnings.warn("SECRET_KEY is not set — using an insecure default. Do not use this in production.", stacklevel=2)
-    _secret_key = 'dev-insecure-placeholder'
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "Set a strong random value before starting the app."
+    )
 app.secret_key = _secret_key
 del _secret_key
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
@@ -582,366 +581,10 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 HEBREW_TRANSLATIONS = {
-    "Dashboard": "לוח בקרה",
-    "Add First Patient": "הוסף מטופל ראשון",
-    "No patients found in this category.": "לא נמצאו מטופלים בקטגוריה זו.",
-    "ID:": "ת.ז:",
-    "Total": "סה״כ",
-    "View Profile": "הצג פרופיל",
-    "Private Psychotherapy Clinic": "קליניקה פרטית לפסיכותרפיה",
-    "Search Patient": "חיפוש מטופל",
-    "Type patient name...": "הקלד שם מטופל...",
-    "All Types": "כל הסוגים",
-    "All Statuses": "כל הסטטוסים",
-    "Patient Conversation": "שיחת מטופל",
-    "Loading...": "טוען...",
-    "Type a message...": "כתוב הודעה...",
-    "No patient conversations": "אין שיחות מטופלים",
-    "unread": "לא נקראו",
-    "No patient login": "אין התחברות מטופל",
-    "You": "אתה",
-    "System/Admin": "מערכת/מנהל",
-    "Encounter Notes": "הערות מפגש/מגע",
-    "Encounter Title": "כותרת מגע",
-    "Document any call, update, or non-session encounter.": "תעד כל שיחה, עדכון או מגע שאינו מפגש טיפולי.",
-    "Save Encounter": "שמור מגע",
-    "Encounter Note": "הערת מגע",
-    "Delete encounter note?": "למחוק הערת מגע?",
-    "No encounter notes yet.": "אין עדיין הערות מגע.",
-    "Encounter note content is required.": "נדרש תוכן עבור הערת המגע.",
-    "Encounter note added.": "הערת מגע נוספה.",
-    "Encounter note deleted.": "הערת מגע נמחקה.",
-    "Encounter note not found.": "הערת מגע לא נמצאה.",
-    "This will replace current patient records with test data. Continue?": "פעולה זו תחליף את רשומות המטופלים הנוכחיות בנתוני בדיקה. להמשיך?",
-    "Reset Test Patients": "איפוס מטופלי בדיקה",
-    "Type RESET to confirm test-patient reset.": "הקלד RESET כדי לאשר איפוס מטופלי בדיקה.",
-    "Test patients reset successfully: one per core type/track with sample treatment methods.": "מטופלי הבדיקה אופסו בהצלחה: אחד לכל סוג/מסלול מרכזי עם שיטות טיפול לדוגמה.",
-    "Manage clinic member records.": "ניהול רשומות חברי הקליניקה.",
-    "Needs scheduling": "דורש תיאום",
-    "View toggle": "מתג תצוגה",
-    "Google Docs": "Google Docs",
-    "Google Doc URL": "קישור Google Doc",
-    "New Activity": "פעילות חדשה",
-    "Just now": "כרגע",
-    "Portal preview was removed from this workflow.": "תצוגת הפורטל הוסרה מתהליך העבודה הזה.",
-
-    "All Patients": "כל המטופלים",
-    "Candidates & Waiting": "מועמדים וממתינים",
-    "Candidate/Waiting": "מועמד/ממתין",
-    "Patients": "מטופלים",
-    "Missing Recurring Appointment": "חסרה פגישה חוזרת",
-
-    "Ongoing": "בטיפול",
-    "Candidates": "מועמדים",
-    "Waiting": "ממתינים",
-    "Archived": "בארכיון",
-    "Deleted": "מחוק",
-    "Deleted Patients": "מטופלים מחוקים",
-    "View Deleted": "הצג מחוק",
-    "Delete Patient": "מחק מטופל",
-    "Deletion Reason": "סיבת המחיקה",
-    "Please provide a reason for deleting this patient": "אנא ציין סיבה למחיקת המטופל",
-    "Confirm Delete": "אשר מחיקה",
-    "Mark as Deleted": "סמן כמחוק",
-    "Patient deleted successfully.": "המטופל נמחק בהצלחה.",
-    "Manage Slots": "ניהול יומן",
-    "Add Patient": "הוספת מטופל",
-    "Messages": "הודעות",
-    "Logout": "התנתק",
-    "Login": "התחבר",
-    "Public Resources": "משאבים ציבוריים",
-    "Resources": "משאבים",
-    "Search": "חיפוש",
-    "Summary": "סיכום",
-    "Appointments": "פגישות",
-    "Clinical Notes": "רשומות קליניות",
-    "Billing": "חיובים",
-    "Internal Chat": "צ'אט פנימי",
-    "Send Email": "שלח דוא״ל",
-    "WhatsApp": "וואטסאפ",
-    "Edit": "ערוך",
-    "Convert to Ongoing": "הפוך למטופל פעיל",
-    "Email": "דוא״ל",
-    "Phone": "טלפון",
-    "Date": "תאריך",
-    "Time": "שעה",
-    "Cost": "עלות",
-    "Meeting Type": "סוג פגישה",
-    "Meeting Link": "קישור לפגישה",
-    "Add": "הוסף",
-    "In-Person": "פרונטלי",
-    "Online": "מקוון",
-    "Remove appointment?": "להסיר את הפגישה?",
-    "Treatment Log": "יומן טיפולים",
-    "Content (English)": "תוכן (אנגלית)",
-    "תוכן (Hebrew)": "תוכן (עברית)",
-    "Attach Files": "צרף קבצים",
-    "Post Treatment Log": "שמור רשומה",
-    "Needs Review": "דורש בדיקה",
-    "Attached Files:": "קבצים מצורפים:",
-    "No clinical history recorded.": "לא תועדה היסטוריה קלינית.",
-    "Financial Receipts": "קבלות פיננסיות",
-    "Amount ($)": "סכום",
-    "Description": "תיאור",
-    "Create New Receipt": "צור קבלה חדשה",
-    "Medical Service": "שירות רפואי",
-    "No financial records.": "אין רשומות פיננסיות.",
-    "Type a message...": "הקלד הודעה...",
-    "No messages yet.": "אין הודעות עדיין.",
-    "Assign Resource": "הקצה משאב",
-    "Select a Private Resource...": "בחר משאב פרטי...",
-    "Assign": "הקצה",
-    "Assigned Resources": "משאבים שהוקצו",
-    "No resources assigned.": "לא הוקצו משאבים.",
-    "Financial Summary": "סיכום פיננסי",
-    "Total Outstanding": "סך חוב",
-    "Credit Balance": "יתרת זכות",
-    "Account Balance": "יתרת חשבון",
-    "Outstanding balance for therapeutic services.": "יתרת חוב עבור שירותים טיפוליים.",
-    "You have credit in your account.": "יש לך יתרת זכות בחשבון.",
-    "Your account is fully settled!": "החשבון שלך מוסדר במלואו!",
-    "My Appointments": "הפגישות שלי",
-    "Sessions": "פגישות",
-    "Scheduled at": "נקבע לשעה",
-    "Join Meeting": "הצטרף לפגישה",
-    "No therapy sessions scheduled.": "לא נקבעו פגישות טיפוליות.",
-    "Schedule a Session": "קבע פגישה",
-    "Scheduling is only available for patients currently awaiting placement.": "קביעת פגישות זמינה רק למטופלים הממתינים לשיבוץ.",
-    "Receipts": "קבלות",
-    "Print": "הדפס",
-    "Service Receipt": "קבלת שירות",
-    "No receipts.": "אין קבלות.",
-    "Shared Files": "קבצים משותפים",
-    "No shared files.": "אין קבצים משותפים.",
-    "Open": "פתח",
-    "No resources assigned to you.": "לא הוקצו לך משאבים.",
-    "Contact Therapist": "צור קשר עם המטפל",
-    "Direct messages with your clinical provider.": "הודעות ישירות עם המטפל שלך.",
-    "Send a message to start.": "שלח הודעה כדי להתחיל.",
-    "Send Securely": "שלח בצורה מאובטחת",
-    "Export History": "יצא היסטוריה",
-    "Import": "ייבא",
-    "Import Patient History (JSON)": "ייבוא היסטוריית מטופל (JSON)",
-    "Upload File or DOCX Treatment Log": "העלאת קובץ או יומן טיפולים DOCX",
-    "Calendar Actions": "פעולות יומן",
-    "Export Calendar to JSON": "ייצא יומן ל-JSON",
-    "Export Appointments CSV": "ייצוא פגישות CSV",
-    "Mark Past Appointments as Completed": "סמן פגישות עבר כהושלמו",
-    "past appointments marked as completed.": "פגישות עבר סומנו כהושלמו.",
-    "Mark Complete": "סמן כהושלם",
-    "Mark No Show": "סמן כאי-הגעה",
-    "Mark Cancelled": "סמן כמבוטל",
-    "Completed": "הושלם",
-    "Cancelled": "בוטל",
-    "Scheduled": "מתוכנן",
-    "No Show": "אי-הגעה",
-    "Portal Active": "הפורטל פעיל",
-    "Portal Disabled": "הפורטל מושבת",
-    "Create Portal Access": "צור גישת פורטל",
-    "Update Portal Credentials": "עדכן פרטי פורטל",
-    "Enable Portal Access": "הפעל גישת פורטל",
-    "Disable Portal Access": "השבת גישת פורטל",
-    "Set a password": "הגדר סיסמה",
-    "Patient can currently sign in.": "המטופל יכול כעת להתחבר.",
-    "Patient sign-in is currently disabled.": "התחברות המטופל מושבתת כעת.",
-    "Send Email": "שלח אימייל",
-    "Appointment status updated.": "סטטוס הפגישה עודכן.",
-    "Could not update appointment status.": "לא ניתן לעדכן את סטטוס הפגישה.",
-    "Update appointment status?": "לעדכן את סטטוס הפגישה?",
-    "Import Calendar from JSON": "ייבא יומן מ-JSON",
-    "Import Calendar": "ייבא יומן",
-    "Repeat until specific date:": "חזור עד תאריך מסוים:",
-    "Repeat for X meetings:": "חזור עבור X פגישות:",
-    "Number of meetings": "מספר פגישות",
-    "First Appointment Date": "תאריך פגישה ראשון",
-    "Duration (Minutes)": "משך (דקות)",
-    "Recurrence Interval (Weeks)": "תדירות חזרה (שבועות)",
-    "Every Week": "כל שבוע",
-    "Every 2 Weeks": "כל שבועיים",
-    "Recurrence End Limit": "גבול סיום חזרה",
-    "Days of Week": "ימי השבוע",
-    "Sun": "א'",
-    "Mon": "ב'",
-    "Tue": "ג'",
-    "Wed": "ד'",
-    "Thu": "ה'",
-    "Check the days that apply. If none checked, defaults to the day of the first appointment.": "סמן את הימים הרלוונטיים. אם לא סומן, יקבע לפי יום הפגישה הראשון.",
-    "Cost per Session ($)": "עלות לפגישה ($)",
-    "Meeting Link (if Online)": "קישור לפגישה (אם מקוון)",
-    "Cancel": "ביטול",
-    "Save & Convert": "שמור והמר",
-    "Welcome Back": "ברוכים השבים",
-    "Please sign in to access the clinic CRM": "אנא היכנס כדי לגשת למערכת הניהול",
-    "Username": "שם משתמש",
-    "Password": "ססמה",
-    "Forgot?": "שכחת?",
-    "New patient?": "מטופל חדש?",
-    "Register here": "הירשם כאן",
-    "Book Session": "קבע פגישה",
-    "Would you like to schedule a session for": "האם תרצה לקבוע פגישה ל-",
-    "Confirm Booking": "אשר קביעה",
-    "Add New Resource": "הוסף משאב חדש",
-    "Title": "כותרת",
-    "URL": "קישור",
-    "Public (visible to everyone)": "פומבי (גלוי לכולם)",
-    "Add Resource": "הוסף משאב",
-    "Manage Resources": "נהל משאבים",
-    "Access": "גישה",
-    "Date Added": "תאריך הוספה",
-    "Actions": "פעולות",
-    "Public": "פומבי",
-    "Private": "פרטי",
-    "Diagnosee": "מאובחן",
-    "No resources found.": "לא נמצאו משאבים.",
-    "Edit Patient": "ערוך מטופל",
-    "Update patient information": "עדכן פרטי מטופל",
-    "Generate AI Background": "צור רקע אוטומטי",
-    "AI-generated summary based on meeting logs.": "סיכום אוטומטי המבוסס על יומני הפגישות.",
-    "AI background generated.": "נוצר רקע אוטומטי.",
-    "Full Name": "שם מלא",
-    "Status": "סטטוס",
-    "Email Address": "כתובת דוא״ל",
-    "Phone Number": "מספר טלפון",
-    "Date of Birth": "תאריך לידה",
-    "ID Number": "תעודת זהות",
-    "Save Changes": "שמור שינויים",
-    "Add New Patient": "הוסף מטופל חדש",
-    "Initial Status": "סטטוס התחלתי",
-    "Add Patient": "הוסף מטופל",
-    "Manage Slot": "נהל משבצת הזמן",
-    "Manage slot for": "נהל משבצת זמן עבור",
-    "Duration": "משך זמן",
-    "Slot Status": "סטטוס משבצת הזמן",
-    "Open (Clickable for patients)": "פתוח (זמין למטופלים)",
-    "Occupied (Busy)": "תפוס (עסוק)",
-    "Blocked (Unavailable)": "חסום (לא זמין)",
-    "Save": "שמור",
-    "Enter username": "הכנס שם משתמש",
-    "Sign In": "התחבר",
-    "Register": "הירשם",
-    "Weekly Snapshot Calendar": "תמונת מצב שבועית",
-    "Current workweek only (Sunday-Thursday, 08:00-20:00). The board auto-rolls to the next week.": "שבוע העבודה הנוכחי בלבד (א'-ה', 08:00-20:00). הלוח מתעדכן אוטומטית לשבוע הבא.",
-    "Back to CRM": "חזרה ל-CRM",
-    "Schedule": "יומן",
-    "Booking Panel": "פאנל קביעות",
-    "Available Slots": "זמינות",
-    "Add Block": "הוסף חסימה",
-    "Legend:": "מקרא:",
-    "Candidate/Waiting": "מועמד/ממתין",
-    "Blocked": "חסום",
-    "Special Occasion": "אירוע מיוחד",
-    "Filters:": "סינון:",
-    "All": "הכל",
-    "Special": "מיוחד",
-    "Showing:": "מוצג:",
-    "Current week": "השבוע הנוכחי",
-    "Ongoing this week:": "בטיפול השבוע:",
-    "None": "אין",
-    "Follow-Up Indicators": "התראות מעקב",
-    "No pending follow-up indicators.": "אין התראות מעקב כרגע.",
-    "Friday Specials": "אירועים מיוחדים - שישי",
-    "Saturday Specials": "אירועים מיוחדים - שבת",
-    "No weekend items.": "אין פריטים לסופ״ש.",
-    "Available Slots This Week": "זמינות לשבוע זה",
-    "Self-Booking": "קביעה עצמית",
-    "You can book into available slots and cancel your own sessions from the calendar.": "אפשר לקבוע לזמנים פנויים ולבטל פגישות שלך מהיומן.",
-    "Self-booking is currently disabled by your therapist.": "קביעה עצמית כרגע כבויה על ידי המטפל.",
-    "Patient": "מטופל",
-    "Select patient...": "בחר מטופל...",
-    "Selected Slot": "משבצת נבחרת",
-    "No slot selected": "לא נבחרה משבצת",
-    "End Time": "שעת סיום",
-    "Booking Type": "סוג קביעה",
-    "Appointment": "פגישה",
-    "Special Pattern": "תבנית אירוע מיוחד",
-    "One-time": "חד פעמי",
-    "Weekly Recurring": "חוזר שבועית",
-    "Repeat Until": "חזרה עד",
-    "Special Title": "כותרת אירוע מיוחד",
-    "Seminar / Conference / Vacation": "סמינר / כנס / חופשה",
-    "Meeting Link (optional)": "קישור פגישה (אופציונלי)",
-    "Click Meet or Zoom to open in a new tab, copy the link, then paste above.": "לחץ Meet או Zoom לפתיחה בלשונית חדשה, העתק את הקישור והדבק כאן.",
-    "Book Selected Slot": "קבע משבצת נבחרת",
-    "Start Time": "שעת התחלה",
-    "Type": "סוג",
-    "Admin title": "כותרת למנהל",
-    "Hide title from patients (shown as Unavailable)": "הסתר כותרת ממטופלים (יוצג כלא זמין)",
-    "Save Override": "שמור דריסה",
-    "Calendar Action": "פעולת יומן",
-    "OK": "אישור",
-    "Clinic CRM": "מערכת CRM קלינית",
-    "Management center for patients, treatment logs, and clinic resources.": "מרכז ניהול למטופלים, יומני טיפול ומשאבי קליניקה.",
-    "Treatment Log Template": "תבנית יומן טיפולים",
-    "View mode": "מצב תצוגה",
-    "Cards": "כרטיסים",
-    "List": "רשימה"
-    ,"Welcome back": "ברוך/ה הבא/ה"
-    ,"Here is your current status": "הנה הסטטוס הנוכחי שלך"
-    ,"Weekly Calendar": "יומן שבועי"
-    ,"Weekly Calendar Locked": "היומן השבועי נעול"
-    ,"Self-booking is disabled": "קביעה עצמית כבויה"
-    ,"Next meeting:": "הפגישה הבאה:"
-    ,"Recurring": "חוזר"
-    ,"Upcoming Appointments": "פגישות קרובות"
-    ,"Online Session": "פגישה מקוונת"
-    ,"In-Person Session": "פגישה פרונטלית"
-    ,"Join Link": "קישור להצטרפות"
-    ,"Download .ics": "הורדת קובץ .ics"
-    ,"No upcoming appointments scheduled.": "אין פגישות קרובות מתוכננות."
-    ,"Shared Documents": "מסמכים משותפים"
-    ,"No shared documents yet.": "אין עדיין מסמכים משותפים."
-    ,"Download": "הורדה"
-    ,"Request Cancellation": "בקשת ביטול"
-    ,"Cancellation Reason": "סיבת הביטול"
-    ,"Send Cancellation Request": "שליחת בקשת ביטול"
-    ,"Send cancellation request": "שליחת בקשת ביטול"
-    ,"Ask to Book Another Meeting": "בקשה לקביעת פגישה נוספת"
-    ,"Request Notes": "הערות לבקשה"
-    ,"Send Booking Request": "שליחת בקשת קביעה"
-    ,"Admin portal preview mode for patient": "מצב תצוגה מקדימה של פורטל המטופל עבור מטופל"
-    ,"minutes": "דקות"
-    ,"Add to calendar": "הוספה ליומן"
-    ,"Ask to cancel": "בקשה לביטול"
-    ,"Why do you need to cancel?": "למה צריך לבטל את הפגישה?"
-    ,"Write a short explanation for the clinic team": "יש לכתוב הסבר קצר לצוות הקליניקה"
-    ,"Close": "סגירה"
-    ,"No upcoming appointments.": "אין פגישות קרובות."
-    ,"Need another meeting?": "צריך/ה פגישה נוספת?"
-    ,"Send a request and the clinic team will contact you or open self-booking if needed.": "שלח/י בקשה וצוות הקליניקה יחזור אליך או יפתח קביעה עצמית במידת הצורך."
-    ,"Request details": "פרטי הבקשה"
-    ,"Share preferred days, urgency, or anything else the team should know": "אפשר לציין ימים מועדפים, דחיפות, או כל פרט נוסף שחשוב לצוות לדעת"
-    ,"Request another meeting": "בקשה לפגישה נוספת"
-    ,"Open weekly calendar": "פתיחת היומן השבועי"
-    ,"Follow-up needed": "נדרש מעקב"
-    ,"Last note date:": "תאריך הרשומה האחרונה:"
-    ,"Days since last note:": "ימים מאז הרשומה האחרונה:"
-    ,"Message composer is disabled in preview mode.": "שדה כתיבת ההודעות מושבת במצב תצוגה מקדימה."
-    ,"Your cancellation request was sent.": "בקשת הביטול שלך נשלחה."
-    ,"Your booking request was sent.": "בקשת הקביעה שלך נשלחה."
-    ,"Cancellation request sent.": "בקשת הביטול נשלחה."
-    ,"Booking request sent.": "בקשת הקביעה נשלחה."
-    ,"Please explain why you want to cancel.": "נא להסביר מדוע ברצונך לבטל."
-    ,"Please add a note for your booking request.": "נא להוסיף הערה לבקשת הקביעה."
-    ,"System": "מערכת"
-    ,"Requested": "נשלחה בקשה"
-    ,"Time before meeting": "זמן לפני הפגישה"
-    ,"No reason provided": "לא נמסרה סיבה"
-    ,"Open self-booking for me": "פתיחת קביעה עצמית עבורי"
-    ,"Request another meeting from available slots": "בקשה לפגישה נוספת מתוך הזמנים הפנויים"
-    ,"This request was added to your chat.": "הבקשה נוספה לצ'אט שלך."
-    ,"Edit Meeting": "ערוך פגישה"
-    ,"Delete Meeting": "מחק פגישה"
-    ,"Delete Recurring Meeting": "מחיקת פגישה חוזרת"
-    ,"How would you like to delete this recurring meeting?": "כיצד ברצונך למחוק את הפגישה החוזרת?"
-    ,"Delete this occurrence only": "מחק מופע זה בלבד"
-    ,"Delete this and all upcoming meetings": "מחק פגישה זו וכל הפגישות הבאות"
-    ,"Delete all meetings in this series": "מחק את כל הפגישות בסדרה"
-    ,"Delete": "מחק"
-    ,"Edit Recurring Meeting": "עריכת פגישה חוזרת"
-    ,"How would you like to apply this change?": "כיצד ברצונך להחיל שינוי זה?"
-    ,"This occurrence only": "מופע זה בלבד"
-    ,"This and all upcoming": "פגישה זו וכל הבאות"
-    ,"All occurrences in this series": "כל המופעים בסדרה"
+    # Translations loaded from translations/he.json
+    # To add or update translations, edit that file directly.
+    # The inline dict was removed to reduce app.py size.
+    # See load_hebrew_translation_overrides() below.
 }
 
 TRANSLATION_OVERRIDES_FILE = Path(__file__).resolve().parent / 'translations' / 'he.json'
@@ -3206,11 +2849,21 @@ def _run_db_migrations(db):
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
 
+    # Shared rate-limit store (used across Gunicorn workers)
+    db.execute('''CREATE TABLE IF NOT EXISTS rate_limits (
+        bucket_key TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        timestamp_real REAL NOT NULL,
+        PRIMARY KEY (bucket_key, scope, timestamp_real)
+    )''')
+    db.execute('''CREATE INDEX IF NOT EXISTS idx_rate_limits_lookup
+        ON rate_limits (bucket_key, scope, timestamp_real)''')
+
     db.commit()
 
 def _seed_admin_user(db):
     """Seed the default admin user and handle legacy migrations."""
-    env_username = (os.environ.get('ADMIN_USERNAME') or '').strip() or 'lioraloni'
+    env_username = (os.environ.get('ADMIN_USERNAME') or '').strip() or 'admin'
     env_password = (os.environ.get('ADMIN_PASSWORD') or '').strip()
 
     # Check if admin exists
@@ -3620,25 +3273,17 @@ def parse_intake_questionnaire(raw_value, fallback_assessment=None):
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Some legacy records were stored as Python dict strings.
+        # Some legacy records were stored as Python dict strings (True/False/None, single quotes).
         raw_text = str(raw_value).strip()
         if raw_text.startswith('{') and raw_text.endswith('}'):
             try:
-                # Prevent DoS from deeply nested structures in ast.literal_eval
-                depth = 0
-                for char in raw_text:
-                    if char in '{[(':
-                        depth += 1
-                        if depth > 100:
-                            raise ValueError("Too deeply nested")
-                    elif char in '}])':
-                        depth -= 1
-
-                literal = ast.literal_eval(raw_text)
-                normalized = normalize_intake_payload(literal)
+                converted = raw_text.replace("'", '"')
+                converted = converted.replace('True', 'true').replace('False', 'false').replace('None', 'null')
+                parsed = json.loads(converted)
+                normalized = normalize_intake_payload(parsed)
                 if normalized:
                     return normalized
-            except (ValueError, SyntaxError, MemoryError, RecursionError):
+            except (ValueError, TypeError, json.JSONDecodeError):
                 pass
 
         legacy_from_questionnaire = parse_legacy_intake_text(raw_value)
@@ -8665,238 +8310,14 @@ def update_patient_group_attendance(patient_id, session_id):
     return redirect_to_patient_tab(patient_id, 'info')
 
 
-@app.route('/api/calendar/snapshot')
-@login_required
-def api_calendar_snapshot():
-    start_raw = request.args.get('week_start', '').strip()
-    anchor = parse_date_safe(start_raw) or datetime.now().date()
-    week_start = anchor - timedelta(days=custom_weekday(anchor))
-    db = get_db()
-    if current_user.role == 'admin':
-        ensure_ongoing_recurrence_from_previous_week(db, anchor)
-        ensure_ongoing_patients_have_upcoming_bookings(db, anchor)
-        ensure_default_recurring_vacancies(db)
-    payload = build_week_calendar_snapshot(db, week_start, current_user)
-    return jsonify(payload)
 
 
-@app.route('/api/calendar/block', methods=['POST'])
-@login_required
-def api_calendar_block():
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    blocked_date = request.form.get('blocked_date', '').strip()
-    blocked_time = request.form.get('blocked_time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    title = request.form.get('title', '').strip()
-    block_type = 'blocked'
-    is_private = 1 if request.form.get('is_private') else 0
-    recurrence_pattern = request.form.get('recurrence_pattern', 'one-time').strip().lower() or 'one-time'
-    repeat_until_raw = request.form.get('repeat_until', '').strip()
-
-    anchor_date = parse_date_safe(blocked_date)
-    parsed_start = parse_time_safe(blocked_time)
-    if not anchor_date or not parsed_start:
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    # Compute duration from start + end time.
-    duration_value = 60
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration_value = computed
-
-    dates_to_create = [anchor_date]
-    if recurrence_pattern == 'weekly':
-        repeat_until = parse_date_safe(repeat_until_raw)
-        if not repeat_until or repeat_until < anchor_date:
-            return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring block.'}), 400
-        dates_to_create = []
-        current_date = anchor_date
-        while current_date <= repeat_until:
-            dates_to_create.append(current_date)
-            current_date += timedelta(days=7)
-
-    db = get_db()
-    for block_day in dates_to_create:
-        start_dt = datetime.combine(block_day, parsed_start)
-        end_dt = start_dt + timedelta(minutes=duration_value)
-        conflict_message = has_time_conflict(db, block_day, start_dt, end_dt)
-        if conflict_message:
-            return jsonify({'status': 'error', 'message': f'{conflict_message} ({block_day.isoformat()})'}), 409
-
-    if dates_to_create:
-        now_iso = datetime.now().isoformat()
-
-        blocked_slots_data = [
-            (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id)
-            for block_day in dates_to_create
-        ]
-
-        slots_override_data = [
-            (title or 'Blocked Slot', now_iso, block_day.isoformat(), parsed_start.strftime('%H:%M'))
-            for block_day in dates_to_create
-        ]
-
-        db.executemany('''
-            INSERT INTO blocked_slots
-            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', blocked_slots_data)
-
-        db.executemany('''
-            UPDATE slots_override
-            SET status = 'booked', booked_by_name = ?, booked_at = ?
-            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', slots_override_data)
-
-    db.commit()
-    return jsonify({'status': 'success', 'created': len(dates_to_create)})
 
 
-@app.route('/api/calendar/block/<int:block_id>/update', methods=['POST'])
-@login_required
-def api_calendar_block_update(block_id):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    existing = db.execute('SELECT * FROM blocked_slots WHERE id = ?', (block_id,)).fetchone()
-    if not existing:
-        return jsonify({'status': 'error', 'message': 'Block not found.'}), 404
-
-    blocked_date = request.form.get('blocked_date', '').strip()
-    blocked_time = request.form.get('blocked_time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    title = request.form.get('title', '').strip()
-    block_type = 'blocked'
-    is_private = 1 if request.form.get('is_private') in ('1', 'true', 'on') else 0
-
-    day_obj = parse_date_safe(blocked_date)
-    start_time = parse_time_safe(blocked_time)
-    end_time = parse_time_safe(end_time_raw) if end_time_raw else None
-    if not day_obj or not start_time:
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    duration = int(existing['duration_minutes'] or 60)
-    if end_time:
-        start_minutes = start_time.hour * 60 + start_time.minute
-        end_minutes = end_time.hour * 60 + end_time.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
-
-    start_dt = datetime.combine(day_obj, start_time)
-    end_dt = start_dt + timedelta(minutes=duration)
-    conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_block_id=block_id)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    db.execute('''
-        UPDATE blocked_slots
-        SET blocked_date = ?, blocked_time = ?, duration_minutes = ?,
-            title = ?, is_private = ?, block_type = ?
-        WHERE id = ?
-    ''', (day_obj.isoformat(), start_time.strftime('%H:%M'), duration, title or None, is_private, block_type, block_id))
-    db.commit()
-    return jsonify({'status': 'success'})
 
 
-@app.route('/api/calendar/block/<int:block_id>/delete', methods=['POST'])
-@login_required
-def api_calendar_block_delete(block_id):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    db.execute('DELETE FROM blocked_slots WHERE id = ?', (block_id,))
-    db.commit()
-    return jsonify({'status': 'success'})
 
 
-@app.route('/api/calendar/bookings')
-@login_required
-def api_calendar_bookings():
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    mode = (request.args.get('mode') or 'upcoming').strip().lower()
-    if mode not in ('upcoming', 'history'):
-        mode = 'upcoming'
-
-    db = get_db()
-    payload = build_booking_management_payload(db, mode=mode)
-    return jsonify(payload)
-
-
-@app.route('/api/calendar/vacancy', methods=['POST'])
-@login_required
-def api_calendar_vacancy():
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    slot_date = request.form.get('slot_date', '').strip()
-    slot_time = request.form.get('slot_time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    recurrence_pattern = (request.form.get('recurrence_pattern') or 'weekly').strip().lower()
-    if recurrence_pattern not in ('one-time', 'weekly'):
-        recurrence_pattern = 'one-time'
-
-    date_obj = parse_date_safe(slot_date)
-    start_time = parse_time_safe(slot_time)
-    end_time = parse_time_safe(end_time_raw)
-    if not date_obj or not start_time or not end_time:
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    start_minutes = start_time.hour * 60 + start_time.minute
-    end_minutes = end_time.hour * 60 + end_time.minute
-    duration = end_minutes - start_minutes
-    if duration <= 0:
-        return jsonify({'status': 'error', 'message': 'End time must be after start time.'}), 400
-
-    slot_start = datetime.combine(date_obj, start_time)
-    slot_end = slot_start + timedelta(minutes=duration)
-
-    db = get_db()
-    conflict_message = has_time_conflict(db, date_obj, slot_start, slot_end)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': f'Vacancy conflict: {conflict_message}'}), 409
-
-    if recurrence_pattern == 'weekly':
-        weekday = custom_weekday(date_obj)
-        db.execute('''
-            DELETE FROM vacancy_recurring
-            WHERE weekday = ? AND slot_time = ?
-        ''', (weekday, start_time.strftime('%H:%M')))
-        insert_cur = db.execute('''
-            INSERT INTO vacancy_recurring (weekday, slot_time, duration_minutes, is_active)
-            VALUES (?, ?, ?, 1)
-        ''', (weekday, start_time.strftime('%H:%M'), duration))
-        db.commit()
-        return jsonify({
-            'status': 'success',
-            'recurrence_pattern': 'weekly',
-            'recurring_id': insert_cur.lastrowid
-        })
-
-    db.execute('''
-        DELETE FROM slots_override
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-    ''', (slot_date, start_time.strftime('%H:%M')))
-    insert_cur = db.execute('''
-        INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
-        VALUES (?, ?, 'available', ?)
-    ''', (slot_date, start_time.strftime('%H:%M'), duration))
-    db.commit()
-    return jsonify({
-        'status': 'success',
-        'recurrence_pattern': 'one-time',
-        'override_id': insert_cur.lastrowid
-    })
 
 
 @app.route('/calendar/open/<token>')
@@ -8987,309 +8408,14 @@ def api_open_slot_book(token):
     return jsonify({'status': 'success', 'message': f'Your booking for {row["slot_date"]} at {row["slot_time"]} has been confirmed!'})
 
 
-@app.route('/api/calendar/vacancy/<int:override_id>/occupy', methods=['POST'])
-@login_required
-def api_calendar_vacancy_occupy(override_id):
-    """Admin manually occupies a vacant slot – assigns a patient or enters a name."""
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM slots_override WHERE id = ? AND status = 'available'",
-        (override_id,)
-    ).fetchone()
-
-    if not row:
-        return jsonify({'status': 'error', 'message': 'Slot not found or already occupied.'}), 404
-
-    patient_id_raw = (request.form.get('patient_id') or '').strip()
-    occupant_name = (request.form.get('occupant_name') or '').strip()
-
-    if not patient_id_raw and not occupant_name:
-        return jsonify({'status': 'error', 'message': 'Provide a patient or a name.'}), 400
-
-    date_obj = parse_date_safe(row['slot_date'])
-    t_obj = parse_time_safe(row['slot_time'])
-    if not date_obj or not t_obj:
-        return jsonify({'status': 'error', 'message': 'Invalid slot data.'}), 500
-
-    duration = int(row['duration_minutes'] or 60)
-    slot_start = datetime.combine(date_obj, t_obj)
-    slot_end = slot_start + timedelta(minutes=duration)
-
-    conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
-    if conflict:
-        return jsonify({'status': 'error', 'message': f'Cannot occupy slot: {conflict}'}), 409
-
-    if patient_id_raw:
-        try:
-            patient_id = int(patient_id_raw)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Invalid patient id.'}), 400
-        patient = db.execute('SELECT id, name, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if not patient:
-            return jsonify({'status': 'error', 'message': 'Patient not found.'}), 404
-        is_ongoing = (patient['status'] or '').lower() == 'ongoing'
-        db.execute('''
-            INSERT INTO appointments
-            (patient_id, appointment_date, appointment_time, status, duration_minutes,
-             is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_title)
-            VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, 'in-person', '### private meeting')
-        ''', (
-            patient_id,
-            row['slot_date'],
-            row['slot_time'],
-            duration,
-            1 if is_ongoing else 0,
-            1 if is_ongoing else None,
-            str(custom_weekday(date_obj)) if is_ongoing else None
-        ))
-        booked_label = patient['name']
-    else:
-        db.execute('''
-            INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
-            VALUES (?, ?, ?, ?, 0, 'special')
-        ''', (row['slot_date'], row['slot_time'], duration, occupant_name))
-        booked_label = occupant_name
-
-    db.execute('''
-        UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_at = ?
-        WHERE id = ?
-    ''', (booked_label, datetime.now().isoformat(), override_id))
-    db.commit()
-    return jsonify({'status': 'success', 'message': f'Slot occupied by {booked_label}.'})
 
 
-@app.route('/api/calendar/vacancies')
-@login_required
-def api_calendar_vacancies():
-    """Admin: list all vacancy slots (open + recently booked)."""
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    today = datetime.now().date()
-    rows = db.execute('''
-        SELECT id, slot_date, slot_time, duration_minutes, status,
-               booked_by_name, booked_by_phone, booked_at
-        FROM slots_override
-        WHERE slot_date >= ?
-        ORDER BY slot_date ASC, slot_time ASC
-    ''', ((today - timedelta(days=7)).isoformat(),)).fetchall()
-
-    recurring_rows = db.execute('''
-        SELECT id, weekday, slot_time, duration_minutes
-        FROM vacancy_recurring
-        WHERE COALESCE(is_active, 1) = 1
-        ORDER BY weekday ASC, slot_time ASC
-    ''').fetchall()
-
-    weekday_names = {
-        0: 'Sunday',
-        1: 'Monday',
-        2: 'Tuesday',
-        3: 'Wednesday',
-        4: 'Thursday',
-        5: 'Friday',
-        6: 'Saturday'
-    }
-
-    items = []
-    for row in rows:
-        date_obj = parse_date_safe(row['slot_date'])
-        t_obj = parse_time_safe(row['slot_time'])
-        duration = int(row['duration_minutes'] or 60)
-        end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
-        items.append({
-            'id': row['id'],
-            'kind': 'one-time',
-            'date': row['slot_date'],
-            'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
-            'end_time': end_dt.strftime('%H:%M') if end_dt else '',
-            'duration_minutes': duration,
-            'status': row['status'],
-            'booked_by_name': row['booked_by_name'] or '',
-            'booked_by_phone': row['booked_by_phone'] or '',
-            'booked_at': row['booked_at'] or '',
-        })
-
-    for row in recurring_rows:
-        t_obj = parse_time_safe(row['slot_time'])
-        duration = int(row['duration_minutes'] or 60)
-        end_dt = None
-        if t_obj:
-            tmp_start = datetime.combine(today, t_obj)
-            end_dt = tmp_start + timedelta(minutes=duration)
-        weekday = int(row['weekday'])
-        weekday_label = weekday_names.get(weekday, str(weekday))
-        items.append({
-            'id': row['id'],
-            'kind': 'weekly',
-            'date': f'Weekly ({weekday_label})',
-            'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
-            'end_time': end_dt.strftime('%H:%M') if end_dt else '',
-            'duration_minutes': duration,
-            'status': 'active',
-            'booked_by_name': '',
-            'booked_by_phone': '',
-            'booked_at': '',
-        })
-
-    return jsonify({'items': items})
 
 
-@app.route('/api/calendar/vacancy/<int:override_id>/delete', methods=['POST'])
-@login_required
-def api_calendar_vacancy_delete(override_id):
-    """Admin: delete a vacancy slot."""
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    delete_kind = (request.form.get('kind') or 'one-time').strip().lower()
-
-    db = get_db()
-    if delete_kind == 'weekly':
-        db.execute('DELETE FROM vacancy_recurring WHERE id = ?', (override_id,))
-    else:
-        db.execute('DELETE FROM slots_override WHERE id = ?', (override_id,))
-    db.commit()
-    return jsonify({'status': 'success'})
 
 
-def _api_calendar_book_special(db, current_user, anchor, booking_time, duration, special_pattern, special_repeat_until, special_title):
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    if special_pattern not in ('one-time', 'weekly'):
-        special_pattern = 'one-time'
-
-    dates_to_block = [anchor]
-    if special_pattern == 'weekly':
-        repeat_until = parse_date_safe(special_repeat_until)
-        if not repeat_until or repeat_until < anchor:
-            return jsonify({'status': 'error', 'message': 'Invalid repeat-until date for recurring special slot.'}), 400
-        dates_to_block = []
-        current = anchor
-        while current <= repeat_until:
-            dates_to_block.append(current)
-            current += timedelta(days=7)
-
-    parsed_booking_time = parse_time_safe(booking_time)
-
-    for d in dates_to_block:
-        date_iso = d.isoformat()
-        start_dt = combine_dt(d, parsed_booking_time.strftime('%H:%M'))
-        end_dt = start_dt + timedelta(minutes=duration)
-        conflict = has_time_conflict(db, d, start_dt, end_dt)
-        if conflict:
-            return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
-
-    for d in dates_to_block:
-        db.execute('''
-            INSERT INTO blocked_slots
-            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-              VALUES (?, ?, ?, ?, 1, 'blocked', ?)
-        ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
-              special_title or 'Special Occasion', current_user.id))
-        db.execute('''
-            UPDATE slots_override
-            SET status = 'booked', booked_by_name = ?, booked_at = ?
-            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', (
-            special_title or 'Special Occasion',
-            datetime.now().isoformat(),
-            d.isoformat(),
-            parsed_booking_time.strftime('%H:%M')
-        ))
-    db.commit()
-    return jsonify({'status': 'success'})
 
 
-def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_time, parsed_booking_time, duration, patient_id, patient_status, is_recurring_explicit, recurrence_end_date_form, meeting_type, meeting_link, meeting_platform, meeting_remarks, save_to_google):
-    # Business rule: honour explicit form value first, then default by patient status.
-    # Ongoing patients default to weekly recurring; others default to one-time.
-    if is_recurring_explicit == '1' or is_recurring_explicit == 'on' or is_recurring_explicit == 'true':
-        is_recurring = 1
-    elif is_recurring_explicit == '0':
-        is_recurring = 0  # explicit one-time override, even for ongoing patients
-    else:
-        is_recurring = 1 if patient_status == 'ongoing' else 0
-    recurrence_interval = 1 if is_recurring else None
-    recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
-
-    start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
-    end_dt = start_dt + timedelta(minutes=duration)
-    conflict_message = has_time_conflict(db, anchor, start_dt, end_dt)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    # Patients can only self-book into explicit vacancy slots; admins can book any free time.
-    if current_user.role != 'admin':
-        week_start = anchor - timedelta(days=custom_weekday(anchor))
-        snapshot = build_week_calendar_snapshot(
-            db,
-            week_start,
-            User(current_user.id, current_user.username, current_user.role, patient_id, current_user.display_name)
-        )
-        is_available = any(slot['date'] == booking_date and slot['time'] == booking_time for slot in snapshot['available_slots'])
-        if not is_available:
-            return jsonify({'status': 'error', 'message': 'Selected slot is not available.'}), 409
-
-    recurrence_end_date = None
-    if is_recurring:
-        if recurrence_end_date_form:
-            recurrence_end_date = recurrence_end_date_form
-        else:
-            recurrence_end_date = (anchor + timedelta(days=365)).isoformat()
-    recurrence_group_id = build_recurrence_group_id() if is_recurring else None
-
-    db.execute('''
-        INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date, recurrence_group_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?)
-    ''', (
-        patient_id,
-        booking_date,
-        parsed_booking_time.strftime('%H:%M'),
-        duration,
-        meeting_type,
-        meeting_link or None,
-        meeting_platform or None,
-        meeting_remarks or None,
-        save_to_google,
-        is_recurring,
-        recurrence_interval,
-        recurrence_days,
-        recurrence_end_date,
-        recurrence_group_id
-    ))
-
-    booked_label = 'Appointment'
-    if patient_id:
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if patient and patient['name']:
-            booked_label = patient['name']
-    db.execute('''
-        UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_at = ?
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-    ''', (booked_label, datetime.now().isoformat(), booking_date, parsed_booking_time.strftime('%H:%M')))
-    db.commit()
-
-    response_payload = {'status': 'success'}
-    if patient_id:
-        new_appt = db.execute(
-            'SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND appointment_time = ? ORDER BY id DESC LIMIT 1',
-            (patient_id, booking_date, parsed_booking_time.strftime('%H:%M')),
-        ).fetchone()
-        if new_appt:
-            sync_message = _sync_appointment_with_google(db, int(new_appt['id']))
-            if sync_message:
-                response_payload['message'] = sync_message
-
-    return jsonify(response_payload)
 
 
 def _combine_google_sync_messages(*messages):
@@ -9400,83 +8526,6 @@ def _sync_multiple_appointments_with_google(db, appointment_ids):
     return _combine_google_sync_messages(*messages)
 
 
-@app.route('/api/calendar/book', methods=['POST'])
-@login_required
-def api_calendar_book():
-    db = get_db()
-
-    booking_date = request.form.get('date', '').strip()
-    booking_time = request.form.get('time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    meeting_type = request.form.get('meeting_type', 'in-person').strip() or 'in-person'
-    meeting_link = request.form.get('meeting_link', '').strip()
-    meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_remarks = request.form.get('meeting_remarks', '').strip() or request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-    is_recurring_explicit = request.form.get('is_recurring')
-    recurrence_end_date_form = request.form.get('recurrence_end_date', '').strip()
-    booking_type = request.form.get('booking_type', 'appointment').strip().lower() or 'appointment'
-    special_pattern = request.form.get('special_pattern', 'one-time').strip().lower() or 'one-time'
-    special_repeat_until = request.form.get('special_repeat_until', '').strip()
-    special_title = request.form.get('special_title', '').strip()
-
-    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    # Compute duration from start + end time.
-    duration = 60
-    parsed_start = parse_time_safe(booking_time)
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
-
-    valid_duration, dur_error = _validate_appointment_duration(duration)
-    if dur_error:
-        return jsonify({'status': 'error', 'message': dur_error}), 400
-    duration = valid_duration
-
-    if current_user.role == 'admin':
-        patient_id_raw = request.form.get('patient_id', '').strip()
-        if booking_type != 'special' and not patient_id_raw.isdigit():
-            return jsonify({'status': 'error', 'message': 'Patient is required.'}), 400
-        patient_id = int(patient_id_raw) if patient_id_raw.isdigit() else None
-    else:
-        if booking_type == 'special':
-            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        patient_id = current_user.patient_id
-        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if not patient or int(patient['can_self_schedule'] or 0) != 1:
-            return jsonify({'status': 'error', 'message': 'Self-booking is disabled for your account.'}), 403
-
-    patient_status = None
-    if booking_type != 'special' and patient_id:
-        patient_row = db.execute('SELECT patient_type, status FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        patient_status = (patient_row['status'] if patient_row else '') or ''
-
-    anchor = parse_date_safe(booking_date)
-    if not anchor:
-        return jsonify({'status': 'error', 'message': 'Invalid booking date.'}), 400
-
-    if booking_type == 'special':
-        return _api_calendar_book_special(
-            db, current_user, anchor, booking_time, duration,
-            special_pattern, special_repeat_until, special_title
-        )
-
-    parsed_booking_time = parse_time_safe(booking_time)
-    if not parsed_booking_time:
-        return jsonify({'status': 'error', 'message': 'Invalid time.'}), 400
-
-    return _api_calendar_book_regular(
-        db, current_user, anchor, booking_date, booking_time, parsed_booking_time,
-        duration, patient_id, patient_status, is_recurring_explicit,
-        recurrence_end_date_form, meeting_type, meeting_link,
-        meeting_platform, meeting_remarks, save_to_google
-    )
 
 
 @app.route('/patient/<int:patient_id>/quick_book', methods=('POST',))
