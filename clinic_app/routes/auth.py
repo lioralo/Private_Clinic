@@ -1,50 +1,65 @@
 from datetime import datetime, timezone
 import hashlib
 import secrets
-import threading
 
 from flask import redirect, render_template, request, session, url_for, flash
 from flask_login import current_user, login_required, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from clinic_app.utils import _request_client_ip
+from clinic_app.models import get_db
 
 
-_LOGIN_RATE_LIMIT_LOCK = threading.Lock()
 _LOGIN_RATE_LIMIT_BUCKETS = {}
-_PASSWORD_RESET_RATE_LIMIT_LOCK = threading.Lock()
 _PASSWORD_RESET_RATE_LIMIT_BUCKETS = {}
-_PASSWORD_RESET_CLEANUP_LOCK = threading.Lock()
-_PASSWORD_RESET_LAST_CLEANUP_TS = 0.0
-_REGISTER_RATE_LIMIT_LOCK = threading.Lock()
 _REGISTER_RATE_LIMIT_BUCKETS = {}
+_LOGIN_RATE_LIMIT_MAX = 5
+_LOGIN_RATE_LIMIT_WINDOW = 300
+_LOGIN_RATE_LIMIT_LOCKOUT = 900
+_PASSWORD_RESET_RATE_LIMIT_MAX = 5
+_PASSWORD_RESET_RATE_LIMIT_WINDOW = 900
+_REGISTER_RATE_LIMIT_MAX = 5
+_REGISTER_RATE_LIMIT_WINDOW = 3600
+
+
+def _prune_rate_limits(db, bucket_key, scope, window_seconds):
+    cutoff = datetime.now(timezone.utc).timestamp() - window_seconds
+    db.execute(
+        'DELETE FROM rate_limits WHERE bucket_key = ? AND scope = ? AND timestamp_real < ?',
+        (bucket_key, scope, cutoff)
+    )
+
+
+def _count_rate_limits(db, bucket_key, scope):
+    row = db.execute(
+        'SELECT COUNT(*) AS cnt FROM rate_limits WHERE bucket_key = ? AND scope = ?',
+        (bucket_key, scope)
+    ).fetchone()
+    return row['cnt'] if row else 0
+
+
+def _record_rate_limit(db, bucket_key, scope):
+    db.execute(
+        'INSERT INTO rate_limits (bucket_key, scope, timestamp_real) VALUES (?, ?, ?)',
+        (bucket_key, scope, datetime.now(timezone.utc).timestamp())
+    )
 
 
 def _check_register_rate_limit(app):
-    """Return seconds to retry-after if IP exceeded registration limit, else None."""
     if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
         return None
-
-    max_requests = int(app.config.get('REGISTER_RATE_LIMIT_MAX', 5) or 5)
-    window_seconds = int(app.config.get('REGISTER_RATE_LIMIT_WINDOW_SECONDS', 3600) or 3600)
+    max_requests = int(app.config.get('REGISTER_RATE_LIMIT_MAX', _REGISTER_RATE_LIMIT_MAX) or _REGISTER_RATE_LIMIT_MAX)
+    window_seconds = int(app.config.get('REGISTER_RATE_LIMIT_WINDOW_SECONDS', _REGISTER_RATE_LIMIT_WINDOW) or _REGISTER_RATE_LIMIT_WINDOW)
     if max_requests <= 0 or window_seconds <= 0:
         return None
-
     ip = _request_client_ip()
-    now_ts = datetime.now(timezone.utc).timestamp()
-    cutoff_ts = now_ts - window_seconds
-
-    with _REGISTER_RATE_LIMIT_LOCK:
-        timestamps = _REGISTER_RATE_LIMIT_BUCKETS.get(ip, [])
-        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
-
-        if len(timestamps) >= max_requests:
-            _REGISTER_RATE_LIMIT_BUCKETS[ip] = timestamps
-            return max(1, int(window_seconds - (now_ts - timestamps[0])))
-
-        timestamps.append(now_ts)
-        _REGISTER_RATE_LIMIT_BUCKETS[ip] = timestamps
-
+    db = get_db()
+    _prune_rate_limits(db, ip, 'register', window_seconds)
+    count = _count_rate_limits(db, ip, 'register')
+    if count >= max_requests:
+        return max(1, int(window_seconds))
+    _record_rate_limit(db, ip, 'register')
+    db.commit()
     return None
 
 
@@ -56,67 +71,59 @@ def _rate_limit_key(username):
 def _check_login_rate_limit(app, username):
     if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
         return None
-
-    max_attempts = int(app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', 5) or 5)
-    window_seconds = int(app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', 300) or 300)
-    lockout_seconds = int(app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS', 900) or 900)
+    max_attempts = int(app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', _LOGIN_RATE_LIMIT_MAX) or _LOGIN_RATE_LIMIT_MAX)
+    window_seconds = int(app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', _LOGIN_RATE_LIMIT_WINDOW) or _LOGIN_RATE_LIMIT_WINDOW)
+    lockout_seconds = int(app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS', _LOGIN_RATE_LIMIT_LOCKOUT) or _LOGIN_RATE_LIMIT_LOCKOUT)
     if max_attempts <= 0 or window_seconds <= 0 or lockout_seconds <= 0:
         return None
-
     now_ts = datetime.now(timezone.utc).timestamp()
     key = _rate_limit_key(username)
-    cutoff_ts = now_ts - window_seconds
-
-    with _LOGIN_RATE_LIMIT_LOCK:
-        state = _LOGIN_RATE_LIMIT_BUCKETS.get(key, {'attempts': [], 'blocked_until': 0.0})
-        attempts = [ts for ts in state.get('attempts', []) if ts >= cutoff_ts]
-        blocked_until = float(state.get('blocked_until', 0.0) or 0.0)
-
-        _LOGIN_RATE_LIMIT_BUCKETS[key] = {
-            'attempts': attempts,
-            'blocked_until': blocked_until,
-        }
-
-    if blocked_until <= now_ts:
-        return None
-    return max(1, int(blocked_until - now_ts))
+    db = get_db()
+    blocked_row = db.execute(
+        'SELECT timestamp_real FROM rate_limits WHERE bucket_key = ? AND scope = ?',
+        (key, 'login-blocked')
+    ).fetchone()
+    if blocked_row and blocked_row['timestamp_real'] > now_ts:
+        return max(1, int(blocked_row['timestamp_real'] - now_ts))
+    elif blocked_row:
+        db.execute('DELETE FROM rate_limits WHERE bucket_key = ? AND scope = ?', (key, 'login-blocked'))
+    _prune_rate_limits(db, key, 'login', window_seconds)
+    count = _count_rate_limits(db, key, 'login')
+    if count >= max_attempts:
+        return max(1, int(window_seconds))
+    return None
 
 
 def _record_login_failure(app, username):
-    max_attempts = int(app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', 5) or 5)
-    window_seconds = int(app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', 300) or 300)
-    lockout_seconds = int(app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS', 900) or 900)
+    max_attempts = int(app.config.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', _LOGIN_RATE_LIMIT_MAX) or _LOGIN_RATE_LIMIT_MAX)
+    window_seconds = int(app.config.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', _LOGIN_RATE_LIMIT_WINDOW) or _LOGIN_RATE_LIMIT_WINDOW)
+    lockout_seconds = int(app.config.get('LOGIN_RATE_LIMIT_LOCKOUT_SECONDS', _LOGIN_RATE_LIMIT_LOCKOUT) or _LOGIN_RATE_LIMIT_LOCKOUT)
     if max_attempts <= 0 or window_seconds <= 0 or lockout_seconds <= 0:
         return False, None
-
     now_ts = datetime.now(timezone.utc).timestamp()
     key = _rate_limit_key(username)
-    cutoff_ts = now_ts - window_seconds
-
-    with _LOGIN_RATE_LIMIT_LOCK:
-        state = _LOGIN_RATE_LIMIT_BUCKETS.get(key, {'attempts': [], 'blocked_until': 0.0})
-        attempts = [ts for ts in state.get('attempts', []) if ts >= cutoff_ts]
-        attempts.append(now_ts)
-
-        blocked_until = 0.0
-        if len(attempts) >= max_attempts:
-            blocked_until = now_ts + lockout_seconds
-            attempts = []
-
-        _LOGIN_RATE_LIMIT_BUCKETS[key] = {
-            'attempts': attempts,
-            'blocked_until': blocked_until,
-        }
-
-    if blocked_until <= now_ts:
-        return False, None
-    return True, max(1, int(blocked_until - now_ts))
+    db = get_db()
+    _prune_rate_limits(db, key, 'login', window_seconds)
+    count = _count_rate_limits(db, key, 'login')
+    _record_rate_limit(db, key, 'login')
+    if count + 1 >= max_attempts:
+        blocked_until = now_ts + lockout_seconds
+        db.execute(
+            'INSERT INTO rate_limits (bucket_key, scope, timestamp_real) VALUES (?, ?, ?)',
+            (key, 'login-blocked', blocked_until)
+        )
+        db.commit()
+        return True, max(1, int(lockout_seconds))
+    db.commit()
+    return False, None
 
 
 def _clear_login_failures(username):
     key = _rate_limit_key(username)
-    with _LOGIN_RATE_LIMIT_LOCK:
-        _LOGIN_RATE_LIMIT_BUCKETS.pop(key, None)
+    db = get_db()
+    db.execute('DELETE FROM rate_limits WHERE bucket_key = ? AND scope IN (?, ?)',
+               (key, 'login', 'login-blocked'))
+    db.commit()
 
 
 def _reset_rate_limit_key(identifier):
@@ -127,27 +134,19 @@ def _reset_rate_limit_key(identifier):
 def _check_password_reset_rate_limit(app, identifier):
     if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
         return None
-
-    max_requests = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_MAX', 5) or 5)
-    window_seconds = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', 900) or 900)
+    max_requests = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_MAX', _PASSWORD_RESET_RATE_LIMIT_MAX) or _PASSWORD_RESET_RATE_LIMIT_MAX)
+    window_seconds = int(app.config.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', _PASSWORD_RESET_RATE_LIMIT_WINDOW) or _PASSWORD_RESET_RATE_LIMIT_WINDOW)
     if max_requests <= 0 or window_seconds <= 0:
         return None
-
     now_ts = datetime.now(timezone.utc).timestamp()
     key = _reset_rate_limit_key(identifier)
-    cutoff_ts = now_ts - window_seconds
-
-    with _PASSWORD_RESET_RATE_LIMIT_LOCK:
-        timestamps = _PASSWORD_RESET_RATE_LIMIT_BUCKETS.get(key, [])
-        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
-
-        if len(timestamps) >= max_requests:
-            _PASSWORD_RESET_RATE_LIMIT_BUCKETS[key] = timestamps
-            return max(1, int(window_seconds - (now_ts - timestamps[0])))
-
-        timestamps.append(now_ts)
-        _PASSWORD_RESET_RATE_LIMIT_BUCKETS[key] = timestamps
-
+    db = get_db()
+    _prune_rate_limits(db, key, 'password-reset', window_seconds)
+    count = _count_rate_limits(db, key, 'password-reset')
+    if count >= max_requests:
+        return max(1, int(window_seconds))
+    _record_rate_limit(db, key, 'password-reset')
+    db.commit()
     return None
 
 
@@ -171,28 +170,13 @@ def _build_reset_generic_message():
 
 
 def _cleanup_password_reset_tokens(db):
-    global _PASSWORD_RESET_LAST_CLEANUP_TS
-
-    now_ts = datetime.now(timezone.utc).timestamp()
-    cadence_seconds = 300
-    if now_ts - float(_PASSWORD_RESET_LAST_CLEANUP_TS or 0.0) < cadence_seconds:
-        return
-
-    if not _PASSWORD_RESET_CLEANUP_LOCK.acquire(blocking=False):
-        return
-
-    try:
-        db.execute(
-            '''
-            DELETE FROM password_reset_tokens
-            WHERE used_at IS NOT NULL
-               OR expires_at <= CURRENT_TIMESTAMP
-            '''
-        )
-        db.commit()
-        _PASSWORD_RESET_LAST_CLEANUP_TS = now_ts
-    finally:
-        _PASSWORD_RESET_CLEANUP_LOCK.release()
+    db.execute(
+        '''
+        DELETE FROM password_reset_tokens
+        WHERE used_at IS NOT NULL
+           OR expires_at <= CURRENT_TIMESTAMP
+        '''
+    )
 
 
 def register_auth_routes(
