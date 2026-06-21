@@ -41,7 +41,6 @@ A web application to manage patients, treatment notes, files, and receipts for a
 ## Recent Verification
 - Latest full regression run:
    - `python -m unittest discover -s tests -p 'test_*.py'`
-   - `python -m unittest -v test_export_data test_import_clinic_data test_google_calendar`
 - Latest reviewed result: `128` tests passed.
 - Targeted review also confirmed:
    - group archive and full-delete flows,
@@ -67,7 +66,6 @@ A web application to manage patients, treatment notes, files, and receipts for a
 Run the tests with:
 ```bash
 python -m unittest discover -s tests -p 'test_*.py'
-python -m unittest -v test_export_data test_import_clinic_data test_google_calendar
 ```
 
 ## Google Calendar Notes
