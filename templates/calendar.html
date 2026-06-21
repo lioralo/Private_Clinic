@@ -34,8 +34,8 @@
 <div class="tab-content" id="calendarTabContent">
 <div class="tab-pane fade show active" id="schedule-pane" role="tabpanel" aria-labelledby="schedule-tab" tabindex="0">
 
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-body py-3">
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
         <div class="d-flex flex-column gap-3">
             <div class="chip-row">
                 <span class="badge rounded-pill calendar-chip" style="background:#2563eb;">{{ t('Ongoing') }}</span>
@@ -84,42 +84,42 @@
 
 <div class="calendar-layout mb-4">
     <div>
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+            <div class="p-5">
                 <div id="weeklyCalendar"></div>
             </div>
         </div>
     </div>
     <div class="calendar-side-stack">
-        <div class="card border-0 shadow-sm rounded-4">
-            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#followUpAlertsWrap" aria-expanded="true" aria-controls="followUpAlertsWrap">
-                <h6 class="fw-bold mb-0 text-primary">{{ t('Follow-Up Indicators') }}</h6>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+            <button class="p-5 border-b border-slate-100 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#followUpAlertsWrap" aria-expanded="true" aria-controls="followUpAlertsWrap">
+                <h5 class="font-bold mb-0 text-primary">{{ t('Follow-Up Indicators') }}</h5>
                 <i class="bi bi-chevron-down text-muted"></i>
             </button>
             <div class="collapse show" id="followUpAlertsWrap">
-                <div class="card-body" id="followUpAlerts">
+                <div class="p-5" id="followUpAlerts">
                     <div class="small text-muted">{{ t('No pending follow-up indicators.') }}</div>
                 </div>
             </div>
         </div>
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#fridaySpecialsWrap" aria-expanded="false" aria-controls="fridaySpecialsWrap">
-                <h6 class="fw-bold mb-0 text-primary">{{ t('Friday Blocked') }}</h6>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-3">
+            <button class="p-5 border-b border-slate-100 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#fridaySpecialsWrap" aria-expanded="false" aria-controls="fridaySpecialsWrap">
+                <h5 class="font-bold mb-0 text-primary">{{ t('Friday Blocked') }}</h5>
                 <i class="bi bi-chevron-down text-muted"></i>
             </button>
             <div class="collapse" id="fridaySpecialsWrap">
-                <div class="card-body weekend-stack" id="fridaySpecials">
+                <div class="p-5 weekend-stack" id="fridaySpecials">
                     <div class="small text-muted">{{ t('No weekend items.') }}</div>
                 </div>
             </div>
         </div>
-        <div class="card border-0 shadow-sm rounded-4">
-            <button class="card-header bg-white border-0 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#saturdaySpecialsWrap" aria-expanded="false" aria-controls="saturdaySpecialsWrap">
-                <h6 class="fw-bold mb-0 text-primary">{{ t('Saturday Blocked') }}</h6>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+            <button class="p-5 border-b border-slate-100 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#saturdaySpecialsWrap" aria-expanded="false" aria-controls="saturdaySpecialsWrap">
+                <h5 class="font-bold mb-0 text-primary">{{ t('Saturday Blocked') }}</h5>
                 <i class="bi bi-chevron-down text-muted"></i>
             </button>
             <div class="collapse" id="saturdaySpecialsWrap">
-                <div class="card-body weekend-stack" id="saturdaySpecials">
+                <div class="p-5 weekend-stack" id="saturdaySpecials">
                     <div class="small text-muted">{{ t('No weekend items.') }}</div>
                 </div>
             </div>
@@ -130,11 +130,11 @@
 
 <div class="tab-pane fade" id="booking-pane" role="tabpanel" aria-labelledby="booking-tab" tabindex="0">
     {% if current_user.role != 'admin' %}
-    <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Self-Booking') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+        <div class="p-5 border-b border-slate-100">
+            <h5 class="font-bold mb-0 text-primary">{{ t('Self-Booking') }}</h5>
         </div>
-        <div class="card-body">
+        <div class="p-5">
             {% if can_self_schedule %}
             <p class="small text-muted mb-0">{{ t('You can book into available slots and cancel your own sessions from the calendar.') }}</p>
             {% else %}
@@ -144,11 +144,11 @@
     </div>
     {% endif %}
 
-    <div class="card border-0 shadow-sm rounded-4 booking-panel-card">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Booking Panel') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 booking-panel-card">
+        <div class="p-5 border-b border-slate-100">
+            <h5 class="font-bold mb-0 text-primary">{{ t('Booking Panel') }}</h5>
         </div>
-        <div class="card-body">
+        <div class="p-5">
             <form id="bookSlotForm">
                 <input type="hidden" id="bookingDate" name="date">
                 <input type="hidden" id="bookingTime" name="time">
@@ -275,26 +275,26 @@
             </form>
         </div>
     </div>
-    <div class="card border-0 shadow-sm rounded-4 mt-3">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Available Slots This Week') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mt-3">
+        <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center">
+            <h5 class="font-bold mb-0 text-primary">{{ t('Available Slots This Week') }}</h5>
             <div class="d-flex align-items-center gap-2">
                 <select id="availableWeekSelect" class="form-select form-select-sm" style="min-width: 210px;"></select>
                 <span class="badge bg-light text-dark" id="availableCount">0</span>
             </div>
         </div>
-        <div class="card-body" id="availableSlots"></div>
+        <div class="p-5" id="availableSlots"></div>
     </div>
     {% if current_user.role == 'admin' %}
-    <div class="card border-0 shadow-sm rounded-4 mt-3">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Booking Management') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mt-3">
+        <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center">
+            <h5 class="font-bold mb-0 text-primary">{{ t('Booking Management') }}</h5>
             <div class="btn-group btn-group-sm" role="group" id="bookingManagementMode">
                 <button type="button" class="btn btn-primary" data-mode="upcoming">{{ t('Upcoming') }}</button>
                 <button type="button" class="btn btn-outline-primary" data-mode="history">{{ t('History') }}</button>
             </div>
         </div>
-        <div class="card-body">
+        <div class="p-5">
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-2">
                     <label class="form-label small">{{ t('Type') }}</label>
@@ -368,11 +368,11 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4 mt-3">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Public Self-Booking Link') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mt-3">
+        <div class="p-5 border-b border-slate-100">
+            <h5 class="font-bold mb-0 text-primary">{{ t('Public Self-Booking Link') }}</h5>
         </div>
-        <div class="card-body">
+        <div class="p-5">
             <p class="small text-muted mb-2">{{ t('Create a secure link that shows only available slots for self-booking.') }}</p>
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <button type="button" class="btn btn-sm btn-outline-primary" id="createPublicBookingLinkBtn">{{ t('Create Link') }}</button>
@@ -385,12 +385,12 @@
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4 mt-3">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0" style="color:#10b981;">{{ t('Open Vacancies') }}</h6>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mt-3">
+        <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center">
+            <h5 class="font-bold mb-0" style="color:#10b981;">{{ t('Open Vacancies') }}</h5>
             <span class="badge text-white" style="background:#10b981;" id="vacancyCount">0</span>
         </div>
-        <div class="card-body" id="vacanciesContainer">
+        <div class="p-5" id="vacanciesContainer">
             <div class="small text-muted">{{ t('Loading vacancies...') }}</div>
         </div>
     </div>

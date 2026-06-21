@@ -55,66 +55,120 @@
 
 <div class="engagement-content-grid mb-4">
     <!-- Upcoming Appointments -->
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Upcoming Sessions') }}</h6>
-            <a href="{{ url_for('patient_home') }}" class="btn btn-sm btn-outline-primary">{{ t('View Calendar') }}</a>
-        </div>
-        <div class="card-body">
-            {% if upcoming_appointments %}
-            <div class="upcoming-list">
-                {% for appt in upcoming_appointments %}
-                <div class="upcoming-item">
-                    <div class="upcoming-time">
-                        <div class="date-badge">
-                            <span class="day">{{ appt['appointment_date']|from_iso_date|strftime('%d') }}</span>
-                            <span class="month">{{ appt['appointment_date']|from_iso_date|strftime('%b') }}</span>
-                        </div>
-                        <div>
-                            <span class="time fw-bold">{{ appt['appointment_time'] }}</span>
-                            <span class="text-muted small">
-                                {% set days_away = (appt['appointment_date']|from_iso_date - now|date).days %}
-                                {% if days_away == 0 %}
-                                    {{ t('Today') }}
-                                {% elif days_away == 1 %}
-                                    {{ t('Tomorrow') }}
-                                {% else %}
-                                    {{ t('in') }} {{ days_away }} {{ t('days') }}
-                                {% endif %}
-                            </span>
-                        </div>
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+    <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center">
+        <h5 class="font-bold mb-0 text-primary">{{ t('Upcoming Sessions') }}</h5>
+        <a href="{{ url_for('patient_home') }}" class="btn btn-sm btn-outline-primary">{{ t('View Calendar') }}</a>
+    </div>
+    <div class="p-5">
+        {% if upcoming_appointments %}
+        <div class="upcoming-list">
+            {% for appt in upcoming_appointments %}
+            <div class="upcoming-item">
+                <div class="upcoming-time">
+                    <div class="date-badge">
+                        <span class="day">{{ appt['appointment_date']|from_iso_date|strftime('%d') }}</span>
+                        <span class="month">{{ appt['appointment_date']|from_iso_date|strftime('%b') }}</span>
                     </div>
-                    <div class="upcoming-type">
-                        {% if appt['meeting_type'] == 'zoom' %}
-                        <span class="badge bg-primary">
-                            <i class="bi bi-camera-video-fill me-1"></i>Zoom
+                    <div>
+                        <span class="time fw-bold">{{ appt['appointment_time'] }}</span>
+                        <span class="text-muted small">
+                            {% set days_away = (appt['appointment_date']|from_iso_date - now|date).days %}
+                            {% if days_away == 0 %}
+                                {{ t('Today') }}
+                            {% elif days_away == 1 %}
+                                {{ t('Tomorrow') }}
+                            {% else %}
+                                {{ t('in') }} {{ days_away }} {{ t('days') }}
+                            {% endif %}
                         </span>
-                        {% elif appt['meeting_type'] == 'google-meet' %}
-                        <span class="badge" style="background: #65b741;">
-                            <i class="bi bi-camera-video-fill me-1"></i>Meet
-                        </span>
-                        {% else %}
-                        <span class="badge bg-success">
-                            <i class="bi bi-person-fill me-1"></i>{{ t('In-person') }}
-                        </span>
-                        {% endif %}
-                        {% if appt['meeting_link'] %}
-                        <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
-                            <i class="bi bi-box-arrow-up-right"></i> {{ t('Join') }}
-                        </a>
-                        {% endif %}
                     </div>
                 </div>
-                {% endfor %}
+                <div class="upcoming-type">
+                    {% if appt['meeting_type'] == 'zoom' %}
+                    <span class="badge bg-primary">
+                        <i class="bi bi-camera-video-fill me-1"></i>Zoom
+                    </span>
+                    {% elif appt['meeting_type'] == 'google-meet' %}
+                    <span class="badge" style="background: #65b741;">
+                        <i class="bi bi-camera-video-fill me-1"></i>Meet
+                    </span>
+                    {% else %}
+                    <span class="badge bg-success">
+                        <i class="bi bi-person-fill me-1"></i>{{ t('In-person') }}
+                    </span>
+                    {% endif %}
+                    {% if appt['meeting_link'] %}
+                    <a href="{{ appt['meeting_link'] }}" target="_blank" class="btn btn-sm btn-outline-primary ms-2">
+                        <i class="bi bi-box-arrow-up-right"></i> {{ t('Join') }}
+                    </a>
+                    {% endif %}
+                </div>
             </div>
-            {% else %}
-            <div class="alert alert-info small mb-0">
-                <i class="bi bi-info-circle me-2"></i>
-                {{ t('No upcoming sessions scheduled. Contact your therapist to book a session.') }}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info small mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            {{ t('No upcoming sessions scheduled. Contact your therapist to book a session.') }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Active Goals -->
+{% if goals %}
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+    <div class="p-5 border-b border-slate-100">
+        <h5 class="font-bold mb-0 text-primary">{{ t('Therapy Goals') }}</h5>
+    </div>
+    <div class="p-5">
+        <div class="goals-list">
+            {% for goal in goals %}
+            <div class="goal-item">
+                <div class="goal-checkbox">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="goal{{ goal['id'] }}" disabled>
+                        <label class="form-check-label" for="goal{{ goal['id'] }}">
+                            {{ goal['description'] }}
+                        </label>
+                    </div>
+                </div>
             </div>
-            {% endif %}
+            {% endfor %}
         </div>
     </div>
+</div>
+{% endif %}
+</div>
+
+<!-- Recent Notes -->
+{% if recent_notes %}
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
+        <h5 class="font-bold mb-0 text-primary">{{ t('Session Notes') }}</h5>
+    </div>
+    <div class="p-5">
+        <div class="notes-timeline">
+            {% for note in recent_notes %}
+            <div class="note-entry">
+                <div class="note-date">
+                    {{ note['created_at']|from_iso_datetime|strftime('%b %d, %Y') }}
+                </div>
+                <div class="note-content">
+                    {% if note['key_topics'] %}
+                    <strong>{{ t('Topics') }}:</strong> {{ note['key_topics'] }}<br>
+                    {% endif %}
+                    {% if note['mood_summary'] %}
+                    <strong>{{ t('Mood') }}:</strong> {{ note['mood_summary'] }}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        </div>
+    </div>
+{% endif %}
 
     <!-- Active Goals -->
     {% if goals %}

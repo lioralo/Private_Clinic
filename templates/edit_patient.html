@@ -11,59 +11,73 @@
             <h2 class="mb-0 fw-bold text-primary">Edit Patient</h2>
         </div>
 
-        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="card-body p-4 p-lg-5">
-                <div class="text-center mb-4 pb-2 border-bottom">
-                    <h5 class="fw-bold mb-1">{{ patient['name'] }}</h5>
-                    <p class="text-muted small">Update patient information</p>
-                </div>
-                
-                <form method="post">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    
-                    <div class="row g-4">
-                        {{ patient_identity_fields(
-                            name=patient['name'],
-                            status=patient['status'] or 'ongoing',
-                            candidate_selected=(patient['status'] in ['candidate', 'waiting', 'waiting for scheduling']),
-                            status_label='Status'
-                        ) }}
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="p-5">
+        <div class="text-center mb-4 pb-2 border-bottom">
+            <h5 class="font-bold mb-1">{{ patient['name'] }}</h5>
+            <p class="text-muted small">Update patient information</p>
+        </div>
+        
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="row g-4">
+                {{ patient_identity_fields(
+                    name=patient['name'],
+                    status=patient['status'] or 'ongoing',
+                    candidate_selected=(patient['status'] in ['candidate', 'waiting', 'waiting for scheduling']),
+                    status_label='Status'
+                ) }}
 
-                        {{ patient_contact_fields(
-                            email=patient['email'] or '',
-                            phone=patient['phone'] or '',
-                            phone_input_type='text'
-                        ) }}
+                {{ patient_contact_fields(
+                    email=patient['email'] or '',
+                    phone=patient['phone'] or '',
+                    phone_input_type='text'
+                ) }}
 
-                        {{ patient_birth_and_id_fields(
-                            birth_date=patient['birth_date'] or '',
-                            id_number=patient['id_number'] or ''
-                        ) }}
+                {{ patient_birth_and_id_fields(
+                    birth_date=patient['birth_date'] or '',
+                    id_number=patient['id_number'] or ''
+                ) }}
 
-                        <div class="col-md-12">
-                            <div class="form-check form-switch mt-1">
-                                <input class="form-check-input" type="checkbox" role="switch" name="can_self_schedule" id="can_self_schedule" value="1" {% if patient['can_self_schedule'] %}checked{% endif %}>
-                                <label class="form-check-label" for="can_self_schedule">
-                                    <i class="bi bi-unlock me-1"></i>Enable patient self-booking
-                                </label>
-                                <div class="small text-muted mt-1">When enabled, this patient can see available vacancy slots and book them from their calendar.</div>
-                            </div>
-                        </div>
-
-                        {{ patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
-                        {{ treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
-                        {{ treatment_method_field(
-                            treatment_method_options,
-                            selected_value=patient['treatment_method'] or ''
-                        ) }}
-
-                        <div class="col-12 mt-4">
-                            <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
-                                <i class="bi bi-save me-2"></i> Save Patient Record
-                            </button>
-                        </div>
+                <div class="col-md-12">
+                    <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" role="switch" name="can_self_schedule" id="can_self_schedule" value="1" {% if patient['can_self_schedule'] %}checked{% endif %}>
+                        <label class="form-check-label" for="can_self_schedule">
+                            <i class="bi bi-unlock me-1"></i>Enable patient self-booking
+                        </label>
+                        <div class="small text-muted mt-1">When enabled, this patient can see available vacancy slots and book them from their calendar.</div>
                     </div>
-                </form>
+                </div>
+
+                {{ patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
+                {{ treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
+                {{ treatment_method_field(
+                    treatment_method_options,
+                    selected_value=patient['treatment_method'] or ''
+                ) }}
+
+                <div class="col-12 mt-4">
+                    <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
+                        <i class="bi bi-save me-2"></i> Save Patient Record
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Patient Section -->
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-4 border-start border-danger border-5">
+    <div class="p-5">
+        <h5 class="font-bold text-danger mb-2">
+            <i class="bi bi-exclamation-triangle me-2"></i>{{ t('Delete Patient') }}
+        </h5>
+        <p class="text-muted small mb-3">{{ 'Permanently mark this patient as deleted. They will be hidden from normal views and archived from the patient count.' if lang == 'en' else 'סמן מטופל זה כמחוק בעד. הוא יהיה מוסתר מהתצוגות הרגילות יצא מספר המטופלים.' }}</p>
+        
+        <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#deletePatientModal">
+            <i class="bi bi-trash-fill me-2"></i>{{ t('Mark as Deleted') }}
+        </button>
             </div>
         </div>
 

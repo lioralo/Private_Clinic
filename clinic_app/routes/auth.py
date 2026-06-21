@@ -156,9 +156,13 @@ def _hash_reset_token(token):
 
 def _log_auth_audit(db, action, details):
     try:
+        from flask import request
+        ip = _request_client_ip()
+        ua_hash = hashlib.sha256(request.headers.get('User-Agent', '').encode('utf-8')).hexdigest()[:16]
+        structured_details = f"{details} | ip={ip} | ua_hash={ua_hash}"
         db.execute(
             'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-            (None, action, details),
+            (None, action, structured_details),
         )
     except Exception:
         # Never block auth flows on audit logging failures.

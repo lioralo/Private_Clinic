@@ -82,83 +82,83 @@
 <div class="row g-4 patient-detail-grid">
     <div class="col-xl-8">
         {% if active_tab == 'info' %}
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-2 text-primary"></i>{{ t('Overview') }}</h5>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" id="patientInfoEditBtn" onclick="togglePatientInfoEdit(true)">{{ t('Edit') }}</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill d-none" id="patientInfoCancelBtn" onclick="togglePatientInfoEdit(false)">{{ t('Cancel') }}</button>
-                    </div>
-                </div>
-            </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="active_tab" value="info">
-                    <fieldset id="patientInfoFieldset" class="row g-3" disabled>
-                        <div class="col-12">
-                            <label class="form-label">{{ t('Background') }}</label>
-                            <textarea name="background" class="form-control" rows="6">{{ patient['background'] or '' }}</textarea>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">{{ t('Treatment Info') }}</label>
-                            <textarea name="treatment_info" class="form-control" rows="6">{{ patient['treatment_info'] or '' }}</textarea>
-                        </div>
-                    </fieldset>
-                    <div class="col-12 d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary rounded-pill px-4 d-none" id="patientInfoSaveBtn">{{ t('Save') }}</button>
-                    </div>
-                </form>
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="font-bold mb-0"><i class="bi bi-file-earmark-text me-2 text-primary"></i>{{ t('Overview') }}</h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" id="patientInfoEditBtn" onclick="togglePatientInfoEdit(true)">{{ t('Edit') }}</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill d-none" id="patientInfoCancelBtn" onclick="togglePatientInfoEdit(false)">{{ t('Cancel') }}</button>
             </div>
         </div>
-
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header">
-                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoalsBody" aria-expanded="false" aria-controls="patientGoalsBody" onclick="toggleStablePanel(this)">
-                    <span class="mb-0 fw-bold"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</span>
-                    <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
-                </button>
+    </div>
+    <div class="p-5">
+        <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="active_tab" value="info">
+            <fieldset id="patientInfoFieldset" class="row g-3" disabled>
+                <div class="col-12">
+                    <label class="form-label">{{ t('Background') }}</label>
+                    <textarea name="background" class="form-control" rows="6">{{ patient['background'] or '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">{{ t('Treatment Info') }}</label>
+                    <textarea name="treatment_info" class="form-control" rows="6">{{ patient['treatment_info'] or '' }}</textarea>
+                </div>
+            </fieldset>
+            <div class="col-12 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary rounded-pill px-4 d-none" id="patientInfoSaveBtn">{{ t('Save') }}</button>
             </div>
-            <div class="card-body d-none" id="patientGoalsBody">
-                <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex flex-column flex-md-row gap-2 mb-3">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="text" name="description" class="form-control" placeholder="{{ t('Add a treatment goal') }}" required>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Add') }}</button>
-                </form>
-                <div class="d-grid gap-2">
-                    {% for goal in goals %}
-                    <div class="border rounded-4 p-3 bg-light-subtle d-flex flex-column flex-md-row justify-content-between gap-3">
-                        <div>
-                            <div class="fw-semibold {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
-                            <div class="small text-muted mt-1">{{ t(goal['status']|capitalize) }}</div>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Toggle') }}</button>
-                            </form>
-                            <form method="post" action="{{ url_for('delete_goal', goal_id=goal['id']) }}" onsubmit="return confirm('{{ t('Delete goal?') }}');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
-                            </form>
-                        </div>
-                    </div>
-                    {% else %}
-                    <div class="text-muted small">{{ t('No goals added yet.') }}</div>
-                    {% endfor %}
+        </form>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
+        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoalsBody" aria-expanded="false" aria-controls="patientGoalsBody" onclick="toggleStablePanel(this)">
+            <span class="font-bold mb-0"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</span>
+            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
+        </button>
+    </div>
+    <div class="p-5 d-none" id="patientGoalsBody">
+        <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex flex-column flex-md-row gap-2 mb-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="description" class="form-control" placeholder="{{ t('Add a treatment goal') }}" required>
+            <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Add') }}</button>
+        </form>
+        <div class="d-grid gap-2">
+            {% for goal in goals %}
+            <div class="border rounded-4 p-3 bg-light-subtle d-flex flex-column flex-md-row justify-content-between gap-3">
+                <div>
+                    <div class="fw-semibold {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
+                    <div class="small text-muted mt-1">{{ t(goal['status']|capitalize) }}</div>
+                </div>
+                <div class="d-flex gap-2">
+                    <form method="post" action="{{ url_for('toggle_goal_status', goal_id=goal['id']) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Toggle') }}</button>
+                    </form>
+                    <form method="post" action="{{ url_for('delete_goal', goal_id=goal['id']) }}" onsubmit="return confirm('{{ t('Delete goal?') }}');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
+                    </form>
                 </div>
             </div>
+            {% else %}
+            <div class="text-muted small">{{ t('No goals added yet.') }}</div>
+            {% endfor %}
         </div>
+    </div>
+</div>
 
-        <div class="card border-0 shadow-sm">
-            <div class="card-header">
-                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoogleDocsBody" aria-expanded="false" aria-controls="patientGoogleDocsBody" onclick="toggleStablePanel(this)">
-                    <span class="mb-0 fw-bold"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>{{ t('Google Docs') }}</span>
-                    <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
-                </button>
-            </div>
-            <div class="card-body d-none" id="patientGoogleDocsBody">
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+    <div class="p-5 border-b border-slate-100">
+        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoogleDocsBody" aria-expanded="false" aria-controls="patientGoogleDocsBody" onclick="toggleStablePanel(this)">
+            <span class="font-bold mb-0"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>{{ t('Google Docs') }}</span>
+            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
+        </button>
+    </div>
+    <div class="p-5 d-none" id="patientGoogleDocsBody">
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     {% if patient['gdoc_id'] %}
                     <a href="{{ url_for('open_gdoc', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill" target="_blank" rel="noopener noreferrer">

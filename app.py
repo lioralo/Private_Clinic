@@ -78,11 +78,15 @@ app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
 
 _secret_key = os.environ.get('SECRET_KEY', '').strip()
-if not _secret_key:
-    raise RuntimeError(
-        "SECRET_KEY environment variable is not set. "
-        "Set a strong random value before starting the app."
-    )
+if not _secret_key or len(_secret_key) < 32:
+    if os.environ.get('FLASK_ENV') == 'production' or not app.debug:
+        raise RuntimeError(
+            "SECRET_KEY environment variable is not set or is too short. "
+            "Set a strong random value of at least 32 characters before starting the app in production."
+        )
+    import warnings
+    warnings.warn("SECRET_KEY is not set or is too short — using an insecure default. Do not use this in production.", stacklevel=2)
+    _secret_key = 'dev-insecure-placeholder'
 app.secret_key = _secret_key
 del _secret_key
 app.config['INACTIVITY_TIMEOUT_MINUTES'] = int(os.environ.get('INACTIVITY_TIMEOUT_MINUTES', '5') or 5)
@@ -2863,7 +2867,9 @@ def _run_db_migrations(db):
 
 def _seed_admin_user(db):
     """Seed the default admin user and handle legacy migrations."""
-    env_username = (os.environ.get('ADMIN_USERNAME') or '').strip() or 'admin'
+    env_username = (os.environ.get('ADMIN_USERNAME') or '').strip()
+    if not env_username:
+        env_username = 'admin'
     env_password = (os.environ.get('ADMIN_PASSWORD') or '').strip()
 
     # Check if admin exists
@@ -2889,7 +2895,7 @@ def _seed_admin_user(db):
 
     # One-time migration from legacy default admin credentials.
     legacy_admin = db.execute("SELECT * FROM users WHERE username = 'admin' AND role = 'admin'").fetchone()
-    if legacy_admin:
+    if legacy_admin and legacy_admin['id'] != admin['id']:
         collision = db.execute("SELECT id FROM users WHERE username = ? AND id <> ?", (env_username, legacy_admin['id'])).fetchone()
         if not collision:
             if env_password:
