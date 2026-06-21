@@ -73,6 +73,25 @@ app = Flask(__name__)
 app.register_blueprint(health_bp)
 app.register_blueprint(patients_bp)
 app.register_blueprint(calendar_bp)
+
+# Keep pre-refactor endpoint names stable for tests and backward compatibility.
+_legacy_calendar_aliases = [
+    ('api_calendar_snapshot', '/api/calendar/snapshot', ['GET']),
+    ('api_calendar_block', '/api/calendar/block', ['POST']),
+    ('api_calendar_block_update', '/api/calendar/block/<int:block_id>/update', ['POST']),
+    ('api_calendar_block_delete', '/api/calendar/block/<int:block_id>/delete', ['POST']),
+    ('api_calendar_bookings', '/api/calendar/bookings', ['GET']),
+    ('api_calendar_vacancy', '/api/calendar/vacancy', ['POST']),
+    ('api_calendar_vacancies', '/api/calendar/vacancies', ['GET']),
+    ('api_calendar_vacancy_occupy', '/api/calendar/vacancy/<int:override_id>/occupy', ['POST']),
+    ('api_calendar_vacancy_delete', '/api/calendar/vacancy/<int:override_id>/delete', ['POST']),
+    ('api_calendar_book', '/api/calendar/book', ['POST']),
+]
+for _endpoint, _rule, _methods in _legacy_calendar_aliases:
+    _view = app.view_functions.get(f'calendar.{_endpoint}')
+    if _view and _endpoint not in app.view_functions:
+        app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
+del _legacy_calendar_aliases
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()

@@ -51,7 +51,7 @@ def _recurring_occurrences_for_week(appt, week_start, week_end):
     recurrence_end = parse_date_safe(appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else '')
     recurrence_count = int(appt['recurrence_count'] or 0) if 'recurrence_count' in appt.keys() else 0
     days = _parse_recurrence_days(appt)
-    excluded_raw = appt['excluded_dates'] if 'excluded_dates' in appt.keys() else ''
+    excluded_raw = (appt['excluded_dates'] if 'excluded_dates' in appt.keys() else '') or ''
     excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
     anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
     result = []
