@@ -135,6 +135,7 @@ app.config['AUDIT_LOG_RETENTION_DAYS'] = int(os.environ.get('AUDIT_LOG_RETENTION
 app.config['PASSWORD_RESET_TOKEN_RETENTION_DAYS'] = int(os.environ.get('PASSWORD_RESET_TOKEN_RETENTION_DAYS', '30') or 30)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
+app.config['REMINDER_HOURS_BEFORE'] = int(os.environ.get('REMINDER_HOURS_BEFORE', '24') or 24)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
@@ -158,6 +159,9 @@ _GDOC_AUTO_SYNC_STOP_EVENT = threading.Event()
 _GDOC_MANUAL_SYNC_JOB_LOCK = threading.Lock()
 _GDOC_MANUAL_SYNC_JOBS = {}
 _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+_REMINDER_WORKER_STATE_LOCK = threading.Lock()
+_REMINDER_WORKER_STARTED = False
+_REMINDER_WORKER_STOP_EVENT = threading.Event()
 _GDOC_MANUAL_SYNC_MAX_JOBS = 40
 _PUBLIC_RATE_LIMIT_LOCK = threading.Lock()
 _PUBLIC_RATE_LIMIT_BUCKETS = {}
@@ -2885,6 +2889,20 @@ def _run_db_migrations(db):
     db.execute('''CREATE INDEX IF NOT EXISTS idx_rate_limits_lookup
         ON rate_limits (bucket_key, scope, timestamp_real)''')
 
+    # Appointment reminder columns
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN reminder_email_enabled BOOLEAN DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE appointments ADD COLUMN reminder_sent_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+
+    db.execute('''CREATE INDEX IF NOT EXISTS idx_appointments_reminder_pending
+        ON appointments (appointment_date, appointment_time)
+        WHERE COALESCE(status, 'scheduled') = 'scheduled' AND reminder_sent_at IS NULL''')
+
     db.commit()
 
 def _seed_admin_user(db):
@@ -2966,6 +2984,7 @@ def init_db():
             except Exception as backup_error:
                 print(f"Routine backup skipped: {backup_error}")
             ensure_gdocs_auto_sync_worker_started()
+            ensure_appointment_reminder_worker_started()
 
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -6377,6 +6396,101 @@ def send_appointment_reminders(db):
             'is_tomorrow': days_away == 1,
         })
     return reminders
+
+
+def _send_appointment_email_reminders(db):
+    """Send email reminders for upcoming appointments within the reminder window."""
+    settings = _smtp_settings_summary()
+    if not settings['configured']:
+        return 0
+
+    hours_before = int(app.config.get('REMINDER_HOURS_BEFORE', 24) or 24)
+    now_dt = datetime.now()
+    window_start = now_dt + timedelta(hours=hours_before - 1)
+    window_end = now_dt + timedelta(hours=hours_before + 1)
+
+    rows = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
+               a.meeting_type, a.meeting_link, a.meeting_title, a.is_recurring,
+               p.id AS patient_id, p.name AS patient_name, p.email AS patient_email,
+               u.email AS user_email
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND COALESCE(u.is_active, 1) = 1
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND COALESCE(p.reminder_email_enabled, 1) = 1
+          AND a.reminder_sent_at IS NULL
+          AND a.appointment_date = ?
+          AND a.appointment_time >= ? AND a.appointment_time <= ?
+        ORDER BY a.appointment_time ASC
+    ''', (
+        now_dt.strftime('%Y-%m-%d'),
+        window_start.strftime('%H:%M'),
+        window_end.strftime('%H:%M'),
+    )).fetchall()
+
+    sent_count = 0
+    for row in rows:
+        recipient = (row['user_email'] or '').strip() or (row['patient_email'] or '').strip()
+        if not recipient:
+            continue
+
+        meeting_title = row['meeting_title'] or ''
+        meeting_type = row['meeting_type'] or 'in-person'
+        meeting_link = row['meeting_link'] or ''
+        time_str = str(row['appointment_time'] or '')[:5]
+        date_str = str(row['appointment_date'] or '')
+
+        meeting_info = f" ({meeting_title})" if meeting_title else ""
+        link_info = f"\n\nJoin link: {meeting_link}" if meeting_link else ""
+
+        subject = f'Appointment Reminder: {row["patient_name"]} on {date_str}'
+        body = (
+            f'Hello {row["patient_name"]},\n\n'
+            f'This is a reminder about your upcoming appointment:\n'
+            f'  Date: {date_str}\n'
+            f'  Time: {time_str}\n'
+            f'  Type: {meeting_type}{meeting_info}'
+            f'{link_info}\n\n'
+            f'If you need to reschedule or cancel, please contact the clinic.\n\n'
+            f'Private Clinic'
+        )
+
+        success, msg = _send_smtp_email(recipient, subject, body)
+        if success:
+            db.execute('UPDATE appointments SET reminder_sent_at = ? WHERE id = ?',
+                       (datetime.now().isoformat(), row['id']))
+            sent_count += 1
+
+    if sent_count:
+        db.commit()
+    return sent_count
+
+
+def _appointment_reminder_worker_loop():
+    _REMINDER_WORKER_INTERVAL = 300
+    while not _REMINDER_WORKER_STOP_EVENT.is_set():
+        if _REMINDER_WORKER_STOP_EVENT.wait(timeout=_REMINDER_WORKER_INTERVAL):
+            break
+        try:
+            with app.app_context():
+                db = get_db()
+                _send_appointment_email_reminders(db)
+        except Exception:
+            app.logger.exception('Appointment reminder worker iteration failed')
+
+
+def ensure_appointment_reminder_worker_started():
+    if app.config.get('TESTING'):
+        return
+    with _REMINDER_WORKER_STATE_LOCK:
+        global _REMINDER_WORKER_STARTED
+        if _REMINDER_WORKER_STARTED:
+            return
+        worker = threading.Thread(target=_appointment_reminder_worker_loop, name='appt-reminder-worker', daemon=True)
+        worker.start()
+        _REMINDER_WORKER_STARTED = True
 
 
 def build_booking_management_payload(db, mode='upcoming', future_days=180, history_days=120):
