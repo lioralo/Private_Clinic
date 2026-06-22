@@ -777,5 +777,14 @@
   "Search Results": "תוצאות חיפוש",
   "Enter at least 2 characters to search.": "הזן לפחות 2 תווים לחיפוש.",
   "No patients found.": "לא נמצאו מטופלים.",
-  "No notes found.": "לא נמצאו הרשמות."
+  "No notes found.": "לא נמצאו הרשמות.",
+  "Treatment Plan & Goals": "תוכנית טיפול ומטרות",
+  "Treatment Plan": "תוכנית טיפול",
+  "Re-open": "פתח מחדש",
+  "Mark achieved": "סמן כהושג",
+  "Goal marked as achieved! Great progress.": "המטרה סומנה כהושגה! התקדמות מעולה.",
+  "Goal re-opened.": "המטרה נפתחה מחדש.",
+  "Session Frequency": "תדירות פגישות",
+  "Save Treatment Plan": "שמור תוכנית טיפול",
+  "Describe the overall treatment plan, therapeutic approach, and long-term goals...": "תאר את תוכנית הטיפול הכללית, הגישה הטיפולית, והמטרות הארוכות טווח..."
 }

@@ -2915,6 +2915,10 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute("ALTER TABLE patients ADD COLUMN treatment_plan TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute("ALTER TABLE receipts ADD COLUMN status TEXT DEFAULT 'paid'")
     except sqlite3.OperationalError:
         pass
@@ -4532,6 +4536,19 @@ def patient_home():
         LIMIT 10
     ''', (patient_id,)).fetchall()
 
+    goals = db.execute(
+        'SELECT * FROM goals WHERE patient_id = ? ORDER BY status ASC, created_at DESC',
+        (patient_id,)
+    ).fetchall()
+
+    notes_for_chart = db.execute(
+        'SELECT note_date, key_topics, created_at FROM notes WHERE patient_id = ? ORDER BY created_at DESC LIMIT 200',
+        (patient_id,)
+    ).fetchall()
+    chart_data = _build_patient_chart_data(notes_for_chart)
+    chart_data['session_labels'] = json.loads(chart_data['session_labels'])
+    chart_data['session_data'] = json.loads(chart_data['session_data'])
+
     db.execute('UPDATE messages SET is_read = 1 WHERE recipient_id = ?', (current_user.id,))
     db.commit()
 
@@ -4540,7 +4557,9 @@ def patient_home():
                            assigned_resources=assigned_resources,
                            receipts=receipts,
                            past_appointments=past_appointments,
-                           shared_notes=shared_notes)
+                           shared_notes=shared_notes,
+                           goals=goals,
+                           chart_data=chart_data)
 
 
 @app.route('/dashboard')
@@ -9179,6 +9198,18 @@ def delete_note(note_id):
     flash('Meeting log deleted.')
     return redirect_to_patient_tab(note['patient_id'], 'notes')
 
+@app.route('/patient/<int:patient_id>/update_treatment_plan', methods=('POST',))
+@login_required
+def update_treatment_plan(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    plan = (request.form.get('treatment_plan') or '').strip()
+    db = get_db()
+    db.execute('UPDATE patients SET treatment_plan = ? WHERE id = ?', (plan or None, patient_id))
+    db.commit()
+    flash('Treatment plan updated.')
+    return redirect_to_patient_tab(patient_id, 'info')
+
 @app.route('/patient/<int:patient_id>/add_goal', methods=('POST',))
 @login_required
 def add_goal(patient_id):
@@ -9221,6 +9252,24 @@ def delete_goal(goal_id):
     db.execute('DELETE FROM goals WHERE id = ?', (goal_id,))
     db.commit()
     return redirect_to_patient_tab(patient_id, 'info')
+
+@app.route('/goal/<int:goal_id>/patient_achieve', methods=('POST',))
+@login_required
+def patient_achieve_goal(goal_id):
+    if current_user.role != 'patient':
+        return "Unauthorized", 403
+    db = get_db()
+    goal = db.execute('SELECT * FROM goals WHERE id = ?', (goal_id,)).fetchone()
+    if not goal or int(goal['patient_id']) != int(current_user.patient_id or 0):
+        return "Goal not found", 404
+    new_status = 'achieved' if goal['status'] == 'active' else 'active'
+    db.execute('UPDATE goals SET status = ? WHERE id = ?', (new_status, goal_id))
+    db.commit()
+    if new_status == 'achieved':
+        flash('Goal marked as achieved! Great progress.')
+    else:
+        flash('Goal re-opened.')
+    return redirect(url_for('patient_home'))
 
 @app.route('/goal/<int:goal_id>/edit', methods=('POST',))
 @login_required

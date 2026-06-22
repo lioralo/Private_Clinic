@@ -219,6 +219,46 @@
         </div>
         {% endif %}
 
+        {% if goals or patient['treatment_plan'] %}
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#treatmentPlanCollapse" aria-expanded="false" style="cursor:pointer;">
+                <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
+                    <span><i class="bi bi-bullseye text-primary me-2"></i>{{ t('Treatment Plan & Goals') }}</span>
+                    <i class="bi bi-chevron-down text-muted small"></i>
+                </h5>
+            </div>
+            <div class="collapse" id="treatmentPlanCollapse">
+                <div class="card-body px-4 pb-4">
+                    {% if patient['treatment_plan'] %}
+                    <div class="mb-3 p-3 bg-light rounded-3">
+                        <div class="fw-semibold small text-muted mb-1">{{ t('Treatment Plan') }}</div>
+                        <div style="white-space: pre-wrap;">{{ patient['treatment_plan'] }}</div>
+                    </div>
+                    {% endif %}
+                    {% if goals %}
+                    <div class="d-grid gap-2">
+                        <div class="fw-semibold small text-muted">{{ t('Goals') }}</div>
+                        {% for goal in goals %}
+                        <div class="d-flex align-items-center gap-2 p-2 rounded-3 {% if goal['status'] == 'achieved' %}bg-success-subtle{% else %}bg-light{% endif %}">
+                            <form method="post" action="{{ url_for('patient_achieve_goal', goal_id=goal['id']) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent" title="{% if goal['status'] == 'achieved' %}{{ t('Re-open') }}{% else %}{{ t('Mark achieved') }}{% endif %}">
+                                    <i class="bi {% if goal['status'] == 'achieved' %}bi-check-circle-fill text-success{% else %}bi-circle text-muted{% endif %}" style="font-size:1.2rem;"></i>
+                                </button>
+                            </form>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold small {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
+                                <div class="text-muted" style="font-size:.75rem;">{{ goal['status'] }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <section class="card border-0 shadow-sm rounded-4 mt-4">
             <div class="card-body p-4">
                 <div class="d-flex align-items-center gap-2 mb-3">
@@ -316,6 +356,33 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if chart_data and chart_data['session_data'] %}
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-graph-up text-primary me-2"></i>{{ t('Session Frequency') }}
+                </h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                {% set sdata = chart_data['session_data'] %}
+                {% set slabels = chart_data['session_labels'] %}
+                {% set smax = sdata|max or 1 %}
+                <div class="d-flex align-items-end gap-1" style="height:80px;">
+                    {% for i in range(sdata|length) %}
+                    <div class="flex-grow-1 d-flex flex-column align-items-center">
+                        <div style="height:{{ (sdata[i] / smax * 60)|int + 5 }}px;" class="bg-primary rounded-1 w-100 opacity-75" title="{{ slabels[i] }}: {{ sdata[i] }}"></div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                    {% for label in slabels %}
+                    <span class="text-muted" style="font-size:.55rem;">{{ label.split(' ')[0] }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <div class="card border-0 shadow-sm rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">

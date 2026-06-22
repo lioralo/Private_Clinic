@@ -151,6 +151,24 @@
     </div>
 </div>
 
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
+        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientTreatmentPlanBody" aria-expanded="false" aria-controls="patientTreatmentPlanBody" onclick="toggleStablePanel(this)">
+            <span class="font-bold mb-0"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Treatment Plan') }}</span>
+            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
+        </button>
+    </div>
+    <div class="p-5 d-none" id="patientTreatmentPlanBody">
+        <form method="post" action="{{ url_for('update_treatment_plan', patient_id=patient['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <textarea name="treatment_plan" class="form-control" rows="6" placeholder="{{ t('Describe the overall treatment plan, therapeutic approach, and long-term goals...') }}">{{ patient['treatment_plan'] or '' }}</textarea>
+            <div class="mt-2 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Treatment Plan') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
     <div class="p-5 border-b border-slate-100">
         <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoogleDocsBody" aria-expanded="false" aria-controls="patientGoogleDocsBody" onclick="toggleStablePanel(this)">
