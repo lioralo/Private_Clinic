@@ -148,6 +148,77 @@
             </div>
         </div>
 
+        {% if past_appointments %}
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#pastAppointmentsCollapse" aria-expanded="false" style="cursor:pointer;">
+                <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
+                    <span><i class="bi bi-clock-history text-muted me-2"></i>{{ t('Past Appointments') }}</span>
+                    <i class="bi bi-chevron-down text-muted small"></i>
+                </h5>
+            </div>
+            <div class="collapse" id="pastAppointmentsCollapse">
+                <div class="card-body px-4 pb-4">
+                    <div class="list-group list-group-flush">
+                        {% for appt in past_appointments %}
+                        <div class="list-group-item border-0 px-0 py-2">
+                            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                <div>
+                                    <div class="fw-semibold small">
+                                        {{ appt['appointment_date'] }} {{ appt['appointment_time'] }}
+                                        {% if appt['meeting_title'] %} — {{ appt['meeting_title'] }}{% endif %}
+                                    </div>
+                                    <div class="text-muted" style="font-size:.8rem;">
+                                        {% if appt['status'] == 'cancelled' %}
+                                        <span class="badge bg-warning-subtle text-warning">{{ t('Cancelled') }}</span>
+                                        {% elif appt['status'] == 'no_show' %}
+                                        <span class="badge bg-danger-subtle text-danger">{{ t('No Show') }}</span>
+                                        {% elif appt['missed_reason'] %}
+                                        <span class="badge bg-danger-subtle text-danger">{{ t('Missed') }}</span>
+                                        {% else %}
+                                        <span class="badge bg-success-subtle text-success">{{ t('Completed') }}</span>
+                                        {% endif %}
+                                        · {{ appt['meeting_type'] or 'in-person' }}
+                                        {% if appt['is_recurring'] %} · {{ t('Recurring') }}{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if shared_notes %}
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#sharedNotesCollapse" aria-expanded="false" style="cursor:pointer;">
+                <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
+                    <span><i class="bi bi-journal-text text-muted me-2"></i>{{ t('Shared Notes from Your Therapist') }}</span>
+                    <i class="bi bi-chevron-down text-muted small"></i>
+                </h5>
+            </div>
+            <div class="collapse" id="sharedNotesCollapse">
+                <div class="card-body px-4 pb-4">
+                    {% for note in shared_notes %}
+                    <div class="mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-semibold small">{{ note['note_date'] or note['created_at'][:10] }}</span>
+                            {% if note['session_number'] %}
+                            <span class="badge bg-light text-dark border rounded-pill">{{ t('Session') }} {{ note['session_number'] }}</span>
+                            {% endif %}
+                        </div>
+                        {% if note['key_topics'] %}
+                        <div class="text-muted small mb-1">{{ note['key_topics'] }}</div>
+                        {% endif %}
+                        <div class="text-dark" style="white-space: pre-wrap; font-size:.9rem;">{{ note['content'] }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <section class="card border-0 shadow-sm rounded-4 mt-4">
             <div class="card-body p-4">
                 <div class="d-flex align-items-center gap-2 mb-3">

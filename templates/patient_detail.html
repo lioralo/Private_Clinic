@@ -233,6 +233,15 @@
                         <label class="form-label">{{ t('Attach File') }}</label>
                         <input type="file" name="file" class="form-control">
                     </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="share_with_patient" id="shareWithPatient" value="1">
+                            <label class="form-check-label" for="shareWithPatient">
+                                <i class="bi bi-eye me-1 text-muted"></i>{{ t('Share with patient') }}
+                            </label>
+                            <div class="text-muted small mt-1">{{ t('Patient will be able to read this note in their portal.') }}</div>
+                        </div>
+                    </div>
                     <div class="col-12 d-flex justify-content-end">
                         <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Log') }}</button>
                     </div>

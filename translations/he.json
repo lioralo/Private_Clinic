@@ -732,5 +732,12 @@
   "When enabled, creates a weekly recurring meeting until specified date.": "כאשר מופעל, יוצר פגישה שבועית חוזרת עד לתאריך המצוין.",
   "patient(s) need a follow-up decision": "מטופל/ים צריך/ים החלטת מעקב",
   "synced": "סונכרן",
-  "their intake appointment has passed but no next step was taken.": "פגישת האינטייק שלהם עברה אבל לא ננקטה פעולת המשך."
+  "their intake appointment has passed but no next step was taken.": "פגישת האינטייק שלהם עברה אבל לא ננקטה פעולת המשך.",
+  "Past Appointments": "פגישות עבר",
+  "Cancelled": "בוטל",
+  "Completed": "הושלם",
+  "Missed": "החמיצה",
+  "Share with patient": "שתוף עם המטופל",
+  "Patient will be able to read this note in their portal.": "המטופל יוכל לקרוא הרשמה זו בפורטל האישי שלו",
+  "Shared Notes from Your Therapist": "הרשמות משותף מהמרפה"
 }

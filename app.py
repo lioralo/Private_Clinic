@@ -2898,6 +2898,10 @@ def _run_db_migrations(db):
         db.execute("ALTER TABLE appointments ADD COLUMN reminder_sent_at TIMESTAMP")
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute("ALTER TABLE notes ADD COLUMN share_with_patient BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
 
     db.execute('''CREATE INDEX IF NOT EXISTS idx_appointments_reminder_pending
         ON appointments (appointment_date, appointment_time)
@@ -4446,13 +4450,35 @@ def patient_home():
         ORDER BY created_at DESC
     ''', (patient_id,)).fetchall()
 
+    past_appointments = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
+               a.meeting_type, a.meeting_link, a.meeting_title, a.status, a.is_recurring,
+               a.missed_reason
+        FROM appointments a
+        WHERE a.patient_id = ?
+          AND a.appointment_date < ?
+        ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        LIMIT 20
+    ''', (patient_id, datetime.now().date().isoformat())).fetchall()
+
+    shared_notes = db.execute('''
+        SELECT id, note_date, content, session_number, key_topics, created_at
+        FROM notes
+        WHERE patient_id = ?
+          AND share_with_patient = 1
+        ORDER BY created_at DESC
+        LIMIT 10
+    ''', (patient_id,)).fetchall()
+
     db.execute('UPDATE messages SET is_read = 1 WHERE recipient_id = ?', (current_user.id,))
     db.commit()
 
     return render_template('patient_home.html', patient=patient,
                            upcoming=upcoming, messages=messages,
                            assigned_resources=assigned_resources,
-                           receipts=receipts)
+                           receipts=receipts,
+                           past_appointments=past_appointments,
+                           shared_notes=shared_notes)
 
 
 @app.route('/dashboard')
@@ -8901,6 +8927,7 @@ def add_note(patient_id):
     link_url = request.form.get('link_url', '').strip()
     is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
     missed_reason = request.form.get('missed_reason', '').strip()
+    share_with_patient = 1 if request.form.get('share_with_patient') in ('1', 'true', 'on') else 0
     if not is_missed_meeting:
         missed_reason = ''
 
@@ -8918,8 +8945,8 @@ def add_note(patient_id):
         cur = db.execute(
             '''INSERT INTO notes (patient_id, appointment_id, session_number, note_date, content,
                                   patient_appearance, behavior_checklist, mood_summary, behavior_notes,
-                                  is_missed_meeting, missed_reason, link_url)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                                  is_missed_meeting, missed_reason, link_url, share_with_patient)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
                 patient_id,
                 appointment_id,
@@ -8932,7 +8959,8 @@ def add_note(patient_id):
                 behavior_notes or None,
                 is_missed_meeting,
                 missed_reason or None,
-                link_url or None
+                link_url or None,
+                share_with_patient
             )
         )
         note_id = cur.lastrowid
@@ -8974,6 +9002,7 @@ def edit_note(note_id):
     link_url = request.form.get('link_url', '').strip()
     is_missed_meeting = 1 if request.form.get('is_missed_meeting') in ('1', 'true', 'on') else 0
     missed_reason = request.form.get('missed_reason', '').strip()
+    share_with_patient = 1 if request.form.get('share_with_patient') in ('1', 'true', 'on') else 0
     if not is_missed_meeting:
         missed_reason = ''
 
@@ -8984,7 +9013,8 @@ def edit_note(note_id):
             '''UPDATE notes
                SET content = ?, session_number = ?, note_date = ?, patient_appearance = ?,
                    behavior_checklist = ?, mood_summary = ?, behavior_notes = ?,
-                   is_missed_meeting = ?, missed_reason = ?, link_url = ?, updated_at = CURRENT_TIMESTAMP
+                   is_missed_meeting = ?, missed_reason = ?, link_url = ?,
+                   share_with_patient = ?, updated_at = CURRENT_TIMESTAMP
                WHERE id = ?''',
             (
                 content or 'Missed meeting documented.',
@@ -8997,6 +9027,7 @@ def edit_note(note_id):
                 is_missed_meeting,
                 missed_reason or None,
                 link_url or None,
+                share_with_patient,
                 note_id
             )
         )
