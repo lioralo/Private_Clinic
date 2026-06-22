@@ -9,6 +9,11 @@ from flask_login import login_required, current_user
 from clinic_app.utils import (
     parse_date_safe, parse_time_safe, combine_dt, custom_weekday,
     daterange, overlaps, _week_start_for_date, _check_public_rate_limit,
+    has_time_conflict, _validate_appointment_duration,
+    build_booking_management_payload,
+    ensure_ongoing_recurrence_from_previous_week,
+    ensure_ongoing_patients_have_upcoming_bookings,
+    ensure_default_recurring_vacancies,
 )
 from clinic_app.models import get_db
 
@@ -519,7 +524,7 @@ def _api_calendar_book_special(db, current_user, anchor, booking_time, duration,
             dates_to_block.append(current)
             current += timedelta(days=7)
     parsed_booking_time = parse_time_safe(booking_time)
-    from app import has_time_conflict
+
     for d in dates_to_block:
         date_iso = d.isoformat()
         start_dt = combine_dt(d, parsed_booking_time.strftime('%H:%M'))
@@ -559,7 +564,7 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
     recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
     start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
     end_dt = start_dt + timedelta(minutes=duration)
-    from app import has_time_conflict
+
     conflict_message = has_time_conflict(db, anchor, start_dt, end_dt)
     if conflict_message:
         return jsonify({'status': 'error', 'message': conflict_message}), 409
@@ -636,7 +641,6 @@ def api_calendar_snapshot():
     week_start = anchor - timedelta(days=custom_weekday(anchor))
     db = get_db()
     if current_user.role == 'admin':
-        from app import ensure_ongoing_recurrence_from_previous_week, ensure_ongoing_patients_have_upcoming_bookings, ensure_default_recurring_vacancies
         ensure_ongoing_recurrence_from_previous_week(db, anchor)
         ensure_ongoing_patients_have_upcoming_bookings(db, anchor)
         ensure_default_recurring_vacancies(db)
@@ -680,7 +684,7 @@ def api_calendar_block():
             dates_to_create.append(current_date)
             current_date += timedelta(days=7)
     db = get_db()
-    from app import has_time_conflict
+
     for block_day in dates_to_create:
         start_dt = datetime.combine(block_day, parsed_start)
         end_dt = start_dt + timedelta(minutes=duration_value)
@@ -740,7 +744,7 @@ def api_calendar_block_update(block_id):
             duration = computed
     start_dt = datetime.combine(day_obj, start_time)
     end_dt = start_dt + timedelta(minutes=duration)
-    from app import has_time_conflict
+
     conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_block_id=block_id)
     if conflict_message:
         return jsonify({'status': 'error', 'message': conflict_message}), 409
@@ -774,7 +778,6 @@ def api_calendar_bookings():
     if mode not in ('upcoming', 'history'):
         mode = 'upcoming'
     db = get_db()
-    from app import build_booking_management_payload
     payload = build_booking_management_payload(db, mode=mode)
     return jsonify(payload)
 
@@ -803,7 +806,7 @@ def api_calendar_vacancy():
     slot_start = datetime.combine(date_obj, start_time)
     slot_end = slot_start + timedelta(minutes=duration)
     db = get_db()
-    from app import has_time_conflict
+
     conflict_message = has_time_conflict(db, date_obj, slot_start, slot_end)
     if conflict_message:
         return jsonify({'status': 'error', 'message': f'Vacancy conflict: {conflict_message}'}), 409
@@ -917,7 +920,7 @@ def api_calendar_vacancy_occupy(override_id):
     duration = int(row['duration_minutes'] or 60)
     slot_start = datetime.combine(date_obj, t_obj)
     slot_end = slot_start + timedelta(minutes=duration)
-    from app import has_time_conflict
+
     conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
     if conflict:
         return jsonify({'status': 'error', 'message': f'Cannot occupy slot: {conflict}'}), 409
@@ -1004,7 +1007,6 @@ def api_calendar_book():
         computed = end_minutes - start_minutes
         if computed > 0:
             duration = computed
-    from app import _validate_appointment_duration
     valid_duration, dur_error = _validate_appointment_duration(duration)
     if dur_error:
         return jsonify({'status': 'error', 'message': dur_error}), 400
