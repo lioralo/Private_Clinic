@@ -10046,6 +10046,56 @@ def import_patient_history(patient_id):
     return redirect_to_patient_tab(patient_id, 'notes')
 
 
+@app.route('/admin/search')
+@login_required
+def admin_global_search():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    q = (request.args.get('q') or '').strip()
+    results = {'patients': [], 'notes': [], 'appointments': []}
+    if len(q) < 2:
+        return render_template('admin_global_search.html', query=q, results=results)
+
+    db = get_db()
+    like = f'%{q}%'
+
+    results['patients'] = db.execute('''
+        SELECT id, name, status, patient_type
+        FROM patients
+        WHERE COALESCE(is_deleted, 0) = 0
+          AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)
+        ORDER BY
+            CASE status WHEN 'ongoing' THEN 1 WHEN 'candidate' THEN 2
+                        WHEN 'waiting' THEN 3 WHEN 'archived' THEN 4 ELSE 5 END,
+            name COLLATE NOCASE ASC
+        LIMIT 20
+    ''', (like, like, like)).fetchall()
+
+    results['notes'] = db.execute('''
+        SELECT n.id, n.note_date, n.content, n.key_topics, n.session_number,
+               n.patient_id, p.name AS patient_name
+        FROM notes n
+        JOIN patients p ON n.patient_id = p.id
+        WHERE COALESCE(p.is_deleted, 0) = 0
+          AND (n.content LIKE ? OR n.key_topics LIKE ? OR n.behavior_notes LIKE ? OR n.mood_summary LIKE ?)
+        ORDER BY n.created_at DESC
+        LIMIT 20
+    ''', (like, like, like, like)).fetchall()
+
+    results['appointments'] = db.execute('''
+        SELECT a.id, a.appointment_date, a.appointment_time, a.meeting_title,
+               a.meeting_type, a.status, a.missed_reason,
+               a.patient_id, p.name AS patient_name
+        FROM appointments a
+        JOIN patients p ON a.patient_id = p.id
+        WHERE COALESCE(p.is_deleted, 0) = 0
+          AND (a.meeting_title LIKE ? OR a.meeting_type LIKE ? OR a.missed_reason LIKE ? OR a.meeting_link LIKE ?)
+        ORDER BY a.appointment_date DESC
+        LIMIT 20
+    ''', (like, like, like, like)).fetchall()
+
+    return render_template('admin_global_search.html', query=q, results=results)
+
 @app.route('/cancel_requests')
 @login_required
 def list_cancel_requests():

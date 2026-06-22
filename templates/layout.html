@@ -284,6 +284,16 @@
             {{ nav_link('admin_contact_inquiries', 'bi-envelope-open', t('Contact Inquiries')) }}
 
             {% if current_user.is_authenticated and current_user.role == 'admin' %}
+            <hr class="my-2 opacity-25">
+            <form method="get" action="{{ url_for('admin_global_search') }}" class="px-2 mt-1 mb-2">
+                <div class="input-group input-group-sm">
+                    <input type="text" name="q" class="form-control form-control-sm border-0 bg-slate-100 rounded-start-lg" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2">
+                    <button class="btn btn-sm btn-primary rounded-end-lg" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </form>
+            <hr class="my-2 opacity-25">
             <a href="{{ url_for('list_cancel_requests') }}"
                class="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-sm transition-all duration-200 {% if endpoint_name == 'list_cancel_requests' %}bg-primary/10 text-primary{% else %}text-slate-600 hover:bg-slate-200{% endif %}">
                 <i class="bi bi-x-circle" style="font-size:18px"></i>

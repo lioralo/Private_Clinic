@@ -772,5 +772,10 @@
   "Rejected": "נדחה",
   "No cancel requests pending.": "אין בקשות ביטול ממתינות.",
   "Mark appointment as cancelled?": "לסמן את הפגישה כמבוטלת?",
-  "Reason (optional)": "סיבה (אופציונלי)"
+  "Reason (optional)": "סיבה (אופציונלי)",
+  "Search everything...": "חיפוש בכל...",
+  "Search Results": "תוצאות חיפוש",
+  "Enter at least 2 characters to search.": "הזן לפחות 2 תווים לחיפוש.",
+  "No patients found.": "לא נמצאו מטופלים.",
+  "No notes found.": "לא נמצאו הרשמות."
 }
