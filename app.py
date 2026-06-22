@@ -630,6 +630,7 @@ def load_hebrew_translation_overrides():
             if isinstance(k, str) and isinstance(v, str)
         }
     except Exception:
+        app.logger.exception('Failed to load Hebrew translation overrides')
         return {}
 
 
@@ -661,6 +662,7 @@ def get_site_settings(db=None):
             if key in settings:
                 settings[key] = row['setting_value'] or ''
     except Exception:
+        app.logger.exception('get_site_settings failed')
         return settings
 
     settings['about_enabled'] = '1' if str(settings.get('about_enabled') or '0') in {'1', 'true', 'yes', 'on'} else '0'
@@ -966,7 +968,7 @@ def _run_google_docs_auto_sync(db, force=False, trigger_source='auto', progress_
         try:
             progress_callback(payload)
         except Exception:
-            pass
+            app.logger.exception('progress_callback failed')
 
     state = _get_google_docs_auto_sync_state(db)
     now = datetime.now(timezone.utc)
@@ -2957,6 +2959,12 @@ def _run_db_migrations(db):
         )
     ''')
 
+    db.execute('CREATE INDEX IF NOT EXISTS idx_cancel_requests_appointment ON cancel_requests(appointment_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_cancel_requests_patient_status ON cancel_requests(patient_id, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_cancel_requests_status_created ON cancel_requests(status, created_at)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_schedules_patient ON schedules(patient_id)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_slots_patient ON slots(patient_id)')
+
     db.execute('''CREATE INDEX IF NOT EXISTS idx_appointments_reminder_pending
         ON appointments (appointment_date, appointment_time)
         WHERE COALESCE(status, 'scheduled') = 'scheduled' AND reminder_sent_at IS NULL''')
@@ -4761,7 +4769,7 @@ def request_cancel_appointment(appointment_id):
         for admin in admin_users:
             _send_smtp_email(admin['email'], subject, body)
     except Exception:
-        pass
+        app.logger.exception('Failed to send cancel request email notification')
 
     db.commit()
     flash('Cancellation request sent.')
@@ -4983,7 +4991,7 @@ def manage_resources():
         flash('Resource added.')
         return redirect(url_for('manage_resources'))
 
-    resources = db.execute('SELECT * FROM resources ORDER BY created_at DESC').fetchall()
+    resources = db.execute('SELECT * FROM resources ORDER BY created_at DESC LIMIT 200').fetchall()
     return render_template('manage_resources.html', resources=resources)
 
 @app.route('/admin/resources/<int:resource_id>/edit', methods=['POST'])
@@ -5148,6 +5156,7 @@ def _get_patient_notes(db, patient_id):
         ORDER BY COALESCE(note_date, date(created_at)) DESC,
                  datetime(created_at) DESC,
                  id DESC
+        LIMIT 200
     ''', (patient_id,)).fetchall()
     return notes
 
@@ -5343,12 +5352,13 @@ def patient_detail(patient_id):
     notes = _get_patient_notes(db, patient_id)
     patient_logs = db.execute(
         '''SELECT * FROM patient_logs WHERE patient_id = ?
-           ORDER BY COALESCE(encounter_date, substr(created_at, 1, 10)) DESC, id DESC''',
+           ORDER BY COALESCE(encounter_date, substr(created_at, 1, 10)) DESC, id DESC
+           LIMIT 100''',
         (patient_id,)
     ).fetchall()
-    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC', (patient_id,)).fetchall()
-    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC', (patient_id,)).fetchall()
+    files = db.execute('SELECT * FROM files WHERE patient_id = ? ORDER BY created_at DESC LIMIT 100', (patient_id,)).fetchall()
+    receipts = db.execute('SELECT * FROM receipts WHERE patient_id = ? ORDER BY created_at DESC LIMIT 100', (patient_id,)).fetchall()
+    appointments = db.execute('SELECT * FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC LIMIT 200', (patient_id,)).fetchall()
     next_items = build_patient_upcoming_events(db, patient_id, days_ahead=120, limit=1)
     next_appointment = next_items[0] if next_items else None
     followup_status = _get_patient_followup_status(db, patient_id, next_appointment)
@@ -5358,7 +5368,7 @@ def patient_detail(patient_id):
     messages, unread_messages_count = _get_patient_messages(db, user, current_user.id)
 
     # Get resources for assignment
-    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC').fetchall()
+    all_resources = db.execute('SELECT * FROM resources WHERE is_public = 0 ORDER BY title ASC LIMIT 200').fetchall()
 
     # Get assigned resources
     assigned_resources = db.execute('''
@@ -5398,17 +5408,17 @@ def patient_detail(patient_id):
     suggested_note_date = datetime.now().date().isoformat()
 
     supervisions = db.execute(
-        'SELECT * FROM supervisions WHERE patient_id = ? ORDER BY supervision_date DESC, created_at DESC',
+        'SELECT * FROM supervisions WHERE patient_id = ? ORDER BY supervision_date DESC, created_at DESC LIMIT 100',
         (patient_id,)
     ).fetchall()
 
     diagnosis_documents = db.execute(
-        'SELECT * FROM diagnosis_documents WHERE patient_id = ? ORDER BY created_at DESC, id DESC',
+        'SELECT * FROM diagnosis_documents WHERE patient_id = ? ORDER BY created_at DESC, id DESC LIMIT 100',
         (patient_id,)
     ).fetchall()
 
     goals = db.execute(
-        'SELECT * FROM goals WHERE patient_id = ? ORDER BY created_at ASC',
+        'SELECT * FROM goals WHERE patient_id = ? ORDER BY created_at ASC LIMIT 50',
         (patient_id,)
     ).fetchall()
 
