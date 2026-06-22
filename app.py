@@ -4806,34 +4806,53 @@ def download_receipt(receipt_id):
         ORDER BY ri.id ASC
     ''', (receipt_id,)).fetchall()
 
-    lines = []
-    lines.append('=' * 40)
-    lines.append('  PRIVATE CLINIC SERVICE RECEIPT')
-    lines.append('=' * 40)
-    lines.append('')
-    lines.append(f'  Receipt #:    {receipt["receipt_number"] or receipt["id"]}')
-    lines.append(f'  Patient:      {patient_name}')
-    lines.append(f'  Date:         {receipt["created_at"] or ""}')
-    lines.append(f'  Status:       {receipt["status"] or "paid"}')
-    lines.append('')
-    lines.append('-' * 40)
-    lines.append(f'  {"Item":<25} {"Qty":>4} {"Price":>8} {"Total":>8}')
-    lines.append('-' * 40)
+    from fpdf import FPDF
+    import tempfile, os
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_font('Arial', '', r'C:\Windows\Fonts\arial.ttf', uni=True)
+    pdf.add_font('Arial', 'B', r'C:\Windows\Fonts\arialbd.ttf', uni=True)
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, 'PRIVATE CLINIC SERVICE RECEIPT', new_x='LMARGIN', new_y='NEXT', align='C')
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 6, f'Receipt #: {receipt["receipt_number"] or receipt["id"]}', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 6, f'Patient:   {patient_name}', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 6, f'Date:      {receipt["created_at"] or ""}', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 6, f'Status:    {receipt["status"] or "paid"}', new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(4)
+    col_w = [70, 15, 30, 30]
+    pdf.set_font('Arial', 'B', 9)
+    pdf.set_fill_color(230, 230, 230)
+    headers = ['Item', 'Qty', 'Price', 'Total']
+    for i, h in enumerate(headers):
+        pdf.cell(col_w[i], 7, h, border=1, align='C', fill=True)
+    pdf.ln()
+    pdf.set_font('Arial', '', 9)
     for it in items:
-        name = (it['service_name'] or it['description'] or f'Item #{it["id"]}')[:24]
-        lines.append(f'  {name:<25} {it["quantity"]:>4} {it["unit_price"]:>7.2f} {it["line_total"]:>7.2f}')
-    lines.append('-' * 40)
-    lines.append(f'  {"TOTAL":>41}')
-    lines.append(f'  ${receipt["amount"]:>7.2f}')
-    lines.append('')
-    lines.append('=' * 40)
-    lines.append('  Thank you for choosing our clinic.')
-    lines.append('=' * 40)
+        name = (it['service_name'] or it['description'] or f'Item #{it["id"]}')[:40]
+        pdf.cell(col_w[0], 6, name, border=1)
+        pdf.cell(col_w[1], 6, str(it['quantity']), border=1, align='C')
+        pdf.cell(col_w[2], 6, f'${it["unit_price"]:.2f}', border=1, align='R')
+        pdf.cell(col_w[3], 6, f'${it["line_total"]:.2f}', border=1, align='R')
+        pdf.ln()
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(col_w[0] + col_w[1] + col_w[2], 7, 'TOTAL', border=1, align='R')
+    pdf.cell(col_w[3], 7, f'${receipt["amount"]:.2f}', border=1, align='R')
+    pdf.ln(10)
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 6, 'Thank you for choosing our clinic.', new_x='LMARGIN', new_y='NEXT', align='C')
 
-    filename = f'receipt_{receipt["receipt_number"] or receipt["id"]}.txt'
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    pdf.output(tmp.name)
+    tmp.close()
+    with open(tmp.name, 'rb') as f:
+        pdf_bytes = f.read()
+    os.unlink(tmp.name)
+    filename = f'receipt_{receipt["receipt_number"] or receipt["id"]}.pdf'
     return Response(
-        '\n'.join(lines),
-        mimetype='text/plain',
+        pdf_bytes,
+        mimetype='application/pdf',
         headers={'Content-Disposition': f'attachment; filename="{filename}"'}
     )
 
