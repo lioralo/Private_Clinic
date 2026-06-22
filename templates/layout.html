@@ -283,6 +283,17 @@
             {{ nav_link('admin_security_log', 'bi-shield-lock', t('Security Log')) }}
             {{ nav_link('admin_contact_inquiries', 'bi-envelope-open', t('Contact Inquiries')) }}
 
+            {% if current_user.is_authenticated and current_user.role == 'admin' %}
+            <a href="{{ url_for('list_cancel_requests') }}"
+               class="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-sm transition-all duration-200 {% if endpoint_name == 'list_cancel_requests' %}bg-primary/10 text-primary{% else %}text-slate-600 hover:bg-slate-200{% endif %}">
+                <i class="bi bi-x-circle" style="font-size:18px"></i>
+                <span>{{ t('Cancel Requests') }}</span>
+                {% if pending_cancel_count > 0 %}
+                <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ pending_cancel_count }}</span>
+                {% endif %}
+            </a>
+            {% endif %}
+
             {# Messages #}
             <a href="#"
                class="flex items-center gap-3 rounded-xl px-4 py-3 font-medium text-sm transition-all duration-200 text-slate-600 hover:bg-slate-200 hover:text-teal-800 active:scale-95"

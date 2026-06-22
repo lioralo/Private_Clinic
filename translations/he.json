@@ -761,5 +761,16 @@
   "Inactive": "לא פעיל",
   "Deactivate": "כהה",
   "Activate": "הפעל",
-  "No service types defined yet.": "עדיין לא הוגדרו סוגי שירות."
+  "No service types defined yet.": "עדיין לא הוגדרו סוגי שירות.",
+  "Cancel Requests": "בקשות ביטול",
+  "Requested": "התבקש",
+  "Admin note": "הערת מנהל",
+  "Approve": "אשר",
+  "Reject": "דחה",
+  "Confirm Reject": "אשר דחייה",
+  "Approved": "אושר",
+  "Rejected": "נדחה",
+  "No cancel requests pending.": "אין בקשות ביטול ממתינות.",
+  "Mark appointment as cancelled?": "לסמן את הפגישה כמבוטלת?",
+  "Reason (optional)": "סיבה (אופציונלי)"
 }

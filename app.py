@@ -1518,16 +1518,22 @@ def inject_global_vars():
     except Exception:
         db = None
 
+    pending_cancel_count = 0
     if current_user.is_authenticated and db is not None:
         unread_messages = db.execute(
             'SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = 0',
             (current_user.id,)
         ).fetchone()['count']
         notification_unread_count = _get_notification_unread_count(db, current_user)
+        if current_user.role == 'admin':
+            pending_cancel_count = db.execute(
+                "SELECT COUNT(*) as count FROM cancel_requests WHERE status = 'pending'"
+            ).fetchone()['count']
 
     return dict(
         unread_messages=unread_messages,
         notification_unread_count=notification_unread_count,
+        pending_cancel_count=pending_cancel_count,
         site_settings=get_site_settings(db)
     )
 
@@ -2932,6 +2938,22 @@ def _run_db_migrations(db):
             description TEXT,
             FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE,
             FOREIGN KEY (service_type_id) REFERENCES service_types(id)
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS cancel_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            appointment_id INTEGER NOT NULL,
+            patient_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            reviewed_by INTEGER,
+            reviewed_at TIMESTAMP,
+            admin_note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+            FOREIGN KEY (patient_id) REFERENCES patients(id),
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
         )
     ''')
 
@@ -4716,6 +4738,12 @@ def request_cancel_appointment(appointment_id):
         f"Time before meeting: {lead_time}. Notes: {reason}"
     )
 
+    db.execute(
+        '''INSERT INTO cancel_requests (appointment_id, patient_id, reason)
+           VALUES (?, ?, ?)''',
+        (appointment_id, current_user.patient_id, reason)
+    )
+
     add_patient_chat_request(
         db,
         current_user.id,
@@ -4725,6 +4753,16 @@ def request_cancel_appointment(appointment_id):
         audit_action='cancel_request',
         audit_details=admin_message
     )
+
+    try:
+        admin_users = db.execute("SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email != ''").fetchall()
+        subject = f'Cancel Request: {appointment["patient_name"]} — {appointment["appointment_date"]} {appointment["appointment_time"]}'
+        body = f'A patient has requested to cancel an appointment.\n\nPatient: {appointment["patient_name"]}\nDate: {appointment["appointment_date"]}\nTime: {appointment["appointment_time"]}\nReason: {reason}\n\nLog in to review: {request.host_url}cancel_requests'
+        for admin in admin_users:
+            _send_smtp_email(admin['email'], subject, body)
+    except Exception:
+        pass
+
     db.commit()
     flash('Cancellation request sent.')
     return redirect(url_for('patient_home'))
@@ -10007,6 +10045,58 @@ def import_patient_history(patient_id):
 
     return redirect_to_patient_tab(patient_id, 'notes')
 
+
+@app.route('/cancel_requests')
+@login_required
+def list_cancel_requests():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    requests = db.execute('''
+        SELECT cr.*, a.appointment_date, a.appointment_time, p.name AS patient_name
+        FROM cancel_requests cr
+        JOIN appointments a ON cr.appointment_id = a.id
+        JOIN patients p ON cr.patient_id = p.id
+        ORDER BY cr.status ASC, cr.created_at DESC
+    ''').fetchall()
+    return render_template('cancel_requests.html', requests=requests)
+
+@app.route('/cancel_requests/<int:request_id>/approve', methods=['POST'])
+@login_required
+def approve_cancel_request(request_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    req = db.execute('SELECT * FROM cancel_requests WHERE id = ?', (request_id,)).fetchone()
+    if not req:
+        return "Request not found", 404
+    admin_note = (request.form.get('admin_note') or '').strip()
+    db.execute(
+        '''UPDATE cancel_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, admin_note = ? WHERE id = ?''',
+        (current_user.id, admin_note or None, request_id)
+    )
+    db.execute(
+        "UPDATE appointments SET status = 'cancelled' WHERE id = ?",
+        (req['appointment_id'],)
+    )
+    db.commit()
+    flash('Cancel request approved; appointment marked as cancelled.')
+    return redirect(url_for('list_cancel_requests'))
+
+@app.route('/cancel_requests/<int:request_id>/reject', methods=['POST'])
+@login_required
+def reject_cancel_request(request_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    admin_note = (request.form.get('admin_note') or '').strip()
+    db.execute(
+        '''UPDATE cancel_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, admin_note = ? WHERE id = ?''',
+        (current_user.id, admin_note or None, request_id)
+    )
+    db.commit()
+    flash('Cancel request rejected.')
+    return redirect(url_for('list_cancel_requests'))
 
 @app.route('/service_types/manage', methods=('GET', 'POST'))
 @login_required
