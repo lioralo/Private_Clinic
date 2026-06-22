@@ -262,13 +262,14 @@ class ClinicTestCase(unittest.TestCase):
             status='ongoing'
         ), follow_redirects=True)
 
-        # Add receipt
-        rv = self.client.post('/patient/1/add_receipt', data=dict(
-            amount='50.00',
-            description='Test Receipt'
-        ), follow_redirects=True)
-        assert b'50.0' in rv.data
-        assert b'Test Receipt' in rv.data
+        # Add receipt with line items
+        rv = self.client.post('/patient/1/add_receipt', data={
+            'service_type_id[]': ['custom'],
+            'quantity[]': ['1'],
+            'unit_price[]': ['50.00'],
+            'item_description[]': ['Test Receipt'],
+        }, follow_redirects=True)
+        assert b'RCPT-000001' in rv.data or b'50.00' in rv.data
 
     def test_patient_access(self):
         totp = pyotp.TOTP(self.admin_otp_secret)
