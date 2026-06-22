@@ -2902,6 +2902,38 @@ def _run_db_migrations(db):
         db.execute("ALTER TABLE notes ADD COLUMN share_with_patient BOOLEAN DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN receipt_number TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN status TEXT DEFAULT 'paid'")
+    except sqlite3.OperationalError:
+        pass
+
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS service_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            default_price REAL NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS receipt_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            receipt_id INTEGER NOT NULL,
+            service_type_id INTEGER,
+            quantity INTEGER DEFAULT 1,
+            unit_price REAL NOT NULL,
+            line_total REAL NOT NULL,
+            description TEXT,
+            FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE,
+            FOREIGN KEY (service_type_id) REFERENCES service_types(id)
+        )
+    ''')
 
     db.execute('''CREATE INDEX IF NOT EXISTS idx_appointments_reminder_pending
         ON appointments (appointment_date, appointment_time)
@@ -4763,18 +4795,44 @@ def download_receipt(receipt_id):
     elif current_user.role != 'admin':
         return 'Unauthorized', 403
 
-    content = (
-        'Private Clinic Service Receipt\n'
-        '-----------------------------\n'
-        f'Receipt ID: {receipt["id"]}\n'
-        f'Patient ID: {receipt["patient_id"]}\n'
-        f'Amount: {receipt["amount"]}\n'
-        f'Description: {receipt["description"] or ""}\n'
-        f'Created At: {receipt["created_at"] or ""}\n'
-    )
-    filename = f'receipt_{receipt["id"]}.txt'
+    patient = db.execute('SELECT name FROM patients WHERE id = ?', (receipt['patient_id'],)).fetchone()
+    patient_name = patient['name'] if patient else 'Unknown'
+
+    items = db.execute('''
+        SELECT ri.*, st.name as service_name
+        FROM receipt_items ri
+        LEFT JOIN service_types st ON ri.service_type_id = st.id
+        WHERE ri.receipt_id = ?
+        ORDER BY ri.id ASC
+    ''', (receipt_id,)).fetchall()
+
+    lines = []
+    lines.append('=' * 40)
+    lines.append('  PRIVATE CLINIC SERVICE RECEIPT')
+    lines.append('=' * 40)
+    lines.append('')
+    lines.append(f'  Receipt #:    {receipt["receipt_number"] or receipt["id"]}')
+    lines.append(f'  Patient:      {patient_name}')
+    lines.append(f'  Date:         {receipt["created_at"] or ""}')
+    lines.append(f'  Status:       {receipt["status"] or "paid"}')
+    lines.append('')
+    lines.append('-' * 40)
+    lines.append(f'  {"Item":<25} {"Qty":>4} {"Price":>8} {"Total":>8}')
+    lines.append('-' * 40)
+    for it in items:
+        name = (it['service_name'] or it['description'] or f'Item #{it["id"]}')[:24]
+        lines.append(f'  {name:<25} {it["quantity"]:>4} {it["unit_price"]:>7.2f} {it["line_total"]:>7.2f}')
+    lines.append('-' * 40)
+    lines.append(f'  {"TOTAL":>41}')
+    lines.append(f'  ${receipt["amount"]:>7.2f}')
+    lines.append('')
+    lines.append('=' * 40)
+    lines.append('  Thank you for choosing our clinic.')
+    lines.append('=' * 40)
+
+    filename = f'receipt_{receipt["receipt_number"] or receipt["id"]}.txt'
     return Response(
-        content,
+        '\n'.join(lines),
         mimetype='text/plain',
         headers={'Content-Disposition': f'attachment; filename="{filename}"'}
     )
@@ -5329,7 +5387,9 @@ def patient_detail(patient_id):
     if not available_questionnaire_titles and selected_questionnaire_titles:
         available_questionnaire_titles = selected_questionnaire_titles
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, followup_status=followup_status, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url)
+    service_types = db.execute('SELECT * FROM service_types WHERE is_active = 1 ORDER BY name ASC').fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, followup_status=followup_status, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url, service_types=service_types)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])
@@ -9574,6 +9634,24 @@ def seed_data():
     init_db()
     db = get_db()
 
+    # Seed service types if none exist
+    existing_service_types = db.execute("SELECT COUNT(*) AS count FROM service_types").fetchone()['count']
+    if existing_service_types == 0:
+        service_type_seeds = [
+            ('Initial Assessment', 'Comprehensive initial evaluation session', 350.0),
+            ('Individual Therapy', 'Standard one-on-one therapy session', 250.0),
+            ('Family Therapy', 'Family therapy session', 300.0),
+            ('Group Therapy', 'Group therapy session per participant', 150.0),
+            ('Crisis Intervention', 'Urgent crisis counseling session', 400.0),
+            ('Telehealth Session', 'Remote video therapy session', 200.0),
+            ('Psychiatric Evaluation', 'Medication assessment and management', 500.0),
+            ('Report Writing', 'Psychological report or letter', 150.0),
+        ]
+        for name, desc, price in service_type_seeds:
+            db.execute('INSERT INTO service_types (name, description, default_price) VALUES (?, ?, ?)',
+                       (name, desc, price))
+        db.commit()
+
     # Keep sample data loading safe and repeatable — skip if any patients exist.
     existing_total = db.execute("SELECT COUNT(*) AS count FROM patients").fetchone()['count']
     if existing_total > 0:
@@ -9911,18 +9989,88 @@ def import_patient_history(patient_id):
     return redirect_to_patient_tab(patient_id, 'notes')
 
 
+@app.route('/service_types/manage', methods=('GET', 'POST'))
+@login_required
+def manage_service_types():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        default_price = request.form.get('default_price', '').strip()
+        description = request.form.get('description', '').strip()
+        if name and default_price:
+            db.execute('INSERT INTO service_types (name, description, default_price) VALUES (?, ?, ?)',
+                       (name, description or None, float(default_price)))
+            db.commit()
+            flash(f'Service type "{name}" added.')
+        else:
+            flash('Name and price are required.')
+        return redirect(url_for('manage_service_types'))
+    service_types = db.execute('SELECT * FROM service_types ORDER BY is_active DESC, name ASC').fetchall()
+    return render_template('manage_service_types.html', service_types=service_types)
+
+@app.route('/service_types/<int:service_id>/toggle', methods=('POST',))
+@login_required
+def toggle_service_type(service_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    st = db.execute('SELECT is_active FROM service_types WHERE id = ?', (service_id,)).fetchone()
+    if st:
+        new_val = 0 if st['is_active'] else 1
+        db.execute('UPDATE service_types SET is_active = ? WHERE id = ?', (new_val, service_id))
+        db.commit()
+    return redirect(url_for('manage_service_types'))
+
 @app.route('/patient/<int:patient_id>/add_receipt', methods=('POST',))
 @login_required
 def add_receipt(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    amount = request.form['amount']
-    description = request.form['description']
-    if amount:
-        db = get_db()
-        db.execute('INSERT INTO receipts (patient_id, amount, description) VALUES (?, ?, ?)', (patient_id, amount, description))
-        db.commit()
+    db = get_db()
+    service_type_ids = request.form.getlist('service_type_id[]')
+    quantities = request.form.getlist('quantity[]')
+    unit_prices = request.form.getlist('unit_price[]')
+    descriptions = request.form.getlist('item_description[]')
+
+    items = []
+    total = 0.0
+    for i in range(len(service_type_ids)):
+        sid = service_type_ids[i].strip()
+        qty = int(quantities[i] or 1)
+        price = float(unit_prices[i] or 0)
+        desc = (descriptions[i] or '').strip()
+        if not sid or price <= 0:
+            continue
+        line_total = round(qty * price, 2)
+        total += line_total
+        items.append((sid, qty, price, line_total, desc))
+
+    if not items:
+        flash('At least one valid line item is required.')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    total = round(total, 2)
+
+    count = db.execute('SELECT COUNT(*) as c FROM receipts').fetchone()['c']
+    receipt_number = f'RCPT-{count + 1:06d}'
+
+    cur = db.execute(
+        'INSERT INTO receipts (patient_id, amount, description, receipt_number, status) VALUES (?, ?, ?, ?, ?)',
+        (patient_id, total, f'{len(items)} item(s)', receipt_number, 'paid')
+    )
+    receipt_id = cur.lastrowid
+
+    for sid, qty, price, line_total, desc in items:
+        db.execute(
+            'INSERT INTO receipt_items (receipt_id, service_type_id, quantity, unit_price, line_total, description) VALUES (?, ?, ?, ?, ?, ?)',
+            (receipt_id, sid, qty, price, line_total, desc or None)
+        )
+
+    db.commit()
+    flash(f'Receipt {receipt_number} created for ${total:.2f}.')
     return redirect_to_patient_tab(patient_id, 'billing')
 
 @app.route('/appointment/<int:appointment_id>/set_status', methods=['POST'])

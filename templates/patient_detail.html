@@ -546,26 +546,91 @@
 
         {% elif active_tab == 'billing' %}
         <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Add Billing Item') }}</h5>
+                <a href="{{ url_for('manage_service_types') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                    <i class="bi bi-gear me-1"></i>{{ t('Manage Services') }}
+                </a>
             </div>
             <div class="card-body">
-                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3">
+                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3" id="receiptForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="col-md-4">
-                        <label class="form-label">{{ t('Amount') }}</label>
-                        <input type="number" step="0.01" name="amount" class="form-control" required>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">{{ t('Line Items') }}</label>
+                        <div id="lineItemsContainer">
+                            <div class="line-item-row row g-2 mb-2 align-items-end">
+                                <div class="col-md-4">
+                                    <select name="service_type_id[]" class="form-select form-select-sm service-type-select" onchange="updatePrice(this)">
+                                        <option value="">{{ t('Select service...') }}</option>
+                                        {% for st in service_types %}
+                                        <option value="{{ st['id'] }}" data-price="{{ st['default_price'] }}">{{ st['name'] }}</option>
+                                        {% endfor %}
+                                        <option value="custom">{{ t('Custom') }}</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" name="quantity[]" class="form-control form-control-sm" value="1" min="1" placeholder="{{ t('Qty') }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="number" step="0.01" name="unit_price[]" class="form-control form-control-sm unit-price" placeholder="{{ t('Unit price') }}" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" name="item_description[]" class="form-control form-control-sm" placeholder="{{ t('Description (optional)') }}">
+                                </div>
+                                <div class="col-md-1 d-flex align-items-center">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.line-item-row').remove(); updateTotal();" title="{{ t('Remove') }}">&times;</button>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-1" onclick="addLineItem()">
+                            <i class="bi bi-plus-circle me-1"></i>{{ t('Add Another Item') }}
+                        </button>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label">{{ t('Description') }}</label>
-                        <input type="text" name="description" class="form-control">
-                    </div>
-                    <div class="col-12 d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Add') }}</button>
+                    <div class="col-12 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">{{ t('Total') }}: <span id="receiptTotal">$0.00</span></span>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Create Receipt') }}</button>
                     </div>
                 </form>
             </div>
         </div>
+
+        <script>
+        function updatePrice(select) {
+            var row = select.closest('.line-item-row');
+            var priceInput = row.querySelector('.unit-price');
+            var selected = select.options[select.selectedIndex];
+            if (select.value && select.value !== 'custom') {
+                priceInput.value = selected.getAttribute('data-price');
+            } else if (select.value === 'custom') {
+                priceInput.value = '';
+            }
+            updateTotal();
+        }
+        function addLineItem() {
+            var container = document.getElementById('lineItemsContainer');
+            var template = container.querySelector('.line-item-row');
+            var clone = template.cloneNode(true);
+            clone.querySelectorAll('input, select').forEach(function(el) { el.value = ''; });
+            clone.querySelector('input[name="quantity[]"]').value = '1';
+            container.appendChild(clone);
+        }
+        function updateTotal() {
+            var total = 0;
+            document.querySelectorAll('.line-item-row').forEach(function(row) {
+                var qty = parseFloat(row.querySelector('input[name^="quantity"]').value) || 1;
+                var price = parseFloat(row.querySelector('.unit-price').value) || 0;
+                total += qty * price;
+            });
+            document.getElementById('receiptTotal').textContent = '$' + total.toFixed(2);
+        }
+        document.getElementById('lineItemsContainer').addEventListener('change', function(e) {
+            if (e.target.closest('.line-item-row')) updateTotal();
+        });
+        document.getElementById('lineItemsContainer').addEventListener('input', function(e) {
+            if (e.target.closest('.line-item-row')) updateTotal();
+        });
+        updateTotal();
+        </script>
 
         <div class="card border-0 shadow-sm">
             <div class="card-header">
@@ -575,10 +640,17 @@
                 {% for receipt in receipts %}
                 <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-center gap-3 flex-wrap">
                     <div>
-                        <div class="fw-semibold">{{ receipt['description'] or t('Receipt') }}</div>
+                        <div class="fw-semibold">{{ receipt['receipt_number'] or t('Receipt') }}</div>
                         <div class="small text-muted">{{ receipt['created_at'] }}</div>
+                        <div class="small text-muted">{{ receipt['description'] }}</div>
                     </div>
-                    <span class="badge bg-white text-primary border rounded-pill px-3 py-2">${{ receipt['amount'] }}</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge {% if receipt['status'] == 'paid' %}bg-success-subtle text-success{% elif receipt['status'] == 'pending' %}bg-warning-subtle text-warning{% else %}bg-light text-muted{% endif %} border rounded-pill px-3 py-2">{{ receipt['status'] or 'paid' }}</span>
+                        <span class="badge bg-white text-primary border rounded-pill px-3 py-2">${{ receipt['amount'] }}</span>
+                        <a href="{{ url_for('download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>
                 </div>
                 {% else %}
                 <div class="text-muted small">{{ t('No receipts yet.') }}</div>
