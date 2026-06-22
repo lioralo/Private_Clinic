@@ -2706,6 +2706,9 @@ def _run_db_migrations(db):
     # Performance indexes for common filters and sort paths.
     db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_patients_type_deleted ON patients(patient_type, is_deleted)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(name COLLATE NOCASE)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_email ON patients(email)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_patients_phone ON patients(phone)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_users_patient_id ON users(patient_id)')
 
     db.execute('CREATE INDEX IF NOT EXISTS idx_appointments_patient_date_time ON appointments(patient_id, appointment_date, appointment_time)')

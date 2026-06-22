@@ -82,10 +82,10 @@ def save_site_settings(db, updates):
 def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority',
                               admin_user_id=None, include_group=True, treatment_method='all'):
     select_clause = _get_patients_select_clause(admin_user_id)
-    where_clause = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
     order_clause = _get_patients_order_clause(sort_by)
-    sql = f"SELECT {select_clause} FROM patients p {where_clause} {order_clause}"
-    return db.execute(sql).fetchall()
+    sql = f"{select_clause}{where_clause}{order_clause}"
+    return db.execute(sql, tuple(params)).fetchall()
 
 
 def _get_patients_select_clause(admin_user_id):
@@ -108,19 +108,24 @@ def _get_patients_select_clause(admin_user_id):
 
 def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
     conditions = ["COALESCE(p.is_deleted, 0) = 0"]
+    params = []
     if status and status != 'all':
-        conditions.append(f"p.status = {sqlite3_quote(status)}")
+        conditions.append("p.status = ?")
+        params.append(status)
     if patient_type and patient_type != 'all':
-        conditions.append(f"p.patient_type = {sqlite3_quote(patient_type)}")
+        conditions.append("p.patient_type = ?")
+        params.append(patient_type)
     if treatment_method and treatment_method != 'all':
-        conditions.append(f"p.treatment_method = {sqlite3_quote(treatment_method)}")
+        conditions.append("p.treatment_method = ?")
+        params.append(treatment_method)
     if search_query:
-        escaped = search_query.replace("'", "''")
-        conditions.append(f"(p.name LIKE '%{escaped}%' OR p.email LIKE '%{escaped}%' OR p.phone LIKE '%{escaped}%')")
+        conditions.append("(p.name LIKE ? OR p.email LIKE ? OR p.phone LIKE ?)")
+        like_val = f"%{search_query}%"
+        params.extend([like_val, like_val, like_val])
     if not include_group:
         conditions.append("(COALESCE(p.patient_type, '') != 'group' AND (p.patient_type IS NULL OR p.patient_type NOT IN ('group', 'dynamic_group')))")
-    where = "WHERE " + " AND ".join(conditions)
-    return where
+    where = " WHERE " + " AND ".join(conditions)
+    return where, params
 
 
 def _get_patients_order_clause(sort_by):
