@@ -158,7 +158,10 @@ fi
 [[ -f "${DB_FILE}" ]] || die "Database file not found: ${DB_FILE}"
 [[ -d "${UPLOADS_DIR}" ]] || die "Uploads directory not found: ${UPLOADS_DIR}"
 [[ -d "${PATIENT_LOGS_DIR}" ]] || die "Patient logs directory not found: ${PATIENT_LOGS_DIR}"
-[[ -f "${APP_LOG_FILE}" ]] || die "App log file not found: ${APP_LOG_FILE}"
+if [[ ! -f "${APP_LOG_FILE}" ]]; then
+  log "App log not found at ${APP_LOG_FILE} (skipping - runtime artifact)"
+  APP_LOG_FILE=""
+fi
 
 if [[ -n "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
   ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
@@ -222,7 +225,9 @@ REPO_URL_Q="$(printf '%q' "${REPO_URL}")"
 GIT_BRANCH_Q="$(printf '%q' "${GIT_BRANCH}")"
 BACKUP_BASENAME_Q="$(printf '%q' "${BACKUP_BASENAME}")"
 
-log "Preparing remote staging area on ${SSH_TARGET}"
+# ---------------------------------------------------------------------------
+log "Phase 1: Prepare remote staging & clone/update repo on ${SSH_TARGET}"
+# ---------------------------------------------------------------------------
 run_ssh_script "
 set -euo pipefail
 mkdir -p ~/migration_staging
@@ -254,24 +259,32 @@ fi
 "
 fi
 
-log "Uploading encrypted backup and environment files"
+# ---------------------------------------------------------------------------
+log "Phase 2: Upload backup, env, and data artifacts"
+# ---------------------------------------------------------------------------
 run_cmd "${SCP_CMD[@]}" "${BACKUP_FILE}" "${SSH_TARGET}:~/migration_staging/${BACKUP_BASENAME}"
 run_cmd "${SCP_CMD[@]}" "${TMP_DIR}/migration_key.env" "${SSH_TARGET}:~/migration_staging/migration_key.env"
 run_cmd "${SCP_CMD[@]}" "${TMP_DIR}/.env.prod" "${SSH_TARGET}:~/migration_staging/.env.prod"
 run_cmd "${SCP_CMD[@]}" "${TMP_DIR}/expected_counts.txt" "${SSH_TARGET}:~/migration_staging/expected_counts.txt"
-if [[ "${DRY_RUN}" == "1" ]]; then
-  quote_cmd tar -C "${ROOT_DIR}/static" -cf - uploads "|" "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
-else
-  tar -C "${ROOT_DIR}/static" -cf - uploads | "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
-fi
-if [[ "${DRY_RUN}" == "1" ]]; then
-  quote_cmd tar -C "${ROOT_DIR}" -cf - patients_logs "|" "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
-else
-  tar -C "${ROOT_DIR}" -cf - patients_logs | "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
-fi
-run_cmd "${SCP_CMD[@]}" "${APP_LOG_FILE}" "${SSH_TARGET}:~/migration_staging/app_log.txt"
+stream_to_remote() {
+  local src_dir="$1"
+  local src_name="$2"
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    quote_cmd tar -C "${src_dir}" -cf - "${src_name}" "|" "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
+  else
+    tar -C "${src_dir}" -cf - "${src_name}" | "${SSH_CMD[@]}" "mkdir -p ~/migration_staging && tar -C ~/migration_staging -xf -"
+  fi
+}
 
-log "Deploying application and restoring data on the AWS host"
+stream_to_remote "${ROOT_DIR}/static" uploads
+stream_to_remote "${ROOT_DIR}" patients_logs
+if [[ -n "${APP_LOG_FILE}" ]]; then
+  run_cmd "${SCP_CMD[@]}" "${APP_LOG_FILE}" "${SSH_TARGET}:~/migration_staging/app_log.txt"
+fi
+
+# ---------------------------------------------------------------------------
+log "Phase 3: Deploy app and restore data on the AWS host"
+# ---------------------------------------------------------------------------
 run_ssh_script "
 set -euo pipefail
 timestamp=\$(date +%Y%m%d_%H%M%S)

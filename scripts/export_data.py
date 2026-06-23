@@ -100,16 +100,20 @@ def verify_export(json_file):
         print(f"Error verifying export: {e}")
         return False
 
-if __name__ == '__main__':
+def main():
     db_path = 'clinic.db'
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     output_file = f'clinic_data_backup_{timestamp}.json'
-    
+
     print(f"Exporting database to {output_file}...")
     print("=" * 50)
-    
+
     if export_database(db_path, output_file):
         verify_export(output_file)
     else:
         print("Export failed")
         exit(1)
+
+
+if __name__ == '__main__':
+    main()

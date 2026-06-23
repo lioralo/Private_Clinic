@@ -1,6 +1,12 @@
 """
-Patient Engagement Dashboard - Create via new route
-Adds features to make the clinic system more engaging and interactive
+Patient Engagement Dashboard routes.
+
+NOTE: This is a Flask blueprint route module, NOT a standalone script.
+It registers routes (patient_dashboard, upcoming appointments API,
+engagement stats API) when imported by the application.
+
+To enable, import this module in app.py:
+    from scripts.patient_engagement import *
 """
 
 from flask import render_template, redirect, url_for, jsonify
@@ -13,20 +19,18 @@ from app import app, get_db
 def patient_dashboard():
     """Enhanced patient engagement dashboard with stats and insights"""
     db = get_db()
-    
+
     if current_user.role == 'admin':
         return redirect(url_for('patients'))
-    
-    # Get patient info
+
     patient = db.execute(
-        'SELECT * FROM patients WHERE id = ?', 
+        'SELECT * FROM patients WHERE id = ?',
         (current_user.patient_id,)
     ).fetchone()
-    
+
     if not patient:
         return redirect(url_for('patient_home'))
-    
-    # Get upcoming appointments
+
     today = datetime.now().date()
     upcoming_appointments = db.execute('''
         SELECT * FROM appointments
@@ -43,23 +47,19 @@ def patient_dashboard():
         (current_user.patient_id,)
     ).fetchone()['count']
     
-    # Get notes/progress
     recent_notes = db.execute('''
         SELECT * FROM notes
         WHERE patient_id = ?
         ORDER BY created_at DESC
         LIMIT 3
     ''', (current_user.patient_id,)).fetchall()
-    
-    # Get therapy goals
+
     goals = db.execute('''
         SELECT * FROM goals
-        WHERE patient_id = ?
-        AND status = 'active'
+        WHERE patient_id = ? AND status = 'active'
         ORDER BY created_at DESC
     ''', (current_user.patient_id,)).fetchall()
-    
-    # Calculate engagement metrics
+
     days_since_last_session = None
     if total_appointments > 0:
         last_appointment = db.execute('''
@@ -68,58 +68,54 @@ def patient_dashboard():
             ORDER BY appointment_date DESC
             LIMIT 1
         ''', (current_user.patient_id,)).fetchone()
-        
         if last_appointment:
             last_date = datetime.fromisoformat(last_appointment['appointment_date']).date()
             days_since_last_session = (today - last_date).days
-    
-    # Get zoom meetings count
+
     zoom_meetings = db.execute('''
-        SELECT COUNT(*) as count FROM appointments
-        WHERE patient_id = ?
-        AND meeting_type IN ('zoom', 'google-meet')
-    ''', (current_user.patient_id,)).fetchone()['count']
-    
+        SELECT COUNT(*) FROM appointments
+        WHERE patient_id = ? AND meeting_type IN ('zoom', 'google-meet')
+    ''', (current_user.patient_id,)).fetchone()[0]
+
     engagement_data = {
         'total_appointments': total_appointments,
         'upcoming_appointments': len(upcoming_appointments),
         'days_since_last': days_since_last_session,
         'zoom_meetings': zoom_meetings,
         'active_goals': len(goals),
-        'recent_notes': len(recent_notes)
+        'recent_notes': len(recent_notes),
     }
-    
-    return render_template('patient_dashboard.html',
+
+    return render_template(
+        'patient_dashboard.html',
         patient=patient,
         upcoming_appointments=upcoming_appointments,
         recent_notes=recent_notes,
         goals=goals,
-        engagement=engagement_data
+        engagement=engagement_data,
     )
 
 @app.route('/api/appointments/upcoming')
 @login_required
 def api_upcoming_appointments():
-    """API endpoint for upcoming appointments with meeting info"""
+    """Return upcoming appointments with meeting info for the current patient."""
     db = get_db()
-    
     today = datetime.now().date()
-    appointments = db.execute('''
+    rows = db.execute('''
         SELECT a.*, p.name as patient_name
         FROM appointments a
         LEFT JOIN patients p ON p.id = a.patient_id
         WHERE a.patient_id = ?
-        AND a.appointment_date >= ?
-        AND COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND a.appointment_date >= ?
+          AND COALESCE(a.status, 'scheduled') = 'scheduled'
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
         LIMIT 10
     ''', (current_user.patient_id, today.isoformat())).fetchall()
-    
+
     result = []
-    for appt in appointments:
+    for appt in rows:
         appt_date = datetime.fromisoformat(appt['appointment_date']).date()
         days_away = (appt_date - today).days
-        
         result.append({
             'id': appt['id'],
             'date': appt['appointment_date'],
@@ -129,44 +125,36 @@ def api_upcoming_appointments():
             'meeting_link': appt['meeting_link'],
             'is_today': days_away == 0,
             'is_tomorrow': days_away == 1,
-            'patient_name': appt['patient_name']
+            'patient_name': appt['patient_name'],
         })
-    
+
     return jsonify(result)
+
 
 @app.route('/api/engagement/stats')
 @login_required
 def api_engagement_stats():
-    """Get engagement statistics for the patient"""
+    """Return engagement statistics for the current patient."""
     db = get_db()
-    
-    total_appts = db.execute(
-        'SELECT COUNT(*) as count FROM appointments WHERE patient_id = ?',
-        (current_user.patient_id,)
-    ).fetchone()['count']
-    
-    completed_appts = db.execute('''
-        SELECT COUNT(*) as count FROM appointments
+
+    counts = db.execute('''
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN COALESCE(status, 'scheduled') = 'completed' THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN strftime('%Y-%m', appointment_date) = strftime('%Y-%m', 'now') THEN 1 ELSE 0 END) AS this_month,
+            SUM(CASE WHEN meeting_type IN ('zoom', 'google-meet') THEN 1 ELSE 0 END) AS online
+        FROM appointments
         WHERE patient_id = ?
-        AND COALESCE(status, 'scheduled') = 'completed'
-    ''', (current_user.patient_id,)).fetchone()['count']
-    
-    this_month_appts = db.execute('''
-        SELECT COUNT(*) as count FROM appointments
-        WHERE patient_id = ?
-        AND strftime('%Y-%m', appointment_date) = strftime('%Y-%m', 'now')
-    ''', (current_user.patient_id,)).fetchone()['count']
-    
-    online_appts = db.execute('''
-        SELECT COUNT(*) as count FROM appointments
-        WHERE patient_id = ?
-        AND meeting_type IN ('zoom', 'google-meet')
-    ''', (current_user.patient_id,)).fetchone()['count']
-    
+    ''', (current_user.patient_id,)).fetchone()
+
+    total = counts['total'] or 0
+    completed = counts['completed'] or 0
+    completion_rate = round((completed / max(total, 1)) * 100) if total > 0 else 0
+
     return jsonify({
-        'total_appointments': total_appts,
-        'completed_appointments': completed_appts,
-        'appointments_this_month': this_month_appts,
-        'online_appointments': online_appts,
-        'completion_rate': round((completed_appts / max(total_appts, 1)) * 100) if total_appts > 0 else 0
+        'total_appointments': total,
+        'completed_appointments': completed,
+        'appointments_this_month': counts['this_month'] or 0,
+        'online_appointments': counts['online'] or 0,
+        'completion_rate': completion_rate,
     })

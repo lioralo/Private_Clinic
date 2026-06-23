@@ -566,12 +566,12 @@
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>{{ t('Add Billing Item') }}</h5>
-                <a href="{{ url_for('manage_service_types') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                <a href="{{ url_for('billing.manage_service_types') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
                     <i class="bi bi-gear me-1"></i>{{ t('Manage Services') }}
                 </a>
             </div>
             <div class="card-body">
-                <form method="post" action="{{ url_for('add_receipt', patient_id=patient['id']) }}" class="row g-3" id="receiptForm">
+                <form method="post" action="{{ url_for('billing.add_receipt', patient_id=patient['id']) }}" class="row g-3" id="receiptForm">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="col-12">
                         <label class="form-label fw-semibold">{{ t('Line Items') }}</label>
@@ -665,7 +665,7 @@
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge {% if receipt['status'] == 'paid' %}bg-success-subtle text-success{% elif receipt['status'] == 'pending' %}bg-warning-subtle text-warning{% else %}bg-light text-muted{% endif %} border rounded-pill px-3 py-2">{{ receipt['status'] or 'paid' }}</span>
                         <span class="badge bg-white text-primary border rounded-pill px-3 py-2">${{ receipt['amount'] }}</span>
-                        <a href="{{ url_for('download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
                             <i class="bi bi-download"></i>
                         </a>
                     </div>

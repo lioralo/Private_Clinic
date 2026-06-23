@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# =============================================================================
+# deploy_local_bundle_to_aws.sh — Deploy local checkout to AWS
+#
+# Bundles the current local checkout (excluding runtime data) and deploys it
+# to an AWS host while preserving .env, .git, and the data/ directory.
+# =============================================================================
+
 set -euo pipefail
 
 usage() {

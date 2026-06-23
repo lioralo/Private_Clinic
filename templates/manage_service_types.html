@@ -10,7 +10,7 @@
         <h5 class="mb-0 fw-bold">{{ t('Add Service Type') }}</h5>
     </div>
     <div class="card-body">
-        <form method="post" action="{{ url_for('manage_service_types') }}" class="row g-3">
+        <form method="post" action="{{ url_for('billing.manage_service_types') }}" class="row g-3">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="col-md-4">
                 <label class="form-label">{{ t('Service Name') }}</label>
@@ -61,7 +61,7 @@
                             {% endif %}
                         </td>
                         <td>
-                            <form method="post" action="{{ url_for('toggle_service_type', service_id=st['id']) }}" class="d-inline">
+                            <form method="post" action="{{ url_for('billing.toggle_service_type', service_id=st['id']) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm {% if st['is_active'] %}btn-outline-warning{% else %}btn-outline-success{% endif %} rounded-pill">
                                     {% if st['is_active'] %}{{ t('Deactivate') }}{% else %}{{ t('Activate') }}{% endif %}

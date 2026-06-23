@@ -241,6 +241,12 @@ def _request_expects_json_error():
     return request.accept_mimetypes.best == 'application/json'
 
 
+def redirect_to_patient_tab(patient_id, default_tab='info'):
+    from flask import request, redirect, url_for
+    tab = request.form.get('active_tab') or request.args.get('tab') or default_tab
+    return redirect(url_for('patient_detail', patient_id=patient_id, tab=tab))
+
+
 def _prune_rate_limits(db, bucket_key, scope, window_seconds):
     cutoff = datetime.now(timezone.utc).timestamp() - window_seconds
     db.execute(

@@ -1,5 +1,15 @@
+#!/usr/bin/env python3
+"""
+Encrypted database backup and restore for Private Clinic.
+
+Supports:
+  - backup:  python backup_db.py
+  - restore: python backup_db.py restore <file.db.enc> [target_path]
+"""
+
 import os
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -197,15 +207,18 @@ def restore_database(encrypted_backup_path: str, target_db_path: str = None):
         return False
 
 
-if __name__ == '__main__':
-    import sys
-    if len(sys.argv) >= 2 and sys.argv[1] == 'restore':
-        if len(sys.argv) < 3:
+def main():
+    args = sys.argv[1:]
+    if args and args[0] == 'restore':
+        if len(args) < 2:
             print("Usage: python backup_db.py restore <encrypted_backup.db.enc> [target_db_path]")
             sys.exit(1)
-        enc_file = sys.argv[2]
-        target_file = sys.argv[3] if len(sys.argv) >= 4 else None
+        enc_file = args[1]
+        target_file = args[2] if len(args) >= 3 else None
         success = restore_database(enc_file, target_file)
         sys.exit(0 if success else 1)
     else:
         backup_database()
+
+if __name__ == '__main__':
+    main()
