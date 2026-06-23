@@ -6,7 +6,6 @@ import sqlite3
 import smtplib
 import shutil
 import zipfile
-import threading
 import secrets
 from datetime import datetime, timezone, timedelta
 from io import BytesIO
@@ -14,14 +13,12 @@ from pathlib import Path
 from email.message import EmailMessage
 from flask import request, session, g, current_app, jsonify, url_for
 from werkzeug.security import generate_password_hash
+from clinic_app.models import get_db
 
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 
 ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
-
-_PUBLIC_RATE_LIMIT_LOCK = threading.Lock()
-_PUBLIC_RATE_LIMIT_BUCKETS = {}
 
 def _request_client_ip():
     forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
@@ -166,27 +163,22 @@ def _check_public_rate_limit(scope_key, token=''):
     window_seconds = int(app.config.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', 60) or 60)
     if max_requests <= 0 or window_seconds <= 0:
         return None
-    now_ts = datetime.now(timezone.utc).timestamp()
     client_ip = _request_client_ip()
     token_prefix = (token or '')[:32]
     bucket_key = f'{scope_key}:{client_ip}:{token_prefix}'
-    cutoff_ts = now_ts - window_seconds
-    with _PUBLIC_RATE_LIMIT_LOCK:
-        timestamps = _PUBLIC_RATE_LIMIT_BUCKETS.get(bucket_key, [])
-        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
-        if len(timestamps) >= max_requests:
-            _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
-            retry_after = max(1, int(window_seconds - (now_ts - timestamps[0])))
-            response = jsonify({
-                'status': 'error',
-                'message': 'Too many requests. Please retry shortly.',
-                'retry_after_seconds': retry_after,
-            })
-            response.status_code = 429
-            response.headers['Retry-After'] = str(retry_after)
-            return response
-        timestamps.append(now_ts)
-        _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
+    db = get_db()
+    existing = _check_db_rate_limit(db, bucket_key, scope_key, max_requests, window_seconds)
+    if existing:
+        response = jsonify({
+            'status': 'error',
+            'message': 'Too many requests. Please retry shortly.',
+            'retry_after_seconds': existing,
+        })
+        response.status_code = 429
+        response.headers['Retry-After'] = str(existing)
+        return response
+    _record_db_rate_limit(db, bucket_key, scope_key)
+    db.commit()
     return None
 
 def parse_date_safe(value):

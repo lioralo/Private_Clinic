@@ -53,6 +53,7 @@ from clinic_app.utils import (
     _validate_appointment_duration,
     overlaps,
     redirect_to_patient_tab,
+    _check_public_rate_limit,
 )
 
 
@@ -280,8 +281,8 @@ _REMINDER_WORKER_STATE_LOCK = threading.Lock()
 _REMINDER_WORKER_STARTED = False
 _REMINDER_WORKER_STOP_EVENT = threading.Event()
 _GDOC_MANUAL_SYNC_MAX_JOBS = 40
-_PUBLIC_RATE_LIMIT_LOCK = threading.Lock()
-_PUBLIC_RATE_LIMIT_BUCKETS = {}
+
+
 _SECURITY_RETENTION_LOCK = threading.Lock()
 _SECURITY_RETENTION_LAST_CHECK_TS = 0.0
 
@@ -483,42 +484,6 @@ def _security_retention_cleanup(db):
     finally:
         _SECURITY_RETENTION_LOCK.release()
 
-
-def _check_public_rate_limit(scope_key, token=''):
-    if app.config.get('TESTING') and not app.config.get('ENABLE_RATE_LIMIT_IN_TESTS'):
-        return None
-
-    max_requests = int(app.config.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', 20) or 20)
-    window_seconds = int(app.config.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', 60) or 60)
-    if max_requests <= 0 or window_seconds <= 0:
-        return None
-
-    now_ts = datetime.now(timezone.utc).timestamp()
-    client_ip = _request_client_ip()
-    token_prefix = (token or '')[:32]
-    bucket_key = f'{scope_key}:{client_ip}:{token_prefix}'
-    cutoff_ts = now_ts - window_seconds
-
-    with _PUBLIC_RATE_LIMIT_LOCK:
-        timestamps = _PUBLIC_RATE_LIMIT_BUCKETS.get(bucket_key, [])
-        timestamps = [ts for ts in timestamps if ts >= cutoff_ts]
-
-        if len(timestamps) >= max_requests:
-            _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
-            retry_after = max(1, int(window_seconds - (now_ts - timestamps[0])))
-            response = jsonify({
-                'status': 'error',
-                'message': 'Too many requests. Please retry shortly.',
-                'retry_after_seconds': retry_after,
-            })
-            response.status_code = 429
-            response.headers['Retry-After'] = str(retry_after)
-            return response
-
-        timestamps.append(now_ts)
-        _PUBLIC_RATE_LIMIT_BUCKETS[bucket_key] = timestamps
-
-    return None
 
 
 def _validate_gdoc_webhook_request():
