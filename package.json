@@ -1,0 +1,30 @@
+{
+  "name": "private_clinic_latest",
+  "version": "1.0.0",
+  "description": "A web application to manage patients, treatment notes, files, and receipts for a private psychotherapy clinic.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css",
+    "watch:css": "tailwindcss -i static/css/input.css -o static/css/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lioralo/Private_Clinic.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/lioralo/Private_Clinic/issues"
+  },
+  "homepage": "https://github.com/lioralo/Private_Clinic#readme",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.1",
+    "tailwindcss": "^4.3.1"
+  }
+}

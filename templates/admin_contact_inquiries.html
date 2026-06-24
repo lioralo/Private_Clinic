@@ -3,6 +3,7 @@
 {% block page_title %}{{ t('Contact Inquiries') }}{% endblock %}
 
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Contact Inquiries')}]) }}
 <div class="d-flex align-items-center justify-content-between mb-4">
     <h2 class="fw-bold text-primary mb-0">
         <i class="bi bi-envelope-open me-2"></i>{{ t('Contact Inquiries') }}
@@ -13,12 +14,7 @@
 </div>
 
 {% if not inquiries %}
-<div class="card border-0 shadow-sm rounded-4">
-    <div class="card-body text-center py-5 text-muted">
-        <i class="bi bi-inbox" style="font-size:3rem;"></i>
-        <p class="mt-3 mb-0">{{ t('No contact inquiries yet.') }}</p>
-    </div>
-</div>
+{{ empty_state(icon='bi-envelope-open', message=t('No contact inquiries yet.')) }}
 {% else %}
 <div class="d-flex flex-column gap-3">
     {% for inq in inquiries %}
@@ -68,7 +64,7 @@
                     </a>
                     {% endif %}
                     <form method="post" action="{{ url_for('delete_contact_inquiry', inquiry_id=inq['id']) }}"
-                          onsubmit="return confirm('{{ t('Delete this inquiry?') }}');">
+                          data-confirm-modal data-confirm-message="{{ t('Delete this inquiry?') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill w-100">
                             <i class="bi bi-trash me-1"></i>{{ t('Delete') }}

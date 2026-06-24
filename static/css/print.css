@@ -1,0 +1,10 @@
+@media print {
+    body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+    .admin-sidebar, .admin-header, .no-print, .btn, .sidebar-link-active,
+    nav, footer, .offcanvas, .toast-container, .skip-link, #adminSidebarBackdrop,
+    #confirmModal, .modal, .toast { display: none !important; }
+    .app-shell, main, #main-content { margin: 0 !important; padding: 0 !important; }
+    a { color: #000 !important; text-decoration: underline; }
+    .card, .border, .rounded-* { border: 1px solid #ccc !important; box-shadow: none !important; }
+    @page { margin: 1.5cm; }
+}

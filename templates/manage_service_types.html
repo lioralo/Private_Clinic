@@ -1,5 +1,6 @@
 {% extends 'layout.html' %}
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Service Types')}]) }}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="fw-bold mb-0"><i class="bi bi-gear me-2 text-primary"></i>{{ t('Service Types') }}</h4>
     <a href="{{ url_for('patients') }}" class="btn btn-outline-secondary rounded-pill btn-sm">{{ t('Back to Patients') }}</a>
@@ -70,9 +71,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr>
-                        <td colspan="5" class="text-muted text-center py-4">{{ t('No service types defined yet.') }}</td>
-                    </tr>
+                    {{ empty_state(colspan='5', icon='bi-gear', message=t('No service types defined yet.')) }}
                     {% endfor %}
                 </tbody>
             </table>

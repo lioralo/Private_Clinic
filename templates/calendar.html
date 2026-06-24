@@ -98,7 +98,7 @@
             </button>
             <div class="collapse show" id="followUpAlertsWrap">
                 <div class="p-5" id="followUpAlerts">
-                    <div class="small text-muted">{{ t('No pending follow-up indicators.') }}</div>
+                    {{ empty_state(icon='bi-bell', message=t('No pending follow-up indicators.')) }}
                 </div>
             </div>
         </div>
@@ -109,7 +109,7 @@
             </button>
             <div class="collapse" id="fridaySpecialsWrap">
                 <div class="p-5 weekend-stack" id="fridaySpecials">
-                    <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                    {{ empty_state(icon='bi-calendar-x', message=t('No weekend items.')) }}
                 </div>
             </div>
         </div>
@@ -120,7 +120,7 @@
             </button>
             <div class="collapse" id="saturdaySpecialsWrap">
                 <div class="p-5 weekend-stack" id="saturdaySpecials">
-                    <div class="small text-muted">{{ t('No weekend items.') }}</div>
+                    {{ empty_state(icon='bi-calendar-x', message=t('No weekend items.')) }}
                 </div>
             </div>
         </div>

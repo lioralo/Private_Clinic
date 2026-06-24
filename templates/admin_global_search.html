@@ -34,7 +34,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">{{ t('No patients found.') }}</div>
+                {{ empty_state(icon='bi-search', message=t('No patients found.')) }}
                 {% endif %}
             </div>
         </div>
@@ -57,7 +57,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">{{ t('No notes found.') }}</div>
+                {{ empty_state(icon='bi-journal-text', message=t('No notes found.')) }}
                 {% endif %}
             </div>
         </div>
@@ -84,7 +84,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">{{ t('No appointments found.') }}</div>
+                {{ empty_state(icon='bi-calendar-event', message=t('No appointments found.')) }}
                 {% endif %}
             </div>
         </div>

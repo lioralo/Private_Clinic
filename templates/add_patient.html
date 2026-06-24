@@ -13,7 +13,7 @@
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div class="p-5">
-                <form method="post">
+                <form method="post" class="needs-validation" novalidate>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
@@ -44,7 +44,7 @@
                                         </div>
                                         {% endfor %}
                                     {% else %}
-                                        <div class="small text-muted">{{ t('No questionnaires found. Set the source Google Sheet in Admin Profile and click Sync.') }}</div>
+                                        {{ empty_state(icon='bi-ui-checks-grid', message=t('No questionnaires found. Set the source Google Sheet in Admin Profile and click Sync.')) }}
                                     {% endif %}
                                 </div>
                             </div>

@@ -1,0 +1,202 @@
+.engagement-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.metric-card {
+    background: white;
+    border: 1px solid rgba(216, 225, 223, 0.85);
+    border-radius: 16px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.metric-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.metric-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.engagement-content-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 1024px) {
+    .engagement-content-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.upcoming-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.upcoming-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    background: #f9fbf9;
+    border-radius: 12px;
+    border-left: 4px solid #0f766e;
+}
+
+.upcoming-time {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+
+.date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #0f766e, #134e4a);
+    color: white;
+    border-radius: 8px;
+}
+
+.date-badge .day {
+    font-weight: 800;
+    font-size: 1.2rem;
+}
+
+.date-badge .month {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.upcoming-type {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.goal-item {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: #f0fdf4;
+    border-left: 3px solid #10b981;
+}
+
+.goal-checkbox label {
+    margin: 0;
+    cursor: pointer;
+    color: #1f2937;
+    font-weight: 500;
+}
+
+.notes-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: relative;
+}
+
+.notes-timeline::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #0f766e, transparent);
+}
+
+.note-entry {
+    margin-left: 1.5rem;
+    position: relative;
+}
+
+.note-entry::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    background: #0f766e;
+    border: 3px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px #0f766e;
+}
+
+.note-date {
+    font-size: 0.85rem;
+    color: #0f766e;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.note-content {
+    font-size: 0.95rem;
+    color: #4b5563;
+    line-height: 1.5;
+}
+
+@media (max-width: 576px) {
+    .engagement-metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .upcoming-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .upcoming-type {
+        width: 100%;
+    }
+}

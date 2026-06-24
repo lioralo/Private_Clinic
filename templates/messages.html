@@ -12,7 +12,7 @@
                     </div>
                 </a>
             {% else %}
-                <div class="p-3 text-muted small text-center">No active conversations.</div>
+                {{ empty_state(icon='bi-chat-dots', message='No active conversations.') }}
             {% endfor %}
         </div>
     </div>
@@ -27,7 +27,7 @@
                         <span class="smallest text-muted mt-1">{{ message['timestamp'] }}</span>
                     </div>
                 {% else %}
-                    <div class="text-center text-muted p-5">No messages yet. Start the conversation!</div>
+                    {{ empty_state(icon='bi-chat-square-dots', message='No messages yet. Start the conversation!') }}
                 {% endfor %}
             </div>
 

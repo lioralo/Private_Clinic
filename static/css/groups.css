@@ -1,0 +1,86 @@
+.create-group-panel,
+.overview-edit-panel,
+.overview-delete-panel {
+    display: none;
+}
+
+.create-group-panel.is-open,
+.overview-edit-panel.is-open,
+.overview-delete-panel.is-open {
+    display: block;
+}
+
+.groups-hero {
+    border: 1px solid rgba(216, 225, 223, 0.9);
+    border-radius: 1.2rem;
+    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(243, 247, 245, 0.92));
+}
+
+.group-overview-card {
+    border-radius: 1.1rem;
+}
+
+.group-overview-meta {
+    font-size: 0.88rem;
+}
+
+.group-overview-title {
+    letter-spacing: -0.01em;
+}
+
+.session-card {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.06);
+}
+
+.session-card.archived-session {
+    opacity: 0.92;
+}
+
+.session-meta {
+    font-size: 0.85rem;
+}
+
+.session-toolbar {
+    gap: 0.5rem;
+}
+
+.member-remove-panel,
+.group-delete-panel,
+.session-booking-panel,
+.supervision-link-panel {
+    display: none;
+}
+
+.member-remove-panel.is-open,
+.group-delete-panel.is-open,
+.session-booking-panel.is-open,
+.supervision-link-panel.is-open {
+    display: block;
+}
+
+.record-fieldset[disabled] {
+    opacity: 0.72;
+}
+
+.record-fieldset textarea,
+.record-fieldset select,
+.record-fieldset input {
+    background-color: #fff;
+}
+
+.session-summary-input {
+    min-height: 14rem;
+}
+
+.member-reason-input,
+.member-note-input {
+    min-width: 100%;
+}
+
+.table-responsive .table {
+    table-layout: fixed;
+    width: 100%;
+}

@@ -140,10 +140,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-center py-5 text-muted">
-                    <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-50"></i>
-                    <p class="mb-0">{{ t('No upcoming appointments.') }}</p>
-                </div>
+                {{ empty_state(icon='bi-calendar-x', message=t('No upcoming appointments.')) }}
                 {% endif %}
             </div>
         </div>
@@ -307,7 +304,7 @@
                     </div>
                     {% endfor %}
                 {% else %}
-                <p class="text-muted text-center py-3 small mb-0">{{ t('No messages yet.') }}</p>
+                {{ empty_state(icon='bi-chat-dots', message=t('No messages yet.')) }}
                 {% endif %}
             </div>
             <div class="card-footer bg-white border-0 px-4 pb-4">
@@ -352,7 +349,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">{{ t('No shared documents yet.') }}</div>
+                {{ empty_state(icon='bi-file-earmark-text', message=t('No shared documents yet.')) }}
                 {% endif %}
             </div>
         </div>
@@ -406,7 +403,7 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="text-muted small">{{ t('No receipts yet.') }}</div>
+                {{ empty_state(icon='bi-receipt', message=t('No receipts yet.')) }}
                 {% endif %}
             </div>
         </div>

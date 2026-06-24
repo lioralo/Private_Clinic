@@ -2,6 +2,7 @@
 <div class="col-md-8">
     <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }}</label>
     <input type="text" class="form-control" name="name" id="name" value="{{ name }}" placeholder="{{ t('Full Name') }}" required>
+    <div class="invalid-feedback">{{ t('Please enter the patient name.') }}</div>
 </div>
 
 <div class="col-md-4">
@@ -11,6 +12,7 @@
         <option value="candidate" {% if candidate_selected %}selected{% endif %}>{{ t('Candidate') }}</option>
         <option value="archived" {% if status == 'archived' %}selected{% endif %}>{{ t('Archived') }}</option>
     </select>
+    <div class="invalid-feedback">{{ t('Please select a status.') }}</div>
 </div>
 {%- endmacro %}
 

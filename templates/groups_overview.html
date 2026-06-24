@@ -14,38 +14,9 @@
 {%- endif -%}
 {%- endmacro %}
 
-<style>
-.create-group-panel,
-.overview-edit-panel,
-.overview-delete-panel {
-    display: none;
-}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}">
 
-.create-group-panel.is-open,
-.overview-edit-panel.is-open,
-.overview-delete-panel.is-open {
-    display: block;
-}
-
-.groups-hero {
-    border: 1px solid rgba(216, 225, 223, 0.9);
-    border-radius: 1.2rem;
-    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(243, 247, 245, 0.92));
-}
-
-.group-overview-card {
-    border-radius: 1.1rem;
-}
-
-.group-overview-meta {
-    font-size: 0.88rem;
-}
-
-.group-overview-title {
-    letter-spacing: -0.01em;
-}
-</style>
-
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Groups')}]) }}
 <div class="groups-hero p-3 p-md-4 mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
     <div>
         <h2 class="mb-1 text-primary fw-bold group-overview-title"><i class="bi bi-collection me-2"></i>{{ txt('Groups Management', 'ניהול קבוצות') }}</h2>
@@ -178,11 +149,7 @@
         </div>
     </div>
     {% else %}
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body text-center text-muted py-5">
-            {{ txt('No groups yet. Create your first group.', 'עדיין אין קבוצות. אפשר ליצור את הקבוצה הראשונה.') }}
-        </div>
-    </div>
+    {{ empty_state(icon='bi-collection', message=txt('No groups yet. Create your first group.', 'עדיין אין קבוצות. אפשר ליצור את הקבוצה הראשונה.')) }}
     {% endfor %}
 </div>
 

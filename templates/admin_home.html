@@ -175,13 +175,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <div class="text-center py-5 text-muted">
-                    <i class="bi bi-calendar-x fs-2 d-block mb-2"></i>
-                    <p class="mb-2">{{ t('No sessions scheduled for today.') }}</p>
-                    <a href="{{ url_for('weekly_calendar') }}" class="btn btn-sm btn-primary rounded-pill">
-                        <i class="bi bi-plus-lg me-1"></i>{{ t('Open Calendar') }}
-                    </a>
-                </div>
+                {{ empty_state(icon='bi-calendar-x', message=t('No sessions scheduled for today.'), cta_url=url_for('weekly_calendar'), cta_text=t('Open Calendar')) }}
                 {% endif %}
             </div>
         </details>
@@ -359,7 +353,7 @@
                 <a href="{{ url_for('export_appointments_csv') }}" class="btn btn-outline-secondary text-start">
                     <i class="bi bi-filetype-csv me-2"></i>{{ t('Export Appointments CSV') }}
                 </a>
-                <button type="button" class="btn btn-outline-warning text-start" id="bulkCompletePastBtn">
+                <button type="button" class="btn btn-outline-warning text-start" id="bulkCompletePastBtn" data-confirm-modal data-confirm-message="{{ t('Mark all past scheduled appointments as completed?') }}">
                     <i class="bi bi-check2-all me-2"></i>{{ t('Mark Past Appointments as Completed') }}
                 </button>
                 <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary text-start">
@@ -374,7 +368,7 @@
                 <a href="{{ url_for('admin_profile') }}" class="btn btn-outline-secondary text-start">
                     <i class="bi bi-gear me-2"></i>{{ t('Settings & Profile') }}
                 </a>
-                <form method="post" action="{{ url_for('reset_test_patients') }}" onsubmit="return confirm('{{ t('This will replace current patient records with test data. Continue?') }}');">
+                <form method="post" action="{{ url_for('reset_test_patients') }}" data-confirm-modal data-confirm-message="{{ t('This will replace current patient records with test data. Continue?') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="confirm" value="RESET">
                     <button type="submit" class="btn btn-outline-danger text-start w-100">
@@ -422,7 +416,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <div class="text-center py-4 text-muted small">{{ t('No patients yet.') }}</div>
+                {{ empty_state(icon='bi-people', message=t('No patients yet.')) }}
                 {% endif %}
             </div>
         </details>
@@ -462,7 +456,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <div class="text-center py-4 text-muted small">{{ t('No recent activity.') }}</div>
+                {{ empty_state(icon='bi-clock-history', message=t('No recent activity.')) }}
                 {% endif %}
             </div>
         </details>
@@ -483,7 +477,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     bulkCompleteBtn.addEventListener('click', function() {
-        if (!confirm('{{ t('Mark all past scheduled appointments as completed?') }}')) return;
         fetch('{{ url_for('bulk_complete_past_appointments') }}', {
             method: 'POST',
             headers: {'X-CSRFToken': '{{ csrf_token() }}', 'Content-Type': 'application/json'}

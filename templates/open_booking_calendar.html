@@ -82,7 +82,7 @@
             </form>
 
             {% if not slots %}
-            <div class="alert alert-warning mt-3 mb-0">{{ 'כרגע אין שעות פנויות. נסה/י שוב מאוחר יותר.' if is_he else 'No available slots right now. Please try again later.' }}</div>
+            {{ empty_state(icon='bi-calendar-x', message=('כרגע אין שעות פנויות. נסה/י שוב מאוחר יותר.' if is_he else 'No available slots right now. Please try again later.')) }}
             {% endif %}
             {% endif %}
         </div>

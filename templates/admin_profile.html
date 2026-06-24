@@ -7,6 +7,7 @@
             <div class="card-header bg-white border-0 py-3">
                 <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-person-gear me-2"></i>{{ t('Admin Profile') }}</h4>
             </div>
+            {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Admin Profile')}]) }}
             <div class="card-body p-4">
                 <form method="post" class="row g-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -236,7 +237,7 @@
                         </table>
                     </div>
                     {% else %}
-                    <div class="small text-muted">No auth events recorded yet.</div>
+                    {{ empty_state(icon='bi-shield-lock', message='No auth events recorded yet.') }}
                     {% endif %}
                 </div>
             </div>
@@ -250,7 +251,7 @@
             <div class="collapse" id="backupCollapse">
                 <div class="card-body p-4">
                     <p class="small text-muted mb-3">{{ t('Restoring will replace the current database with the selected backup. A safety copy of the current DB is created automatically before restore.') }}</p>
-                    <form method="post" action="{{ url_for('restore_backup_now') }}" onsubmit="return confirm('{{ t('Restore selected backup? This will replace current live data.') }}');">
+                    <form method="post" action="{{ url_for('restore_backup_now') }}" data-confirm-modal data-confirm-message="{{ t('Restore selected backup? This will replace current live data.') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row g-2 align-items-end">
                             <div class="col-md-9">
@@ -431,7 +432,7 @@
                             </div>
                             <div class="small text-muted mt-2">{{ t('Choose the Google Docs sources to sync into the site automatically.') }}</div>
                             {% else %}
-                            <div class="small text-muted">{{ t('No Google Docs are connected yet. Link a patient or group doc first.') }}</div>
+                            {{ empty_state(icon='bi-google', message=t('No Google Docs are connected yet. Link a patient or group doc first.')) }}
                             {% endif %}
                         </div>
 
@@ -473,7 +474,7 @@
                                 </table>
                             </div>
                             {% else %}
-                            <div class="small text-muted">{{ t('No sync history yet.') }}</div>
+                            {{ empty_state(icon='bi-arrow-repeat', message=t('No sync history yet.')) }}
                             {% endif %}
                         </div>
                     </form>
@@ -807,11 +808,7 @@
 })();
 </script>
 
-<style>
-.admin-pw-check { font-size:.75rem; background:#f1f5f9; color:#64748b; border-color:#e2e8f0 !important; transition:background .2s,color .2s; }
-.admin-pw-check.ok  { background:#dcfce7; color:#166534; border-color:#86efac !important; }
-.admin-pw-check.bad { background:#fee2e2; color:#991b1b; border-color:#fca5a5 !important; }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tweaks.css') }}">
 <script>
 (function () {
     var np = document.getElementById('adminNewPasswordInput');

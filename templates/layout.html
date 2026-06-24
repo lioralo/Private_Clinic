@@ -3,7 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>(function(){var t;try{t=localStorage.getItem('clinic-theme')}catch(e){}if(!t)t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-bs-theme',t)})();</script>
     <title>{% if lang == 'he' %}ליאור אלוני - קליניק{% else %}Lior Aloni Clinic{% endif %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 
     <!-- Bootstrap CSS (forms, tabs, modals, offcanvas) -->
     {% if lang == 'he' %}
@@ -11,202 +14,16 @@
     {% else %}
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
     {% endif %}
-    <!-- Bootstrap Icons -->
+    <!-- Bootstrap Icons (vendored) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!-- Tailwind CSS (design system) -->
-    <script src="{{ url_for('static', filename='vendor/tailwind/tailwindcss.com.js') }}"></script>
+    <!-- Tailwind CSS (built) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-
-    <!-- Tailwind Configuration (updated palette) -->
-    <script>
-    tailwind.config = {
-        darkMode: "class",
-        theme: {
-            extend: {
-                colors: {
-                    "primary":                   "#5676b6",
-                    "primary-container":         "#134e4a",
-                    "on-primary":                "#ffffff",
-                    "on-primary-container":      "#87beb8",
-                    "secondary":                 "#6c7792",
-                    "secondary-container":       "#d1e7e4",
-                    "on-secondary":              "#ffffff",
-                    "on-secondary-container":    "#546866",
-                    "surface":                   "#f7f9fb",
-                    "surface-container":         "#eceef0",
-                    "surface-container-low":     "#f2f4f6",
-                    "surface-container-lowest":  "#ffffff",
-                    "surface-container-high":    "#e6e8ea",
-                    "surface-container-highest": "#e0e3e5",
-                    "on-surface":                "#191c1e",
-                    "on-surface-variant":        "#404847",
-                    "outline":                   "#707977",
-                    "outline-variant":           "#bfc8c6",
-                    "primary-fixed":             "#b5ede7",
-                    "primary-fixed-dim":         "#9ad1cb",
-                    "error":                     "#ba1a1a",
-                    "error-container":           "#ffdad6",
-                    "on-error":                  "#ffffff",
-                    "on-error-container":        "#93000a",
-                    "background":                "#f7f9fb",
-                    "on-background":             "#191c1e",
-                },
-                borderRadius: {
-                    "DEFAULT": "0.25rem",
-                    "lg":   "0.5rem",
-                    "xl":   "0.75rem",
-                    "2xl":  "1rem",
-                    "3xl":  "1.5rem",
-                    "full": "9999px",
-                },
-                fontFamily: {
-                    "headline": ["Segoe UI", "Arial", "sans-serif"],
-                    "body":     ["Segoe UI", "Arial", "sans-serif"],
-                },
-            },
-        },
-    }
-    </script>
-
-    <style>
-        /* Hebrew body font */
-        :dir(rtl) body,
-        :dir(rtl) button,
-        :dir(rtl) input,
-        :dir(rtl) select,
-        :dir(rtl) textarea,
-        :dir(rtl) .btn,
-        :dir(rtl) .form-control,
-        :dir(rtl) .form-select,
-        [dir="rtl"] body,
-        [dir="rtl"] button,
-        [dir="rtl"] input,
-        [dir="rtl"] select,
-        [dir="rtl"] textarea,
-        [dir="rtl"] .btn,
-        [dir="rtl"] .form-control,
-        [dir="rtl"] .form-select {
-            font-family: 'Heebo', 'Assistant', 'Rubik', 'Noto Sans Hebrew', sans-serif !important;
-        }
-        /* Sidebar active link */
-        .sidebar-link-active {
-            background-color: #5676b6 !important;
-            color: #ffffff !important;
-        }
-
-        .admin-sidebar {
-            width: 16rem;
-            max-width: 85vw;
-            will-change: transform;
-            border-inline-end: 1px solid rgb(226 232 240);
-        }
-
-        .admin-header {
-            inset-inline: 0;
-        }
-
-        .notification-recipient-list {
-            max-height: 220px;
-            overflow-y: auto;
-        }
-
-        .stable-filter-btn {
-            min-width: 6.5rem;
-            min-height: 2rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.35rem;
-            white-space: nowrap;
-            font-weight: 600 !important;
-            line-height: 1.2;
-            box-sizing: border-box;
-            border-width: 1px !important;
-            transform: none !important;
-            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .stable-filter-btn:hover,
-        .stable-filter-btn:focus,
-        .stable-filter-btn:active {
-            font-weight: 600 !important;
-            transform: none !important;
-        }
-
-        .stable-filter-btn.is-selected {
-            background-color: rgba(86, 118, 182, 0.12) !important;
-            color: #36538a !important;
-            border-color: rgba(86, 118, 182, 0.45) !important;
-            box-shadow: none !important;
-        }
-
-        .notification-history-item {
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 0.9rem;
-            padding: 0.75rem;
-            background: #fff;
-        }
-
-        .collapse.show {
-            display: block;
-            visibility: visible !important;
-        }
-
-        .collapsing {
-            visibility: visible !important;
-        }
-
-        @media (max-width: 1023.98px) {
-            .admin-sidebar {
-                position: fixed;
-                top: 0;
-                bottom: 0;
-                z-index: 40;
-                opacity: 0;
-                pointer-events: none;
-                transition: transform 0.28s ease, opacity 0.28s ease;
-                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
-            }
-            .admin-sidebar {
-                inset-inline-start: 0;
-                transform: translateX(-105%);
-            }
-            html:dir(rtl) .admin-sidebar,
-            html[dir="rtl"] .admin-sidebar {
-                transform: translateX(105%);
-            }
-            .admin-sidebar.is-open {
-                transform: translateX(0) !important;
-                opacity: 1;
-                pointer-events: auto;
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .admin-header {
-                inset-inline-start: 16rem;
-                inset-inline-end: 0;
-            }
-            html:dir(rtl) .admin-header,
-            html[dir="rtl"] .admin-header {
-                inset-inline-end: 16rem;
-                inset-inline-start: 0;
-            }
-            .admin-sidebar {
-                position: static !important;
-                inset: auto !important;
-                transform: none !important;
-                opacity: 1 !important;
-                pointer-events: auto !important;
-                box-shadow: none !important;
-                max-width: none;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}" media="print">
 </head>
 <body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 <a href="#main-content" class="skip-link">{{ 'דלג לתוכן הראשי' if lang == 'he' else 'Skip to main content' }}</a>
@@ -243,6 +60,64 @@
     {% endfor %}
 {%- endmacro %}
 
+{% macro form_field(field, label='', type='text', value='', required=false, errors=[], placeholder='', help_text='') -%}
+    <div class="mb-3">
+        {% if label %}
+        <label for="{{ field }}" class="form-label">{{ label }}{% if required %} <span class="text-danger">*</span>{% endif %}</label>
+        {% endif %}
+        {% if type == 'textarea' %}
+        <textarea id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}"{% if required %} required{% endif %}>{{ value }}</textarea>
+        {% elif type == 'select' %}
+        <select id="{{ field }}" name="{{ field }}" class="form-select{% if errors %} is-invalid{% endif %}"{% if required %} required{% endif %}>
+            {{ caller() if caller else '' }}
+        </select>
+        {% else %}
+        <input type="{{ type }}" id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}" value="{{ value }}"{% if required %} required{% endif %}>
+        {% endif %}
+        {% if errors %}
+        <div class="invalid-feedback">{{ errors|join(', ') }}</div>
+        {% elif help_text %}
+        <div class="form-text small text-muted">{{ help_text }}</div>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{% macro breadcrumb(items) -%}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="flex items-center gap-1.5 text-sm text-muted flex-wrap">
+        {% for item in items %}
+        <li class="flex items-center gap-1.5">
+            {% if not loop.last %}
+            <a href="{{ item.url }}" class="text-primary hover:underline">{{ item.label }}</a>
+            <i class="bi bi-chevron-right text-xs opacity-40"></i>
+            {% else %}
+            <span class="font-semibold text-[#191c1e]">{{ item.label }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+</nav>
+{%- endmacro %}
+
+{% macro empty_state(icon='bi-inbox', title='', message='', cta_url='', cta_text='', colspan='') -%}
+    {% if colspan %}
+    <td colspan="{{ colspan }}" class="text-center py-5">
+    {% else %}
+    <div class="text-center py-5">
+    {% endif %}
+        <i class="bi {{ icon }} fs-1 d-block mb-3 text-muted" style="opacity:.25"></i>
+        {% if title %}<h5 class="text-muted fw-semibold mb-2">{{ title }}</h5>{% endif %}
+        <p class="text-muted mb-0">{{ message }}</p>
+        {% if cta_url and cta_text %}
+        <a href="{{ cta_url }}" class="btn btn-primary btn-sm mt-3 rounded-pill px-4">{{ cta_text }}</a>
+        {% endif %}
+    {% if colspan %}
+    </td>
+    {% else %}
+    </div>
+    {% endif %}
+{%- endmacro %}
+
 {# ═══════════════════ LAYOUT SHELL (open) ══════════════════════ #}
 {# The content block is defined exactly ONCE below.               #}
 {# Conditional HTML wraps it from outside the block definition.   #}
@@ -251,10 +126,10 @@
 {# ── ADMIN: sidebar + main content ───────────────────────────── #}
 <div class="flex min-h-screen lg:h-screen overflow-hidden">
 
-    <div id="adminSidebarBackdrop" class="fixed inset-0 bg-slate-950/30 z-30 hidden lg:hidden transition-opacity"></div>
+    <div id="adminSidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar #}
-    <aside id="adminSidebar" aria-hidden="true" class="admin-sidebar h-screen flex-shrink-0 bg-slate-50 flex flex-col p-4 overflow-y-auto">
+    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar h-screen flex-shrink-0 bg-slate-50 flex flex-col p-4 overflow-y-auto">
 
         {# Brand #}
         <div class="flex flex-col items-center mb-8 pt-2 px-2 flex-shrink-0">
@@ -323,8 +198,13 @@
             <span>{{ t('Add Patient') }}</span>
         </a>
 
-        {# Bottom: language + logout #}
+        {# Bottom: theme toggle, language + logout #}
         <div class="mt-auto border-t border-slate-200 pt-4 space-y-1 flex-shrink-0">
+            <button id="themeToggle" type="button"
+               class="w-full flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
+                <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:18px"></i>
+                <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
+            </button>
             <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
                class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 text-sm font-medium">
                 <i class="bi bi-translate" style="font-size:18px"></i>
@@ -479,86 +359,6 @@
 </footer>
 {% endif %}
 
-    <script>
-    window.showAppToast = function(message, options) {
-        if (!message) {
-            return;
-        }
-
-        const config = options || {};
-        const variant = config.variant || 'primary';
-        const title = config.title || '{{ t('Clinic Update') }}';
-        const autohide = config.autohide !== false;
-        const delay = Number(config.delay || 5000);
-
-        let container = document.getElementById('notificationContainer');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'notificationContainer';
-            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-            document.body.appendChild(container);
-        }
-
-        const toast = document.createElement('div');
-        toast.className = 'toast border-' + variant;
-        toast.setAttribute('role', 'alert');
-        toast.setAttribute('aria-live', 'assertive');
-        toast.setAttribute('aria-atomic', 'true');
-
-        const toastHeader = document.createElement('div');
-        toastHeader.className = 'toast-header bg-' + variant + ' text-white';
-
-        const icon = document.createElement('i');
-        icon.className = 'bi bi-bell-fill me-2';
-
-        const titleElement = document.createElement('strong');
-        titleElement.className = 'me-auto';
-        titleElement.textContent = title;
-
-        const nowLabel = document.createElement('small');
-        nowLabel.className = 'text-white-50';
-        nowLabel.textContent = '{{ t('Just now') }}';
-
-        const closeButton = document.createElement('button');
-        closeButton.type = 'button';
-        closeButton.className = 'btn-close btn-close-white';
-        closeButton.setAttribute('data-bs-dismiss', 'toast');
-        closeButton.setAttribute('aria-label', '{{ t('Close') }}');
-
-        toastHeader.appendChild(icon);
-        toastHeader.appendChild(titleElement);
-        toastHeader.appendChild(nowLabel);
-        toastHeader.appendChild(closeButton);
-
-        const toastBody = document.createElement('div');
-        toastBody.className = 'toast-body bg-light';
-        toastBody.textContent = String(message);
-
-        toast.appendChild(toastHeader);
-        toast.appendChild(toastBody);
-        container.appendChild(toast);
-
-        if (window.bootstrap && window.bootstrap.Toast) {
-            const instance = window.bootstrap.Toast.getOrCreateInstance(toast, {
-                autohide: autohide,
-                delay: delay
-            });
-            toast.addEventListener('hidden.bs.toast', function() {
-                toast.remove();
-            });
-            instance.show();
-            return;
-        }
-
-        toast.classList.add('show');
-        if (autohide) {
-            window.setTimeout(function() {
-                toast.remove();
-            }, delay);
-        }
-    };
-    </script>
-
     {% if current_user.is_authenticated %}
     <div class="offcanvas offcanvas-end" tabindex="-1" id="messagesOffcanvas" aria-labelledby="messagesOffcanvasLabel">
       <div class="offcanvas-header text-white" style="background: linear-gradient(135deg,#134e4a,#003633);">
@@ -677,504 +477,6 @@
       </div>
     </div>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const sidebar = document.getElementById('adminSidebar');
-        const sidebarToggle = document.getElementById('adminSidebarToggle');
-        const sidebarBackdrop = document.getElementById('adminSidebarBackdrop');
-        const offcanvas = document.getElementById('messagesOffcanvas');
-        const notificationsOffcanvas = document.getElementById('notificationsOffcanvas');
-        const isAdmin = {{ 'true' if current_user.role == 'admin' else 'false' }};
-        const conversationSelect = document.getElementById('conversationSelect');
-        const conversationSearch = document.getElementById('conversationSearch');
-        const conversationTypeFilter = document.getElementById('conversationTypeFilter');
-        const conversationStatusFilter = document.getElementById('conversationStatusFilter');
-        const recipientInput = document.getElementById('messageRecipientId');
-        const notificationAudience = document.getElementById('notificationAudience');
-        const selectedPatientsWrap = document.getElementById('selectedPatientsWrap');
-        const filterNotificationAll = document.getElementById('filterNotificationAll');
-        const filterNotificationCandidates = document.getElementById('filterNotificationCandidates');
-        const selectAllNotificationPatients = document.getElementById('selectAllNotificationPatients');
-        const clearAllNotificationPatients = document.getElementById('clearAllNotificationPatients');
-        const refreshNotificationsBtn = document.getElementById('refreshNotificationsBtn');
-        const markAllNotificationsReadBtn = document.getElementById('markAllNotificationsReadBtn');
-        const notificationHistoryList = document.getElementById('notificationHistoryList');
-        const notificationRecipientsList = document.getElementById('notificationRecipientsList');
-        const pageCsrfToken = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
-        let selectedConversation = null;
-        let allConversations = [];
-        let activeNotificationRecipientFilter = 'all';
-
-        function isDesktopViewport() {
-            return window.innerWidth >= 1024;
-        }
-
-        function setSidebarState(openOnMobile) {
-            if (!sidebar) return;
-            if (isDesktopViewport()) {
-                sidebar.classList.remove('is-open');
-                sidebar.setAttribute('aria-hidden', 'false');
-                if (sidebarBackdrop) {
-                    sidebarBackdrop.classList.add('hidden');
-                }
-                document.body.classList.remove('overflow-hidden');
-                if (sidebarToggle) {
-                    sidebarToggle.setAttribute('aria-expanded', 'false');
-                }
-                return;
-            }
-
-            const shouldOpen = !!openOnMobile;
-            sidebar.classList.toggle('is-open', shouldOpen);
-            sidebar.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
-            if (sidebarBackdrop) {
-                sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
-            }
-            document.body.classList.toggle('overflow-hidden', shouldOpen);
-            if (sidebarToggle) {
-                sidebarToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
-            }
-        }
-
-        function syncSidebarStateForViewport() {
-            if (!sidebar) return;
-            const isOpen = sidebarToggle && sidebarToggle.getAttribute('aria-expanded') === 'true';
-            setSidebarState(isOpen);
-        }
-
-        function toggleAdminSidebar(forceOpen) {
-            if (!sidebar || isDesktopViewport()) return;
-            const currentlyOpen = sidebar.classList.contains('is-open');
-            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !currentlyOpen;
-            setSidebarState(shouldOpen);
-        }
-
-        syncSidebarStateForViewport();
-
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', function () {
-                toggleAdminSidebar();
-            });
-        }
-
-        if (sidebarBackdrop) {
-            sidebarBackdrop.addEventListener('click', function () {
-                toggleAdminSidebar(false);
-            });
-        }
-
-        if (sidebar) {
-            sidebar.querySelectorAll('a').forEach((link) => {
-                link.addEventListener('click', function () {
-                    if (!isDesktopViewport()) {
-                        toggleAdminSidebar(false);
-                    }
-                });
-            });
-        }
-
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
-                toggleAdminSidebar(false);
-            }
-        });
-
-        window.addEventListener('resize', syncSidebarStateForViewport);
-
-        if (offcanvas) {
-            offcanvas.addEventListener('show.bs.offcanvas', function () {
-                loadMessages();
-            });
-
-            if (conversationSelect) {
-                conversationSelect.addEventListener('change', function () {
-                    selectedConversation = conversationSelect.value || null;
-                    if (recipientInput) {
-                        recipientInput.value = selectedConversation || '';
-                    }
-                    loadMessages();
-                });
-            }
-
-            [conversationSearch, conversationTypeFilter, conversationStatusFilter].forEach((node) => {
-                if (!node) return;
-                node.addEventListener('input', function () {
-                    selectedConversation = null;
-                    loadMessages();
-                });
-                node.addEventListener('change', function () {
-                    selectedConversation = null;
-                    loadMessages();
-                });
-            });
-
-            document.getElementById('sendMessageForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                const content = document.getElementById('messageContent').value;
-                const csrfToken = document.getElementById('csrf_token').value;
-
-                if (content.trim() !== '') {
-                    if (isAdmin && !selectedConversation) {
-                        return;
-                    }
-                    const formBody = 'content=' + encodeURIComponent(content)
-                        + (isAdmin && selectedConversation ? '&recipient_id=' + encodeURIComponent(selectedConversation) : '');
-
-                    fetch('{{ url_for("api_send_message") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: formBody
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            document.getElementById('messageContent').value = '';
-                            loadMessages();
-                        }
-                    });
-                }
-            });
-        }
-
-        function toggleNotificationRecipientsVisibility() {
-            if (!notificationAudience || !selectedPatientsWrap) {
-                return;
-            }
-            selectedPatientsWrap.classList.toggle('d-none', notificationAudience.value !== 'selected');
-        }
-
-        function escapeHtml(value) {
-            return String(value || '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
-
-        function escapeAttribute(value) {
-            return escapeHtml(value).replace(/`/g, '&#96;');
-        }
-
-        function linkifyText(value) {
-            const text = String(value || '');
-            const tokenPattern = /(https?:\/\/[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
-            let html = '';
-            let lastIndex = 0;
-
-            text.replace(tokenPattern, function(match, _token, offset) {
-                html += escapeHtml(text.slice(lastIndex, offset));
-                if (/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(match)) {
-                    html += `<a href="mailto:${escapeAttribute(match)}" class="text-decoration-none">${escapeHtml(match)}</a>`;
-                } else {
-                    html += `<a href="${escapeAttribute(match)}" target="_blank" rel="noopener noreferrer" class="text-decoration-none">${escapeHtml(match)}</a>`;
-                }
-                lastIndex = offset + match.length;
-                return match;
-            });
-
-            html += escapeHtml(text.slice(lastIndex));
-            return html.replace(/\n/g, '<br>');
-        }
-
-        function applyNotificationRecipientFilter(filterName) {
-            activeNotificationRecipientFilter = filterName || 'all';
-            document.querySelectorAll('.notification-recipient-item').forEach((node) => {
-                const statusValue = (node.dataset.status || '').toLowerCase();
-                const shouldShow = activeNotificationRecipientFilter === 'all' || statusValue === 'candidate';
-                node.classList.toggle('d-none', !shouldShow);
-            });
-            if (filterNotificationAll) {
-                filterNotificationAll.classList.toggle('is-selected', activeNotificationRecipientFilter === 'all');
-            }
-            if (filterNotificationCandidates) {
-                filterNotificationCandidates.classList.toggle('is-selected', activeNotificationRecipientFilter === 'candidate');
-            }
-        }
-
-        function loadNotificationRecipients() {
-            if (!notificationRecipientsList || !isAdmin) {
-                return;
-            }
-            notificationRecipientsList.innerHTML = '<div class="text-muted small">{{ t('Loading...') }}</div>';
-            fetch('/api/notification_recipients')
-                .then(response => response.json())
-                .then(items => {
-                    if (!items || items.length === 0) {
-                        notificationRecipientsList.innerHTML = '<div class="text-muted small">{{ t('No patient conversations') }}</div>';
-                        return;
-                    }
-                    notificationRecipientsList.innerHTML = items.map(item => {
-                        const typeLabel = escapeHtml(String(item.patient_type || 'private').replace(/-/g, ' '));
-                        const statusLabel = escapeHtml(String(item.status || 'ongoing').replace(/-/g, ' '));
-                        const patientName = escapeHtml(item.patient_name || '');
-                        const disabledAttr = item.has_login ? '' : 'disabled';
-                        const mutedClass = item.has_login ? '' : ' opacity-50';
-                        const noLogin = item.has_login ? '' : `<span class="d-block text-muted">{{ t('No patient login') }}</span>`;
-                        return `
-                            <label class="notification-recipient-item d-flex align-items-start gap-2 py-1${mutedClass}" data-status="${escapeHtml(item.status || '')}" data-patient-type="${escapeHtml(item.patient_type || '')}">
-                                <input type="checkbox" name="patient_ids" value="${item.patient_id}" class="form-check-input mt-1 notification-patient-check" ${disabledAttr}>
-                                <span class="small">
-                                    <span class="fw-semibold">${patientName}</span>
-                                    <span class="badge bg-light text-dark border ms-1 text-capitalize">${typeLabel}</span>
-                                    <span class="badge bg-warning-subtle text-dark border ms-1 text-capitalize">${statusLabel}</span>
-                                    ${noLogin}
-                                </span>
-                            </label>
-                        `;
-                    }).join('');
-                    applyNotificationRecipientFilter(activeNotificationRecipientFilter);
-                })
-                .catch(() => {
-                    notificationRecipientsList.innerHTML = '<div class="text-danger small">{{ t('Error') }}</div>';
-                });
-        }
-
-        function updateNotificationBadges(unreadCount) {
-            document.querySelectorAll('.notification-badge').forEach((node) => {
-                if (unreadCount > 0) {
-                    node.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-                } else {
-                    node.remove();
-                }
-            });
-            if (markAllNotificationsReadBtn) {
-                markAllNotificationsReadBtn.disabled = unreadCount === 0;
-            }
-        }
-
-        function submitNotificationRead(notificationId, markAll) {
-            const body = new URLSearchParams();
-            if (markAll) {
-                body.set('all', '1');
-            } else if (notificationId) {
-                body.append('notification_id', String(notificationId));
-            }
-            fetch('/api/notifications/mark_read', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': pageCsrfToken
-                },
-                body: body.toString()
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        loadNotificationCenter();
-                    } else {
-                        window.showAppToast(data.message || '{{ t('Error') }}', {
-                            variant: 'danger',
-                            title: '{{ t('Error') }}'
-                        });
-                    }
-                })
-                .catch(() => window.showAppToast('{{ t('Error') }}', {
-                    variant: 'danger',
-                    title: '{{ t('Error') }}'
-                }));
-        }
-
-        window.markNotificationRead = function(notificationId) {
-            submitNotificationRead(notificationId, false);
-        };
-
-        function loadNotificationCenter() {
-            if (!notificationHistoryList) {
-                return;
-            }
-            notificationHistoryList.innerHTML = '<div class="text-muted small">{{ t('Loading...') }}</div>';
-            fetch('/api/notifications?all=1&mark_read=0')
-                .then(response => response.json())
-                .then(items => {
-                    const unreadCount = Array.isArray(items)
-                        ? items.filter(item => Number(item.is_read || 0) === 0).length
-                        : 0;
-                    updateNotificationBadges(unreadCount);
-                    if (!items || items.length === 0) {
-                        notificationHistoryList.innerHTML = '<div class="text-muted small">{{ t('No notifications yet.') }}</div>';
-                        return;
-                    }
-                    notificationHistoryList.innerHTML = items.map(item => {
-                        const badgeLabel = escapeHtml(item.audience ? String(item.audience).replace(/-/g, ' ') : '{{ t('Update') }}');
-                        const title = escapeHtml(item.title || '{{ t('Clinic Update') }}');
-                        const message = linkifyText(item.message || '');
-                        const createdAt = escapeHtml(item.created_at || '');
-                        const notificationId = Number(item.id || 0);
-                        const isUnread = Number(item.is_read || 0) === 0;
-                        const actionHtml = isUnread
-                            ? `<button type="button" class="btn btn-outline-success btn-sm rounded-pill" onclick="markNotificationRead(${notificationId})">{{ t('Mark as seen') }}</button>`
-                            : `<span class="badge bg-success-subtle text-success border">{{ t('Seen') }}</span>`;
-                        return `
-                            <div class="notification-history-item border rounded-3 p-2 ${isUnread ? 'border-primary-subtle bg-light-subtle' : ''}">
-                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                    <div class="fw-semibold text-dark">${title}</div>
-                                    <span class="badge bg-light text-dark border text-uppercase">${badgeLabel}</span>
-                                </div>
-                                <div class="text-muted mb-2" style="white-space:pre-wrap;">${message}</div>
-                                <div class="d-flex justify-content-between align-items-center gap-2">
-                                    <div class="small text-secondary">${createdAt}</div>
-                                    ${actionHtml}
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                })
-                .catch(() => {
-                    notificationHistoryList.innerHTML = '<div class="text-danger small">{{ t('Error') }}</div>';
-                });
-        }
-
-        if (notificationAudience) {
-            notificationAudience.addEventListener('change', toggleNotificationRecipientsVisibility);
-            toggleNotificationRecipientsVisibility();
-        }
-
-        if (filterNotificationAll) {
-            filterNotificationAll.addEventListener('click', function () {
-                applyNotificationRecipientFilter('all');
-            });
-        }
-
-        if (filterNotificationCandidates) {
-            filterNotificationCandidates.addEventListener('click', function () {
-                applyNotificationRecipientFilter('candidate');
-            });
-        }
-
-        if (selectAllNotificationPatients) {
-            selectAllNotificationPatients.addEventListener('click', function () {
-                document.querySelectorAll('.notification-recipient-item:not(.d-none) .notification-patient-check:not([disabled])').forEach((node) => {
-                    node.checked = true;
-                });
-            });
-        }
-
-        if (clearAllNotificationPatients) {
-            clearAllNotificationPatients.addEventListener('click', function () {
-                document.querySelectorAll('.notification-patient-check').forEach((node) => {
-                    node.checked = false;
-                });
-            });
-        }
-
-        if (refreshNotificationsBtn) {
-            refreshNotificationsBtn.addEventListener('click', loadNotificationCenter);
-        }
-
-        if (markAllNotificationsReadBtn) {
-            markAllNotificationsReadBtn.addEventListener('click', function () {
-                submitNotificationRead(null, true);
-            });
-        }
-
-        if (notificationsOffcanvas) {
-            notificationsOffcanvas.addEventListener('show.bs.offcanvas', function () {
-                loadNotificationCenter();
-                loadNotificationRecipients();
-            });
-        }
-
-        function loadMessages() {
-            let query = '';
-            if (isAdmin) {
-                const searchValue = conversationSearch ? conversationSearch.value.trim() : '';
-                const typeValue = conversationTypeFilter ? conversationTypeFilter.value : 'all';
-                const statusValue = conversationStatusFilter ? conversationStatusFilter.value : 'all';
-                const params = new URLSearchParams();
-                if (selectedConversation) params.set('conversation_with', selectedConversation);
-                if (searchValue) params.set('q', searchValue);
-                if (typeValue && typeValue !== 'all') params.set('patient_type', typeValue);
-                if (statusValue && statusValue !== 'all') params.set('status', statusValue);
-                query = params.toString() ? ('?' + params.toString()) : '';
-            } else if (selectedConversation) {
-                query = '?conversation_with=' + encodeURIComponent(selectedConversation);
-            }
-
-            fetch('{{ url_for("api_get_messages") }}' + query)
-                .then(response => response.json())
-                .then(payload => {
-                    const container = document.getElementById('messagesContainer');
-                    container.innerHTML = '';
-
-                    let messages = payload;
-
-                    if (isAdmin) {
-                        const conversations = payload.conversations || [];
-                        allConversations = conversations;
-
-                        if (conversationSelect) {
-                            conversationSelect.innerHTML = '';
-
-                            if (allConversations.length === 0) {
-                                conversationSelect.innerHTML = '<option value="">{{ t('No patient conversations') }}</option>';
-                            } else {
-                                allConversations.forEach((conv) => {
-                                    const option = document.createElement('option');
-                                    option.value = conv.user_id ? String(conv.user_id) : '';
-                                    option.disabled = !conv.can_message;
-                                    const unread = conv.unread_count ? ` (${conv.unread_count} {{ t('unread') }})` : '';
-                                    const locked = conv.can_message ? '' : ' ({{ t('No patient login') }})';
-                                    option.textContent = conv.patient_name + unread + locked;
-                                    conversationSelect.appendChild(option);
-                                });
-                            }
-                        }
-
-                        if (selectedConversation && !allConversations.some(c => c.user_id && String(c.user_id) === String(selectedConversation))) {
-                            selectedConversation = null;
-                        }
-
-                        const activeConversation = payload.active_conversation ? String(payload.active_conversation) : null;
-                        if (!selectedConversation && activeConversation) {
-                            selectedConversation = activeConversation;
-                        }
-
-                        if (!selectedConversation) {
-                            const firstAvailable = allConversations.find(c => c.can_message && c.user_id);
-                            selectedConversation = firstAvailable ? String(firstAvailable.user_id) : null;
-                        }
-
-                        if (conversationSelect && selectedConversation) {
-                            conversationSelect.value = selectedConversation;
-                        }
-
-                        if (recipientInput) {
-                            recipientInput.value = selectedConversation || '';
-                        }
-
-                        messages = payload.messages || [];
-                    }
-
-                    if (messages.length === 0) {
-                        container.innerHTML = '<div class="text-center py-4 text-muted small">{{ t('No messages yet.') }}</div>';
-                        return;
-                    }
-
-                    messages.forEach(msg => {
-                        const isMine = msg.sender_id === {{ current_user.id }};
-                        const alignClass = isMine ? 'text-end' : 'text-start';
-                        const bgClass = isMine ? 'bg-primary text-white' : 'bg-light border';
-                        const senderName = isMine ? '{{ t('You') }}' : (msg.sender_name || '{{ t('System/Admin') }}');
-
-                        container.innerHTML += `
-                            <div class="${alignClass} mb-3">
-                                <div class="smallest text-muted mb-1">${senderName}</div>
-                                <span class="d-inline-block p-2 rounded-3 ${bgClass}" style="max-width: 85%; word-break: break-word;">${msg.content}</span>
-                                <small class="text-muted d-block smallest mt-1">${msg.timestamp}</small>
-                            </div>
-                        `;
-                    });
-
-                    container.scrollTop = container.scrollHeight;
-                });
-        }
-
-    });
-    </script>
     {% endif %}
 
     <!-- Notification Toast Container (admin only) -->
@@ -1185,95 +487,62 @@
     <!-- FullCalendar JS -->
     <script src='{{ url_for('static', filename='vendor/fullcalendar/index.global.min.js') }}'></script>
 
-    {% if current_user.is_authenticated %}
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            function checkNotifications() {
-                fetch('/api/notifications')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.length > 0) {
-                            document.querySelectorAll('.notification-badge').forEach((node) => node.remove());
-                            const container = document.getElementById('notificationContainer');
-                            data.forEach(notification => {
-                                const title = notification.title || '{{ t('New Activity') }}';
-                                const toastHTML = `
-                                    <div class="toast show border-primary" role="alert" aria-live="assertive" aria-atomic="true">
-                                        <div class="toast-header bg-primary text-white">
-                                            <i class="bi bi-bell-fill me-2"></i>
-                                            <strong class="me-auto">${title}</strong>
-                                            <small class="text-white-50">{{ t('Just now') }}</small>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="{{ t('Close') }}"></button>
-                                        </div>
-                                        <div class="toast-body bg-light">
-                                            ${notification.message}
-                                        </div>
-                                    </div>
-                                `;
-                                container.insertAdjacentHTML('beforeend', toastHTML);
-                                const newToast = container.lastElementChild;
-                                setTimeout(() => {
-                                    newToast.classList.remove('show');
-                                    setTimeout(() => newToast.remove(), 500);
-                                }, 10000);
-                            });
-                        }
-                    })
-                    .catch(error => console.error('Error fetching notifications:', error));
-            }
-            setInterval(checkNotifications, 10000);
-            checkNotifications();
-        });
-    </script>
-    {% endif %}
-
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const endpoint = (document.body.dataset.endpoint || '').trim();
-        if (endpoint === 'login') {
-            return;
+    window.AppConfig = {
+        isAuthenticated: {{ 'true' if current_user.is_authenticated else 'false' }},
+        isAdmin: {{ 'true' if current_user.role == 'admin' else 'false' }},
+        userId: {{ current_user.id }},
+        csrfToken: '{{ csrf_token() }}',
+        endpoints: {
+            sendMessage: '{{ url_for("api_send_message") }}',
+            getMessages: '{{ url_for("api_get_messages") }}'
+        },
+        translations: {
+            loading: '{{ t("Loading...") }}',
+            error: '{{ t("Error") }}',
+            noMessages: '{{ t("No messages yet.") }}',
+            noNotifications: '{{ t("No notifications yet.") }}',
+            noConversations: '{{ t("No patient conversations") }}',
+            noLogin: '{{ t("No patient login") }}',
+            markAsSeen: '{{ t("Mark as seen") }}',
+            you: '{{ t("You") }}',
+            systemAdmin: '{{ t("System/Admin") }}',
+            newActivity: '{{ t("New Activity") }}',
+            justNow: '{{ t("Just now") }}',
+            close: '{{ t("Close") }}',
+            seen: '{{ t("Seen") }}',
+            update: '{{ t("Update") }}',
+            unread: '{{ t("unread") }}',
+            clinicUpdate: '{{ t("Clinic Update") }}',
+            darkMode: '{{ t("Dark Mode") }}',
+            lightMode: '{{ t("Light Mode") }}'
         }
-
-        {% if not current_user.is_authenticated or current_user.role == 'patient' %}
-        const blockClipboard = function(event) {
-            const eventTarget = event.target;
-            // Allow clipboard on elements explicitly marked with data-allow-clipboard
-            if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
-                return;
-            }
-            event.preventDefault();
-        };
-        // Render-time role checks keep admin pages from shipping the blocker at all.
-        document.addEventListener('copy', blockClipboard, true);
-        document.addEventListener('cut', blockClipboard, true);
-        document.addEventListener('paste', blockClipboard, true);
-        {% elif current_user.role == 'admin' %}
-        console.log('[Clinic] Admin clipboard access enabled (role: admin)');
-        // Prevent any third-party library (e.g. FullCalendar) from blocking the
-        // native browser context menu for admin users. Run at capture phase so
-        // we intercept before any bubble-phase listeners on child elements.
-        document.addEventListener('contextmenu', function(e) {
-            e.stopImmediatePropagation();
-            // Do NOT call preventDefault — we want the native menu to appear.
-        }, true);
-        {% endif %}
-
-        document.querySelectorAll('form').forEach((form) => {
-            form.setAttribute('autocomplete', 'off');
-        });
-
-        document.querySelectorAll('input, textarea').forEach((field) => {
-            const fieldType = (field.getAttribute('type') || '').toLowerCase();
-            if (fieldType === 'hidden' || fieldType === 'checkbox' || fieldType === 'radio' || fieldType === 'submit' || fieldType === 'button') {
-                return;
-            }
-            field.setAttribute('autocomplete', 'off');
-            field.setAttribute('autocorrect', 'off');
-            field.setAttribute('autocapitalize', 'none');
-            field.setAttribute('spellcheck', 'false');
-        });
-    });
+    };
     </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+    <!-- Reusable confirmation modal -->
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="confirmModalLabel">{{ t('Confirm') }}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
+          </div>
+          <div class="modal-body">
+            <p id="confirmModalMessage" class="mb-0">{{ t('Are you sure?') }}</p>
+            <div id="confirmModalReasonWrap" class="mb-0 d-none">
+              <label for="confirmModalReason" class="form-label mt-3">{{ t('Reason') }}</label>
+              <textarea id="confirmModalReason" class="form-control" rows="2" placeholder="{{ t('Required') }}" required></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
+            <button type="button" class="btn btn-danger" id="confirmModalBtn">{{ t('Confirm') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     {% block scripts %}{% endblock %}
 </body>

@@ -56,10 +56,7 @@
                             </div>
                         </div>
                     {% else %}
-                        <div class="py-5 text-center text-muted">
-                            <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-50"></i>
-                            <p class="small mb-0">No therapy sessions scheduled.</p>
-                        </div>
+                        {{ empty_state(icon='bi-calendar-x', message='No therapy sessions scheduled.') }}
                     {% endfor %}
                 </div>
             </div>
@@ -84,7 +81,7 @@
                                     <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">No receipts.</div>
+                                {{ empty_state(icon='bi-receipt', message='No receipts.') }}
                             {% endfor %}
                         </div>
                     </div>
@@ -108,7 +105,7 @@
                                     </div>
                                 </div>
                             {% else %}
-                                <div class="p-4 text-center text-muted smallest">No shared files.</div>
+                                {{ empty_state(icon='bi-file-earmark', message='No shared files.') }}
                             {% endfor %}
                         </div>
                     </div>
@@ -133,7 +130,7 @@
                         <span class="smallest text-muted mt-1">{{ message['timestamp'] }}</span>
                     </div>
                 {% else %}
-                    <div class="text-center text-muted p-4">No messages yet. Send a message to your therapist.</div>
+                    {{ empty_state(icon='bi-chat-dots', message='No messages yet. Send a message to your therapist.') }}
                 {% endfor %}
             </div>
 
@@ -153,19 +150,7 @@
     </div>
 </div>
 
-<script>
-    // Auto-scroll to bottom of chat
-    var chatHistory = document.getElementById('chatHistory');
-    chatHistory.scrollTop = chatHistory.scrollHeight;
-</script>
-
-<style>
-.tracking-wider { letter-spacing: 0.05em; }
-.placeholder-light::placeholder { color: rgba(255,255,255,0.4); }
-#calendar {
-    min-height: 500px;
-}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tweaks.css') }}">
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {

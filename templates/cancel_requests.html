@@ -1,5 +1,6 @@
 {% extends 'layout.html' %}
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Cancel Requests')}]) }}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="fw-bold mb-0"><i class="bi bi-x-circle me-2 text-primary"></i>{{ t('Cancel Requests') }}</h4>
     <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary rounded-pill btn-sm">{{ t('Back to Dashboard') }}</a>
@@ -30,7 +31,7 @@
                         {% if req['status'] == 'pending' %}
                         <form method="post" action="{{ url_for('approve_cancel_request', request_id=req['id']) }}" class="d-inline">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-outline-success rounded-pill" onclick="return confirm('{{ t('Mark appointment as cancelled?') }}')">
+                            <button type="submit" class="btn btn-sm btn-outline-success rounded-pill" data-confirm-modal data-confirm-message="{{ t('Mark appointment as cancelled?') }}">
                                 <i class="bi bi-check-circle me-1"></i>{{ t('Approve') }}
                             </button>
                         </form>
@@ -55,10 +56,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="text-center py-5 text-muted">
-            <i class="bi bi-check2-circle fs-1 d-block mb-3 opacity-50"></i>
-            <p class="mb-0">{{ t('No cancel requests pending.') }}</p>
-        </div>
+        {{ empty_state(icon='bi-check2-circle', message=t('No cancel requests pending.')) }}
         {% endif %}
     </div>
 </div>

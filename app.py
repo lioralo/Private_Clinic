@@ -41,6 +41,7 @@ from clinic_app.routes.billing import billing_bp
 from clinic_app.routes.google_calendar import google_calendar_bp
 from clinic_app.routes.messaging import messaging_bp
 from clinic_app.routes.admin import admin_bp
+from clinic_app.routes.google_docs import google_docs_bp
 from clinic_app.utils import (
     parse_recurrence_days,
     recurring_occurrences_between,
@@ -95,6 +96,7 @@ app.register_blueprint(billing_bp)
 app.register_blueprint(messaging_bp)
 app.register_blueprint(google_calendar_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(google_docs_bp)
 
 # Keep pre-refactor endpoint names stable for tests and backward compatibility.
 # Map: old_endpoint_name -> (blueprint_endpoint_name, url_rule, methods)
@@ -179,12 +181,47 @@ _legacy_calendar_aliases = [
     ('api_calendar_vacancy_occupy', '/api/calendar/vacancy/<int:override_id>/occupy', ['POST']),
     ('api_calendar_vacancy_delete', '/api/calendar/vacancy/<int:override_id>/delete', ['POST']),
     ('api_calendar_book', '/api/calendar/book', ['POST']),
+    ('weekly_calendar', '/calendar', ['GET']),
+    ('api_upcoming_appointments', '/api/appointments/upcoming', ['GET']),
+    ('api_create_public_booking_link', '/api/calendar/public-link', ['POST']),
+    ('open_public_booking_calendar', '/calendar/public/<token>', ['GET']),
+    ('api_public_calendar_book', '/api/calendar/public/<token>/book', ['POST']),
+    ('open_booking_page', '/calendar/open/<token>', ['GET']),
+    ('api_open_slot_book', '/api/calendar/open/<token>/book', ['POST']),
+    ('api_calendar_appointment_delete', '/api/calendar/appointment/<int:appointment_id>/delete', ['POST']),
+    ('api_calendar_appointment_update', '/api/calendar/appointment/<int:appointment_id>/update', ['POST']),
+    ('add_appointment', '/patient/<int:patient_id>/add_appointment', ['POST']),
+    ('export_ics', '/export_ics/<int:appointment_id>', ['GET']),
+    ('export_ical', '/appointment/<int:appointment_id>/ical', ['GET']),
+    ('delete_appointment', '/appointment/<int:appointment_id>/delete', ['POST']),
 ]
 for _endpoint, _rule, _methods in _legacy_calendar_aliases:
     _view = app.view_functions.get(f'calendar.{_endpoint}')
     if _view and _endpoint not in app.view_functions:
         app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
 del _legacy_calendar_aliases
+
+# Keep pre-refactor endpoint names stable for tests and backward compatibility.
+_legacy_google_docs_aliases = [
+    ('link_gdoc', '/patient/<int:patient_id>/link-gdoc', ['POST']),
+    ('attach_gdoc', '/patient/<int:patient_id>/attach-gdoc', ['POST']),
+    ('detach_gdoc', '/patient/<int:patient_id>/detach-gdoc', ['POST']),
+    ('open_gdoc', '/patient/<int:patient_id>/open-gdoc', ['GET']),
+    ('sync_from_gdoc', '/patient/<int:patient_id>/sync-from-gdoc', ['POST']),
+    ('link_group_gdoc', '/groups/<int:group_id>/link-gdoc', ['POST']),
+    ('attach_group_gdoc', '/groups/<int:group_id>/attach-gdoc', ['POST']),
+    ('detach_group_gdoc', '/groups/<int:group_id>/detach-gdoc', ['POST']),
+    ('open_group_gdoc', '/groups/<int:group_id>/open-gdoc', ['GET']),
+    ('sync_group_gdoc', '/groups/<int:group_id>/sync-gdoc', ['POST']),
+    ('pull_group_gdoc', '/groups/<int:group_id>/pull-gdoc', ['POST']),
+    ('push_group_gdoc', '/groups/<int:group_id>/push-gdoc', ['POST']),
+    ('gdoc_webhook', '/api/gdoc/webhook', ['POST']),
+]
+for _endpoint, _rule, _methods in _legacy_google_docs_aliases:
+    _view = app.view_functions.get(f'google_docs.{_endpoint}')
+    if _view and _endpoint not in app.view_functions:
+        app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
+del _legacy_google_docs_aliases
 
 # Keep pre-refactor endpoint names stable for tests and backward compatibility.
 _legacy_google_calendar_aliases = [
@@ -208,6 +245,42 @@ from clinic_app.routes.google_calendar import (
     _store_google_oauth_pending_state,
     _pop_google_oauth_pending_state,
     _load_active_admin_user,
+)
+
+# Re-export moved helpers for test backward compatibility
+from clinic_app.routes.calendar import (
+    calendar_allowed_windows,
+    build_recurrence_group_id,
+    canonical_recurrence_days,
+    estimate_recurring_series_end,
+    find_related_recurring_appointments,
+    ensure_recurrence_group_id,
+    build_group_recurrence_dates,
+    _combine_google_sync_messages,
+    _delete_google_events,
+    _sync_appointment_with_google,
+    _sync_multiple_appointments_with_google,
+    _handle_appointment_update_one,
+    _handle_appointment_update_upcoming,
+    _handle_appointment_update_all,
+    _insert_appointment_db,
+)
+
+# Re-export moved helpers for test backward compatibility
+from clinic_app.routes.google_docs import (
+    _extract_google_doc_id,
+    _extract_google_sheet_id,
+    _extract_google_activation_url,
+    _friendly_google_sheets_error,
+    _google_sheets_dependency_error,
+    _get_google_sheets_credentials,
+    _list_questionnaire_tabs,
+    _list_spreadsheet_tab_titles,
+    _create_diagnosee_questionnaires_sheet,
+    _copy_questionnaire_tabs_to_spreadsheet,
+    _pull_gdoc_notes,
+    _pull_group_gdoc_notes,
+    _sync_group_gdoc_sessions,
 )
 
 app.jinja_env.add_extension('jinja2.ext.do')
@@ -4524,44 +4597,6 @@ def patient_dashboard():
     )
 
 
-@app.route('/api/appointments/upcoming')
-@login_required
-def api_upcoming_appointments():
-    """API endpoint for upcoming appointments with meeting info"""
-    db = get_db()
-    
-    today = datetime.now().date()
-    appointments = db.execute('''
-        SELECT a.*, p.name as patient_name
-        FROM appointments a
-        LEFT JOIN patients p ON p.id = a.patient_id
-        WHERE a.patient_id = ?
-        AND a.appointment_date >= ?
-        AND COALESCE(a.status, 'scheduled') = 'scheduled'
-        ORDER BY a.appointment_date ASC, a.appointment_time ASC
-        LIMIT 10
-    ''', (current_user.patient_id, today.isoformat())).fetchall()
-    
-    result = []
-    for appt in appointments:
-        appt_date = datetime.fromisoformat(appt['appointment_date']).date()
-        days_away = (appt_date - today).days
-        
-        result.append({
-            'id': appt['id'],
-            'date': appt['appointment_date'],
-            'time': appt['appointment_time'],
-            'days_away': days_away,
-            'meeting_type': appt['meeting_type'] or 'in-person',
-            'meeting_link': appt['meeting_link'],
-            'is_today': days_away == 0,
-            'is_tomorrow': days_away == 1,
-            'patient_name': appt['patient_name']
-        })
-    
-    return jsonify(result)
-
-
 @app.route('/api/engagement/stats')
 @login_required
 def api_engagement_stats():
@@ -5503,26 +5538,6 @@ def daterange(start_date, end_date):
         current += timedelta(days=1)
 
 
-def calendar_allowed_windows(day_code):
-    # 0=Sunday ... 6=Saturday
-    # Requested clinic availability:
-    # Sunday: 14:00-15:00
-    # Monday: 09:00-10:00, 12:30-13:30
-    # Tuesday: fully blocked
-    # Wednesday: fully blocked
-    # Thursday: 10:00-15:00, 19:00-20:00
-    # Friday/Saturday: no regular slots
-    if day_code == 0:
-        return [('14:00', '15:00')]
-    if day_code == 1:
-        return [('09:00', '10:00'), ('12:30', '13:30')]
-    if day_code in (2, 3):
-        return []
-    if day_code == 4:
-        return [('10:00', '15:00'), ('19:00', '20:00')]
-    return []
-
-
 
 def recurring_occurrences_for_week(appt, week_start, week_end):
     base_date = parse_date_safe(appt['appointment_date'])
@@ -5575,114 +5590,6 @@ def recurring_occurrences_for_week(appt, week_start, week_end):
         week_index += 1
 
     return sorted(result)
-
-
-def build_recurrence_group_id():
-    return secrets.token_hex(16)
-
-
-def canonical_recurrence_days(appt):
-    days = parse_recurrence_days(appt)
-    if not days:
-        base_date = parse_date_safe(appt['appointment_date'])
-        if base_date:
-            days = [custom_weekday(base_date)]
-    return ','.join(str(day) for day in sorted(set(days)))
-
-
-def estimate_recurring_series_end(appt):
-    base_date = parse_date_safe(appt['appointment_date'])
-    if not base_date:
-        return None
-
-    explicit_end = parse_date_safe(appt['recurrence_end_date']) if 'recurrence_end_date' in appt.keys() else None
-    if explicit_end:
-        return explicit_end
-
-    recurrence_count = int(appt['recurrence_count'] or 0) if 'recurrence_count' in appt.keys() and appt['recurrence_count'] else 0
-    if recurrence_count > 0:
-        interval = max(int(appt['recurrence_interval'] or 1), 1)
-        probe_end = base_date + timedelta(weeks=max(interval * recurrence_count, 1) + 8)
-        occurrences = recurring_occurrences_between(appt, base_date, probe_end, max_occurrences=recurrence_count)
-        if occurrences:
-            return occurrences[-1]
-
-    return base_date
-
-
-def find_related_recurring_appointments(db, appt):
-    signature_days = canonical_recurrence_days(appt)
-    interval = max(int(appt['recurrence_interval'] or 1), 1)
-    cadence_days = max(interval * 7, 1)
-
-    rows = db.execute('''
-        SELECT *
-        FROM appointments
-        WHERE patient_id = ?
-          AND COALESCE(is_recurring, 0) = 1
-          AND appointment_time = ?
-          AND COALESCE(duration_minutes, 60) = ?
-          AND COALESCE(recurrence_interval, 1) = ?
-        ORDER BY appointment_date ASC, id ASC
-    ''', (
-        appt['patient_id'],
-        appt['appointment_time'],
-        int(appt['duration_minutes'] or 60),
-        interval,
-    )).fetchall()
-
-    candidates = [row for row in rows if canonical_recurrence_days(row) == signature_days]
-    if not candidates:
-        return [appt]
-
-    target_index = next((index for index, row in enumerate(candidates) if row['id'] == appt['id']), None)
-    if target_index is None:
-        return [appt]
-
-    cluster_start = target_index
-    cluster_end = target_index
-
-    while cluster_start > 0:
-        previous = candidates[cluster_start - 1]
-        current = candidates[cluster_start]
-        previous_end = estimate_recurring_series_end(previous)
-        current_start = parse_date_safe(current['appointment_date'])
-        if not previous_end or not current_start:
-            break
-        if (current_start - previous_end).days <= cadence_days + 1:
-            cluster_start -= 1
-            continue
-        break
-
-    while cluster_end < len(candidates) - 1:
-        current = candidates[cluster_end]
-        following = candidates[cluster_end + 1]
-        current_end = estimate_recurring_series_end(current)
-        following_start = parse_date_safe(following['appointment_date'])
-        if not current_end or not following_start:
-            break
-        if (following_start - current_end).days <= cadence_days + 1:
-            cluster_end += 1
-            continue
-        break
-
-    return candidates[cluster_start:cluster_end + 1]
-
-
-def ensure_recurrence_group_id(db, appt):
-    existing_group_id = (appt['recurrence_group_id'] or '').strip() if 'recurrence_group_id' in appt.keys() and appt['recurrence_group_id'] else ''
-    if existing_group_id:
-        return existing_group_id
-
-    related_rows = find_related_recurring_appointments(db, appt)
-    discovered_group_id = next(
-        ((row['recurrence_group_id'] or '').strip() for row in related_rows if 'recurrence_group_id' in row.keys() and row['recurrence_group_id']),
-        ''
-    )
-    group_id = discovered_group_id or build_recurrence_group_id()
-    update_data = [(group_id, row['id']) for row in related_rows]
-    db.executemany('UPDATE appointments SET recurrence_group_id = ? WHERE id = ?', update_data)
-    return group_id
 
 
 
@@ -6462,90 +6369,6 @@ def _week_start_for_date(day_obj):
     return day_obj - timedelta(days=custom_weekday(day_obj))
 
 
-@app.route('/calendar')
-@login_required
-def weekly_calendar():
-    db = get_db()
-    if current_user.role == 'admin':
-        ensure_ongoing_recurrence_from_previous_week(db)
-        ensure_ongoing_patients_have_upcoming_bookings(db)
-        ensure_default_recurring_vacancies(db)
-    patient_options = []
-    can_self_schedule = False
-    if current_user.role == 'admin':
-        patient_options = db.execute(
-            'SELECT id, name, status, patient_type FROM patients WHERE COALESCE(is_deleted, 0) = 0 ORDER BY COALESCE(patient_type, "private") ASC, name ASC'
-        ).fetchall()
-    else:
-        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-        can_self_schedule = bool(patient and int(patient['can_self_schedule'] or 0) == 1)
-        if not can_self_schedule:
-            flash('Self-booking is currently disabled by your therapist.')
-            return redirect(url_for('patient_home'))
-
-    initial_anchor = _nearest_calendar_anchor_date(db, current_user)
-    initial_week_start = _week_start_for_date(initial_anchor).isoformat()
-
-    return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
-                           is_admin=(current_user.role == 'admin'),
-                           initial_week_start=initial_week_start)
-
-
-@app.route('/api/calendar/public-link', methods=['POST'])
-@login_required
-def api_create_public_booking_link():
-    if current_user.role != 'admin':
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    db = get_db()
-    token = None
-    for _ in range(10):
-        candidate = secrets.token_urlsafe(16)
-        exists = db.execute('SELECT 1 FROM public_booking_links WHERE token = ?', (candidate,)).fetchone()
-        if not exists:
-            token = candidate
-            break
-    if not token:
-        return jsonify({'status': 'error', 'message': 'Could not create booking link.'}), 500
-
-    db.execute(
-        'INSERT INTO public_booking_links (token, created_by, is_active) VALUES (?, ?, 1)',
-        (token, current_user.id)
-    )
-    db.commit()
-
-    public_url = build_external_public_url('open_public_booking_calendar', token=token)
-    subject = quote('Self-booking calendar link')
-    body = quote(f'You can book an available slot using this secure link:\n{public_url}')
-    return jsonify({
-        'status': 'success',
-        'token': token,
-        'url': public_url,
-        'mailto': f'mailto:?subject={subject}&body={body}'
-    })
-
-
-def build_group_recurrence_dates(start_date, recurrence_interval_weeks=1, recurrence_end_date=None, recurrence_count=None):
-    """Generate a bounded list of recurring group session dates."""
-    interval = max(1, int(recurrence_interval_weeks or 1))
-    cap = 104
-    max_count = int(recurrence_count or 0)
-    if max_count <= 0:
-        max_count = 8
-    max_count = min(max_count, cap)
-
-    dates = []
-    current = start_date
-    for _ in range(cap):
-        if recurrence_end_date and current > recurrence_end_date:
-            break
-        dates.append(current)
-        if len(dates) >= max_count:
-            break
-        current = current + timedelta(days=interval * 7)
-    return dates
-
-
 def archive_patient_record(db, patient_id):
     patient = db.execute('SELECT id, name FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if not patient:
@@ -6692,134 +6515,6 @@ def get_group_members_for_session(db, group_id, session_date_iso):
         ORDER BY p.name ASC
     ''', (group_id, session_date_iso, session_date_iso)).fetchall()
     return [dict(row) for row in fallback]
-
-
-@app.route('/calendar/public/<token>')
-def open_public_booking_calendar(token):
-    db = get_db()
-    link_row = db.execute(
-        'SELECT id FROM public_booking_links WHERE token = ? AND COALESCE(is_active, 1) = 1',
-        (token,)
-    ).fetchone()
-
-    if not link_row:
-        page_lang = (request.args.get('lang') or session.get('lang') or 'en').strip().lower()
-        if page_lang not in {'en', 'he'}:
-            page_lang = 'en'
-        return render_template('open_booking_calendar.html', token=token, slots=[], link_invalid=True, page_lang=page_lang)
-
-    slots = collect_public_available_slots(db, weeks_ahead=10)
-    page_lang = (request.args.get('lang') or session.get('lang') or 'en').strip().lower()
-    if page_lang not in {'en', 'he'}:
-        page_lang = 'en'
-    return render_template('open_booking_calendar.html', token=token, slots=slots, link_invalid=False, page_lang=page_lang)
-
-
-@app.route('/api/calendar/public/<token>/book', methods=['POST'])
-@csrf.exempt
-def api_public_calendar_book(token):
-    rate_limit_response = _check_public_rate_limit('calendar-public-book', token=token)
-    if rate_limit_response is not None:
-        return rate_limit_response
-
-    # Honeypot: real browsers leave this hidden field blank; bots typically fill it.
-    if (request.form.get('website') or '').strip():
-        return jsonify({'status': 'ok', 'message': 'Booking received.'}), 200
-
-    db = get_db()
-    link_row = db.execute(
-        'SELECT id FROM public_booking_links WHERE token = ? AND COALESCE(is_active, 1) = 1',
-        (token,)
-    ).fetchone()
-    if not link_row:
-        return jsonify({'status': 'error', 'message': 'Booking link is invalid or expired.'}), 404
-
-    name = (request.form.get('name') or '').strip()
-    birth_date_raw = (request.form.get('birth_date') or '').strip()
-    phone = (request.form.get('phone') or '').strip()
-    email = (request.form.get('email') or '').strip()
-    booking_notes = (request.form.get('notes') or '').strip()
-    selected_date = (request.form.get('date') or '').strip()
-    selected_time = (request.form.get('time') or '').strip()
-    selected_duration_raw = (request.form.get('duration_minutes') or '').strip()
-
-    if not name:
-        return jsonify({'status': 'error', 'message': 'Name is required.'}), 400
-    if not phone and not email:
-        return jsonify({'status': 'error', 'message': 'Phone or email is required.'}), 400
-
-    birth_date = None
-    if birth_date_raw:
-        birth_date = parse_date_safe(birth_date_raw)
-        if not birth_date:
-            return jsonify({'status': 'error', 'message': 'Birth date is invalid.'}), 400
-
-    booking_date = parse_date_safe(selected_date)
-    booking_time = parse_time_safe(selected_time)
-    try:
-        duration = int(selected_duration_raw or '60')
-    except ValueError:
-        duration = 60
-    if duration <= 0:
-        duration = 60
-
-    if not booking_date or not booking_time:
-        return jsonify({'status': 'error', 'message': 'Please choose an available slot.'}), 400
-
-    available_keys = {
-        (slot['date'], slot['time'], int(slot['duration_minutes'] or 60))
-        for slot in collect_public_available_slots(db, weeks_ahead=10)
-    }
-    request_key = (booking_date.isoformat(), booking_time.strftime('%H:%M'), duration)
-    if request_key not in available_keys:
-        return jsonify({'status': 'error', 'message': 'Selected slot is no longer available.'}), 409
-
-    slot_start = datetime.combine(booking_date, booking_time)
-    slot_end = slot_start + timedelta(minutes=duration)
-    conflict = has_time_conflict(db, booking_date, slot_start, slot_end)
-    if conflict:
-        return jsonify({'status': 'error', 'message': 'Selected slot is no longer available.'}), 409
-
-    patient_cur = db.execute('''
-        INSERT INTO patients (name, status, email, phone, birth_date, patient_type)
-        VALUES (?, 'waiting', ?, ?, ?, 'private')
-    ''', (name, email or None, phone or None, birth_date.isoformat() if birth_date else None))
-    patient_id = patient_cur.lastrowid
-
-    db.execute('''
-        INSERT INTO appointments (
-            patient_id, appointment_date, appointment_time, duration_minutes,
-            meeting_type, meeting_title, status, is_recurring
-        ) VALUES (?, ?, ?, ?, 'in-person', 'Self-booked via public link', 'scheduled', 0)
-    ''', (patient_id, booking_date.isoformat(), booking_time.strftime('%H:%M'), duration))
-
-    db.execute('''
-        UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-    ''', (
-        name,
-        phone or email,
-        booking_notes or None,
-        datetime.now().isoformat(),
-        booking_date.isoformat(),
-        booking_time.strftime('%H:%M')
-    ))
-
-    contact_text = phone or email
-    notes_suffix = f' Notes: {booking_notes}.' if booking_notes else ''
-    message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.{notes_suffix}'
-    db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
-    db.execute(
-        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-        (patient_id, 'public-self-book', message)
-    )
-    db.commit()
-
-    return jsonify({
-        'status': 'success',
-        'message': 'Booking received. We created a pending patient record and reserved the slot.'
-    })
 
 
 @app.route('/groups', methods=['GET', 'POST'])
@@ -7739,222 +7434,6 @@ def update_patient_group_attendance(patient_id, session_id):
 
 
 
-
-
-
-
-
-
-
-
-@app.route('/calendar/open/<token>')
-def open_booking_page(token):
-    """Public booking page – no login required. Patients use this to book a shared vacancy slot."""
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
-        (token,)
-    ).fetchone()
-
-    if not row:
-        booked_row = db.execute(
-            "SELECT * FROM slots_override WHERE share_token = ?",
-            (token,)
-        ).fetchone()
-        if booked_row:
-            return render_template('open_booking.html', slot=None, already_booked=True, token=token)
-        return render_template('open_booking.html', slot=None, already_booked=False, token=token, not_found=True)
-
-    date_obj = parse_date_safe(row['slot_date'])
-    t_obj = parse_time_safe(row['slot_time'])
-    duration = int(row['duration_minutes'] or 60)
-    end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
-    slot = {
-        'id': row['id'],
-        'date': date_obj.strftime('%A, %B %d, %Y') if date_obj else row['slot_date'],
-        'date_iso': row['slot_date'],
-        'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
-        'end_time': end_dt.strftime('%H:%M') if end_dt else '',
-        'duration_minutes': duration,
-    }
-    return render_template('open_booking.html', slot=slot, already_booked=False, not_found=False, token=token)
-
-
-@app.route('/api/calendar/open/<token>/book', methods=['POST'])
-@csrf.exempt
-def api_open_slot_book(token):
-    """Public endpoint – books a shared vacancy slot. No authentication required."""
-    rate_limit_response = _check_public_rate_limit('calendar-open-slot-book', token=token)
-    if rate_limit_response is not None:
-        return rate_limit_response
-
-    booker_name = (request.form.get('name') or '').strip()
-    booker_phone = (request.form.get('phone') or '').strip()
-    booker_notes = (request.form.get('notes') or '').strip()
-
-    if not booker_name:
-        return jsonify({'status': 'error', 'message': 'Name is required.'}), 400
-
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
-        (token,)
-    ).fetchone()
-
-    if not row:
-        return jsonify({'status': 'error', 'message': 'This slot is no longer available.'}), 409
-
-    date_obj = parse_date_safe(row['slot_date'])
-    t_obj = parse_time_safe(row['slot_time'])
-    if not date_obj or not t_obj:
-        return jsonify({'status': 'error', 'message': 'Invalid slot data.'}), 500
-
-    duration = int(row['duration_minutes'] or 60)
-    slot_start = datetime.combine(date_obj, t_obj)
-    slot_end = slot_start + timedelta(minutes=duration)
-
-    conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
-    if conflict:
-        return jsonify({'status': 'error', 'message': 'This slot is no longer available – another booking was just made.'}), 409
-
-    full_title = booker_name
-    if booker_notes:
-        full_title = f"{booker_name} – {booker_notes}"
-
-    db.execute('''
-        INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
-        VALUES (?, ?, ?, ?, 0, 'blocked')
-    ''', (row['slot_date'], row['slot_time'], duration, full_title))
-
-    db.execute('''
-        UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
-        WHERE id = ?
-    ''', (booker_name, booker_phone, datetime.now().isoformat(), row['id']))
-    db.commit()
-    return jsonify({'status': 'success', 'message': f'Your booking for {row["slot_date"]} at {row["slot_time"]} has been confirmed!'})
-
-
-
-
-
-
-
-
-
-
-
-
-def _combine_google_sync_messages(*messages):
-    ordered = []
-    for message in messages:
-        normalized = (message or '').strip()
-        if normalized and normalized not in ordered:
-            ordered.append(normalized)
-    return ' '.join(ordered) if ordered else None
-
-
-def _delete_google_events(db, google_event_ids):
-    event_ids = []
-    for event_id in google_event_ids or []:
-        normalized = str(event_id or '').strip()
-        if normalized and normalized not in event_ids:
-            event_ids.append(normalized)
-    if not event_ids:
-        return None
-
-    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
-    if not gcal_ref or not getattr(gcal_ref, 'GOOGLE_LIBS_AVAILABLE', False):
-        return 'Google Calendar sync is unavailable because the Google libraries are not installed.'
-    if not getattr(gcal_ref, 'is_connected', lambda _db: False)(db):
-        return 'Google Calendar is not connected, so linked Google events could not be removed.'
-
-    failed_ids = []
-    for event_id in event_ids:
-        try:
-            deleted = bool(gcal_ref.delete_event_from_google(db, event_id))
-        except Exception:
-            deleted = False
-        if not deleted:
-            failed_ids.append(event_id)
-
-    if failed_ids:
-        return 'Google Calendar removal failed for one or more linked events.'
-    return None
-
-
-def _sync_appointment_with_google(db, appointment_id):
-    appointment = db.execute(
-        '''
-        SELECT a.id,
-               a.patient_id,
-               a.appointment_date,
-               a.appointment_time,
-               a.duration_minutes,
-               a.meeting_type,
-               a.meeting_link,
-               a.save_to_google,
-               a.google_event_id,
-               p.name AS patient_name
-        FROM appointments a
-        LEFT JOIN patients p ON p.id = a.patient_id
-        WHERE a.id = ?
-        ''',
-        (appointment_id,),
-    ).fetchone()
-    if not appointment:
-        return None
-
-    save_to_google = int(appointment['save_to_google'] or 0) if 'save_to_google' in appointment.keys() else 0
-    google_event_id = str(appointment['google_event_id'] or '').strip() if 'google_event_id' in appointment.keys() else ''
-    if not save_to_google and not google_event_id:
-        return None
-
-    gcal_ref = _import_optional_module('google_calendar', 'scripts.google_calendar')
-    if not gcal_ref or not getattr(gcal_ref, 'GOOGLE_LIBS_AVAILABLE', False):
-        return 'Google Calendar sync is unavailable because the Google libraries are not installed.'
-    if not getattr(gcal_ref, 'is_connected', lambda _db: False)(db):
-        return 'Google Calendar is not connected. The appointment was saved locally only.'
-
-    try:
-        if google_event_id and not save_to_google:
-            deleted = bool(gcal_ref.delete_event_from_google(db, google_event_id))
-            if not deleted:
-                return 'Google Calendar removal failed. The appointment was updated locally, but the old Google event could not be removed.'
-            db.execute('UPDATE appointments SET google_event_id = NULL WHERE id = ?', (appointment_id,))
-            db.commit()
-            return None
-
-        event_id = gcal_ref.sync_appointment_to_google(
-            db,
-            appointment_id=appointment_id,
-            patient_name=(appointment['patient_name'] or 'Appointment'),
-            date_iso=appointment['appointment_date'],
-            time_str=appointment['appointment_time'],
-            duration_minutes=appointment['duration_minutes'] or 60,
-            meeting_type=(appointment['meeting_type'] or 'in-person'),
-            meeting_link=appointment['meeting_link'] or '',
-            google_event_id=google_event_id or None,
-        )
-    except Exception as exc:
-        return f'Google Calendar sync failed: {exc}'
-
-    if not event_id:
-        return 'Google Calendar sync failed. The appointment was saved locally only.'
-    return None
-
-
-def _sync_multiple_appointments_with_google(db, appointment_ids):
-    messages = []
-    for appointment_id in appointment_ids or []:
-        message = _sync_appointment_with_google(db, int(appointment_id))
-        if message:
-            messages.append(message)
-    return _combine_google_sync_messages(*messages)
-
-
-
-
 @app.route('/patient/<int:patient_id>/quick_book', methods=('POST',))
 @login_required
 def quick_book_patient_appointment(patient_id):
@@ -8053,122 +7532,6 @@ def quick_book_patient_appointment(patient_id):
     else:
         flash('Appointment booked.', 'success')
     return redirect_to_patient_tab(patient_id, 'info')
-
-
-@app.route('/api/calendar/appointment/<int:appointment_id>/delete', methods=['POST'])
-@login_required
-def api_calendar_appointment_delete(appointment_id):
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if not appt:
-        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
-
-    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    if current_user.role == 'patient':
-        patient = db.execute('SELECT can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
-        if not patient or int(patient['can_self_schedule'] or 0) != 1:
-            return jsonify({'status': 'error', 'message': 'Self-management is disabled.'}), 403
-
-    is_recurring = int(appt['is_recurring'] or 0) == 1
-    scope = request.form.get('scope', 'all').strip()
-    occurrence_date_raw = request.form.get('occurrence_date', '').strip()
-    recurrence_group_id = None
-    related_rows = [appt]
-
-    if is_recurring:
-        recurrence_group_id = ensure_recurrence_group_id(db, appt)
-        if recurrence_group_id:
-            related_rows = db.execute(
-                'SELECT * FROM appointments WHERE recurrence_group_id = ? ORDER BY appointment_date ASC, id ASC',
-                (recurrence_group_id,)
-            ).fetchall()
-
-    if not is_recurring or scope == 'all':
-        deleted_google_event_ids = [row['google_event_id'] for row in related_rows if 'google_event_id' in row.keys()]
-        if is_recurring and recurrence_group_id:
-            db.execute('DELETE FROM appointments WHERE recurrence_group_id = ?', (recurrence_group_id,))
-        else:
-            db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-        db.commit()
-        sync_message = _delete_google_events(db, deleted_google_event_ids)
-        response = {'status': 'success'}
-        if sync_message:
-            response['message'] = sync_message
-        return jsonify(response)
-
-    if scope == 'one':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        try:
-            existing_excluded = appt['excluded_dates'] or ''
-        except (KeyError, IndexError):
-            existing_excluded = ''
-        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-        if occ_date.isoformat() not in excluded_list:
-            excluded_list.append(occ_date.isoformat())
-        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-                   (','.join(excluded_list), appointment_id))
-        db.commit()
-        return jsonify({'status': 'success'})
-
-    if scope == 'upcoming':
-        occ_date = parse_date_safe(occurrence_date_raw)
-        if not occ_date:
-            deleted_google_event_ids = [row['google_event_id'] for row in related_rows if 'google_event_id' in row.keys()]
-            if recurrence_group_id:
-                db.execute('DELETE FROM appointments WHERE recurrence_group_id = ?', (recurrence_group_id,))
-            else:
-                db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-            db.commit()
-            sync_message = _delete_google_events(db, deleted_google_event_ids)
-            response = {'status': 'success'}
-            if sync_message:
-                response['message'] = sync_message
-            return jsonify(response)
-
-        deleted_google_event_ids = []
-        for row in related_rows:
-            base_date = parse_date_safe(row['appointment_date'])
-            if not base_date:
-                continue
-            
-            is_occurrence_in_series = False
-            if base_date > occ_date:
-                is_occurrence_in_series = False
-            else:
-                row_occurrences = recurring_occurrences_between(row, occ_date, occ_date)
-                is_occurrence_in_series = len(row_occurrences) > 0
-            
-            if is_occurrence_in_series:
-                if base_date >= occ_date:
-                    # Truncating to occ_date-1 would make end < start — delete instead.
-                    deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
-                    db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-                else:
-                    cutoff = (occ_date - timedelta(days=1)).isoformat()
-                    db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
-            elif base_date >= occ_date:
-                deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
-                db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-        db.commit()
-        sync_message = _delete_google_events(db, deleted_google_event_ids)
-        response = {'status': 'success'}
-        if sync_message:
-            response['message'] = sync_message
-        return jsonify(response)
-
-    # Fallback
-    deleted_google_event_ids = [appt['google_event_id']] if 'google_event_id' in appt.keys() else []
-    db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-    db.commit()
-    sync_message = _delete_google_events(db, deleted_google_event_ids)
-    response = {'status': 'success'}
-    if sync_message:
-        response['message'] = sync_message
-    return jsonify(response)
 
 @app.route('/patient/<int:patient_id>/add_note', methods=('POST',))
 @login_required
@@ -9185,127 +8548,6 @@ def _copy_questionnaire_tabs_to_spreadsheet(db, destination_sheet_id, selected_t
         return None, str(exc)
 
 
-@app.route('/patient/<int:patient_id>/link-gdoc', methods=['POST'])
-@login_required
-def link_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    dependency_error = _google_docs_dependency_error()
-    if dependency_error:
-        return jsonify({'error': dependency_error}), 500
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    creds = gcal.load_credentials(db)
-    if not creds:
-        return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
-    try:
-        creds = gcal._refresh_and_save(db, creds)
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-    try:
-        doc_id = gdocs.create_patient_doc(creds, patient['name'])
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-
-    # Optionally register a Drive Watch webhook
-    webhook_url = (request.form.get('webhook_url') or '').strip()
-    channel_id, expiry = None, None
-    if webhook_url:
-        try:
-            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
-        except Exception:
-            pass  # webhook is optional; manual sync still works
-
-    db.execute(
-        'UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
-        (doc_id, channel_id, expiry, patient_id)
-    )
-    db.commit()
-    return jsonify({
-        'status':  'ok',
-        'doc_id':  doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-        'message': 'Google Doc created and linked successfully.',
-    })
-
-
-@app.route('/patient/<int:patient_id>/attach-gdoc', methods=['POST'])
-@login_required
-def attach_gdoc(patient_id):
-    """Link an existing Google Doc to a patient by URL or document ID."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    doc_url = request.form.get('doc_url', '').strip()
-    if not doc_url:
-        return jsonify({'error': 'No document URL provided'}), 400
-    doc_id = _extract_google_doc_id(doc_url)
-    if not doc_id:
-        return jsonify({'error': 'Invalid document URL or ID'}), 400
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    db.execute('UPDATE patients SET gdoc_id = ? WHERE id = ?', (doc_id, patient_id))
-    db.commit()
-    return jsonify({
-        'status': 'ok',
-        'doc_id': doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-        'message': 'Google Doc linked successfully.',
-    })
-
-
-@app.route('/patient/<int:patient_id>/detach-gdoc', methods=['POST'])
-@login_required
-def detach_gdoc(patient_id):
-    """Unlink the Google Doc from a patient (does not delete the doc itself)."""
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient:
-        return jsonify({'error': 'Patient not found'}), 404
-    db.execute(
-        'UPDATE patients SET gdoc_id = NULL, gdoc_watch_channel = NULL, gdoc_watch_expiry = NULL WHERE id = ?',
-        (patient_id,)
-    )
-    db.commit()
-    return jsonify({'status': 'ok', 'message': 'Google Doc disconnected successfully.'})
-
-
-@app.route('/patient/<int:patient_id>/open-gdoc')
-@login_required
-def open_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return 'Unauthorized', 403
-    db = get_db()
-    patient = db.execute('SELECT gdoc_id FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient or not patient['gdoc_id']:
-        flash('No Google Doc linked for this patient.')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
-    return redirect(f'https://docs.google.com/document/d/{patient["gdoc_id"]}/edit')
-
-
-@app.route('/patient/<int:patient_id>/sync-from-gdoc', methods=['POST'])
-@login_required
-def sync_from_gdoc(patient_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    dependency_error = _google_docs_dependency_error()
-    if dependency_error:
-        return jsonify({'error': dependency_error}), 500
-    db = get_db()
-    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if not patient or not patient['gdoc_id']:
-        return jsonify({'error': 'No Google Doc linked'}), 400
-    count, err = _pull_gdoc_notes(db, patient)
-    if err:
-        return jsonify({'error': err}), 500
-    return jsonify({'status': 'ok', 'synced': count, 'message': f'Synced {count} note(s) from Google Doc.'})
-
-
 def _pull_group_gdoc_notes(db, group):
     dependency_error = _google_docs_dependency_error()
     if dependency_error:
@@ -9685,238 +8927,6 @@ def _sync_group_gdoc_sessions(db, group, session_id=None):
     return len(blocks), None
 
 
-@app.route('/groups/<int:group_id>/link-gdoc', methods=['POST'])
-@login_required
-def link_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    dependency_error = _google_docs_dependency_error()
-    if dependency_error:
-        return jsonify({'error': dependency_error}), 500
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-    creds = gcal.load_credentials(db)
-    if not creds:
-        return jsonify({'error': 'Google not connected — connect via Admin Profile first'}), 400
-    try:
-        creds = gcal._refresh_and_save(db, creds)
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-    try:
-        create_group_doc = getattr(gdocs, 'create_group_doc', None)
-        group_name = (group['name'] or '').strip() or f'Group {group_id}'
-        if callable(create_group_doc):
-            doc_id = create_group_doc(creds, group_name)
-        else:
-            doc_id = gdocs.create_patient_doc(creds, f"Group — {group_name}")
-    except Exception as exc:
-        return jsonify({'error': str(exc)}), 500
-
-    webhook_url = (request.form.get('webhook_url') or '').strip()
-    channel_id, expiry = None, None
-    if webhook_url:
-        try:
-            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
-        except Exception:
-            pass
-
-    db.execute(
-        'UPDATE groups SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
-        (doc_id, channel_id, expiry, group_id)
-    )
-    db.commit()
-    return jsonify({
-        'status': 'ok',
-        'doc_id': doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-        'message': 'Google Doc created and linked successfully.'
-    })
-
-
-@app.route('/groups/<int:group_id>/attach-gdoc', methods=['POST'])
-@login_required
-def attach_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    doc_id = _extract_google_doc_id(request.form.get('doc_url', ''))
-    if not doc_id:
-        return jsonify({'error': 'Invalid document URL or ID'}), 400
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-    db.execute('UPDATE groups SET gdoc_id = ? WHERE id = ?', (doc_id, group_id))
-    db.commit()
-    return jsonify({
-        'status': 'ok',
-        'doc_id': doc_id,
-        'doc_url': f'https://docs.google.com/document/d/{doc_id}/edit',
-        'message': 'Google Doc linked successfully.'
-    })
-
-
-@app.route('/groups/<int:group_id>/detach-gdoc', methods=['POST'])
-@login_required
-def detach_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-    db.execute(
-        'UPDATE groups SET gdoc_id = NULL, gdoc_watch_channel = NULL, gdoc_watch_expiry = NULL WHERE id = ?',
-        (group_id,)
-    )
-    db.commit()
-    return jsonify({'status': 'ok', 'message': 'Google Doc disconnected successfully.'})
-
-
-@app.route('/groups/<int:group_id>/open-gdoc')
-@login_required
-def open_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return 'Unauthorized', 403
-    db = get_db()
-    group = db.execute('SELECT gdoc_id FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group or not group['gdoc_id']:
-        flash('No Google Doc linked for this group.')
-        return redirect(url_for('group_detail', group_id=group_id))
-    return redirect(f"https://docs.google.com/document/d/{group['gdoc_id']}/edit")
-
-
-@app.route('/groups/<int:group_id>/sync-gdoc', methods=['POST'])
-@login_required
-def sync_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-    session_id_raw = (request.form.get('session_id') or '').strip()
-    session_id = int(session_id_raw) if session_id_raw.isdigit() else None
-
-    sync_mode = (request.form.get('mode') or 'both').strip().lower()
-    if sync_mode not in ('both', 'pull', 'push'):
-        return jsonify({'error': 'Invalid sync mode'}), 400
-
-    pulled = 0
-    pushed = 0
-
-    if sync_mode in ('both', 'pull'):
-        pulled, pull_err = _pull_group_gdoc_notes(db, group)
-        if pull_err:
-            return jsonify({'error': pull_err}), 400
-
-    if sync_mode in ('both', 'push'):
-        pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
-        if push_err:
-            return jsonify({'error': push_err}), 400
-
-    total_synced = int(pulled or 0) + int(pushed or 0)
-    if sync_mode == 'pull':
-        message = f'Replaced site meeting content from Google Docs for {int(pulled or 0)} meeting(s).'
-    elif sync_mode == 'push':
-        message = f'Appended {int(pushed or 0)} meeting record(s) to the end of Google Docs.'
-    else:
-        message = f'Synced {total_synced} group meeting record(s). Pulled {int(pulled or 0)} from Google Docs and pushed {int(pushed or 0)} back.'
-
-    return jsonify({
-        'status': 'ok',
-        'synced': total_synced,
-        'pulled': int(pulled or 0),
-        'pushed': int(pushed or 0),
-        'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
-        'mode': sync_mode,
-        'message': message
-    })
-
-
-@app.route('/groups/<int:group_id>/pull-gdoc', methods=['POST'])
-@login_required
-def pull_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-
-    pulled, pull_err = _pull_group_gdoc_notes(db, group)
-    if pull_err:
-        return jsonify({'error': pull_err}), 400
-
-    return jsonify({
-        'status': 'ok',
-        'pulled': int(pulled or 0),
-        'synced': int(pulled or 0),
-        'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
-        'message': f'Replaced site meeting content from Google Docs for {int(pulled or 0)} meeting(s).'
-    })
-
-
-@app.route('/groups/<int:group_id>/push-gdoc', methods=['POST'])
-@login_required
-def push_group_gdoc(group_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
-    db = get_db()
-    group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
-    if not group:
-        return jsonify({'error': 'Group not found'}), 404
-
-    session_id_raw = (request.form.get('session_id') or '').strip()
-    session_id = int(session_id_raw) if session_id_raw.isdigit() else None
-    pushed, push_err = _sync_group_gdoc_sessions(db, group, session_id=session_id)
-    if push_err:
-        return jsonify({'error': push_err}), 400
-
-    return jsonify({
-        'status': 'ok',
-        'pushed': int(pushed or 0),
-        'synced': int(pushed or 0),
-        'doc_url': f"https://docs.google.com/document/d/{group['gdoc_id']}/edit",
-        'message': f'Appended {int(pushed or 0)} meeting record(s) to the end of Google Docs.'
-    })
-
-
-@app.route('/api/gdoc/webhook', methods=['POST'])
-@csrf.exempt
-def gdoc_webhook():
-    if not _validate_gdoc_webhook_request():
-        return '', 403
-
-    channel_id = (request.headers.get('X-Goog-Channel-ID') or '').strip()
-    db = get_db()
-    patient = None
-    group = None
-    try:
-        patient = db.execute(
-            'SELECT * FROM patients WHERE gdoc_watch_channel = ?', (channel_id,)
-        ).fetchone()
-        if not patient:
-            group = db.execute(
-                'SELECT * FROM groups WHERE gdoc_watch_channel = ?', (channel_id,)
-            ).fetchone()
-    except sqlite3.OperationalError:
-        pass
-
-    # Reject webhooks whose channel_id is not registered to any patient or group.
-    if not patient and not group:
-        return '', 404
-
-    if patient and patient['gdoc_id'] and gdocs:
-        try:
-            _pull_gdoc_notes(db, patient)
-        except Exception:
-            pass
-    # group gdoc sync is handled by the auto-sync worker; no action needed here.
-    return '', 200
-
-
 
 @app.route('/patient/<int:patient_id>/convert', methods=('POST',))
 @login_required
@@ -10059,248 +9069,8 @@ def update_admin_profile_name():
     flash('Admin display name updated.')
     return redirect(request.referrer or url_for('crm_dashboard'))
 
-def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
-    occ_date = parse_date_safe(occurrence_date_raw)
-    if not occ_date:
-        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-    new_day = parse_date_safe(booking_date)
-    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-    new_end_dt = new_start_dt + timedelta(minutes=duration)
-    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
-    if conflict:
-        return jsonify({'status': 'error', 'message': conflict}), 409
-    existing_excluded = appt['excluded_dates'] or ''
-    excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-    if occ_date.isoformat() not in excluded_list:
-        excluded_list.append(occ_date.isoformat())
-    # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
-    # exclude it from the series too so the moved standalone is the only event on that day.
-    if new_day and new_day.isoformat() != occ_date.isoformat():
-        series_days = parse_recurrence_days(appt)
-        series_base = parse_date_safe(appt['appointment_date'])
-        series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
-        if (custom_weekday(new_day) in series_days
-                and series_base and new_day >= series_base
-                and (not series_end or new_day <= series_end)
-                and new_day.isoformat() not in excluded_list):
-            excluded_list.append(new_day.isoformat())
-    db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-               (','.join(excluded_list), appointment_id))
-    new_row = db.execute('''
-        INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes,
-         is_recurring, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-        VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
-    ''', (appt['patient_id'], new_day.isoformat(),
-          parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          meeting_type, meeting_link or None, meeting_platform or None,
-          meeting_title or None, save_to_google))
-    db.commit()
-    sync_message = _sync_appointment_with_google(db, int(new_row.lastrowid))
-    response = {'status': 'success'}
-    if sync_message:
-        response['message'] = sync_message
-    return jsonify(response)
-
-def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id):
-    occ_date = parse_date_safe(occurrence_date_raw)
-    if not occ_date:
-        return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-
-    affects_series = False
-    inherited_end = None
-    cutoff = (occ_date - timedelta(days=1)).isoformat()
-    deleted_google_event_ids = []
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-
-        row_end = parse_date_safe(row['recurrence_end_date']) if row['recurrence_end_date'] else None
-        if row_end and (inherited_end is None or row_end > inherited_end):
-            inherited_end = row_end
-
-        if row_base >= occ_date:
-            affects_series = True
-            deleted_google_event_ids.append(row['google_event_id'] if 'google_event_id' in row.keys() else None)
-            db.execute('DELETE FROM appointments WHERE id = ?', (row['id'],))
-            continue
-
-        row_occurs_on_cutoff = recurring_occurrences_between(row, occ_date, occ_date)
-        if row_occurs_on_cutoff:
-            affects_series = True
-            db.execute('UPDATE appointments SET recurrence_end_date = ? WHERE id = ?', (cutoff, row['id']))
-
-    if not affects_series:
-        return jsonify({'status': 'error', 'message': 'Occurrence does not belong to this recurring series.'}), 400
-
-    new_day = parse_date_safe(booking_date)
-    new_start_dt = combine_dt(new_day, parse_time_safe(booking_time).strftime('%H:%M'))
-    new_end_dt = new_start_dt + timedelta(minutes=duration)
-    conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt)
-    if conflict:
-        db.rollback()
-        return jsonify({'status': 'error', 'message': conflict}), 409
-    # Use the new date's weekday for the new series so occurrences land on the new day.
-    rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-    rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
-    rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
-    new_row = db.execute('''
-        INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes,
-         is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
-         meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (appt['patient_id'], new_day.isoformat(),
-          parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          rec_days, rec_interval, rec_end,
-          meeting_type, meeting_link or None, meeting_platform or None,
-          meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
-    db.commit()
-    sync_message = _combine_google_sync_messages(
-        _delete_google_events(db, deleted_google_event_ids),
-        _sync_appointment_with_google(db, int(new_row.lastrowid)),
-    )
-    response = {'status': 'success'}
-    if sync_message:
-        response['message'] = sync_message
-    return jsonify(response)
-
-def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google):
-    new_day = parse_date_safe(booking_date)
-    occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
-    delta_days = (new_day - occ_date).days if new_day and occ_date else 0
-    new_rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-        shifted_day = row_base + timedelta(days=delta_days)
-        shifted_start = combine_dt(shifted_day, parse_time_safe(booking_time).strftime('%H:%M'))
-        shifted_end = shifted_start + timedelta(minutes=duration)
-        conflict_message = has_time_conflict(
-            db,
-            shifted_day,
-            shifted_start,
-            shifted_end,
-            exclude_appointment_id=row['id']
-        )
-        if conflict_message:
-            return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    for row in related_rows:
-        row_base = parse_date_safe(row['appointment_date'])
-        if not row_base:
-            continue
-        shifted_day = row_base + timedelta(days=delta_days)
-        db.execute('''
-            UPDATE appointments
-            SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-                meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-                meeting_title = ?, save_to_google = ?, recurrence_days = ?
-            WHERE id = ?
-        ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
-              meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, new_rec_days, row['id']))
-    db.commit()
-    sync_message = _sync_multiple_appointments_with_google(db, [row['id'] for row in related_rows])
-    response = {'status': 'success'}
-    if sync_message:
-        response['message'] = sync_message
-    return jsonify(response)
 
 
-@app.route('/api/calendar/appointment/<int:appointment_id>/update', methods=['POST'])
-@login_required
-def api_calendar_appointment_update(appointment_id):
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if not appt:
-        return jsonify({'status': 'error', 'message': 'Appointment not found.'}), 404
-
-    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    scope = request.form.get('scope', 'all').strip()
-    occurrence_date_raw = request.form.get('occurrence_date', '').strip()
-    booking_date = request.form.get('date', '').strip()
-    booking_time = request.form.get('time', '').strip()
-    end_time_raw = request.form.get('end_time', '').strip()
-    meeting_type = request.form.get('meeting_type', (appt['meeting_type'] or 'in-person')).strip() or 'in-person'
-    meeting_link = request.form.get('meeting_link', '').strip()
-    meeting_platform = request.form.get('meeting_platform', '').strip()
-    meeting_title = request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-
-    if not parse_date_safe(booking_date) or not parse_time_safe(booking_time):
-        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
-
-    duration = int(appt['duration_minutes'] or 60)
-    parsed_start = parse_time_safe(booking_time)
-    parsed_end = parse_time_safe(end_time_raw) if end_time_raw else None
-    if parsed_start and parsed_end:
-        start_minutes = parsed_start.hour * 60 + parsed_start.minute
-        end_minutes = parsed_end.hour * 60 + parsed_end.minute
-        computed = end_minutes - start_minutes
-        if computed > 0:
-            duration = computed
-
-    is_recurring = int(appt['is_recurring'] or 0) == 1
-    recurrence_group_id = None
-    related_rows = [appt]
-    if is_recurring:
-        recurrence_group_id = ensure_recurrence_group_id(db, appt)
-        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-        if recurrence_group_id:
-            related_rows = db.execute(
-                'SELECT * FROM appointments WHERE recurrence_group_id = ? ORDER BY appointment_date ASC, id ASC',
-                (recurrence_group_id,)
-            ).fetchall()
-
-    # --- Scope: this occurrence only ---
-    if is_recurring and scope == 'one':
-        return _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-
-    # --- Scope: this and all upcoming ---
-    if is_recurring and scope == 'upcoming':
-        return _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-
-    if is_recurring and scope == 'all':
-        return _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, booking_date, booking_time, duration, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google)
-
-    # --- Default / scope='all': update the record directly ---
-    day_obj = parse_date_safe(booking_date)
-    start_dt = combine_dt(day_obj, parse_time_safe(booking_time).strftime('%H:%M'))
-    end_dt = start_dt + timedelta(minutes=duration)
-    conflict_message = has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=appointment_id)
-    if conflict_message:
-        return jsonify({'status': 'error', 'message': conflict_message}), 409
-
-    # For recurring appointments, update recurrence_days to match the new date's weekday
-    # so the entire series shifts to the new day rather than still generating old-weekday occurrences.
-    new_rec_days = str(custom_weekday(day_obj)) if (is_recurring and day_obj) else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-    db.execute('''
-        UPDATE appointments
-        SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
-            meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-            meeting_title = ?, save_to_google = ?, recurrence_days = ?
-        WHERE id = ?
-    ''', (booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None,
-          save_to_google, new_rec_days, appointment_id))
-    db.commit()
-    sync_message = _sync_appointment_with_google(db, appointment_id)
-    response = {'status': 'success'}
-    if sync_message:
-        response['message'] = sync_message
-    return jsonify(response)
 
 
 @app.route('/api/groups/sessions/<int:session_id>/update', methods=['POST'])
@@ -10889,179 +9659,8 @@ def _extract_recurrence_data(form):
 
     return recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count, None
 
-def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
-                           recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                           recurrence_end_date, recurrence_count, meeting_title, save_to_google):
-    if is_recurring:
-        cursor = db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes,
-                                is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                                                                    recurrence_end_date, recurrence_count, meeting_title, save_to_google, recurrence_group_id)
-                                                                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                   (patient_id, date, time, cost, duration, recurrence_interval,
-                            recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
-                                                            meeting_title or None, save_to_google, build_recurrence_group_id()))
-    else:
-        cursor = db.execute('''INSERT INTO appointments
-                      (patient_id, appointment_date, appointment_time, cost, duration_minutes,
-                                meeting_type, meeting_link, meeting_title, save_to_google)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                          (patient_id, date, time, cost, duration, meeting_type, meeting_link,
-                            meeting_title or None, save_to_google))
-
-    # Log the appointment
-    patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    if patient:
-        appt_type = "recurring" if is_recurring else "single"
-        details = f"Patient {patient['name']} has scheduled a {appt_type} appointment on {date} at {time}."
-        db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-                   (patient_id, 'schedule', details))
-    return cursor.lastrowid
-
-@app.route('/patient/<int:patient_id>/add_appointment', methods=('POST',))
-@login_required
-def add_appointment(patient_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    date = request.form.get('date', '').strip()
-    time = request.form.get('time', '').strip()
-    
-    # Properly handle cost - convert to float with default 0
-    cost_input = request.form.get('cost', '').strip()
-    try:
-        cost = float(cost_input) if cost_input else 0
-    except (ValueError, TypeError):
-        cost = 0
-    
-    meeting_type = request.form.get('meeting_type', 'in-person')
-    meeting_link = request.form.get('meeting_link', '')
-    meeting_title = request.form.get('meeting_title', '').strip()
-    save_to_google = 1 if request.form.get('save_to_google') in ('1', 'true', 'on') else 0
-    is_recurring = int(request.form.get('is_recurring', 0))
-    duration = int(request.form.get('duration', 60))
-
-    formatted_time, dt_error = _validate_appointment_datetime(date, time)
-    if dt_error:
-        flash(dt_error, 'error')
-        return redirect(url_for('patient_detail', patient_id=patient_id))
-    time = formatted_time
-
-    db = get_db()
-    patient_row = db.execute('SELECT patient_type FROM patients WHERE id = ?', (patient_id,)).fetchone()
-    patient_type = (patient_row['patient_type'] if patient_row else 'private') or 'private'
-    if patient_type in ('initial-intake', 'diagnosee'):
-        is_recurring = 0
-
-    recurrence_interval = None
-    recurrence_days = None
-    recurrence_end_date = None
-    recurrence_count = None
-
-    if is_recurring:
-        recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count, rec_error = _extract_recurrence_data(request.form)
-        if rec_error:
-            flash(rec_error, 'error')
-            return redirect(url_for('patient_detail', patient_id=patient_id))
-
-    try:
-        appointment_id = _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
-                                                recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                                                recurrence_end_date, recurrence_count, meeting_title, save_to_google)
-        db.commit()
-        appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
-        flash(appt_msg)
-        sync_message = _sync_appointment_with_google(db, appointment_id)
-        if sync_message:
-            flash(sync_message, 'warning')
-    except sqlite3.IntegrityError as e:
-        flash(f'Error adding appointment: {str(e)}', 'error')
-    except Exception as e:
-        flash(f'Unexpected error: {str(e)}', 'error')
-
-    return redirect(url_for('patient_detail', patient_id=patient_id))
 
 
-@app.route('/export_ics/<int:appointment_id>')
-@login_required
-def export_ics(appointment_id):
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if not appt:
-        return "Not found", 404
-
-    # Security check: only allow admin or the patient who owns the appointment
-    if current_user.role == 'patient' and appt['patient_id'] != current_user.patient_id:
-        return "Unauthorized", 403
-
-    import uuid
-    from datetime import datetime, timedelta
-
-    start_datetime = datetime.fromisoformat(f"{appt['appointment_date']}T{appt['appointment_time'].zfill(5)}")
-    end_datetime = start_datetime + timedelta(minutes=appt['duration_minutes'] or 60)
-
-    dtstart = start_datetime.strftime("%Y%m%dT%H%M%S")
-    dtend = end_datetime.strftime("%Y%m%dT%H%M%S")
-    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-
-    ical_content = f"""BEGIN:VCALENDAR\r
-VERSION:2.0\r
-PRODID:-//Private Clinic CRM//EN\r
-BEGIN:VEVENT\r
-UID:{uuid.uuid4()}@clinic\r
-DTSTAMP:{dtstamp}\r
-DTSTART:{dtstart}\r
-DTEND:{dtend}\r
-SUMMARY:Therapy Session\r
-DESCRIPTION:Therapy session\r
-"""
-    if appt['meeting_link']:
-        ical_content += f"URL:{appt['meeting_link']}\r\n"
-        ical_content += f"LOCATION:{appt['meeting_link']}\r\n"
-    elif appt['meeting_type'] == 'in-person':
-        ical_content += "LOCATION:Clinic\r\n"
-
-    ical_content += """END:VEVENT\r
-END:VCALENDAR\r
-"""
-
-    from flask import make_response
-    response = make_response(ical_content)
-    response.headers["Content-Disposition"] = f"attachment; filename=appointment_{appointment_id}.ics"
-    response.headers["Content-type"] = "text/calendar"
-    return response
-
-@app.route('/appointment/<int:appointment_id>/ical')
-@login_required
-def export_ical(appointment_id):
-    return redirect(url_for('export_ics', appointment_id=appointment_id))
-
-
-
-@app.route('/appointment/<int:appointment_id>/delete', methods=('POST',))
-@login_required
-def delete_appointment(appointment_id):
-    if current_user.role != 'admin':
-        return "Unauthorized", 403
-
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
-    if appt:
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
-        if patient:
-            details = f"Patient {patient['name']} appointment on {appt['appointment_date']} at {appt['appointment_time']} was deleted."
-            db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (appt['patient_id'], 'delete', details))
-
-        deleted_google_event_ids = [appt['google_event_id']] if 'google_event_id' in appt.keys() else []
-        db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
-        db.commit()
-        flash('Appointment deleted.')
-        sync_message = _delete_google_events(db, deleted_google_event_ids)
-        if sync_message:
-            flash(sync_message, 'warning')
-        return redirect(url_for('patient_detail', patient_id=appt['patient_id']))
-
-    return "Appointment not found", 404
 
 def is_port_in_use(port, host='127.0.0.1'):
     """Return True when a TCP port is already occupied."""

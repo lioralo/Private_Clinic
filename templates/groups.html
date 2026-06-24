@@ -43,7 +43,7 @@
             {% if group['gdoc_id'] %}
             <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-doc-sync-action="push" onclick="pushGroupDoc({{ group['id'] }}, {{ session['id'] }}, true)">{{ txt('Append to Doc', 'הוספה למסמך') }}</button>
             {% endif %}
-            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
+            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" data-confirm-modal data-confirm-message="{{ txt('Delete this group session?', 'למחוק את המפגש הזה?') }}" onclick="deleteSession({{ session['id'] }})">{{ txt('Delete', 'מחיקה') }}</button>
         </div>
     </div>
 
@@ -209,7 +209,7 @@
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="4" class="text-muted small">{{ txt('No active members for this date.', 'אין משתתפים פעילים לתאריך הזה.') }}</td></tr>
+                        {{ empty_state(colspan='4', icon='bi-people', message=txt('No active members for this date.', 'אין משתתפים פעילים לתאריך הזה.')) }}
                         {% endfor %}
                     </tbody>
                 </table>
@@ -223,65 +223,9 @@
 </div>
 {% endmacro %}
 
-<style>
-.session-card {
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 1rem;
-    background: #fff;
-    box-shadow: 0 0.5rem 1.5rem rgba(15, 23, 42, 0.06);
-}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/groups.css') }}">
 
-.session-card.archived-session {
-    opacity: 0.92;
-}
-
-.session-meta {
-    font-size: 0.85rem;
-}
-
-.session-toolbar {
-    gap: 0.5rem;
-}
-
-.member-remove-panel,
-.group-delete-panel,
-.session-booking-panel,
-.supervision-link-panel {
-    display: none;
-}
-
-.member-remove-panel.is-open,
-.group-delete-panel.is-open,
-.session-booking-panel.is-open,
-.supervision-link-panel.is-open {
-    display: block;
-}
-
-.record-fieldset[disabled] {
-    opacity: 0.72;
-}
-
-.record-fieldset textarea,
-.record-fieldset select,
-.record-fieldset input {
-    background-color: #fff;
-}
-
-.session-summary-input {
-    min-height: 14rem;
-}
-
-.member-reason-input,
-.member-note-input {
-    min-width: 100%;
-}
-
-.table-responsive .table {
-    table-layout: fixed;
-    width: 100%;
-}
-</style>
-
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': url_for('groups_dashboard'), 'label': t('Groups')}, {'url': '', 'label': group['name']}]) }}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
         <h2 class="mb-1 text-primary fw-bold"><i class="bi bi-people-fill me-2"></i>{{ group['name'] }}</h2>
@@ -365,7 +309,7 @@
                             <div class="d-flex gap-2 flex-wrap">
                                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-doc-sync-action="push" onclick="pushGroupDoc({{ group['id'] }}, null, true)">{{ txt('Append Site Notes to Doc', 'הוספת רשומות האתר למסמך') }}</button>
                                 <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" data-doc-sync-action="pull" onclick="pullGroupDoc({{ group['id'] }})">{{ txt('Pull Doc and Replace Site Notes', 'משיכת מסמך והחלפת רשומות באתר') }}</button>
-                                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" data-confirm-modal data-confirm-message="{{ txt('Detach the Google Doc from this group?', 'לנתק את מסמך Google מהקבוצה?') }}" onclick="detachGroupDoc({{ group['id'] }})">{{ txt('Detach Google Doc', 'ניתוק מסמך Google') }}</button>
                             </div>
                             <div id="groupDocsSyncStatus" class="small text-muted mt-2" aria-live="polite">{{ txt('Choose append (site to doc) or pull/replace (doc to site).', 'יש לבחור בין הוספה למסמך (מהאתר) לבין משיכה והחלפה באתר (מהמסמך).') }}</div>
                             {% else %}
@@ -497,7 +441,7 @@
                                 </div>
                             </div>
                             {% else %}
-                            <div class="list-group-item small text-muted">{{ txt('No members added yet.', 'עדיין לא נוספו משתתפים.') }}</div>
+                            {{ empty_state(icon='bi-people', message=txt('No members added yet.', 'עדיין לא נוספו משתתפים.')) }}
                             {% endfor %}
                         </div>
                         <form method="post" action="{{ url_for('add_group_member', group_id=group['id']) }}" class="d-flex gap-2">
@@ -542,7 +486,7 @@
                                 </form>
                             </div>
                             {% else %}
-                            <div class="list-group-item small text-muted">{{ txt('No member history yet.', 'עדיין אין היסטוריית משתתפים.') }}</div>
+                            {{ empty_state(icon='bi-clock-history', message=txt('No member history yet.', 'עדיין אין היסטוריית משתתפים.')) }}
                             {% endfor %}
                         </div>
                     </div>
@@ -638,7 +582,7 @@
                         {% if next_session %}
                         {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
                         {% else %}
-                        <div class="small text-muted">{{ txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.') }}</div>
+                        {{ empty_state(icon='bi-calendar-event', message=txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.')) }}
                         {% endif %}
                     </div>
                     <div class="tab-pane" id="pastMeetingsPane" role="tabpanel">
@@ -656,7 +600,7 @@
                                 </div>
                             </div>
                             {% else %}
-                            <div class="small text-muted">{{ txt('No past meetings yet.', 'עדיין אין מפגשי עבר.') }}</div>
+                            {{ empty_state(icon='bi-clock-history', message=txt('No past meetings yet.', 'עדיין אין מפגשי עבר.')) }}
                             {% endfor %}
                         </div>
                     </div>
@@ -665,7 +609,7 @@
                             {% for session in upcoming_queue %}
                             {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
                             {% else %}
-                            <div class="small text-muted">{{ txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.') }}</div>
+                            {{ empty_state(icon='bi-calendar-plus', message=txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.')) }}
                             {% endfor %}
                         </div>
                     </div>
@@ -692,14 +636,14 @@
                             <div class="fw-semibold mb-1">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &nbsp;·&nbsp; {{ sup['supervisor_name'] }}{% endif %}</div>
                             <div class="small text-dark" style="white-space:pre-wrap;">{{ sup['content'] }}</div>
                         </div>
-                        <form method="post" action="{{ url_for('delete_group_supervision', group_id=group['id'], sup_id=sup['id']) }}" onsubmit="return confirm(isHebrew ? 'למחוק רשומת הדרכה זו?' : 'Delete this supervision record?')">
+                        <form method="post" action="{{ url_for('delete_group_supervision', group_id=group['id'], sup_id=sup['id']) }}" data-confirm-modal data-confirm-message="{{ txt('Delete this supervision record?', 'למחוק רשומת הדרכה זו?') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
                         </form>
                     </div>
                 </div>
                 {% else %}
-                <div class="text-muted small text-center py-4">{{ txt('No supervision records yet.', 'אין עדיין רשומות הדרכה.') }}</div>
+                {{ empty_state(icon='bi-shield-check', message=txt('No supervision records yet.', 'אין עדיין רשומות הדרכה.')) }}
                 {% endfor %}
             </div>
         </div>
@@ -1041,7 +985,6 @@ function pullGroupDoc(groupId) {
 }
 
 function detachGroupDoc(groupId) {
-    if (!confirm(labels.groupDocsDetachConfirm)) return;
     setGroupDocsSyncStatus(isHebrew ? 'מנתק את מסמך Google...' : 'Disconnecting the Google Doc...', 'info');
     fetch('/groups/' + groupId + '/detach-gdoc', {
         method: 'POST',
@@ -1107,7 +1050,6 @@ function saveSession(id) {
 }
 
 function deleteSession(id) {
-    if (!confirm(labels.deleteSessionConfirm)) return;
     fetch('/api/groups/sessions/' + id + '/delete', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrfToken }

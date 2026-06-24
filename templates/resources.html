@@ -30,10 +30,7 @@
                         </div>
                     </div>
                     {% else %}
-                    <div class="col-12 text-center py-5">
-                        <i class="bi bi-inbox fs-1 text-muted opacity-50 mb-3 d-block"></i>
-                        <p class="text-muted">{{ t('No public resources available at this time.') }}</p>
-                    </div>
+                    {{ empty_state(icon='bi-inbox', message=t('No public resources available at this time.')) }}
                     {% endfor %}
                 </div>
             </div>

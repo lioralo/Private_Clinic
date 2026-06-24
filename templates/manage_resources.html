@@ -1,6 +1,7 @@
 {% extends 'layout.html' %}
 
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Resources')}]) }}
 <div class="row">
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -84,7 +85,7 @@
                                         <a href="{{ resource['url'] }}" target="_blank" class="btn btn-sm btn-outline-primary" title="Open"><i class="bi bi-link-45deg"></i></a>
                                         {% endif %}
                                         <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#editResource{{ resource['id'] }}" title="Edit"><i class="bi bi-pencil"></i></button>
-                                        <form method="POST" action="{{ url_for('delete_resource', resource_id=resource['id']) }}" onsubmit="return confirm('Delete this resource? It will be unassigned from all patients.')">
+                                        <form method="POST" action="{{ url_for('delete_resource', resource_id=resource['id']) }}" data-confirm-modal data-confirm-message="Delete this resource? It will be unassigned from all patients.">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash3"></i></button>
                                         </form>
@@ -119,9 +120,7 @@
                                 </td>
                             </tr>
                             {% else %}
-                            <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">{{ t('No resources found.') }}</td>
-                            </tr>
+                            {{ empty_state(colspan='5', icon='bi-folder2-open', message=t('No resources found.')) }}
                             {% endfor %}
                         </tbody>
                     </table>
