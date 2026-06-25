@@ -1268,9 +1268,15 @@ def admin_backup_now():
 def admin_restore_backup():
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-    backup_path = (request.form.get('backup_path') or '').strip()
-    if not backup_path:
+    backup_file = (request.form.get('backup_file') or '').strip()
+    if not backup_file:
         return jsonify({'status': 'error', 'message': 'Backup file path is required.'}), 400
+    from app import BACKUP_DIR
+    backup_path = os.path.join(BACKUP_DIR, backup_file)
+    if not os.path.exists(backup_path):
+        backup_path = backup_file
+        if not os.path.exists(backup_path):
+            return jsonify({'status': 'error', 'message': f'Backup file not found: {backup_file}'}), 400
     try:
         from app import _perform_restore
         result = _perform_restore(backup_path)
