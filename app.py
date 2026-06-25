@@ -748,6 +748,13 @@ def date_filter(value):
     except AttributeError:
         return value
 
+@app.template_filter('israeli_date')
+def israeli_date_filter(value):
+    try:
+        return value.strftime('%d.%m.%Y')
+    except AttributeError:
+        return value
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'

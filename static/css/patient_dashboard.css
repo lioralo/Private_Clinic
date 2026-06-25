@@ -78,7 +78,7 @@
     padding: 1rem;
     background: #f9fbf9;
     border-radius: 12px;
-    border-left: 4px solid #0f766e;
+    border-inline-start: 4px solid #0f766e;
 }
 
 .upcoming-time {
@@ -127,7 +127,7 @@
     padding: 0.75rem;
     border-radius: 8px;
     background: #f0fdf4;
-    border-left: 3px solid #10b981;
+    border-inline-start: 3px solid #10b981;
 }
 
 .goal-checkbox label {
@@ -147,7 +147,7 @@
 .notes-timeline::before {
     content: '';
     position: absolute;
-    left: 0;
+    inset-inline-start: 0;
     top: 0;
     bottom: 0;
     width: 2px;
@@ -155,14 +155,14 @@
 }
 
 .note-entry {
-    margin-left: 1.5rem;
+    margin-inline-start: 1.5rem;
     position: relative;
 }
 
 .note-entry::before {
     content: '';
     position: absolute;
-    left: -16px;
+    inset-inline-start: -16px;
     top: 4px;
     width: 12px;
     height: 12px;

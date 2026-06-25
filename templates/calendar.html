@@ -1487,6 +1487,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
+        direction: document.documentElement.dir,
         height: 'auto',
         expandRows: true,
         contentHeight: 'auto',

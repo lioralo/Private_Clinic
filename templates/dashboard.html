@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var calendarEl = document.getElementById('calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
+        direction: document.documentElement.dir,
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',

@@ -113,10 +113,28 @@ p {
 [dir="rtl"] h3,
 [dir="rtl"] h4,
 [dir="rtl"] h5,
-[dir="rtl"] h6 {
-    font-weight: 700;
-    letter-spacing: -0.01em;
+[dir="rtl"] h6,
+[dir="rtl"] .card-header,
+[dir="rtl"] .card-body,
+[dir="rtl"] .modal-header,
+[dir="rtl"] .modal-body,
+[dir="rtl"] .modal-footer,
+[dir="rtl"] td, [dir="rtl"] th,
+[dir="rtl"] .list-group-item {
     text-align: start;
+}
+
+/* RTL directional icon mirroring */
+:dir(rtl) .bi-chevron-left::before,
+:dir(rtl) .bi-chevron-right::before,
+:dir(rtl) .bi-arrow-left::before,
+:dir(rtl) .bi-arrow-right::before,
+:dir(rtl) .bi-arrow-right-short::before,
+:dir(rtl) .bi-arrow-up-right::before,
+:dir(rtl) .bi-box-arrow-right::before,
+:dir(rtl) .bi-box-arrow-left::before {
+    transform: scaleX(-1);
+    display: inline-block;
 }
 
 /*  ── Admin sidebar shell ─────────────────────────────────── */

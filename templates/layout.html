@@ -264,16 +264,16 @@
         <label for="{{ field }}" class="form-label">{{ label }}{% if required %} <span class="text-danger">*</span>{% endif %}</label>
         {% endif %}
         {% if type == 'textarea' %}
-        <textarea id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}"{% if required %} required{% endif %}>{{ value }}</textarea>
+        <textarea id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}"{% if required %} required aria-required="true"{% endif %} dir="auto">{{ value }}</textarea>
         {% elif type == 'select' %}
-        <select id="{{ field }}" name="{{ field }}" class="form-select{% if errors %} is-invalid{% endif %}"{% if required %} required{% endif %}>
+        <select id="{{ field }}" name="{{ field }}" class="form-select{% if errors %} is-invalid{% endif %}"{% if required %} required aria-required="true"{% endif %}>
             {{ caller() if caller else '' }}
         </select>
         {% else %}
-        <input type="{{ type }}" id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}" value="{{ value }}"{% if required %} required{% endif %}>
+        <input type="{{ type }}" id="{{ field }}" name="{{ field }}" class="form-control{% if errors %} is-invalid{% endif %}" placeholder="{{ placeholder }}" value="{{ value }}"{% if required %} required aria-required="true"{% endif %}{% if type in ('text', 'search', 'tel') %} dir="auto"{% endif %}>
         {% endif %}
         {% if errors %}
-        <div class="invalid-feedback">{{ errors|join(', ') }}</div>
+        <div class="invalid-feedback" role="alert">{{ errors|join(', ') }}</div>
         {% elif help_text %}
         <div class="form-text small text-muted">{{ help_text }}</div>
         {% endif %}
@@ -337,7 +337,7 @@
         </div>
 
         {# Main Nav #}
-        <nav class="flex-1 space-y-1">
+        <nav class="flex-1 space-y-1" aria-label="{{ t('Main navigation') }}">
             {% set endpoint_name = request.endpoint or '' %}
 
             {% macro nav_link(target, icon, label) %}
@@ -360,7 +360,7 @@
             <hr class="my-2 opacity-25">
             <form method="get" action="{{ url_for('admin_global_search') }}" class="px-2 mt-1 mb-2">
                 <div class="input-group input-group-sm">
-                    <input type="text" name="q" class="form-control form-control-sm border-0 bg-slate-100 rounded-start-lg" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2">
+                    <input type="text" name="q" class="form-control form-control-sm border-0 bg-slate-100 rounded-start-lg" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2" dir="auto">
                     <button class="btn btn-sm btn-primary rounded-end-lg" type="submit">
                         <i class="bi bi-search"></i>
                     </button>
@@ -457,7 +457,7 @@
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}
-<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
+<nav aria-label="{{ t('Patient navigation') }}" class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
     <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
             <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
@@ -501,7 +501,7 @@
 
 {% else %}
 {# ── PUBLIC / UNAUTHENTICATED ─────────────────────────────────── #}
-<nav class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
+<nav aria-label="{{ t('Site navigation') }}" class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
     <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
             <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
@@ -626,7 +626,7 @@
             <input type="hidden" id="messageRecipientId" value="">
             {% endif %}
             <div class="input-group">
-                <input type="text" id="messageContent" class="form-control" placeholder="{{ t('Type a message...') }}" required>
+                <input type="text" id="messageContent" class="form-control" placeholder="{{ t('Type a message...') }}" required dir="auto">
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
             </div>
         </form>
@@ -678,7 +678,7 @@
             </div>
             <div>
                 <label class="form-label small mb-1">{{ t('Message') }}</label>
-                <textarea name="message" rows="4" class="form-control form-control-sm" placeholder="{{ t('Type a message...') }}" required></textarea>
+                <textarea name="message" rows="4" class="form-control form-control-sm" placeholder="{{ t('Type a message...') }}" required dir="auto"></textarea>
             </div>
         </form>
         {% endif %}
@@ -801,7 +801,7 @@
             <p id="confirmModalMessage" class="mb-0">{{ t('Are you sure?') }}</p>
             <div id="confirmModalReasonWrap" class="mb-0 d-none">
               <label for="confirmModalReason" class="form-label mt-3">{{ t('Reason') }}</label>
-              <textarea id="confirmModalReason" class="form-control" rows="2" placeholder="{{ t('Required') }}" required></textarea>
+              <textarea id="confirmModalReason" class="form-control" rows="2" placeholder="{{ t('Required') }}" required dir="auto"></textarea>
             </div>
           </div>
           <div class="modal-footer">
@@ -811,6 +811,107 @@
         </div>
       </div>
     </div>
+
+    <!-- Accessibility preferences -->
+    <div id="accessibilityWidget" style="display:none">
+        <button id="a11yToggle" class="btn btn-sm rounded-circle shadow-sm" style="position:fixed;bottom:1rem;inset-inline-end:1rem;z-index:9999;width:44px;height:44px;background:#134e4a;color:white;border:none;font-size:1.2rem;display:flex;align-items:center;justify-content:center" aria-label="{{ 'נגישות' if lang == 'he' else 'Accessibility' }}" title="{{ 'הגדרות נגישות' if lang == 'he' else 'Accessibility settings' }}">
+            <i class="bi bi-universal-access"></i>
+        </button>
+        <div id="a11yPanel" class="shadow-lg rounded-2xl p-4" style="position:fixed;bottom:5rem;inset-inline-end:1rem;z-index:9998;width:280px;background:white;border:1px solid #e5e7eb;display:none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <strong class="text-sm">{{ 'הגדרות נגישות' if lang == 'he' else 'Accessibility' }}</strong>
+                <button id="a11yClose" class="btn btn-sm p-0 border-0 bg-transparent text-slate-400" aria-label="{{ 'סגור' if lang == 'he' else 'Close' }}">&times;</button>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small mb-1">{{ 'גודל טקסט' if lang == 'he' else 'Text size' }}</label>
+                <div class="d-flex gap-2">
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="small">{{ 'א׳' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill active" data-size="normal">{{ 'א׳' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="large">{{ 'א׳' if lang == 'he' else 'A' }}</button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="a11yHighContrast">
+                    <label class="form-check-label small" for="a11yHighContrast">{{ 'ניגודיות גבוהה' if lang == 'he' else 'High contrast' }}</label>
+                </div>
+            </div>
+            <div class="mb-0">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="a11yLineSpacing">
+                    <label class="form-check-label small" for="a11yLineSpacing">{{ 'ריווח מוגדל' if lang == 'he' else 'Increased spacing' }}</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var widget = document.getElementById('accessibilityWidget');
+        if (!widget) return;
+        var toggle = document.getElementById('a11yToggle');
+        var panel = document.getElementById('a11yPanel');
+        var close = document.getElementById('a11yClose');
+        var html = document.documentElement;
+        var STORAGE_KEY = 'a11y_prefs';
+        function loadPrefs() {
+            try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch(e) { return {}; }
+        }
+        function savePrefs(prefs) {
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch(e) {}
+        }
+        function applyPrefs(prefs) {
+            html.classList.remove('a11y-small', 'a11y-large', 'a11y-high-contrast', 'a11y-wide-spacing');
+            if (prefs.fontSize === 'small') html.classList.add('a11y-small');
+            else if (prefs.fontSize === 'large') html.classList.add('a11y-large');
+            if (prefs.highContrast) html.classList.add('a11y-high-contrast');
+            if (prefs.lineSpacing) html.classList.add('a11y-wide-spacing');
+        }
+        var prefs = loadPrefs();
+        if (prefs.fontSize === undefined) prefs.fontSize = 'normal';
+        applyPrefs(prefs);
+        widget.style.display = '';
+        document.querySelectorAll('.a11y-font-size').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.a11y-font-size').forEach(function(b) { b.classList.remove('active', 'btn-primary'); b.classList.add('border'); });
+                this.classList.add('active', 'btn-primary'); this.classList.remove('border');
+                prefs.fontSize = this.dataset.size;
+                savePrefs(prefs);
+                applyPrefs(prefs);
+            });
+            if (btn.dataset.size === prefs.fontSize) { btn.classList.add('active', 'btn-primary'); btn.classList.remove('border'); }
+        });
+        var hcToggle = document.getElementById('a11yHighContrast');
+        hcToggle.checked = !!prefs.highContrast;
+        hcToggle.addEventListener('change', function() {
+            prefs.highContrast = this.checked;
+            savePrefs(prefs);
+            applyPrefs(prefs);
+        });
+        var lsToggle = document.getElementById('a11yLineSpacing');
+        lsToggle.checked = !!prefs.lineSpacing;
+        lsToggle.addEventListener('change', function() {
+            prefs.lineSpacing = this.checked;
+            savePrefs(prefs);
+            applyPrefs(prefs);
+        });
+        toggle.addEventListener('click', function() { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; });
+        close.addEventListener('click', function() { panel.style.display = 'none'; });
+    })();
+    </script>
+    <style>
+        .a11y-small { font-size: 14px !important; }
+        .a11y-large { font-size: 20px !important; }
+        .a11y-large p, .a11y-large li, .a11y-large .card-body { font-size: 1.1rem !important; }
+        .a11y-high-contrast, .a11y-high-contrast body { background: #000 !important; color: #fff !important; }
+        .a11y-high-contrast a:not(.btn) { color: #ff0 !important; text-decoration: underline !important; }
+        .a11y-high-contrast .card, .a11y-high-contrast .card-body, .a11y-high-contrast .bg-white { background: #111 !important; border-color: #555 !important; }
+        .a11y-high-contrast .text-muted, .a11y-high-contrast .text-slate-500 { color: #ccc !important; }
+        .a11y-high-contrast input, .a11y-high-contrast textarea, .a11y-high-contrast select { background: #222 !important; color: #fff !important; border-color: #666 !important; }
+        .a11y-high-contrast .btn-primary { background: #ff0 !important; color: #000 !important; border-color: #ff0 !important; }
+        .a11y-wide-spacing p, .a11y-wide-spacing li, .a11y-wide-spacing .card-body { line-height: 2 !important; }
+        .a11y-wide-spacing .form-control, .a11y-wide-spacing textarea { line-height: 2 !important; }
+        .a11y-font-size.active { background: #134e4a !important; color: white !important; border-color: #134e4a !important; }
+    </style>
 
     {% block scripts %}{% endblock %}
 </body>
