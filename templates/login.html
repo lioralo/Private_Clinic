@@ -77,7 +77,7 @@
                             <small class="form-text">{{ t('Enter the 6-digit code from your authenticator app') }}</small>
                         </div>
 
-                        <button type="submit" class="btn btn-primary btn-lg btn-verify w-100">
+                        <button type="submit" class="btn btn-primary btn-lg btn-verify w-100" onclick="this.form.submit(); this.disabled=true;">
                             <i class="bi bi-check-circle me-2"></i>{{ t('Verify & Sign In') }}
                         </button>
 

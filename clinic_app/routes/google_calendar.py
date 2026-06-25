@@ -188,10 +188,10 @@ def api_google_calendar_status():
     return google_calendar_status()
 
 
-@google_calendar_bp.route('/admin/google-calendar/connect', methods=['GET'])
+@google_calendar_bp.route('/admin/google-calendar/connect', methods=['GET', 'POST'])
 @login_required
 def google_calendar_connect():
-    from app import gcal, build_external_public_url
+    from app import gcal, build_external_public_url, get_site_settings
     if current_user.role != 'admin':
         flash('Unauthorized.')
         return redirect(url_for('admin_profile'))
@@ -201,18 +201,45 @@ def google_calendar_connect():
     if not gcal._client_secrets_available():
         flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
         return redirect(url_for('admin_profile'))
+    
     db = get_db()
+    
+    # Always save the selected integrations to the database on POST
+    if request.method == 'POST':
+        integrations = request.form.getlist('google_integration')
+        db.execute(
+            "INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) "
+            "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+            ('google_enabled_integrations', json.dumps(integrations))
+        )
+        db.commit()
+    else: # GET request
+        settings = get_site_settings(db)
+        try:
+            integrations = json.loads(settings.get('google_enabled_integrations') or '[]')
+        except (ValueError, TypeError):
+            integrations = []
+    
+    # If no integrations are determined by POST or GET, default to all available
+    if not integrations:
+        integrations = list(gcal.INTEGRATION_SCOPES.keys())
+
     try:
         redirect_uri = build_external_public_url('google_calendar_callback')
         oauth_state = _generate_google_oauth_state()
+        
         auth_url, state, code_verifier = gcal.get_authorization_url(
-            integrations=list(gcal.INTEGRATION_SCOPES.keys()), redirect_uri=redirect_uri, state=oauth_state)
+            integrations=integrations, redirect_uri=redirect_uri, state=oauth_state
+        )
+        
         _store_google_oauth_pending_state(db, state, current_user.id, redirect_uri, code_verifier)
         db.commit()
+        
         session['gcal_oauth_state'] = state
         session['gcal_redirect_uri'] = redirect_uri
         if code_verifier:
             session['gcal_code_verifier'] = code_verifier
+            
         return redirect(auth_url)
     except Exception as exc:
         flash(f'Failed to initiate Google connection: {exc}')

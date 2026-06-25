@@ -4,7 +4,9 @@ import sqlite3
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 import google_calendar
 
 class TestGoogleCalendar(unittest.TestCase):

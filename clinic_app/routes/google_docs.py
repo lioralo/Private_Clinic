@@ -39,7 +39,12 @@ def _google_docs_dependency_error():
         issues.append(detail or 'Google libraries not installed')
     if not issues:
         return None
-    return 'Google integration dependencies are unavailable: ' + '; '.join(str(item) for item in issues) + '. Please run pip install -r requirements.txt.'
+    
+    # Improved error message for better user guidance
+    error_message = 'Google integration dependencies are unavailable: '
+    error_message += '; '.join(str(item) for item in issues)
+    error_message += '. To fix this, please run the following command in your terminal: pip install -r requirements.txt'
+    return error_message
 
 
 def _extract_google_doc_id(raw_value):

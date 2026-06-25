@@ -7,7 +7,8 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import app as app_module
-from app import app, init_db, get_db
+from app import app, init_db, get_db, _run_db_migrations
+from werkzeug.security import generate_password_hash
 
 class PatientEngagementTestCase(unittest.TestCase):
     def setUp(self):
@@ -24,12 +25,24 @@ class PatientEngagementTestCase(unittest.TestCase):
         app.config['APP_LOG_FILE'] = self.app_log_path
         self.client = app.test_client()
 
-        # Provide known credentials so _seed_admin_user creates a predictable account.
-        os.environ.setdefault('ADMIN_USERNAME', 'lioraloni')
-        os.environ['ADMIN_PASSWORD'] = 'Flo@tingind4'
-
         with app.app_context():
-            init_db()
+            # Create tables
+            db = get_db()
+            with app.open_resource('clinic_app/schema.sql', mode='r') as f:
+                db.cursor().executescript(f.read())
+            db.commit()
+
+            # Run all migrations to create all tables
+            _run_db_migrations(db)
+            db.commit()
+
+            # Create the primary admin user for tests
+            hashed_pw = generate_password_hash('Flo@tingind4')
+            db.execute(
+                "INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)",
+                ('lioraloni', hashed_pw, 'admin', 1)
+            )
+            db.commit()
 
     def tearDown(self):
         os.environ.pop('ADMIN_PASSWORD', None)

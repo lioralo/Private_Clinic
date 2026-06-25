@@ -611,8 +611,16 @@ class ClinicTestCase(unittest.TestCase):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Template Import Patient', status='ongoing'), follow_redirects=True)
 
-        with open('static/treatment_log_example.json', 'r', encoding='utf-8') as f:
-            payload = json.load(f)
+        
+        # Construct the absolute path to the example JSON file
+        current_dir = Path(__file__).parent.resolve()
+        json_path = current_dir.parent / 'static' / 'treatment_log_example.json'
+        self.assertTrue(json_path.is_file(), f"Test setup failed: example file not found at {json_path}")
+
+        with open(json_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            payload = json.loads(content)
+
 
         rv = self.client.post(
             '/patient/1/import',

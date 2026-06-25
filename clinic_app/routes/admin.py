@@ -938,6 +938,7 @@ def google_docs_auto_sync_status(job_id):
 # Admin profile
 # ---------------------------------------------------------------------------
 
+
 @admin_bp.route('/admin/profile', methods=['GET', 'POST'])
 @login_required
 def admin_profile():

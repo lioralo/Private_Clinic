@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'scripts'))
 from import_clinic_data import (
     is_empty_value,
     build_where_clause,

@@ -23,10 +23,11 @@
 }
 
 .admin-sidebar {
-    width: 16rem;
-    max-width: 85vw;
+    width: 22rem;
+    max-width: 90vw;
     will-change: transform;
     border-inline-end: 1px solid rgb(226 232 240);
+    overflow-y: auto;
 }
 
 .notification-recipient-list {
