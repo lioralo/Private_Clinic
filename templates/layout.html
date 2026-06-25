@@ -20,10 +20,208 @@
     <!-- Tailwind CSS (built) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 
+    <!-- Hebrew Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}" media="print">
+
+    <!-- Hebrew Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&family=Noto+Sans+Hebrew:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind Configuration (updated palette) -->
+    <script>
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "primary":                   "#5676b6",
+                    "primary-container":         "#134e4a",
+                    "on-primary":                "#ffffff",
+                    "on-primary-container":      "#87beb8",
+                    "secondary":                 "#6c7792",
+                    "secondary-container":       "#d1e7e4",
+                    "on-secondary":              "#ffffff",
+                    "on-secondary-container":    "#546866",
+                    "surface":                   "#f7f9fb",
+                    "surface-container":         "#eceef0",
+                    "surface-container-low":     "#f2f4f6",
+                    "surface-container-lowest":  "#ffffff",
+                    "surface-container-high":    "#e6e8ea",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-surface":                "#191c1e",
+                    "on-surface-variant":        "#404847",
+                    "outline":                   "#707977",
+                    "outline-variant":           "#bfc8c6",
+                    "primary-fixed":             "#b5ede7",
+                    "primary-fixed-dim":         "#9ad1cb",
+                    "error":                     "#ba1a1a",
+                    "error-container":           "#ffdad6",
+                    "on-error":                  "#ffffff",
+                    "on-error-container":        "#93000a",
+                    "background":                "#f7f9fb",
+                    "on-background":             "#191c1e",
+                },
+                borderRadius: {
+                    "DEFAULT": "0.25rem",
+                    "lg":   "0.5rem",
+                    "xl":   "0.75rem",
+                    "2xl":  "1rem",
+                    "3xl":  "1.5rem",
+                    "full": "9999px",
+                },
+                fontFamily: {
+                    "headline": ["Heebo", "Assistant", "Segoe UI", "Arial", "sans-serif"],
+                    "body":     ["Heebo", "Assistant", "Segoe UI", "Arial", "sans-serif"],
+                    "hebrew":   ["Heebo", "Assistant", "Noto Sans Hebrew", "sans-serif"],
+                },
+            },
+        },
+    }
+    </script>
+
+    <style>
+        /* Hebrew body font */
+        :dir(rtl) body,
+        :dir(rtl) button,
+        :dir(rtl) input,
+        :dir(rtl) select,
+        :dir(rtl) textarea,
+        :dir(rtl) .btn,
+        :dir(rtl) .form-control,
+        :dir(rtl) .form-select,
+        [dir="rtl"] body,
+        [dir="rtl"] button,
+        [dir="rtl"] input,
+        [dir="rtl"] select,
+        [dir="rtl"] textarea,
+        [dir="rtl"] .btn,
+        [dir="rtl"] .form-control,
+        [dir="rtl"] .form-select {
+            font-family: 'Heebo', 'Assistant', 'Rubik', 'Noto Sans Hebrew', sans-serif !important;
+        }
+        /* Sidebar active link */
+        .sidebar-link-active {
+            background-color: #5676b6 !important;
+            color: #ffffff !important;
+        }
+
+        .admin-sidebar {
+            width: 16rem;
+            max-width: 85vw;
+            will-change: transform;
+            border-inline-end: 1px solid rgb(226 232 240);
+        }
+
+        .admin-header {
+            inset-inline: 0;
+        }
+
+        .notification-recipient-list {
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .stable-filter-btn {
+            min-width: 6.5rem;
+            min-height: 2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+            font-weight: 600 !important;
+            line-height: 1.2;
+            box-sizing: border-box;
+            border-width: 1px !important;
+            transform: none !important;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stable-filter-btn:hover,
+        .stable-filter-btn:focus,
+        .stable-filter-btn:active {
+            font-weight: 600 !important;
+            transform: none !important;
+        }
+
+        .stable-filter-btn.is-selected {
+            background-color: rgba(86, 118, 182, 0.12) !important;
+            color: #36538a !important;
+            border-color: rgba(86, 118, 182, 0.45) !important;
+            box-shadow: none !important;
+        }
+
+        .notification-history-item {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 0.9rem;
+            padding: 0.75rem;
+            background: #fff;
+        }
+
+        .collapse.show {
+            display: block;
+            visibility: visible !important;
+        }
+
+        .collapsing {
+            visibility: visible !important;
+        }
+
+        @media (max-width: 1023.98px) {
+            .admin-sidebar {
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                z-index: 40;
+                opacity: 0;
+                pointer-events: none;
+                transition: transform 0.28s ease, opacity 0.28s ease;
+                box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+            }
+            .admin-sidebar {
+                inset-inline-start: 0;
+                transform: translateX(-105%);
+            }
+            html:dir(rtl) .admin-sidebar,
+            html[dir="rtl"] .admin-sidebar {
+                transform: translateX(105%);
+            }
+            .admin-sidebar.is-open {
+                transform: translateX(0) !important;
+                opacity: 1;
+                pointer-events: auto;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .admin-header {
+                inset-inline-start: 16rem;
+                inset-inline-end: 0;
+            }
+            html:dir(rtl) .admin-header,
+            html[dir="rtl"] .admin-header {
+                inset-inline-end: 16rem;
+                inset-inline-start: 0;
+            }
+            .admin-sidebar {
+                position: static !important;
+                inset: auto !important;
+                transform: none !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+                box-shadow: none !important;
+                max-width: none;
+            }
+        }
+    </style>
 </head>
 <body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 <a href="#main-content" class="skip-link">{{ 'דלג לתוכן הראשי' if lang == 'he' else 'Skip to main content' }}</a>
@@ -356,8 +554,31 @@
     <a href="{{ url_for('accessibility_statement') }}" class="text-slate-600 text-sm hover:text-teal-700 transition-colors">
         {{ 'הצהרת נגישות' if lang == 'he' else 'Accessibility Statement' }}
     </a>
+    <span class="text-slate-300 mx-2">•</span>
+    <a href="{{ url_for('privacy_policy') }}" class="text-slate-600 text-sm hover:text-teal-700 transition-colors">
+        {{ 'מדיניות פרטיות' if lang == 'he' else 'Privacy Policy' }}
+    </a>
 </footer>
 {% endif %}
+
+    {# Cookie Consent Banner #}
+    <div id="cookieConsentBanner" class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 shadow-lg p-4 hidden" role="alert" aria-label="{{ 'הודעת עוגיות' if lang == 'he' else 'Cookie notice' }}">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <p class="text-sm text-slate-700 flex-1">
+                {% if lang == 'he' %}
+                אתר זה משתמש בעוגיות חיוניות לצורך תפעול תקין ואימות משתמשים בלבד. אין אנו משתמשים בעוגיות לצרכי מעקב או פרסום.
+                {% else %}
+                This site uses essential cookies for operation and authentication only. We do not use tracking or advertising cookies.
+                {% endif %}
+                <a href="{{ url_for('privacy_policy') }}" class="text-primary underline hover:no-underline ms-1">
+                    {{ 'מידע נוסף' if lang == 'he' else 'Learn more' }}
+                </a>
+            </p>
+            <button id="cookieConsentAccept" class="bg-primary text-white text-sm font-medium px-5 py-2 rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap">
+                {{ 'הבנתי' if lang == 'he' else 'Got it' }}
+            </button>
+        </div>
+    </div>
 
     {% if current_user.is_authenticated %}
     <div class="offcanvas offcanvas-end" tabindex="-1" id="messagesOffcanvas" aria-labelledby="messagesOffcanvasLabel">
@@ -518,6 +739,53 @@
             lightMode: '{{ t("Light Mode") }}'
         }
     };
+
+        {% if not current_user.is_authenticated or current_user.role == 'patient' %}
+        const blockClipboard = function(event) {
+            const eventTarget = event.target;
+            if (eventTarget && typeof eventTarget.closest === 'function' && eventTarget.closest('[data-allow-clipboard="true"]')) {
+                return;
+            }
+            event.preventDefault();
+        };
+        document.addEventListener('copy', blockClipboard, true);
+        document.addEventListener('cut', blockClipboard, true);
+        document.addEventListener('paste', blockClipboard, true);
+        {% elif current_user.role == 'admin' %}
+        console.log('[Clinic] Admin clipboard access enabled (role: admin)');
+        document.addEventListener('contextmenu', function(e) {
+            e.stopImmediatePropagation();
+        }, true);
+        {% endif %}
+
+        document.querySelectorAll('form').forEach((form) => {
+            form.setAttribute('autocomplete', 'off');
+        });
+
+        document.querySelectorAll('input, textarea').forEach((field) => {
+            const fieldType = (field.getAttribute('type') || '').toLowerCase();
+            if (fieldType === 'hidden' || fieldType === 'checkbox' || fieldType === 'radio' || fieldType === 'submit' || fieldType === 'button') {
+                return;
+            }
+            field.setAttribute('autocomplete', 'off');
+            field.setAttribute('autocorrect', 'off');
+            field.setAttribute('autocapitalize', 'none');
+            field.setAttribute('spellcheck', 'false');
+        });
+
+        {# Cookie consent #}
+        const cookieBanner = document.getElementById('cookieConsentBanner');
+        const cookieAcceptBtn = document.getElementById('cookieConsentAccept');
+        if (cookieBanner && cookieAcceptBtn) {
+            if (!localStorage.getItem('cookie_consent')) {
+                cookieBanner.classList.remove('hidden');
+            }
+            cookieAcceptBtn.addEventListener('click', function() {
+                localStorage.setItem('cookie_consent', '1');
+                cookieBanner.classList.add('hidden');
+            });
+        }
+    });
     </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 

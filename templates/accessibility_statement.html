@@ -14,70 +14,105 @@
         <div class="card-body p-4 p-md-5">
             {% if lang == 'he' %}
             <h1 class="h3 mb-3">הצהרת נגישות</h1>
-            <p class="text-muted mb-4">אנו פועלים להנגשת האתר בהתאם לתקן הישראלי IS 5568, המעוגן ב-WCAG 2.0 ברמה AA.</p>
+            <p class="text-muted mb-3">אנו בקליניקת ליאור אלוני מחויבים להנגשת האתר לאנשים עם מוגבלויות, בהתאם לתקן הישראלי IS 5568, המעוגן ב-WCAG 2.0 ברמה AA.</p>
 
-            <h2 class="h5 mt-4">מה יישמנו באתר</h2>
+            <h2 class="h5 mt-4">אמצעי הנגישות המיושמים באתר</h2>
             <ul class="mb-4">
-                <li>תמיכה בכיוון כתיבה מימין לשמאל (RTL) והצהרת שפה תקינה.</li>
-                <li>ניווט במקלדת, כולל קישור "דלג לתוכן הראשי".</li>
-                <li>תיוג שדות טופס והודעות שגיאה ברורות.</li>
-                <li>תמיכה בקוראי מסך והתאמה לתוכן עברי/אנגלי משולב.</li>
-                <li>שיפור קריאות טקסט וניגודיות בממשק.</li>
+                <li>הצהרת שפה תקינה (lang="he") וכיוון כתיבה (dir="rtl") ברמת המסמך</li>
+                <li>תמיכה מלאה בניווט באמצעות מקלדת, כולל קישור "דלג לתוכן הראשי"</li>
+                <li>תיוג מלא של שדות טפסים והודעות שגיאה ברורות בעברית</li>
+                <li>תמיכה בקוראי מסך (NVDA, JAWS, VoiceOver)</li>
+                <li>ניגודיות צבעים העומדת ביחס 4.5:1 לפחות</li>
+                <li>תמונות מלוות בטקסט חלופי (alt text)</li>
+                <li>שילוב תוכן עברי/אנגלי עם טיפול נכון בכיוון כתיבה (bidi)</li>
+                <li>גופנים מותאמים לעברית (Heebo, Assistant) עם ריווח משופר לקריאות</li>
+                <li>תמיכה בשינוי גודל טקסט ללא אובדן תוכן</li>
             </ul>
 
-            <h2 class="h5 mt-4">יצירת קשר בנושא נגישות</h2>
-            <p class="mb-1">בכל בעיית נגישות ניתן לפנות אלינו ונשמח לסייע.</p>
-            <p class="mb-1">
-                <strong>טלפון:</strong>
+            <h2 class="h5 mt-4">מגבלות נגישות ידועות</h2>
+            <p class="mb-2">אנו פועלים באופן מתמיד לשיפור הנגישות. להלן המגבלות המוכרות לנו נכון למועד הביקורת האחרון:</p>
+            <ul class="mb-4">
+                <li>מסמכי PDF וקבצים שהועלו על ידי המטפל עשויים שלא להיות מונגשים במלואם</li>
+                <li>חלק מהרכיבים המותאמים אישית (כגון גרירת מטופלים לReorder) עשויים להיות מוגבלים למשתמשי מקלדת טהורה</li>
+            </ul>
+            <p>אנו מתכננים לתקן מגבלות אלה בעדכונים עתידיים.</p>
+
+            <h2 class="h5 mt-4">רכז/ת נגישות</h2>
+            <p class="mb-1"><strong>שם:</strong> ליאור אלוני</p>
+            <p class="mb-1"><strong>טלפון:</strong>
                 {% if site_settings.get('about_phone') %}
                 <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
                 {% else %}
                 <span dir="ltr">+972-50-000-0000</span>
                 {% endif %}
             </p>
-            <p class="mb-4">
-                <strong>דוא"ל:</strong>
+            <p class="mb-4"><strong>דוא"ל:</strong>
                 {% if site_settings.get('about_email') %}
-                <a href="mailto:{{ site_settings.get('about_email') }}" dir="ltr">{{ site_settings.get('about_email') }}</a>
+                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
                 {% else %}
-                <a href="mailto:accessibility@clinic.example" dir="ltr">accessibility@clinic.example</a>
+                <a href="mailto:negishot@clinic.lior-clinic.org">negishot@clinic.lior-clinic.org</a>
                 {% endif %}
             </p>
 
-            <p class="small text-muted mb-0">תאריך עדכון אחרון: 18/05/2026</p>
+            <h2 class="h5 mt-4">פרטי ביקורת הנגישות</h2>
+            <p class="mb-1"><strong>תאריך ביקורת אחרונה:</strong> יוני 2026</p>
+            <p class="mb-4"><strong>תאריך עדכון ההצהרה:</strong> יוני 2026</p>
+
+            <h2 class="h5 mt-4">פנייה בנושא נגישות</h2>
+            <p class="mb-3">אם נתקלת בבעיית נגישות באתר, נשמח לקבל פנייתך באמצעות פרטי הקשר לעיל. אנו נשיב תוך 60 ימי עסקים כנדרש בחוק. במידה ולא נטופל כראוי, תוכל לפנות לנציבות שוויון זכויות לאנשים עם מוגבלות.</p>
+
+            <p class="small text-muted mb-0">תאריך עדכון אחרון: יוני 2026</p>
+
             {% else %}
             <h1 class="h3 mb-3">Accessibility Statement</h1>
-            <p class="text-muted mb-4">We continuously improve this site to align with Israeli Standard IS 5568 (WCAG 2.0 AA baseline).</p>
+            <p class="text-muted mb-3">Lior Aloni Clinic is committed to making its website accessible to individuals with disabilities in accordance with Israeli Standard IS 5568 (WCAG 2.0 AA baseline).</p>
 
-            <h2 class="h5 mt-4">What we implemented</h2>
+            <h2 class="h5 mt-4">Accessibility Features Implemented</h2>
             <ul class="mb-4">
-                <li>Proper language and RTL/LTR direction handling.</li>
-                <li>Keyboard navigation support, including a skip-to-content link.</li>
-                <li>Clear form labels and validation feedback.</li>
-                <li>Better screen-reader compatibility for mixed Hebrew/English content.</li>
-                <li>Improved readability and contrast in core views.</li>
+                <li>Proper language declaration (lang="he") and document direction (dir="rtl")</li>
+                <li>Full keyboard navigation support, including skip-to-content link</li>
+                <li>Complete form labeling and clear error messages in Hebrew</li>
+                <li>Screen reader support (NVDA, JAWS, VoiceOver)</li>
+                <li>Color contrast ratio of at least 4.5:1</li>
+                <li>Alternative text for all images</li>
+                <li>Correct bidirectional (bidi) handling for mixed Hebrew/English content</li>
+                <li>Hebrew-optimized fonts (Heebo, Assistant) with improved readability spacing</li>
+                <li>Text resize support without content loss</li>
             </ul>
 
-            <h2 class="h5 mt-4">Accessibility contact</h2>
-            <p class="mb-1">If you encounter any accessibility issue, please contact us and we will assist.</p>
-            <p class="mb-1">
-                <strong>Phone:</strong>
+            <h2 class="h5 mt-4">Known Limitations</h2>
+            <p class="mb-2">We continuously work to improve accessibility. Known limitations as of the latest audit:</p>
+            <ul class="mb-4">
+                <li>PDF documents and files uploaded by the therapist may not be fully accessible</li>
+                <li>Some custom interactive components (e.g., patient drag-to-reorder) may have limited keyboard-only support</li>
+            </ul>
+            <p>We plan to address these limitations in future updates.</p>
+
+            <h2 class="h5 mt-4">Accessibility Coordinator</h2>
+            <p class="mb-1"><strong>Name:</strong> Lior Aloni</p>
+            <p class="mb-1"><strong>Phone:</strong>
                 {% if site_settings.get('about_phone') %}
                 <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
                 {% else %}
                 <span dir="ltr">+972-50-000-0000</span>
                 {% endif %}
             </p>
-            <p class="mb-4">
-                <strong>Email:</strong>
+            <p class="mb-4"><strong>Email:</strong>
                 {% if site_settings.get('about_email') %}
-                <a href="mailto:{{ site_settings.get('about_email') }}" dir="ltr">{{ site_settings.get('about_email') }}</a>
+                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
                 {% else %}
-                <a href="mailto:accessibility@clinic.example" dir="ltr">accessibility@clinic.example</a>
+                <a href="mailto:negishot@clinic.lior-clinic.org">negishot@clinic.lior-clinic.org</a>
                 {% endif %}
             </p>
 
-            <p class="small text-muted mb-0">Last updated: 18/05/2026</p>
+            <h2 class="h5 mt-4">Audit Details</h2>
+            <p class="mb-1"><strong>Last audit date:</strong> June 2026</p>
+            <p class="mb-4"><strong>Statement updated:</strong> June 2026</p>
+
+            <h2 class="h5 mt-4">Contact Us About Accessibility</h2>
+            <p class="mb-3">If you encounter an accessibility issue, please contact us using the details above. We will respond within 60 business days as required by law. If your concern is not properly addressed, you may contact the Commission for Equal Rights of Persons with Disabilities.</p>
+
+            <p class="small text-muted mb-0">Last updated: June 2026</p>
             {% endif %}
         </div>
     </article>

@@ -3262,6 +3262,12 @@ def accessibility_statement():
     return render_template('accessibility_statement.html', site_settings=settings)
 
 
+@app.route('/privacy-policy')
+def privacy_policy():
+    settings = get_site_settings()
+    return render_template('privacy_policy.html', site_settings=settings)
+
+
 HEBREW_NUMBER_WORDS = {
     'אחד': '1',
     'אחת': '1',

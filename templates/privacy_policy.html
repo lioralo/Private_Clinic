@@ -1,0 +1,124 @@
+{% extends "layout.html" %}
+
+{% block title %}
+{{ 'מדיניות פרטיות' if lang == 'he' else 'Privacy Policy' }}
+{% endblock %}
+
+{% block page_title %}
+{{ 'מדיניות פרטיות' if lang == 'he' else 'Privacy Policy' }}
+{% endblock %}
+
+{% block content %}
+<section class="max-w-4xl mx-auto mt-4">
+    <article class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5">
+            {% if lang == 'he' %}
+            <h1 class="h3 mb-3">מדיניות פרטיות</h1>
+            <p class="text-muted mb-4">עודכן לאחרונה: יוני 2026</p>
+
+            <p>קליניקת ליאור אלוני מכבדת את פרטיותך ומחויבת להגן על המידע האישי שלך בהתאם לחוק הגנת הפרטיות, התשמ״א-1981 ולתקנות הגנת הפרטיות (אבטחת מידע), התשע״ז-2017.</p>
+
+            <h2 class="h5 mt-4">איזה מידע אנו אוספים</h2>
+            <ul class="mb-4">
+                <li>שם מלא, כתובת אימייל, מספר טלפון</li>
+                <li>תאריך לידה ומספר תעודת זהות (לצרכי טיפול וחשבונית)</li>
+                <li>מידע רפואי/טיפולי הנרשם במהלך הטיפול</li>
+                <li>כתובת IP ונתוני גלישה בסיסיים לצרכי אבטחת מידע</li>
+                <li>פרטי תשלום לצרכי חיוב וקבלות</li>
+            </ul>
+
+            <h2 class="h5 mt-4">כיצד אנו משתמשים במידע</h2>
+            <ul class="mb-4">
+                <li>ניהול תיק המטופל ומתן שירות טיפולי</li>
+                <li>תיאום פגישות ושליחת תזכורות</li>
+                <li>שליחת קבלות ומסמכים טיפוליים</li>
+                <li>עמידה בדרישות חוקיות ורגולטוריות</li>
+                <li>שיפור השירות והתאמתו לצרכי המטופלים</li>
+            </ul>
+
+            <h2 class="h5 mt-4">אבטחת מידע</h2>
+            <p class="mb-4">המידע נשמר במאגר מאובטח בהצפנה מלאה. הגישה למידע מוגבלת למטפל בלבד. אנו נוקטים באמצעי אבטחה מתקדמים בהתאם לרמת האבטחה הנדרשת בתקנות הגנת הפרטיות (אבטחת מידע), התשע״ז-2017.</p>
+
+            <h2 class="h5 mt-4">העברת מידע לצדדים שלישיים</h2>
+            <p class="mb-4">אין אנו מעבירים מידע אישי לצדדים שלישיים, אלא אם נדרש על פי חוק, או לצורך עיבוד תשלומים (באמצעות מערכות סליקה מאובטחות).</p>
+
+            <h2 class="h5 mt-4">זכויותיך לפי חוק הגנת הפרטיות</h2>
+            <ul class="mb-4">
+                <li>זכות לעיין במידע המוחזק עליך (סעיף 13)</li>
+                <li>זכות לבקש תיקון מידע שגוי, לא שלם או לא ברור (סעיף 14)</li>
+                <li>זכות לבקש הסרה ממאגר המידע</li>
+                <li>זכות לבטל הסכמה לשימוש במידע (בתיקון 13)</li>
+            </ul>
+            <p class="mb-4">ניתן לממש זכויות אלה באמצעות פנייה בכתב לכתובת האימייל שלמטה. אנו נשיב לפנייתך תוך 30 ימים כנדרש בחוק.</p>
+
+            <h2 class="h5 mt-4">עוגיות (Cookies)</h2>
+            <p class="mb-4">האתר משתמש בעוגיות חיוניות לצורך תפעול תקין של המערכת ואימות משתמשים. אין אנו משתמשים בעוגיות לצרכי מעקב או פרסום. ניתן לבטל עוגיות בהגדרות הדפדפן, אך הדבר עלול לפגוע בתפקוד האתר.</p>
+
+            <h2 class="h5 mt-4">יצירת קשר בנושא פרטיות</h2>
+            <p class="mb-1">
+                <strong>דוא"ל:</strong>
+                {% if site_settings.get('about_email') %}
+                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
+                {% else %}
+                <a href="mailto:admin@clinic.lior-clinic.org">admin@clinic.lior-clinic.org</a>
+                {% endif %}
+            </p>
+            <p class="small text-muted mt-4">תאריך עדכון אחרון: יוני 2026</p>
+
+            {% else %}
+            <h1 class="h3 mb-3">Privacy Policy</h1>
+            <p class="text-muted mb-4">Last updated: June 2026</p>
+
+            <p>Lior Aloni Clinic respects your privacy and is committed to protecting your personal data in accordance with the Israeli Privacy Protection Law, 1981 and the Privacy Protection (Data Security) Regulations, 2017.</p>
+
+            <h2 class="h5 mt-4">Information We Collect</h2>
+            <ul class="mb-4">
+                <li>Full name, email address, phone number</li>
+                <li>Date of birth and ID number (for treatment and invoicing)</li>
+                <li>Medical/therapeutic information recorded during treatment</li>
+                <li>IP address and basic browsing data for security purposes</li>
+                <li>Payment details for billing and receipts</li>
+            </ul>
+
+            <h2 class="h5 mt-4">How We Use Your Information</h2>
+            <ul class="mb-4">
+                <li>Managing patient records and providing therapeutic services</li>
+                <li>Scheduling appointments and sending reminders</li>
+                <li>Sending receipts and therapeutic documents</li>
+                <li>Complying with legal and regulatory requirements</li>
+                <li>Improving services and adapting to patient needs</li>
+            </ul>
+
+            <h2 class="h5 mt-4">Data Security</h2>
+            <p class="mb-4">All information is stored in a fully encrypted secure database. Access is limited to the therapist only. We employ advanced security measures in accordance with the Privacy Protection (Data Security) Regulations, 2017.</p>
+
+            <h2 class="h5 mt-4">Third-Party Data Sharing</h2>
+            <p class="mb-4">We do not share personal information with third parties unless required by law or for payment processing through secure payment systems.</p>
+
+            <h2 class="h5 mt-4">Your Rights Under Privacy Law</h2>
+            <ul class="mb-4">
+                <li>Right to access information held about you (Section 13)</li>
+                <li>Right to request correction of inaccurate, incomplete, or unclear data (Section 14)</li>
+                <li>Right to request removal from the database</li>
+                <li>Right to withdraw consent (Amendment 13)</li>
+            </ul>
+            <p class="mb-4">You may exercise these rights by contacting us via email. We will respond within 30 days as required by law.</p>
+
+            <h2 class="h5 mt-4">Cookies</h2>
+            <p class="mb-4">This site uses essential cookies for system operation and user authentication. We do not use tracking or advertising cookies. You may disable cookies in your browser settings, though this may affect site functionality.</p>
+
+            <h2 class="h5 mt-4">Contact Us About Privacy</h2>
+            <p class="mb-1">
+                <strong>Email:</strong>
+                {% if site_settings.get('about_email') %}
+                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
+                {% else %}
+                <a href="mailto:admin@clinic.lior-clinic.org">admin@clinic.lior-clinic.org</a>
+                {% endif %}
+            </p>
+            <p class="small text-muted mt-4">Last updated: June 2026</p>
+            {% endif %}
+        </div>
+    </article>
+</section>
+{% endblock %}
