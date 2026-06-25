@@ -150,6 +150,31 @@ bash scripts/deploy_now.sh
 
 ---
 
+---
+
+## Deployment Update — June 25, 2026
+
+### Changes Deployed
+
+| Change | Details |
+|--------|---------|
+| Privacy Policy | New page at `/privacy-policy`, compliant with Israeli Privacy Protection Law 1981 + Amendment 13 |
+| Accessibility Statement | Updated to IS 5568 standard, named accessibility coordinator (Lior Aloni), audit dated |
+| Cookie Consent Banner | Essential-cookies-only informational banner with localStorage dismissal |
+| Hebrew Fonts | Heebo, Assistant, Noto Sans Hebrew loaded from Google Fonts; Tailwind font config updated |
+| SMTP (AWS SES) | Configured and verified — login successful to `email-smtp.eu-north-1.amazonaws.com:587` |
+| init_db race fix | Added `--preload` to gunicorn + idempotent init guard prevents triple schema execution |
+| .env.example | Template committed (secrets excluded from git) |
+
+### Verification
+
+- [x] Code pushed to `origin/main` (commit `f53f0df`)
+- [x] Server pulled latest, Docker image rebuilt, container healthy
+- [x] SMTP login successful from running container
+- [x] `/privacy-policy`, `/accessibility-statement` routes registered and serving
+- [x] Database init runs once (preload + idempotent guard)
+- [x] Environment vars injected (SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD in `.env`)
+
 **Deployment completed successfully!** 🎉
 
 The Private Clinic application is now running on AWS with the latest code from GitHub.

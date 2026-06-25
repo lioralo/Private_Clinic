@@ -3198,20 +3198,40 @@ def _seed_admin_user(db):
         db.commit()
 
 
+_db_initialized = False
+
 def init_db():
+    global _db_initialized
+
+    if _db_initialized:
+        return
 
     database = app.config.get('DATABASE', DATABASE)
-    # Always run schema to ensure tables exist
     with app.app_context():
         db = get_db()
-        with app.open_resource('clinic_app/schema.sql', mode='r') as f:
-            db.cursor().executescript(f.read())
-        db.commit()
+        # Check if DB already has schema (e.g. alembic_version exists)
+        already_initialized = False
+        try:
+            row = db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+            ).fetchone()
+            if row:
+                already_initialized = True
+        except Exception:
+            pass
+
+        if not already_initialized:
+            with app.open_resource('clinic_app/schema.sql', mode='r') as f:
+                db.cursor().executescript(f.read())
+            db.commit()
 
         _run_db_migrations(db)
         _seed_admin_user(db)
 
-        print(f"Initialized the database at {database}.")
+        if not already_initialized:
+            print(f"Initialized the database at {database}.")
+
+    _db_initialized = True
 
         if not app.config.get('TESTING'):
             try:
