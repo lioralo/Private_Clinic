@@ -1178,7 +1178,7 @@ def setup_authenticator():
     code = (request.form.get('code') or '').strip()
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
-    if action == 'generate':
+    if action == 'generate' or action == 'start':
         secret = pyotp.random_base32()
         totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user['username'], issuer_name='Private Clinic')
         session['pending_totp_secret'] = secret

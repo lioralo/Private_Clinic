@@ -108,9 +108,9 @@
                         </button>
                     </form>
                     {% else %}
-                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="action" value="start">
+                        <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="generate">
                         <button class="btn btn-primary rounded-pill" type="submit">
                             <i class="bi bi-qr-code-scan me-1"></i>{{ t('Start Authenticator Setup') }}
                         </button>
