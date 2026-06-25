@@ -1717,6 +1717,10 @@ def api_calendar_appointment_delete(appointment_id):
             ).fetchall()
 
     if not is_recurring or scope == 'all':
+        patient = db.execute('SELECT * FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
+        if patient:
+            from app import _notify_patient_appointment_change
+            _notify_patient_appointment_change('cancelled', db, appt, patient)
         deleted_google_event_ids = [row['google_event_id'] for row in related_rows if 'google_event_id' in row.keys()]
         if is_recurring and recurrence_group_id:
             db.execute('DELETE FROM appointments WHERE recurrence_group_id = ?', (recurrence_group_id,))
@@ -2036,6 +2040,7 @@ def api_calendar_appointment_update(appointment_id):
     new_rec_days = str(custom_weekday(day_obj)) if (is_recurring and day_obj) else (
         appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
     )
+    old_details = {'date': str(appt['appointment_date'] or ''), 'time': str(appt['appointment_time'] or '')[:5]}
     db.execute('''
         UPDATE appointments
         SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
@@ -2046,6 +2051,12 @@ def api_calendar_appointment_update(appointment_id):
           meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None,
           save_to_google, new_rec_days, appointment_id))
     db.commit()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
+    if patient:
+        from app import _notify_patient_appointment_change
+        updated_appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+        if updated_appt:
+            _notify_patient_appointment_change('rescheduled', db, updated_appt, patient, old_details)
     sync_message = _sync_appointment_with_google(db, appointment_id)
     response = {'status': 'success'}
     if sync_message:
@@ -2217,10 +2228,12 @@ def delete_appointment(appointment_id):
     db = get_db()
     appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
     if appt:
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
+        patient = db.execute('SELECT * FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
         if patient:
             details = f"Patient {patient['name']} appointment on {appt['appointment_date']} at {appt['appointment_time']} was deleted."
             db.execute('INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)', (appt['patient_id'], 'delete', details))
+            from app import _notify_patient_appointment_change
+            _notify_patient_appointment_change('cancelled', db, appt, patient)
 
         deleted_google_event_ids = [appt['google_event_id']] if 'google_event_id' in appt.keys() else []
         db.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))

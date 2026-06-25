@@ -24,6 +24,17 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-1}
+      # Appointment reminders
+      REMINDER_HOURS_BEFORE: ${REMINDER_HOURS_BEFORE:-24}
+      REMINDER_SCHEDULER_INTERVAL: ${REMINDER_SCHEDULER_INTERVAL:-300}
+      # Incoming email (IMAP) — optional
+      IMAP_HOST: ${IMAP_HOST:-}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USERNAME: ${IMAP_USERNAME:-}
+      IMAP_PASSWORD: ${IMAP_PASSWORD:-}
+      IMAP_USE_SSL: ${IMAP_USE_SSL:-1}
+      IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
+      IMAP_POLL_INTERVAL: ${IMAP_POLL_INTERVAL:-300}
     volumes:
       - ./data:/data
 

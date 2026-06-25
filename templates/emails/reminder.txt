@@ -1,0 +1,11 @@
+Hello {{ patient_name }},
+
+This is a reminder about your upcoming appointment:
+  Date: {{ date_str }}
+  Time: {{ time_str }}
+  Type: {{ meeting_type }}{% if meeting_title %} ({{ meeting_title }}){% endif %}{% if meeting_link %}
+  Join link: {{ meeting_link }}{% endif %}
+
+If you need to reschedule or cancel, please contact the clinic.
+
+{{ clinic_name }}

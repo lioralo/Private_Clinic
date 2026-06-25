@@ -848,6 +848,12 @@ def approve_cancel_request(request_id):
     db.execute('UPDATE cancel_requests SET is_approved = 1 WHERE id = ?', (request_id,))
     db.execute('UPDATE appointments SET status = ? WHERE id = ?', ('cancelled', req['appointment_id']))
     db.commit()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (req['patient_id'],)).fetchone()
+    if patient:
+        appt = db.execute('SELECT * FROM appointments WHERE id = ?', (req['appointment_id'],)).fetchone()
+        if appt:
+            from app import _notify_patient_appointment_change
+            _notify_patient_appointment_change('cancelled', db, appt, patient)
     flash('Cancellation approved.')
     return redirect(url_for('.list_cancel_requests'))
 

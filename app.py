@@ -24,6 +24,8 @@ import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import quote, quote_plus, parse_qs, urlparse
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from flask import Flask, render_template, request, redirect, url_for, flash, g, send_from_directory, jsonify, session, Response, send_file
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
@@ -327,6 +329,8 @@ app.config['PASSWORD_RESET_TOKEN_RETENTION_DAYS'] = int(os.environ.get('PASSWORD
 app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_MAX', '20') or 20)
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 app.config['REMINDER_HOURS_BEFORE'] = int(os.environ.get('REMINDER_HOURS_BEFORE', '24') or 24)
+app.config['REMINDER_SCHEDULER_INTERVAL'] = int(os.environ.get('REMINDER_SCHEDULER_INTERVAL', '300') or 300)
+scheduler = BackgroundScheduler(daemon=True)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
@@ -434,7 +438,7 @@ def _smtp_health_check():
         }
 
 
-def _send_smtp_email(recipient_email, subject, body_text):
+def _send_smtp_email(recipient_email, subject, body_text, html_body=None):
     settings = _smtp_settings_summary()
     if not settings['configured']:
         return False, 'SMTP is not configured.'
@@ -444,6 +448,8 @@ def _send_smtp_email(recipient_email, subject, body_text):
     message['From'] = settings['from_email']
     message['To'] = recipient_email
     message.set_content(body_text)
+    if html_body:
+        message.add_alternative(html_body, subtype='html')
 
     try:
         with smtplib.SMTP(settings['host'], settings['port'], timeout=15) as smtp:
@@ -3046,6 +3052,10 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute("ALTER TABLE appointments ADD COLUMN reminder_hours_before INTEGER")
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute("ALTER TABLE notes ADD COLUMN share_with_patient BOOLEAN DEFAULT 0")
     except sqlite3.OperationalError:
         pass
@@ -3111,6 +3121,22 @@ def _run_db_migrations(db):
     db.execute('''CREATE INDEX IF NOT EXISTS idx_appointments_reminder_pending
         ON appointments (appointment_date, appointment_time)
         WHERE COALESCE(status, 'scheduled') = 'scheduled' AND reminder_sent_at IS NULL''')
+
+    db.execute('''CREATE TABLE IF NOT EXISTS reminder_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        appointment_id INTEGER NOT NULL,
+        patient_id INTEGER NOT NULL,
+        recipient_email TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+        FOREIGN KEY (patient_id) REFERENCES patients(id)
+    )''')
+    db.execute('''CREATE INDEX IF NOT EXISTS idx_reminder_log_appointment
+        ON reminder_log (appointment_id)''')
+    db.execute('''CREATE INDEX IF NOT EXISTS idx_reminder_log_patient_status
+        ON reminder_log (patient_id, status)''')
 
     db.commit()
 
@@ -5741,15 +5767,20 @@ def _send_appointment_email_reminders(db):
     if not settings['configured']:
         return 0
 
-    hours_before = int(app.config.get('REMINDER_HOURS_BEFORE', 24) or 24)
-    now_dt = datetime.now()
-    window_start = now_dt + timedelta(hours=hours_before - 1)
-    window_end = now_dt + timedelta(hours=hours_before + 1)
+    global_hours_before = int(app.config.get('REMINDER_HOURS_BEFORE', 24) or 24)
 
-    rows = db.execute('''
-        SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
-               a.meeting_type, a.meeting_link, a.meeting_title, a.is_recurring,
-               p.id AS patient_id, p.name AS patient_name, p.email AS patient_email,
+    # Fetch appointments with their individual reminder_hours_before (if set) and
+    # compute target windows per-row.  Since timing can differ per appointment,
+    # fetch a wider window and then filter programmatically.
+    #
+    # We pull appointments scheduled within the next 7 days and then
+    # check which ones fall inside their own reminder window.
+    look_ahead = 7
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    look_ahead_date = (datetime.now() + timedelta(days=look_ahead)).strftime('%Y-%m-%d')
+
+    candidates = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.email AS patient_email,
                u.email AS user_email
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
@@ -5758,77 +5789,217 @@ def _send_appointment_email_reminders(db):
           AND COALESCE(p.is_deleted, 0) = 0
           AND COALESCE(p.reminder_email_enabled, 1) = 1
           AND a.reminder_sent_at IS NULL
-          AND a.appointment_date = ?
-          AND a.appointment_time >= ? AND a.appointment_time <= ?
-        ORDER BY a.appointment_time ASC
-    ''', (
-        now_dt.strftime('%Y-%m-%d'),
-        window_start.strftime('%H:%M'),
-        window_end.strftime('%H:%M'),
-    )).fetchall()
+          AND a.appointment_date BETWEEN ? AND ?
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (today_str, look_ahead_date)).fetchall()
+
+    non_recurring = []
+    recurring_candidates = []
+
+    for row in candidates:
+        actual_hours = int(row.get('reminder_hours_before') or global_hours_before)
+        appt_date = str(row['appointment_date'] or '')
+        appt_time = str(row['appointment_time'] or '')[:5]
+        try:
+            appt_dt = datetime.strptime(f'{appt_date} {appt_time}', '%Y-%m-%d %H:%M')
+        except (ValueError, TypeError):
+            continue
+        reminder_start = appt_dt - timedelta(hours=actual_hours + 1)
+        reminder_end = appt_dt - timedelta(hours=actual_hours - 1)
+        now_dt = datetime.now()
+        if reminder_start <= now_dt <= reminder_end:
+            if row.get('is_recurring'):
+                recurring_candidates.append(row)
+            else:
+                non_recurring.append(row)
 
     sent_count = 0
-    for row in rows:
+    log_entries = []
+
+    def process_row(row):
+        nonlocal sent_count
         recipient = (row['user_email'] or '').strip() or (row['patient_email'] or '').strip()
         if not recipient:
-            continue
-
+            return
         meeting_title = row['meeting_title'] or ''
         meeting_type = row['meeting_type'] or 'in-person'
         meeting_link = row['meeting_link'] or ''
         time_str = str(row['appointment_time'] or '')[:5]
         date_str = str(row['appointment_date'] or '')
 
-        meeting_info = f" ({meeting_title})" if meeting_title else ""
-        link_info = f"\n\nJoin link: {meeting_link}" if meeting_link else ""
+        patient_name = row['patient_name']
+        try:
+            html_body = render_template('emails/reminder_en.html',
+                patient_name=patient_name, date_str=date_str, time_str=time_str,
+                meeting_type=meeting_type, meeting_title=meeting_title,
+                meeting_link=meeting_link, clinic_name='Private Clinic')
+            text_body = render_template('emails/reminder.txt',
+                patient_name=patient_name, date_str=date_str, time_str=time_str,
+                meeting_type=meeting_type, meeting_title=meeting_title,
+                meeting_link=meeting_link, clinic_name='Private Clinic')
+        except Exception:
+            text_body = (
+                f'Hello {patient_name},\n\n'
+                f'This is a reminder about your upcoming appointment:\n'
+                f'  Date: {date_str}\n'
+                f'  Time: {time_str}\n'
+                f'  Type: {meeting_type}'
+                f'{f" ({meeting_title})" if meeting_title else ""}'
+                f'{f"\n\nJoin link: {meeting_link}" if meeting_link else ""}\n\n'
+                f'If you need to reschedule or cancel, please contact the clinic.\n\n'
+                f'Private Clinic'
+            )
+            html_body = None
 
-        subject = f'Appointment Reminder: {row["patient_name"]} on {date_str}'
-        body = (
-            f'Hello {row["patient_name"]},\n\n'
-            f'This is a reminder about your upcoming appointment:\n'
-            f'  Date: {date_str}\n'
-            f'  Time: {time_str}\n'
-            f'  Type: {meeting_type}{meeting_info}'
-            f'{link_info}\n\n'
-            f'If you need to reschedule or cancel, please contact the clinic.\n\n'
-            f'Private Clinic'
-        )
+        subject = f'Appointment Reminder: {patient_name} on {date_str}'
+        success, msg = _send_smtp_email(recipient, subject, text_body, html_body)
 
-        success, msg = _send_smtp_email(recipient, subject, body)
+        log_entries.append({
+            'appointment_id': row['id'],
+            'patient_id': row['patient_id'],
+            'recipient_email': recipient,
+            'status': 'sent' if success else 'failed',
+            'error_message': msg if not success else None,
+        })
+
         if success:
             db.execute('UPDATE appointments SET reminder_sent_at = ? WHERE id = ?',
                        (datetime.now().isoformat(), row['id']))
             sent_count += 1
 
-    if sent_count:
+    for row in non_recurring:
+        process_row(row)
+
+    if recurring_candidates:
+        for row in recurring_candidates:
+            date_str = str(row['appointment_date'] or '')
+            try:
+                occurrences = recurring_occurrences_between(
+                    row, date_str, date_str
+                )
+            except Exception:
+                occurrences = []
+            row_date = str(row['appointment_date'] or '')
+            if any(str(o) == row_date for o in occurrences):
+                process_row(row)
+
+    if log_entries:
+        for entry in log_entries:
+            try:
+                db.execute('''INSERT INTO reminder_log
+                    (appointment_id, patient_id, recipient_email, status, error_message)
+                    VALUES (?, ?, ?, ?, ?)''',
+                    (entry['appointment_id'], entry['patient_id'],
+                     entry['recipient_email'], entry['status'], entry['error_message']))
+            except Exception as exc:
+                app.logger.error('Failed to write reminder_log entry: %s', exc)
         db.commit()
+
     return sent_count
 
 
-def _appointment_reminder_worker_loop():
-    _REMINDER_WORKER_INTERVAL = 300
-    while not _REMINDER_WORKER_STOP_EVENT.is_set():
-        if _REMINDER_WORKER_STOP_EVENT.wait(timeout=_REMINDER_WORKER_INTERVAL):
-            break
-        try:
-            with app.app_context():
-                db = get_db()
-                _send_appointment_email_reminders(db)
-        except Exception:
-            app.logger.exception('Appointment reminder worker iteration failed')
+def _scheduler_reminder_job():
+    try:
+        with app.app_context():
+            db = get_db()
+            _send_appointment_email_reminders(db)
+    except Exception:
+        app.logger.exception('Scheduled reminder job failed')
+
+
+def _scheduler_incoming_email_job():
+    try:
+        from clinic_app.incoming_email import poll_incoming_email
+        poll_incoming_email(app)
+    except Exception:
+        app.logger.exception('Incoming email polling job failed')
 
 
 def ensure_appointment_reminder_worker_started():
     if app.config.get('TESTING'):
         return
-    with _REMINDER_WORKER_STATE_LOCK:
-        global _REMINDER_WORKER_STARTED
-        if _REMINDER_WORKER_STARTED:
-            return
-        worker = threading.Thread(target=_appointment_reminder_worker_loop, name='appt-reminder-worker', daemon=True)
-        worker.start()
-        _REMINDER_WORKER_STARTED = True
+    if scheduler.get_job('appointment_reminder'):
+        return
+    interval = app.config.get('REMINDER_SCHEDULER_INTERVAL', 300)
+    scheduler.add_job(
+        _scheduler_reminder_job,
+        IntervalTrigger(seconds=interval),
+        id='appointment_reminder',
+        name='Send appointment email reminders',
+        replace_existing=True,
+    )
+    incoming_interval = int(os.environ.get('IMAP_POLL_INTERVAL', '300') or 300)
+    scheduler.add_job(
+        _scheduler_incoming_email_job,
+        IntervalTrigger(seconds=incoming_interval),
+        id='incoming_email_poller',
+        name='Poll IMAP for incoming email replies',
+        replace_existing=True,
+    )
+    if not scheduler.running:
+        scheduler.start()
+        app.logger.info('APScheduler started: reminders every %ss, incoming email every %ss',
+                        interval, incoming_interval)
 
+
+def _notify_patient_appointment_change(change_type, db, appointment, patient, old_details=None):
+    """Send email + internal message about an appointment change.
+
+    change_type: 'cancelled', 'rescheduled', 'new'
+    """
+    recipient = (patient['email'] or '').strip()
+    if not recipient:
+        return False
+
+    date_str = str(appointment['appointment_date'] or '')
+    time_str = str(appointment['appointment_time'] or '')[:5]
+    meeting_type = str(appointment['meeting_type'] or 'in-person')
+
+    if change_type == 'cancelled':
+        subject = f'Appointment Cancelled: {date_str} at {time_str}'
+        text_body = (
+            f'Hello {patient["name"]},\n\n'
+            f'Your appointment on {date_str} at {time_str} ({meeting_type}) has been cancelled.\n\n'
+            f'If you have any questions, please contact the clinic.\n\n'
+            f'Private Clinic'
+        )
+    elif change_type == 'rescheduled':
+        old_date = old_details.get('date', '') if old_details else ''
+        old_time = old_details.get('time', '') if old_details else ''
+        subject = f'Appointment Rescheduled: was {old_date} {old_time}'
+        text_body = (
+            f'Hello {patient["name"]},\n\n'
+            f'Your appointment has been rescheduled:\n'
+            f'  Old: {old_date} at {old_time}\n'
+            f'  New: {date_str} at {time_str} ({meeting_type})\n\n'
+            f'If you have any questions, please contact the clinic.\n\n'
+            f'Private Clinic'
+        )
+    else:
+        subject = f'New Appointment: {date_str} at {time_str}'
+        text_body = (
+            f'Hello {patient["name"]},\n\n'
+            f'A new appointment has been scheduled:\n'
+            f'  Date: {date_str}\n'
+            f'  Time: {time_str}\n'
+            f'  Type: {meeting_type}\n\n'
+            f'If you need to reschedule or cancel, please contact the clinic.\n\n'
+            f'Private Clinic'
+        )
+
+    _send_smtp_email(recipient, subject, text_body)
+
+    user = db.execute('SELECT id FROM users WHERE patient_id = ?', (patient['id'],)).fetchone()
+    if user:
+        admin = db.execute("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").fetchone()
+        sender_id = admin['id'] if admin else user['id']
+        db.execute(
+            'INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+            (sender_id, user['id'], f'{subject}\n\n{text_body}')
+        )
+        db.commit()
+
+    return True
 
 
 def build_week_calendar_snapshot(db, week_start, user):
@@ -9338,6 +9509,7 @@ def edit_patient(patient_id):
         birth_date = request.form.get('birth_date') or None
         id_number = (request.form.get('id_number') or '').strip() or None
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
+        reminder_email_enabled = 1 if request.form.get('reminder_email_enabled') else 0
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
@@ -9372,10 +9544,12 @@ def edit_patient(patient_id):
                 treatment_method = request.form.get('treatment_method', '').strip() or None
                 db.execute('''UPDATE patients
                               SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
+                                  reminder_email_enabled = ?,
                                   patient_type = ?, has_intake_tab = ?, has_questionnaire_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
                                   treatment_method = ?
                               WHERE id = ?''',
-                           (name, status, email, phone, birth_date, id_number, can_self_schedule, patient_type,
+                           (name, status, email, phone, birth_date, id_number, can_self_schedule,
+                            reminder_email_enabled, patient_type,
                             has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
                 db.commit()
                 flash('Patient updated successfully.')

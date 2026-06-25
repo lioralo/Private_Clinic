@@ -50,6 +50,16 @@
                     </div>
                 </div>
 
+                <div class="col-md-12">
+                    <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" role="switch" name="reminder_email_enabled" id="reminder_email_enabled" value="1" {% if patient['reminder_email_enabled'] == 1 or patient['reminder_email_enabled'] is none %}checked{% endif %}>
+                        <label class="form-check-label" for="reminder_email_enabled">
+                            <i class="bi bi-bell me-1"></i>Send appointment reminders
+                        </label>
+                        <div class="small text-muted mt-1">When enabled, the patient will receive email reminders before each appointment.</div>
+                    </div>
+                </div>
+
                 {{ patient_type_fields(patient_type=patient['patient_type'] or 'private') }}
                 {{ treatment_track_field(patient_type=patient['patient_type'] or 'private') }}
                 {{ treatment_method_field(
