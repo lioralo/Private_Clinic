@@ -29,10 +29,6 @@
     border-inline-end: 1px solid rgb(226 232 240);
 }
 
-.admin-header {
-    inset-inline: 0;
-}
-
 .notification-recipient-list {
     max-height: 220px;
     overflow-y: auto;
@@ -111,15 +107,6 @@
 }
 
 @media (min-width: 1024px) {
-    .admin-header {
-        inset-inline-start: 16rem;
-        inset-inline-end: 0;
-    }
-    html:dir(rtl) .admin-header,
-    html[dir="rtl"] .admin-header {
-        inset-inline-end: 16rem;
-        inset-inline-start: 0;
-    }
     .admin-sidebar {
         position: static !important;
         inset: auto !important;
@@ -134,11 +121,6 @@
 [data-bs-theme="dark"] .admin-sidebar {
     background-color: #1e293b;
     border-inline-end-color: #334155;
-}
-
-[data-bs-theme="dark"] .admin-header {
-    background-color: rgba(30, 41, 59, 0.88);
-    border-bottom-color: #334155;
 }
 
 [data-bs-theme="dark"] .notification-history-item {

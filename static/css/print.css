@@ -1,6 +1,6 @@
 @media print {
     body { background: #fff !important; color: #000 !important; font-size: 11pt; }
-    .admin-sidebar, .admin-header, .no-print, .btn, .sidebar-link-active,
+    .admin-sidebar, .no-print, .btn, .sidebar-link-active,
     nav, footer, .offcanvas, .toast-container, .skip-link, #adminSidebarBackdrop,
     #confirmModal, .modal, .toast { display: none !important; }
     .app-shell, main, #main-content { margin: 0 !important; padding: 0 !important; }

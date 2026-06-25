@@ -295,29 +295,12 @@
                         <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>
                         {% endif %}
                     </div>
-                    {# Integration selector + connect form #}
+                    {# Single-click connect button #}
                     <div id="gcalConnectWrap" class="mb-3{% if google_calendar_ui.connected or not google_calendar_ui.client_configured %} d-none{% endif %}">
-                        <form method="post" action="{{ url_for('google_calendar_connect') }}" id="gcalConnectForm">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="small fw-semibold mb-2">{{ t('Request access for:') }}</div>
-                            <div class="d-flex flex-wrap gap-3 mb-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="calendar" id="gcalIntCalendar" {% if 'calendar' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
-                                    <label class="form-check-label small" for="gcalIntCalendar"><i class="bi bi-calendar2-check me-1 text-success"></i>{{ t('Google Calendar') }}</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="docs" id="gcalIntDocs" {% if 'docs' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
-                                    <label class="form-check-label small" for="gcalIntDocs"><i class="bi bi-file-earmark-text me-1 text-primary"></i>{{ t('Google Docs') }}</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="google_integration" value="sheets" id="gcalIntSheets" {% if 'sheets' in google_calendar_ui.enabled_integrations %}checked{% endif %}>
-                                    <label class="form-check-label small" for="gcalIntSheets"><i class="bi bi-table me-1 text-success"></i>{{ t('Google Sheets') }}</label>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
-                                <i class="bi bi-google me-1"></i>{{ t('Connect with Google') }}
-                            </button>
-                        </form>
+                        <p class="small text-muted mb-2">{{ t('Connect once to enable Calendar sync, Docs templates, and Sheets exports.') }}</p>
+                        <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
+                            <i class="bi bi-google me-1"></i>{{ t('Connect with Google') }}
+                        </a>
                     </div>
                     <div id="gcalActiveIntegrations" class="mb-2{% if not (google_calendar_ui.connected and google_calendar_ui.enabled_integrations) %} d-none{% endif %}">
                         {% if google_calendar_ui.connected and google_calendar_ui.enabled_integrations %}

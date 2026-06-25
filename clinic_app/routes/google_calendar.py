@@ -188,10 +188,10 @@ def api_google_calendar_status():
     return google_calendar_status()
 
 
-@google_calendar_bp.route('/admin/google-calendar/connect', methods=['GET', 'POST'])
+@google_calendar_bp.route('/admin/google-calendar/connect', methods=['GET'])
 @login_required
 def google_calendar_connect():
-    from app import gcal, build_external_public_url, get_site_settings, save_site_settings
+    from app import gcal, build_external_public_url
     if current_user.role != 'admin':
         flash('Unauthorized.')
         return redirect(url_for('admin_profile'))
@@ -202,23 +202,11 @@ def google_calendar_connect():
         flash('Google OAuth credentials are not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
         return redirect(url_for('admin_profile'))
     db = get_db()
-    if request.method == 'POST':
-        selected = request.form.getlist('google_integration')
-        valid_options = list(gcal.INTEGRATION_SCOPES.keys()) if gcal else ['calendar', 'docs', 'sheets']
-        integrations = [i for i in selected if i in valid_options] or valid_options
-        save_site_settings(db, {'google_enabled_integrations': json.dumps(integrations)})
-        db.commit()
-    else:
-        settings = get_site_settings(db)
-        try:
-            integrations = json.loads(settings.get('google_enabled_integrations') or '[]') or list(gcal.INTEGRATION_SCOPES.keys())
-        except (ValueError, TypeError):
-            integrations = list(gcal.INTEGRATION_SCOPES.keys())
     try:
         redirect_uri = build_external_public_url('google_calendar_callback')
         oauth_state = _generate_google_oauth_state()
         auth_url, state, code_verifier = gcal.get_authorization_url(
-            integrations=integrations, redirect_uri=redirect_uri, state=oauth_state)
+            integrations=list(gcal.INTEGRATION_SCOPES.keys()), redirect_uri=redirect_uri, state=oauth_state)
         _store_google_oauth_pending_state(db, state, current_user.id, redirect_uri, code_verifier)
         db.commit()
         session['gcal_oauth_state'] = state

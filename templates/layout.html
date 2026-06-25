@@ -120,10 +120,6 @@
             border-inline-end: 1px solid rgb(226 232 240);
         }
 
-        .admin-header {
-            inset-inline: 0;
-        }
-
         .notification-recipient-list {
             max-height: 220px;
             overflow-y: auto;
@@ -202,15 +198,6 @@
         }
 
         @media (min-width: 1024px) {
-            .admin-header {
-                inset-inline-start: 16rem;
-                inset-inline-end: 0;
-            }
-            html:dir(rtl) .admin-header,
-            html[dir="rtl"] .admin-header {
-                inset-inline-end: 16rem;
-                inset-inline-start: 0;
-            }
             .admin-sidebar {
                 position: static !important;
                 inset: auto !important;
@@ -334,6 +321,8 @@
             <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="w-full rounded-xl object-contain mb-3" style="max-height:110px">
             <h1 class="font-black text-teal-950 text-sm text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
             <p class="text-[9px] text-slate-500 uppercase tracking-widest mt-1 text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
+            <span class="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wider">{{ t('Admin') }}</span>
+            <p class="mt-1 text-[10px] text-slate-400 text-center leading-tight">{{ current_user.display_name or current_user.username }}</p>
         </div>
 
         {# Main Nav #}
@@ -342,7 +331,7 @@
 
             {% macro nav_link(target, icon, label) %}
             <a href="{{ url_for(target) }}"
-               class="flex items-center gap-2.5 rounded-lg px-3 py-2 font-medium text-sm transition-all duration-200 {% if endpoint_name == target %}bg-teal-100 text-teal-800{% else %}text-slate-600 hover:bg-slate-200{% endif %}">
+               class="flex items-center gap-2.5 rounded-lg px-3 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == target %}bg-teal-100 text-teal-800{% else %}text-slate-900 hover:bg-slate-200{% endif %} no-underline">
                 <i class="bi {{ icon }}" style="font-size:16px"></i>
                 <span>{{ label }}</span>
             </a>
@@ -369,7 +358,7 @@
             <hr class="my-2 opacity-25">
             <a href="{{ url_for('list_cancel_requests') }}"
                title="{{ t('Approve or reject patient appointment cancellation requests') }}"
-               class="flex items-center gap-2.5 rounded-lg px-3 py-2 font-medium text-sm transition-all duration-200 {% if endpoint_name == 'list_cancel_requests' %}bg-teal-100 text-teal-800{% else %}text-slate-600 hover:bg-slate-200{% endif %}">
+               class="flex items-center gap-2.5 rounded-lg px-3 py-2 font-bold text-sm transition-colors duration-200 no-underline {% if endpoint_name == 'list_cancel_requests' %}bg-teal-100 text-teal-800{% else %}text-slate-900 hover:bg-slate-200{% endif %}">
                 <i class="bi bi-x-circle" style="font-size:16px"></i>
                 <span>{{ t('Cancellation Requests') }}</span>
                 {% if pending_cancel_count > 0 %}
@@ -380,7 +369,7 @@
 
             {# Messages #}
             <a href="#"
-               class="flex items-center gap-2.5 rounded-xl px-3 py-2 font-medium text-sm transition-all duration-200 text-slate-600 hover:bg-slate-200 hover:text-teal-800 active:scale-95"
+               class="flex items-center gap-2.5 rounded-lg px-3 py-2 font-bold text-sm transition-colors duration-200 text-slate-900 hover:bg-slate-200 no-underline"
                data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas">
                 <i class="bi bi-chat-dots-fill" style="font-size:18px"></i>
                 <span>{{ t('Messages') }}</span>
@@ -400,17 +389,17 @@
         {# Bottom: theme toggle, language + logout #}
         <div class="mt-auto border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
             <button id="themeToggle" type="button"
-               class="w-full flex items-center gap-2.5 text-slate-600 hover:bg-slate-200 rounded-lg px-3 py-2 transition-all duration-200 text-sm font-medium">
+               class="w-full flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline">
                 <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:16px"></i>
                 <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
             </button>
             <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-               class="flex items-center gap-2.5 text-slate-600 hover:bg-slate-200 rounded-lg px-3 py-2 transition-all duration-200 text-sm font-medium">
+               class="flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline">
                 <i class="bi bi-translate" style="font-size:16px"></i>
                 <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
             </a>
             <a href="{{ url_for('logout') }}"
-               class="flex items-center gap-2.5 text-slate-600 hover:bg-slate-200 rounded-lg px-3 py-2 transition-all duration-200 text-sm font-medium">
+               class="flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline">
                 <i class="bi bi-box-arrow-right" style="font-size:16px"></i>
                 <span>{{ t('Logout') }}</span>
             </a>
@@ -420,38 +409,15 @@
     {# Main content column #}
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {# Top Header #}
-        <header class="admin-header fixed top-0 bg-white/88 backdrop-blur-md z-30 flex justify-between items-center flex-wrap px-3 lg:px-6 py-2.5 shadow-sm border-b border-slate-200 gap-2">
-            <div class="flex items-center gap-6">
-                <button id="adminSidebarToggle" type="button" class="inline-flex lg:hidden items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
-                    <i class="bi bi-list" style="font-size:20px"></i>
-                </button>
-                <h2 class="text-lg lg:text-xl font-bold text-teal-900 tracking-tight">
-                    {% block page_title %}{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni Clinic{% endif %}{% endblock %}
-                </h2>
-            </div>
-            <div class="flex items-center gap-4">
-                <button type="button" class="p-2 text-slate-500 hover:text-primary transition-colors relative" data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas" title="{{ t('Notifications') }}">
-                    <i class="bi bi-bell-fill" style="font-size:20px"></i>
-                    {% if notification_unread_count is defined and notification_unread_count > 0 %}
-                    <span class="notification-badge absolute -top-0.5 min-w-[18px] h-[18px] px-1 bg-red-500 text-white rounded-full border-2 border-white text-[10px] leading-[14px] text-center" style="inset-inline-end:-0.125rem;">{{ notification_unread_count }}</span>
-                    {% endif %}
-                </button>
-                <div class="h-8 w-[1px] bg-slate-200 mx-1 lg:mx-2"></div>
-                <a href="{{ url_for('admin_profile') }}" class="flex items-center gap-3 text-decoration-none hover:opacity-80 transition-opacity">
-                    <div class="text-start">
-                        <p class="text-sm font-bold text-teal-900 leading-none">{{ current_user.display_name or current_user.username }}</p>
-                        <p class="text-[10px] text-slate-500 font-medium">{% if lang == 'he' %}מנהל{% else %}Admin{% endif %}</p>
-                    </div>
-                    <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0 text-white">
-                        <i class="bi bi-person-fill" style="font-size:16px"></i>
-                    </div>
-                </a>
-            </div>
-        </header>
+        {# Mobile sidebar toggle (visible only on small screens) #}
+        <div class="lg:hidden flex items-center px-3 py-2 border-b border-slate-200 bg-white">
+            <button id="adminSidebarToggle" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
+                <i class="bi bi-list" style="font-size:20px"></i>
+            </button>
+        </div>
 
         {# Page content wrapper #}
-        <main id="main-content" tabindex="-1" class="mt-20 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
+        <main id="main-content" tabindex="-1" class="p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
 
         {# Flash Messages #}
         {{ render_flash_messages('mb-3') }}
