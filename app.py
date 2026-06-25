@@ -2139,6 +2139,70 @@ def perform_encrypted_backup(db_path):
     return str(encrypted_path)
 
 
+def _export_json_backup(db_path):
+    """Create an unencrypted JSON export as a fallback restore option."""
+    backup_root = Path(BACKUP_DIR)
+    backup_root.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    export_path = backup_root / f'clinic_data_export_{timestamp}.json'
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    data = {}
+    for t in tables:
+        rows = c.execute(f'SELECT * FROM "{t}"').fetchall()
+        records = [dict(r) for r in rows]
+        if records:
+            clean = []
+            for r in records:
+                rec = {}
+                for k, v in r.items():
+                    if isinstance(v, datetime):
+                        rec[k] = v.isoformat()
+                    else:
+                        rec[k] = v
+                clean.append(rec)
+            data[t] = {"records": clean}
+    conn.close()
+
+    output = {"exported_at": datetime.now().isoformat(), "data": data}
+    export_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(f"JSON backup created: {export_path}")
+    return str(export_path)
+
+
+def _ensure_backup_key_consistency():
+    """Ensure the backup encryption key is stored in both env and file, and log a warning if mismatched."""
+    key_dir = Path(BACKUP_DIR)
+    key_dir.mkdir(parents=True, exist_ok=True)
+    env_key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
+    file_key_path = key_dir / '.backup.key'
+
+    if env_key:
+        file_key_path.write_text(env_key)
+        key_info = {
+            'note': 'Backup encryption key fingerprint (not the key itself). Verify against BACKUP_ENCRYPTION_KEY in .env',
+            'key_fingerprint': hashlib.sha256(env_key.encode()).hexdigest()[:16],
+            'generated_at': datetime.now().isoformat(),
+            'instructions': 'Check .env for BACKUP_ENCRYPTION_KEY or ' + str(file_key_path)
+        }
+        (key_dir / 'KEY_RECOVERY.txt').write_text(json.dumps(key_info, indent=2))
+        return
+
+    if file_key_path.exists():
+        file_key = file_key_path.read_bytes().strip()
+        key_info = {
+            'note': 'Backup encryption key fingerprint (not the key itself).',
+            'key_fingerprint': hashlib.sha256(file_key).hexdigest()[:16],
+            'generated_at': datetime.now().isoformat(),
+            'instructions': 'The key is stored in ' + str(file_key_path)
+        }
+        (key_dir / 'KEY_RECOVERY.txt').write_text(json.dumps(key_info, indent=2))
+        print("Warning: BACKUP_ENCRYPTION_KEY not set in environment. Using file key only.")
+
+
 def perform_routine_encrypted_backup(db_path):
     backup_root = Path(BACKUP_DIR)
     backup_root.mkdir(parents=True, exist_ok=True)
@@ -2153,7 +2217,9 @@ def perform_routine_encrypted_backup(db_path):
         except ValueError:
             pass
 
+    _ensure_backup_key_consistency()
     encrypted_path = perform_encrypted_backup(db_path)
+    _export_json_backup(db_path)
     marker.write_text(now.isoformat())
     return encrypted_path
 
@@ -2162,7 +2228,7 @@ def list_encrypted_backups():
     if not os.path.exists(BACKUP_DIR):
         return []
     all_files = os.listdir(BACKUP_DIR)
-    backup_files = [f for f in all_files if (f.startswith('clinic_') and f.endswith('.db.enc')) or (f.endswith('.json') and f.startswith('clinic_data_backup'))]
+    backup_files = [f for f in all_files if (f.startswith('clinic_') and f.endswith('.db.enc')) or (f.endswith('.json') and (f.startswith('clinic_data_backup') or f.startswith('clinic_data_export')))]
     backup_files.sort(key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)), reverse=True)
     return [
         {
@@ -2273,6 +2339,7 @@ def _perform_restore(backup_path):
         raw = data.get('data') or data
         conn = sqlite3.connect(str(app.config['DATABASE']))
         conn.row_factory = sqlite3.Row
+        c = conn.cursor()
         total = 0
         for table, content in raw.items():
             if isinstance(content, dict) and 'records' in content:
@@ -2283,26 +2350,28 @@ def _perform_restore(backup_path):
                 continue
             if not records:
                 continue
-            columns = [c['name'] for c in conn.execute(f'PRAGMA table_info("{table}")').fetchall()]
+            col_info = c.execute(f'PRAGMA table_info("{table}")').fetchall()
+            columns = [r['name'] for r in col_info]
+            has_id = 'id' in columns
+            pk_cols = [r['name'] for r in col_info if r['pk'] > 0]
+            pk_col = pk_cols[0] if pk_cols and has_id else None
             for record in records:
                 existing = None
-                pk_cols = [c['name'] for c in conn.execute(f'PRAGMA table_info("{table}")').fetchall() if c['pk'] > 0]
-                pk_col = pk_cols[0] if pk_cols else None
                 if pk_col:
                     pk_val = record.get(pk_col)
                     if pk_val is not None:
-                        existing = conn.execute(f'SELECT id FROM "{table}" WHERE "{pk_col}" = ?', (pk_val,)).fetchone()
+                        existing = c.execute(f'SELECT id FROM "{table}" WHERE "{pk_col}" = ?', (pk_val,)).fetchone()
                 if existing:
-                    present_cols = [c for c in record if c in columns and c != pk_col]
+                    present_cols = [col for col in record if col in columns and col != pk_col]
                     if present_cols:
-                        set_clause = ', '.join(f'"{c}" = ?' for c in present_cols)
-                        vals = [record[c] for c in present_cols]
-                        conn.execute(f'UPDATE "{table}" SET {set_clause} WHERE "{pk_col}" = ?', vals + [record.get(pk_col)])
+                        set_clause = ', '.join(f'"{col}" = ?' for col in present_cols)
+                        vals = [record[col] for col in present_cols]
+                        c.execute(f'UPDATE "{table}" SET {set_clause} WHERE id = ?', vals + [existing['id']])
                 else:
-                    insert_cols = [c for c in record if c in columns]
+                    insert_cols = [col for col in record if col in columns]
                     placeholders = ', '.join('?' for _ in insert_cols)
-                    col_list = ', '.join(f'"{c}"' for c in insert_cols)
-                    conn.execute(f'INSERT OR IGNORE INTO "{table}" ({col_list}) VALUES ({placeholders})', [record[c] for c in insert_cols])
+                    col_list = ', '.join(f'"{col}"' for col in insert_cols)
+                    c.execute(f'INSERT OR IGNORE INTO "{table}" ({col_list}) VALUES ({placeholders})', [record[col] for col in insert_cols])
                 total += 1
         conn.commit()
         conn.close()
