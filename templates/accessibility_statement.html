@@ -41,16 +41,16 @@
             <p class="mb-1"><strong>שם:</strong> ליאור אלוני</p>
             <p class="mb-1"><strong>טלפון:</strong>
                 {% if site_settings.get('about_phone') %}
-                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
+                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr" class="text-decoration-none fw-semibold">{{ site_settings.get('about_phone') }}</a>
                 {% else %}
                 <span dir="ltr">+972-50-000-0000</span>
                 {% endif %}
             </p>
             <p class="mb-4"><strong>דוא"ל:</strong>
                 {% if site_settings.get('about_email') %}
-                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
+                <a href="mailto:{{ site_settings.get('about_email') }}" class="text-decoration-none fw-semibold">{{ site_settings.get('about_email') }}</a>
                 {% else %}
-                <a href="mailto:negishot@clinic.lior-clinic.org">negishot@clinic.lior-clinic.org</a>
+                <a href="mailto:negishot@clinic.lior-clinic.org" class="text-decoration-none fw-semibold">negishot@clinic.lior-clinic.org</a>
                 {% endif %}
             </p>
 
@@ -92,16 +92,16 @@
             <p class="mb-1"><strong>Name:</strong> Lior Aloni</p>
             <p class="mb-1"><strong>Phone:</strong>
                 {% if site_settings.get('about_phone') %}
-                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr">{{ site_settings.get('about_phone') }}</a>
+                <a href="tel:{{ site_settings.get('about_phone')|replace(' ', '') }}" dir="ltr" class="text-decoration-none fw-semibold">{{ site_settings.get('about_phone') }}</a>
                 {% else %}
                 <span dir="ltr">+972-50-000-0000</span>
                 {% endif %}
             </p>
             <p class="mb-4"><strong>Email:</strong>
                 {% if site_settings.get('about_email') %}
-                <a href="mailto:{{ site_settings.get('about_email') }}">{{ site_settings.get('about_email') }}</a>
+                <a href="mailto:{{ site_settings.get('about_email') }}" class="text-decoration-none fw-semibold">{{ site_settings.get('about_email') }}</a>
                 {% else %}
-                <a href="mailto:negishot@clinic.lior-clinic.org">negishot@clinic.lior-clinic.org</a>
+                <a href="mailto:negishot@clinic.lior-clinic.org" class="text-decoration-none fw-semibold">negishot@clinic.lior-clinic.org</a>
                 {% endif %}
             </p>
 

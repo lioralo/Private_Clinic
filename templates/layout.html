@@ -368,9 +368,10 @@
             </form>
             <hr class="my-2 opacity-25">
             <a href="{{ url_for('list_cancel_requests') }}"
+               title="{{ t('Approve or reject patient appointment cancellation requests') }}"
                class="flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-sm transition-all duration-200 {% if endpoint_name == 'list_cancel_requests' %}bg-primary/10 text-primary{% else %}text-slate-600 hover:bg-slate-200{% endif %}">
                 <i class="bi bi-x-circle" style="font-size:18px"></i>
-                <span>{{ t('Cancel Requests') }}</span>
+                <span>{{ t('Cancellation Requests') }}</span>
                 {% if pending_cancel_count > 0 %}
                 <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ pending_cancel_count }}</span>
                 {% endif %}
@@ -453,7 +454,7 @@
         {{ render_flash_messages('mx-4 lg:mx-6 mt-4') }}
 
         {# Page content wrapper #}
-        <main id="main-content" tabindex="-1" class="mt-14 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
+        <main id="main-content" tabindex="-1" class="mt-16 p-3 sm:p-4 lg:p-6 xl:p-8 flex-1 overflow-y-auto app-shell">
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}

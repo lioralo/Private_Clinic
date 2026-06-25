@@ -818,13 +818,13 @@ def list_cancel_requests():
     db = get_db()
     from clinic_app.utils import combine_dt
     requests = db.execute('''
-        SELECT cr.id, cr.appointment_id, cr.reason, cr.created_at AS requested_at, cr.is_approved,
+        SELECT cr.id, cr.appointment_id, cr.reason, cr.created_at AS requested_at, cr.status,
                a.appointment_date, a.appointment_time, a.meeting_type,
                p.id AS patient_id, p.name AS patient_name
         FROM cancel_requests cr
         JOIN appointments a ON a.id = cr.appointment_id
         JOIN patients p ON p.id = a.patient_id
-        WHERE COALESCE(cr.is_approved, 0) = 0
+        WHERE cr.status = 'pending'
         ORDER BY cr.created_at ASC
     ''').fetchall()
     return render_template('cancel_requests.html', requests=requests)
@@ -845,7 +845,7 @@ def approve_cancel_request(request_id):
     if not req:
         flash('Cancel request not found.')
         return redirect(url_for('.list_cancel_requests'))
-    db.execute('UPDATE cancel_requests SET is_approved = 1 WHERE id = ?', (request_id,))
+    db.execute('UPDATE cancel_requests SET status = \'approved\', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id, request_id,))
     db.execute('UPDATE appointments SET status = ? WHERE id = ?', ('cancelled', req['appointment_id']))
     db.commit()
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (req['patient_id'],)).fetchone()
@@ -864,7 +864,7 @@ def reject_cancel_request(request_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
     db = get_db()
-    db.execute('UPDATE cancel_requests SET is_approved = 0 WHERE id = ?', (request_id,))
+    db.execute('UPDATE cancel_requests SET status = \'rejected\', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?', (current_user.id, request_id,))
     db.commit()
     flash('Cancellation rejected.')
     return redirect(url_for('.list_cancel_requests'))
