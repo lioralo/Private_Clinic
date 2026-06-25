@@ -1101,24 +1101,36 @@ def admin_security_log():
         return "Unauthorized", 403
     db = get_db()
     action_filter = request.args.get('action', '')
+    search = request.args.get('q', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 50
     offset = (page - 1) * per_page
-    where_clause = ''
+    where_clauses = []
     params = []
     if action_filter:
-        where_clause = 'WHERE al.action = ?'
+        where_clauses.append('al.action = ?')
         params.append(action_filter)
-    logs = db.execute(f'''
+    if search:
+        where_clauses.append('(al.action LIKE ? OR al.details LIKE ?)')
+        like_val = f'%{search}%'
+        params.append(like_val)
+        params.append(like_val)
+    where_sql = ('WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
+    total = db.execute(f'SELECT COUNT(*) AS cnt FROM audit_logs al {where_sql}', params).fetchone()['cnt']
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    events = db.execute(f'''
         SELECT al.id, al.action, al.details, al.created_at,
                p.name AS patient_name, p.id AS patient_id
         FROM audit_logs al
         LEFT JOIN patients p ON p.id = al.patient_id
-        {where_clause}
+        {where_sql}
         ORDER BY al.created_at DESC
         LIMIT ? OFFSET ?
     ''', params + [per_page, offset]).fetchall()
-    return render_template('admin_security_log.html', logs=logs, action_filter=action_filter, page=page)
+    action_names = [r['action'] for r in db.execute('SELECT DISTINCT action FROM audit_logs ORDER BY action').fetchall()]
+    return render_template('admin_security_log.html',
+                           events=events, action_filter=action_filter, page=page, search=search,
+                           total=total, total_pages=total_pages, action_names=action_names)
 
 
 @admin_bp.route('/admin/security-log/export')

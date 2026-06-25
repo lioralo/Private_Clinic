@@ -2162,7 +2162,7 @@ def list_encrypted_backups():
     if not os.path.exists(BACKUP_DIR):
         return []
     all_files = os.listdir(BACKUP_DIR)
-    backup_files = [f for f in all_files if f.startswith('clinic_') and f.endswith('.db.enc')]
+    backup_files = [f for f in all_files if (f.startswith('clinic_') and f.endswith('.db.enc')) or (f.endswith('.json') and f.startswith('clinic_data_backup'))]
     backup_files.sort(key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)), reverse=True)
     return [
         {
@@ -2250,6 +2250,72 @@ def perform_encrypted_restore(db_path, backup_filename=None):
         verify_conn.close()
 
     return str(target), str(safety_copy)
+
+
+def _perform_restore(backup_path):
+    """
+    Restore from a backup file. Supports:
+    - .db.enc encrypted backups (via perform_encrypted_restore)
+    - .json data exports (imports records safely)
+    - .bak / .db SQLite files (direct file swap)
+    """
+    path = Path(backup_path)
+    if not path.exists():
+        raise FileNotFoundError(f'Backup file not found: {backup_path}')
+
+    if path.suffix == '.enc':
+        result = perform_encrypted_restore(str(app.config['DATABASE']), backup_filename=path.name)
+        return {'tables_restored': 0, 'path': str(result[0])}
+
+    if path.suffix == '.json':
+        import json as _json
+        data = _json.loads(path.read_text(encoding='utf-8'))
+        raw = data.get('data') or data
+        conn = sqlite3.connect(str(app.config['DATABASE']))
+        conn.row_factory = sqlite3.Row
+        total = 0
+        for table, content in raw.items():
+            if isinstance(content, dict) and 'records' in content:
+                records = content['records']
+            elif isinstance(content, list):
+                records = content
+            else:
+                continue
+            if not records:
+                continue
+            columns = [c['name'] for c in conn.execute(f'PRAGMA table_info("{table}")').fetchall()]
+            for record in records:
+                existing = None
+                pk_cols = [c['name'] for c in conn.execute(f'PRAGMA table_info("{table}")').fetchall() if c['pk'] > 0]
+                pk_col = pk_cols[0] if pk_cols else None
+                if pk_col:
+                    pk_val = record.get(pk_col)
+                    if pk_val is not None:
+                        existing = conn.execute(f'SELECT id FROM "{table}" WHERE "{pk_col}" = ?', (pk_val,)).fetchone()
+                if existing:
+                    present_cols = [c for c in record if c in columns and c != pk_col]
+                    if present_cols:
+                        set_clause = ', '.join(f'"{c}" = ?' for c in present_cols)
+                        vals = [record[c] for c in present_cols]
+                        conn.execute(f'UPDATE "{table}" SET {set_clause} WHERE "{pk_col}" = ?', vals + [record.get(pk_col)])
+                else:
+                    insert_cols = [c for c in record if c in columns]
+                    placeholders = ', '.join('?' for _ in insert_cols)
+                    col_list = ', '.join(f'"{c}"' for c in insert_cols)
+                    conn.execute(f'INSERT OR IGNORE INTO "{table}" ({col_list}) VALUES ({placeholders})', [record[c] for c in insert_cols])
+                total += 1
+        conn.commit()
+        conn.close()
+        return {'tables_restored': total}
+
+    if path.suffix in ('.db', '.bak'):
+        live_db = Path(str(app.config['DATABASE']))
+        live_db.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, live_db)
+        return {'tables_restored': 0}
+
+    raise ValueError(f'Unsupported backup format: {path.suffix}')
+
 
 def _run_db_migrations(db):
     """Run all schema migrations and index creations."""
@@ -3151,7 +3217,7 @@ def _seed_admin_user(db):
     """Seed the default admin user and handle legacy migrations."""
     env_username = (os.environ.get('ADMIN_USERNAME') or '').strip()
     if not env_username:
-        env_username = 'admin'
+        env_username = 'lioraloni'
     env_password = (os.environ.get('ADMIN_PASSWORD') or '').strip()
 
     # Check if admin exists
@@ -3199,6 +3265,25 @@ def _seed_admin_user(db):
             db.commit()
             admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
             print(f'Legacy admin account migrated to {env_username}.')
+
+    # Rename admin if current username doesn't match env_username
+    if admin and env_username and admin['username'] != env_username:
+        collision = db.execute("SELECT id FROM users WHERE username = ? AND id <> ?", (env_username, admin['id'])).fetchone()
+        if not collision:
+            db.execute("UPDATE users SET username = ? WHERE id = ?", (env_username, admin['id']))
+            db.commit()
+            admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
+            print(f'Admin username updated to {env_username}.')
+
+    # Update password from env if provided (preserves 2FA/TOTP settings)
+    if admin and env_password:
+        existing_hash = admin.get('password_hash') or ''
+        if not check_password_hash(existing_hash, env_password):
+            new_hash = generate_password_hash(env_password)
+            db.execute("UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?", (new_hash, admin['id']))
+            db.commit()
+            print(f'Admin password updated from environment.')
+        admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
 
     if admin and not admin['display_name']:
         db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
