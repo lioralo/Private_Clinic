@@ -3344,14 +3344,13 @@ def _seed_admin_user(db):
             admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
             print(f'Admin username updated to {env_username}.')
 
-    # Update password from env if provided (preserves 2FA/TOTP settings)
-    if admin and env_password:
-        existing_hash = admin['password_hash'] or ''
-        if not check_password_hash(existing_hash, env_password):
-            new_hash = generate_password_hash(env_password)
-            db.execute("UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?", (new_hash, admin['id']))
-            db.commit()
-            print(f'Admin password updated from environment.')
+    # Force reset password from env if ADMIN_PASSWORD_RESET=1
+    force_reset = os.environ.get('ADMIN_PASSWORD_RESET', '').strip() == '1'
+    if admin and env_password and force_reset:
+        new_hash = generate_password_hash(env_password)
+        db.execute("UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?", (new_hash, admin['id']))
+        db.commit()
+        print(f'Admin password force-reset from environment.')
         admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
 
     if admin and not admin['display_name']:
