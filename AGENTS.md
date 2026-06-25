@@ -40,8 +40,8 @@ $env:TESTING = "1"
 
 For Google OAuth tests also set:
 ```powershell
-$env:GOOGLE_OAUTH_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
-$env:GOOGLE_OAUTH_CLIENT_SECRET = "test-secret"
+$env:GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+$env:GOOGLE_CLIENT_SECRET = "test-secret"
 ```
 
 ## Full Reference
