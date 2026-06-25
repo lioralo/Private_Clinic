@@ -3277,7 +3277,7 @@ def _seed_admin_user(db):
 
     # Update password from env if provided (preserves 2FA/TOTP settings)
     if admin and env_password:
-        existing_hash = admin.get('password_hash') or ''
+        existing_hash = admin['password_hash'] or ''
         if not check_password_hash(existing_hash, env_password):
             new_hash = generate_password_hash(env_password)
             db.execute("UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?", (new_hash, admin['id']))
