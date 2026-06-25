@@ -300,7 +300,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 ### Color Palette
 | Token | Color | Usage |
 |-------|-------|-------|
-| Primary | `#5676b6` (Blue) | Main brand color |
+| Primary | `#134e4a` (Teal) | Main brand color |
 | Secondary | `#6c7792` (Gray-Blue) | Secondary actions |
 | Tertiary | `#e3b453` (Amber/Gold) | Highlights |
 | Background | `#f7f9fb` (Light Gray) | Page background |

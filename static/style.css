@@ -51,6 +51,83 @@
     --bs-link-hover-color: #2dd4bf;
 }
 
+[data-bs-theme="dark"] .navbar-light,
+[data-bs-theme="dark"] .bg-white {
+    background-color: #1e293b !important;
+}
+
+[data-bs-theme="dark"] footer {
+    background-color: rgba(30, 41, 59, 0.92) !important;
+    border-top-color: #334155;
+}
+
+[data-bs-theme="dark"] .card {
+    background: rgba(30, 41, 59, 0.92);
+    border-color: #334155;
+}
+
+[data-bs-theme="dark"] .card:hover {
+    border-color: rgba(94, 234, 212, 0.25);
+}
+
+[data-bs-theme="dark"] .card-header {
+    background-color: rgba(30, 41, 59, 0.95);
+    border-bottom-color: #334155;
+    color: #5eead4;
+}
+
+[data-bs-theme="dark"] h1,
+[data-bs-theme="dark"] h2,
+[data-bs-theme="dark"] h3,
+[data-bs-theme="dark"] h4,
+[data-bs-theme="dark"] h5 {
+    color: #5eead4;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: #334155;
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+    border-color: #5eead4;
+    box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.15);
+}
+
+[data-bs-theme="dark"] .form-label {
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: #1e293b !important;
+}
+
+[data-bs-theme="dark"] .offcanvas-body {
+    background-color: #0f172a;
+}
+
+[data-bs-theme="dark"] .offcanvas {
+    background-color: #0f172a;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+    color: #94a3b8;
+    border-color: #475569;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: #334155;
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .section-hero {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-color: #334155;
+}
+
 html[data-density="compact"] {
     --textbox-min-height: 6rem;
     --textbox-min-height-sm: 5rem;
@@ -345,6 +422,15 @@ input.form-control[type="password"] {
 .form-select:focus {
     border-color: #003633;
     box-shadow: 0 0 0 3px rgba(0, 54, 51, 0.12);
+}
+
+.offcanvas-header-brand {
+    background: linear-gradient(135deg, #134e4a, #003633);
+    color: #fff;
+}
+
+[data-bs-theme="dark"] .offcanvas-header-brand {
+    background: linear-gradient(135deg, #0d9488, #134e4a);
 }
 
 .app-shell {
