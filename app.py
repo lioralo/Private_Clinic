@@ -3231,8 +3231,6 @@ def init_db():
         if not already_initialized:
             print(f"Initialized the database at {database}.")
 
-    _db_initialized = True
-
         if not app.config.get('TESTING'):
             try:
                 perform_routine_encrypted_backup(database)
@@ -3240,6 +3238,8 @@ def init_db():
                 print(f"Routine backup skipped: {backup_error}")
             ensure_gdocs_auto_sync_worker_started()
             ensure_appointment_reminder_worker_started()
+
+    _db_initialized = True
 
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
