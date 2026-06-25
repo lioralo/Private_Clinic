@@ -386,8 +386,26 @@
             <span>{{ t('Add Patient') }}</span>
         </a>
 
+        {# Notifications & Profile #}
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+            <button type="button"
+               class="w-full flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline relative"
+               data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas">
+                <i class="bi bi-bell-fill" style="font-size:16px"></i>
+                <span>{{ t('Notifications') }}</span>
+                {% if notification_unread_count is defined and notification_unread_count > 0 %}
+                <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ notification_unread_count }}</span>
+                {% endif %}
+            </button>
+            <a href="{{ url_for('admin_profile') }}"
+               class="flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline">
+                <i class="bi bi-person-gear" style="font-size:16px"></i>
+                <span>{{ t('Profile') }}</span>
+            </a>
+        </div>
+
         {# Bottom: theme toggle, language + logout #}
-        <div class="mt-auto border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
             <button id="themeToggle" type="button"
                class="w-full flex items-center gap-2.5 text-slate-900 hover:bg-slate-200 rounded-lg px-3 py-2 transition-colors duration-200 text-sm font-bold no-underline">
                 <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:16px"></i>
