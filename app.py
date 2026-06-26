@@ -288,6 +288,7 @@ from clinic_app.routes.google_docs import (
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
+app.config['DATABASE'] = os.environ.get('DATABASE', DATABASE)
 
 _secret_key = os.environ.get('SECRET_KEY', '').strip()
 if not _secret_key or len(_secret_key) < 32:
@@ -2330,14 +2331,14 @@ def _perform_restore(backup_path):
         raise FileNotFoundError(f'Backup file not found: {backup_path}')
 
     if path.suffix == '.enc':
-        result = perform_encrypted_restore(str(app.config['DATABASE']), backup_filename=path.name)
+        result = perform_encrypted_restore(str(app.config.get('DATABASE', DATABASE)), backup_filename=path.name)
         return {'tables_restored': 0, 'path': str(result[0])}
 
     if path.suffix == '.json':
         import json as _json
         data = _json.loads(path.read_text(encoding='utf-8'))
         raw = data.get('data') or data
-        conn = sqlite3.connect(str(app.config['DATABASE']))
+        conn = sqlite3.connect(str(app.config.get('DATABASE', DATABASE)))
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
         total = 0
@@ -2378,7 +2379,7 @@ def _perform_restore(backup_path):
         return {'tables_restored': total}
 
     if path.suffix in ('.db', '.bak'):
-        live_db = Path(str(app.config['DATABASE']))
+        live_db = Path(str(app.config.get('DATABASE', DATABASE)))
         live_db.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, live_db)
         return {'tables_restored': 0}
