@@ -288,7 +288,6 @@ from clinic_app.routes.google_docs import (
 app.jinja_env.add_extension('jinja2.ext.do')
 app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'static/uploads')
 app.config['PUBLIC_BASE_URL'] = os.environ.get('PUBLIC_BASE_URL', '').strip()
-app.config['DATABASE'] = os.environ.get('DATABASE', DATABASE)
 
 _secret_key = os.environ.get('SECRET_KEY', '').strip()
 if not _secret_key or len(_secret_key) < 32:
@@ -334,6 +333,7 @@ app.config['REMINDER_SCHEDULER_INTERVAL'] = int(os.environ.get('REMINDER_SCHEDUL
 scheduler = BackgroundScheduler(daemon=True)
 csrf = CSRFProtect(app)
 DATABASE = os.environ.get('DATABASE', 'clinic.db')
+app.config['DATABASE'] = DATABASE
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
