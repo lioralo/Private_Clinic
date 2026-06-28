@@ -915,9 +915,11 @@ def google_docs_auto_sync_now():
     db = get_db()
     try:
         from app import _create_manual_sync_job, _run_manual_google_docs_sync_job
-        job = _create_manual_sync_job(current_user.id)
-        _run_manual_google_docs_sync_job(job['job_id'])
-        return jsonify({'status': 'triggered', 'job_id': job['job_id']})
+        job_id, existing_id = _create_manual_sync_job(current_user.id)
+        if not job_id and existing_id:
+            return jsonify({'status': 'already_running', 'job_id': existing_id}), 409
+        _run_manual_google_docs_sync_job(job_id)
+        return jsonify({'status': 'triggered', 'job_id': job_id})
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 

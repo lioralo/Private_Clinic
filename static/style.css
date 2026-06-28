@@ -80,7 +80,7 @@
 }
 
 [data-bs-theme="dark"] .card:hover {
-    border-color: rgba(94, 234, 212, 0.25);
+    border-color: rgba(96, 165, 250, 0.25);
 }
 
 [data-bs-theme="dark"] .card-header {
@@ -107,7 +107,7 @@
 [data-bs-theme="dark"] .form-control:focus,
 [data-bs-theme="dark"] .form-select:focus {
     border-color: var(--bs-primary);
-    box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.15);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
 }
 
 [data-bs-theme="dark"] .form-label {
@@ -222,7 +222,9 @@ p {
 :dir(rtl) .bi-arrow-right-short::before,
 :dir(rtl) .bi-arrow-up-right::before,
 :dir(rtl) .bi-box-arrow-right::before,
-:dir(rtl) .bi-box-arrow-left::before {
+:dir(rtl) .bi-box-arrow-left::before,
+:dir(rtl) .bi-caret-left-fill::before,
+:dir(rtl) .bi-caret-right-fill::before {
     transform: scaleX(-1);
     display: inline-block;
 }
@@ -234,12 +236,12 @@ p {
 .navbar {
     /* kept for any rare usage, but primary nav is sidebar now */
     background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%) !important;
-    box-shadow: 0 4px 16px rgba(0, 54, 51, 0.18);
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.18);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .navbar-brand {
-    font-family: 'Manrope', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-weight: 800;
     letter-spacing: -0.5px;
 }
@@ -287,7 +289,7 @@ p {
 }
 
 h1, h2, h3, h4, h5 {
-    font-family: 'Manrope', 'Assistant', sans-serif;
+    font-family: 'Poppins', 'Assistant', sans-serif;
     font-weight: 700;
     color: #3B82F6;
 }
@@ -305,7 +307,7 @@ h1, h2, h3, h4, h5 {
     background-color: #2563EB;
     border-color: #2563EB;
     transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(0, 54, 51, 0.3);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 
 .btn-outline-secondary,
@@ -349,7 +351,7 @@ h1, h2, h3, h4, h5 {
 .form-control:focus,
 .form-select:focus {
     border-color: #3B82F6;
-    box-shadow: 0 0 0 3px rgba(0, 54, 51, 0.12);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
     outline: none;
 }
 
@@ -465,8 +467,8 @@ input.form-control[type="password"] {
     padding: 1.5rem 1.75rem;
     border-radius: 20px;
     background: linear-gradient(135deg, #ffffff 0%, #f2f4f6 100%);
-    border: 1px solid rgba(191, 200, 198, 0.7);
-    box-shadow: 0 2px 12px rgba(0, 54, 51, 0.06);
+    border: 1px solid rgba(226, 232, 240, 0.7);
+    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.06);
     overflow: hidden;
 }
 
@@ -486,7 +488,7 @@ input.form-control[type="password"] {
     gap: 0.45rem;
     padding: 0.4rem 0.8rem;
     border-radius: 999px;
-    background: rgba(0, 54, 51, 0.08);
+    background: rgba(59, 130, 246, 0.08);
     color: #2563EB;
     font-size: 0.78rem;
     font-weight: 800;
@@ -516,7 +518,7 @@ input.form-control[type="password"] {
     padding: 1rem 1.1rem;
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.75);
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .stat-card .label {
@@ -553,7 +555,7 @@ input.form-control[type="password"] {
 .pill-nav .nav-link.active {
     color: #fff;
     background: linear-gradient(135deg, #3B82F6, #2563EB);
-    box-shadow: 0 8px 20px rgba(0, 54, 51, 0.20);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.20);
 }
 
 .chip-row {
@@ -608,7 +610,7 @@ input.form-control[type="password"] {
 .patient-card:hover {
     transform: translateY(-6px);
     box-shadow: 0 22px 40px rgba(15, 23, 42, 0.12) !important;
-    border-color: rgba(15, 118, 110, 0.24);
+    border-color: rgba(59, 130, 246, 0.24);
 }
 
 .patient-card-body {
@@ -687,7 +689,7 @@ input.form-control[type="password"] {
     padding: 1rem 1.1rem;
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.75);
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .calendar-mini-card .eyebrow {
@@ -719,15 +721,15 @@ input.form-control[type="password"] {
 .calendar-aux-note {
     padding: 0.9rem 1rem;
     border-radius: 14px;
-    background: rgba(0, 54, 51, 0.06);
+    background: rgba(59, 130, 246, 0.06);
     color: #2563EB;
-    border: 1px solid rgba(0, 54, 51, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.12);
 }
 
 .slot-day-details {
     padding: 0.85rem 1rem;
     border-radius: 18px;
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     background: rgba(255, 255, 255, 0.62);
 }
 
@@ -750,13 +752,13 @@ input.form-control[type="password"] {
     padding: 0.8rem 0.9rem;
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.76);
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
 .crm-summary-mini.active {
-    border-color: rgba(0, 54, 51, 0.35);
-    background: rgba(181, 237, 231, 0.55);
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(191, 219, 254, 0.55);
 }
 
 .crm-summary-label {
@@ -777,7 +779,7 @@ input.form-control[type="password"] {
 }
 
 .crm-filter-panel {
-    border-top: 1px solid rgba(216, 225, 223, 0.9);
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
 }
 
 .crm-filter-hidden {
@@ -796,7 +798,7 @@ input.form-control[type="password"] {
     gap: 1rem;
     padding: 0.85rem 1rem;
     border-radius: 18px;
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     background: rgba(255, 255, 255, 0.72);
     box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
@@ -805,7 +807,7 @@ input.form-control[type="password"] {
 .crm-patient-row:hover {
     transform: translateY(-2px);
     box-shadow: 0 16px 26px rgba(15, 23, 42, 0.08);
-    border-color: rgba(15, 118, 110, 0.28);
+    border-color: rgba(59, 130, 246, 0.28);
 }
 
 .crm-patient-main {
@@ -895,9 +897,9 @@ input.form-control[type="password"] {
 
 /* ── Treatment method badge ────────────────────────────── */
 .crm-method-badge {
-    background: rgba(0, 54, 51, 0.10);
+    background: rgba(59, 130, 246, 0.10);
     color: #3B82F6;
-    border: 1px solid rgba(0, 54, 51, 0.20);
+    border: 1px solid rgba(59, 130, 246, 0.20);
     font-size: 0.72em;
     font-weight: 600;
 }
@@ -906,7 +908,7 @@ input.form-control[type="password"] {
 .crm-table-wrap {
     overflow-x: auto;
     border-radius: 18px;
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     background: rgba(255, 255, 255, 0.72);
     box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
@@ -929,7 +931,7 @@ input.form-control[type="password"] {
     cursor: pointer;
 }
 .crm-table-row:hover {
-    background: rgba(204, 251, 241, 0.35) !important;
+    background: rgba(191, 219, 254, 0.35) !important;
 }
 .crm-table-row td {
     padding: 0.55rem 0.85rem;
@@ -973,7 +975,7 @@ body.admin-user * {
 }
 .crm-patient-card {
     border-radius: 16px;
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     background: rgba(255, 255, 255, 0.8);
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
     padding: 0.85rem 1rem;
@@ -983,7 +985,7 @@ body.admin-user * {
 .crm-patient-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
-    border-color: rgba(15, 118, 110, 0.3);
+    border-color: rgba(59, 130, 246, 0.3);
 }
 .crm-card-header {
     display: flex;
@@ -1020,7 +1022,7 @@ body.admin-user * {
     padding: 1rem 1.1rem;
     border-radius: 18px;
     background: rgba(255,255,255,0.82);
-    border: 1px solid rgba(216, 225, 223, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.9);
     box-shadow: 0 6px 16px rgba(15,23,42,0.05);
     transition: transform 0.15s, box-shadow 0.15s;
 }
@@ -1169,7 +1171,7 @@ footer {
 
 /* FullCalendar Modernization */
 .fc-theme-standard .fc-scrollgrid {
-    border: 1px solid rgba(216, 225, 223, 0.95);
+    border: 1px solid rgba(226, 232, 240, 0.95);
     border-radius: 24px;
     overflow: hidden;
     box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
@@ -1209,7 +1211,7 @@ footer {
 #weeklyCalendar .fc-timegrid-axis-cushion,
 #weeklyCalendar .fc-timegrid-slot-label-cushion {
     color: #334155;
-    font-family: 'Manrope', 'Segoe UI', sans-serif;
+    font-family: 'Poppins', 'Segoe UI', sans-serif;
     font-weight: 700;
 }
 
@@ -1220,7 +1222,7 @@ footer {
 
 #weeklyCalendar .fc-event-title,
 #weeklyCalendar .fc-event-time {
-    font-family: 'Manrope', 'Segoe UI', sans-serif;
+    font-family: 'Poppins', 'Segoe UI', sans-serif;
     font-weight: 700;
     letter-spacing: 0.1px;
 }
@@ -1407,4 +1409,37 @@ a:focus-visible {
         pointer-events: none;
         opacity: 0.7;
     }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ENHANCED VISUAL HIERARCHY (Clean design)
+   ══════════════════════════════════════════════════════════════ */
+
+/* Enhanced card styling */
+.card {
+    backdrop-filter: blur(8px);
+}
+
+.card-header {
+    font-family: 'Poppins', sans-serif;
+    letter-spacing: -0.01em;
+}
+
+/* Enhanced section hero – blue gradient, amber/gold accent */
+.section-hero {
+    background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+    border-color: rgba(191, 219, 254, 0.5);
+}
+
+/* Smooth transitions on all interactive elements */
+a, button, .btn, .card, .form-control, .form-select, .badge {
+    transition: all 0.2s ease;
+}
+
+/* Better focus ring on form elements using blue primary */
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    outline: none;
 }
