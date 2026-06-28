@@ -1,13 +1,8 @@
-import sqlite3
-from flask import g, current_app
+from flask import g
 
 def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        database = current_app.config.get('DATABASE', 'clinic.db')
-        db = g._database = sqlite3.connect(database)
-        db.row_factory = sqlite3.Row
-    return db
+    from app import get_db as _app_get_db
+    return _app_get_db()
 
 def get_all_meeting_notes():
     db = get_db()

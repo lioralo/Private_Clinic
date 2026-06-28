@@ -5,6 +5,7 @@ Route handlers live in `clinic_app/routes/*.py` as Flask blueprints:
 - `health.py`, `patients.py`, `calendar.py`, `auth.py`, `billing.py`, `messaging.py`, `google_calendar.py`, `admin.py`
 - Legacy `url_for()` endpoint names maintained via `app.add_url_rule()` aliases in `app.py`
 - Shared utilities in `clinic_app/utils.py`; data helpers in `clinic_app/models.py`
+- Google OAuth setup wizard at `/admin/google-setup` (endpoint: `admin.google_setup`)
 
 ## Database Migrations (Alembic)
 Schema migrations use Alembic. Two revisions capture the full schema:

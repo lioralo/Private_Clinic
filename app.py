@@ -383,6 +383,28 @@ def ensure_runtime_paths():
     backup_path.mkdir(parents=True, exist_ok=True)
 
 
+import functools
+import time as _time
+
+def _db_retry(max_attempts=3, delay=0.1):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_attempts):
+                try:
+                    return f(*args, **kwargs)
+                except sqlite3.OperationalError as exc:
+                    if 'database is locked' not in str(exc):
+                        raise
+                    last_exc = exc
+                    if attempt < max_attempts - 1:
+                        _time.sleep(delay * (2 ** attempt))
+            raise last_exc
+        return wrapper
+    return decorator
+
+
 def _request_client_ip():
     forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
     if forwarded_for:
@@ -1920,8 +1942,9 @@ def get_db():
     db = getattr(g, '_database', None)
     if db is None:
         database = app.config.get('DATABASE', DATABASE)
-        db = g._database = sqlite3.connect(database)
+        db = g._database = sqlite3.connect(database, timeout=5)
         db.row_factory = sqlite3.Row
+        db.execute("PRAGMA busy_timeout=5000")
     return db
 
 @app.teardown_appcontext
@@ -3359,6 +3382,7 @@ def _seed_admin_user(db):
         db.commit()
 
 
+_db_init_lock = threading.Lock()
 _db_initialized = False
 
 def init_db():
@@ -3367,40 +3391,46 @@ def init_db():
     if _db_initialized:
         return
 
-    database = app.config.get('DATABASE', DATABASE)
-    with app.app_context():
-        db = get_db()
-        # Check if DB already has schema (e.g. alembic_version exists)
-        already_initialized = False
-        try:
-            row = db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
-            ).fetchone()
-            if row:
-                already_initialized = True
-        except Exception:
-            pass
+    with _db_init_lock:
+        if _db_initialized:
+            return
 
-        if not already_initialized:
-            with app.open_resource('clinic_app/schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            db.commit()
-
-        _run_db_migrations(db)
-        _seed_admin_user(db)
-
-        if not already_initialized:
-            print(f"Initialized the database at {database}.")
-
-        if not app.config.get('TESTING'):
+        database = app.config.get('DATABASE', DATABASE)
+        with app.app_context():
+            db = get_db()
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA busy_timeout=5000")
+            # Check if DB already has schema (e.g. alembic_version exists)
+            already_initialized = False
             try:
-                perform_routine_encrypted_backup(database)
-            except Exception as backup_error:
-                print(f"Routine backup skipped: {backup_error}")
-            ensure_gdocs_auto_sync_worker_started()
-            ensure_appointment_reminder_worker_started()
+                row = db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+                ).fetchone()
+                if row:
+                    already_initialized = True
+            except Exception:
+                pass
 
-    _db_initialized = True
+            if not already_initialized:
+                with app.open_resource('clinic_app/schema.sql', mode='r') as f:
+                    db.cursor().executescript(f.read())
+                db.commit()
+
+            _run_db_migrations(db)
+            _seed_admin_user(db)
+
+            if not already_initialized:
+                print(f"Initialized the database at {database}.")
+
+            if not app.config.get('TESTING'):
+                try:
+                    perform_routine_encrypted_backup(database)
+                except Exception as backup_error:
+                    print(f"Routine backup skipped: {backup_error}")
+                ensure_gdocs_auto_sync_worker_started()
+                ensure_appointment_reminder_worker_started()
+
+        _db_initialized = True
 
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])

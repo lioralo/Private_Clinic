@@ -301,6 +301,9 @@
                         <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
                             <i class="bi bi-google me-1"></i>{{ t('Connect with Google') }}
                         </a>
+                        <a href="{{ url_for('admin.google_setup') }}" class="btn btn-outline-primary btn-sm rounded-pill">
+                            <i class="bi bi-gear me-1"></i>{{ t('Setup Guide') }}
+                        </a>
                     </div>
                     <div id="gcalActiveIntegrations" class="mb-2{% if not (google_calendar_ui.connected and google_calendar_ui.enabled_integrations) %} d-none{% endif %}">
                         {% if google_calendar_ui.connected and google_calendar_ui.enabled_integrations %}

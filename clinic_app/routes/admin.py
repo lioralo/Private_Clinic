@@ -1383,6 +1383,37 @@ def assign_resource(patient_id):
     return redirect_to_patient_tab(patient_id, 'info')
 
 
+@admin_bp.route('/admin/google-setup')
+@login_required
+def google_setup():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    from app import gcal, build_external_public_url, get_site_settings
+    db = get_db()
+    settings = get_site_settings(db)
+    try:
+        enabled_integrations = json.loads(settings.get('google_enabled_integrations') or '["calendar","docs","sheets"]')
+    except (ValueError, TypeError):
+        enabled_integrations = ['calendar', 'docs', 'sheets']
+    redirect_uri = build_external_public_url('google_calendar.google_calendar_callback')
+    client_id = os.environ.get('GOOGLE_CLIENT_ID', '')
+    client_secret_set = bool(os.environ.get('GOOGLE_CLIENT_SECRET', ''))
+    libs_available = gcal is not None and getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', False)
+    connected = False
+    if gcal:
+        try:
+            connected = bool(gcal.is_connected(db))
+        except Exception:
+            pass
+    return render_template('google_setup.html',
+        redirect_uri=redirect_uri,
+        client_id=client_id,
+        client_secret_set=client_secret_set,
+        libs_available=libs_available,
+        connected=connected,
+        enabled_integrations=enabled_integrations)
+
+
 @admin_bp.route('/admin/profile/name', methods=('POST',))
 @login_required
 def admin_profile_name():

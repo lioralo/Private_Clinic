@@ -1,0 +1,117 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-8 col-lg-9">
+        {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Google Setup')}]) }}
+
+        {% for category, message in get_flashed_messages(with_categories=true) %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0 py-3">
+                <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-google me-2"></i>{{ t('Google Integration Setup') }}</h4>
+            </div>
+            <div class="card-body p-4">
+                <div class="mb-4">
+                    <h5 class="fw-bold">{{ t('Status') }}</h5>
+                    <div class="d-flex flex-wrap gap-3 mt-2">
+                        {% if libs_available %}
+                        <span class="badge bg-success fs-6 px-3 py-2 rounded-pill"><i class="bi bi-check-circle me-1"></i>{{ t('Libraries OK') }}</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark fs-6 px-3 py-2 rounded-pill"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Libraries not installed') }}</span>
+                        {% endif %}
+                        {% if client_id and client_secret_set %}
+                        <span class="badge bg-success fs-6 px-3 py-2 rounded-pill"><i class="bi bi-check-circle me-1"></i>{{ t('Credentials configured') }}</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark fs-6 px-3 py-2 rounded-pill"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Credentials missing') }}</span>
+                        {% endif %}
+                        {% if connected %}
+                        <span class="badge bg-success fs-6 px-3 py-2 rounded-pill"><i class="bi bi-link-45deg me-1"></i>{{ t('Connected') }}</span>
+                        {% else %}
+                        <span class="badge bg-secondary fs-6 px-3 py-2 rounded-pill"><i class="bi bi-unlink me-1"></i>{{ t('Not connected') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <hr>
+
+                <h5 class="fw-bold mb-3">{{ t('Step 1: Enable Google APIs') }}</h5>
+                <ol class="list-group list-group-numbered mb-4">
+                    <li class="list-group-item border-0 ps-0">
+                        <a href="https://console.cloud.google.com/apis/dashboard" target="_blank" rel="noopener">
+                            {{ t('Open Google Cloud Console') }}
+                        </a>
+                        <span class="text-muted small ms-2">{{ t('(opens in new tab)') }}</span>
+                    </li>
+                    <li class="list-group-item border-0 ps-0">{{ t('Create a new project or select an existing one.') }}</li>
+                    <li class="list-group-item border-0 ps-0">{{ t('Enable these APIs:') }}
+                        <code>Google Calendar API</code>, <code>Google Docs API</code>, <code>Google Drive API</code>
+                    </li>
+                </ol>
+
+                <h5 class="fw-bold mb-3">{{ t('Step 2: Create OAuth Credentials') }}</h5>
+                <ol class="list-group list-group-numbered mb-4">
+                    <li class="list-group-item border-0 ps-0">{{ t('Go to "Credentials" page and click "Create Credentials" → "OAuth Client ID".') }}</li>
+                    <li class="list-group-item border-0 ps-0">{{ t('Choose "Web Application" as the application type.') }}</li>
+                    <li class="list-group-item border-0 ps-0">{{ t('Set any name (e.g. "Private Clinic CRM").') }}</li>
+                    <li class="list-group-item border-0 ps-0">
+                        {{ t('Under "Authorized redirect URIs", add:') }}
+                        <div class="mt-2">
+                            <input class="form-control form-control-sm font-monospace bg-light" id="redirect-uri-input" value="{{ redirect_uri }}" readonly onclick="this.select(); navigator.clipboard.writeText(this.value);">
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary mt-2 rounded-pill" onclick="event.preventDefault(); navigator.clipboard.writeText(document.getElementById('redirect-uri-input').value);">
+                            <i class="bi bi-clipboard me-1"></i>{{ t('Copy redirect URI') }}
+                        </button>
+                    </li>
+                    <li class="list-group-item border-0 ps-0">{{ t('Click "Create" and copy the Client ID and Client Secret.') }}</li>
+                </ol>
+
+                <h5 class="fw-bold mb-3">{{ t('Step 3: Configure Environment') }}</h5>
+                <p class="text-muted small">{{ t('Add these values to your .env file:') }}</p>
+                <div class="bg-dark text-light p-3 rounded-3 mb-4 font-monospace small">
+                    GOOGLE_CLIENT_ID={{ client_id or 'your-client-id' }}<br>
+                    GOOGLE_CLIENT_SECRET={{ t('your-client-secret') }}
+                </div>
+
+                <hr>
+
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ url_for('google_calendar.google_calendar_connect') }}" class="btn btn-primary rounded-pill px-4{% if not client_id or not client_secret_set or not libs_available %} disabled{% endif %}">
+                        <i class="bi bi-google me-2"></i>{{ t('Connect with Google') }}
+                    </a>
+                    <a href="{{ url_for('admin.admin_profile') }}" class="btn btn-outline-secondary rounded-pill px-4">
+                        <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Profile') }}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if connected %}
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-body p-4">
+                <h5 class="fw-bold text-success"><i class="bi bi-check-circle me-2"></i>{{ t('Connected Services') }}</h5>
+                <ul class="mt-3">
+                    {% if 'calendar' in enabled_integrations %}
+                    <li><i class="bi bi-calendar3 me-2 text-primary"></i>{{ t('Google Calendar') }}</li>
+                    {% endif %}
+                    {% if 'docs' in enabled_integrations %}
+                    <li><i class="bi bi-file-text me-2 text-primary"></i>{{ t('Google Docs') }}</li>
+                    {% endif %}
+                    {% if 'sheets' in enabled_integrations %}
+                    <li><i class="bi bi-table me-2 text-primary"></i>{{ t('Google Sheets') }}</li>
+                    {% endif %}
+                </ul>
+                <a href="{{ url_for('google_calendar.google_calendar_disconnect') }}" class="btn btn-outline-danger rounded-pill btn-sm mt-2"
+                   onclick="return confirm('{{ t('Disconnect Google? This will remove all tokens.') }}')">
+                    <i class="bi bi-unlink me-1"></i>{{ t('Disconnect') }}
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
