@@ -59,9 +59,9 @@
 }
 
 .stable-filter-btn.is-selected {
-    background-color: rgba(0, 54, 51, 0.12) !important;
-    color: #002c2a !important;
-    border-color: rgba(0, 54, 51, 0.45) !important;
+    background-color: rgba(59, 130, 246, 0.12) !important;
+    color: #1e40af !important;
+    border-color: rgba(59, 130, 246, 0.45) !important;
     box-shadow: none !important;
 }
 
@@ -137,4 +137,24 @@
     background-color: rgba(59, 130, 246, 0.15) !important;
     color: var(--bs-primary) !important;
     border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+/* RTL icon mirroring for Bootstrap Icons */
+:dir(rtl) .bi-chevron-left,
+:dir(rtl) .bi-chevron-right,
+:dir(rtl) .bi-arrow-left,
+:dir(rtl) .bi-arrow-right,
+:dir(rtl) .bi-arrow-right-short,
+:dir(rtl) .bi-arrow-up-right,
+:dir(rtl) .bi-caret-left-fill,
+:dir(rtl) .bi-caret-right-fill,
+[dir="rtl"] .bi-chevron-left,
+[dir="rtl"] .bi-chevron-right,
+[dir="rtl"] .bi-arrow-left,
+[dir="rtl"] .bi-arrow-right,
+[dir="rtl"] .bi-arrow-right-short,
+[dir="rtl"] .bi-arrow-up-right,
+[dir="rtl"] .bi-caret-left-fill,
+[dir="rtl"] .bi-caret-right-fill {
+    transform: scaleX(-1);
 }

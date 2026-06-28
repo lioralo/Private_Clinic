@@ -1143,7 +1143,7 @@ body.admin-user * {
 :dir(rtl) .ms-3, [dir="rtl"] .ms-3 { margin-inline-start: 1rem !important; margin-left: 0 !important; }
 
 .skip-link:not(:focus) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-.skip-link:focus { position: fixed; top: 0.5rem; left: 0.5rem; z-index: 9999; padding: 0.75rem 1.5rem; background: var(--bs-primary); color: #fff; font-weight: 700; border-radius: 0.5rem; text-decoration: none; outline: 2px solid #60A5FA; outline-offset: 2px; }
+.skip-link:focus { position: fixed; top: 0.5rem; inset-inline-start: 0.5rem; z-index: 9999; padding: 0.75rem 1.5rem; background: var(--bs-primary); color: #fff; font-weight: 700; border-radius: 0.5rem; text-decoration: none; outline: 2px solid #60A5FA; outline-offset: 2px; }
 
 .smaller { font-size: 0.8rem; }
 .smallest { font-size: 0.75rem; }
@@ -1246,7 +1246,7 @@ footer {
 }
 
 #weeklyCalendar .fc-event-badge-row .badge {
-    margin-left: 0 !important;
+    margin-inline-start: 0 !important;
 }
 
 .slot-day-details summary {

@@ -240,7 +240,7 @@ check_endpoint() {
 }
 
 check_endpoint "/" "Homepage"
-check_endpoint "/admin/" "Admin Portal"
+check_endpoint "/admin/dashboard" "Admin Portal"
 check_endpoint "/crm" "CRM Interface"
 
 echo ""

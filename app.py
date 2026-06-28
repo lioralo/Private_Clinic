@@ -10070,6 +10070,8 @@ def find_available_port(start_port=5000, max_tries=100):
 if __name__ == '__main__':
     ensure_runtime_paths()
     init_db()
+    if not os.environ.get('GOOGLE_CLIENT_ID') or not os.environ.get('GOOGLE_CLIENT_SECRET'):
+        print('[WARNING] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google integration disabled.')
     try:
         requested_port = int(os.environ.get('PORT', '5000'))
     except ValueError:
