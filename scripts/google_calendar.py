@@ -130,8 +130,8 @@ def load_credentials(db: sqlite3.Connection):
             token=token_data.get('token'),
             refresh_token=token_data.get('refresh_token'),
             token_uri=token_data.get('token_uri', 'https://oauth2.googleapis.com/token'),
-            client_id=token_data.get('client_id') or os.environ.get('GOOGLE_CLIENT_ID', ''),
-            client_secret=token_data.get('client_secret') or os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+            client_id=os.environ.get('GOOGLE_CLIENT_ID', token_data.get('client_id', '')),
+            client_secret=os.environ.get('GOOGLE_CLIENT_SECRET', token_data.get('client_secret', '')),
             scopes=token_data.get('scopes', SCOPES),
         )
         return creds
@@ -146,8 +146,8 @@ def save_credentials(db: sqlite3.Connection, creds, calendar_id: str = 'primary'
         'token': creds.token,
         'refresh_token': creds.refresh_token,
         'token_uri': creds.token_uri,
-        'client_id': creds.client_id,
-        'client_secret': creds.client_secret,
+        'client_id': os.environ.get('GOOGLE_CLIENT_ID', creds.client_id),
+        'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET', creds.client_secret),
         'scopes': list(creds.scopes) if creds.scopes else SCOPES,
     }
     token_json = json.dumps(token_data)
