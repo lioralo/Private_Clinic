@@ -17,8 +17,8 @@
     right: 0;
     bottom: 0;
     background: 
-        radial-gradient(circle at 20% 80%, rgba(0, 54, 51, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 20%, rgba(0, 54, 51, 0.05) 0%, transparent 50%);
+        radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
     pointer-events: none;
 }
 
@@ -32,7 +32,7 @@
 .login-card {
     background: white;
     border-radius: 28px;
-    box-shadow: 0 8px 48px rgba(0, 54, 51, 0.14), 0 0 60px rgba(0, 54, 51, 0.08);
+    box-shadow: 0 8px 48px rgba(59, 130, 246, 0.14), 0 0 60px rgba(59, 130, 246, 0.08);
     overflow: hidden;
 }
 
@@ -41,7 +41,7 @@
     background: white;
     padding: 4rem 2.5rem 3rem;
     text-align: center;
-    color: #003633;
+    color: var(--bs-primary);
 }
 
 .logo-wrapper {
@@ -70,7 +70,7 @@
     font-weight: 800;
     margin: 0 0 0.25rem 0;
     letter-spacing: -0.02em;
-    color: #003633;
+    color: var(--bs-primary);
 }
 
 .clinic-tagline {
@@ -97,7 +97,7 @@
     padding: 0.5rem 1rem;
     background: #f3f4f6;
     border-radius: 8px;
-    color: #003633;
+    color: var(--bs-primary);
     text-decoration: none;
     font-weight: 600;
     font-size: 0.9rem;
@@ -107,7 +107,7 @@
 
 .login-control-link:hover {
     background: #e5e7eb;
-    color: #002c2a;
+    color: #2563EB;
     transform: translateY(-1px);
 }
 
@@ -140,7 +140,7 @@
 .welcome-text {
     font-size: 1.05rem;
     font-weight: 600;
-    color: #003633;
+    color: var(--bs-primary);
     margin: 0 0 0.5rem 0;
     text-align: center;
 }
@@ -161,7 +161,7 @@
 }
 
 .form-label i {
-    color: #003633;
+    color: var(--bs-primary);
     font-size: 1rem;
     margin-inline-end: 0.5rem;
 }
@@ -177,7 +177,7 @@
 }
 
 .form-control:focus {
-    border-color: #003633;
+    border-color: var(--bs-primary);
     background-color: white;
     box-shadow: 0 0 0 4px rgba(0, 54, 51, 0.10);
     outline: none;
@@ -252,7 +252,7 @@
 
 /* ── BUTTONS ─────────────────────────────────────────────── */
 .btn-primary {
-    background: linear-gradient(135deg, #003633 0%, #002c2a 100%);
+    background: linear-gradient(135deg, var(--bs-primary) 0%, #2563EB 100%);
     border: none;
     border-radius: 12px;
     font-weight: 700;
@@ -269,7 +269,7 @@
 }
 
 .btn-link {
-    color: #003633;
+    color: var(--bs-primary);
     font-weight: 600;
     text-decoration: none;
     transition: color 0.2s ease;
@@ -278,7 +278,7 @@
 }
 
 .btn-link:hover {
-    color: #002c2a;
+    color: #2563EB;
     text-decoration: underline;
 }
 
@@ -296,14 +296,14 @@
 }
 
 .footer-link {
-    color: #003633;
+    color: var(--bs-primary);
     font-weight: 700;
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 .footer-link:hover {
-    color: #002c2a;
+    color: #2563EB;
     text-decoration: underline;
 }
 

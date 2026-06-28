@@ -18,7 +18,7 @@
 }
 
 .sidebar-link-active {
-    background-color: #003633 !important;
+    background-color: #3B82F6 !important;
     color: #ffffff !important;
 }
 
@@ -134,7 +134,7 @@
 }
 
 [data-bs-theme="dark"] .stable-filter-btn.is-selected {
-    background-color: rgba(94, 234, 212, 0.15) !important;
-    color: #5eead4 !important;
-    border-color: rgba(94, 234, 212, 0.4) !important;
+    background-color: rgba(59, 130, 246, 0.15) !important;
+    color: var(--bs-primary) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
 }

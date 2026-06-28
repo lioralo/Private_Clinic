@@ -78,7 +78,7 @@
     padding: 1rem;
     background: #f9fbf9;
     border-radius: 12px;
-    border-inline-start: 4px solid #0f766e;
+    border-inline-start: 4px solid #3B82F6;
 }
 
 .upcoming-time {
@@ -95,7 +95,7 @@
     justify-content: center;
     width: 50px;
     height: 50px;
-    background: linear-gradient(135deg, #0f766e, #134e4a);
+    background: linear-gradient(135deg, #3B82F6, #2563EB);
     color: white;
     border-radius: 8px;
 }
@@ -151,7 +151,7 @@
     top: 0;
     bottom: 0;
     width: 2px;
-    background: linear-gradient(to bottom, #0f766e, transparent);
+    background: linear-gradient(to bottom, #3B82F6, transparent);
 }
 
 .note-entry {
@@ -166,15 +166,15 @@
     top: 4px;
     width: 12px;
     height: 12px;
-    background: #0f766e;
+    background: #3B82F6;
     border: 3px solid white;
     border-radius: 50%;
-    box-shadow: 0 0 0 1px #0f766e;
+    box-shadow: 0 0 0 1px #3B82F6;
 }
 
 .note-date {
     font-size: 0.85rem;
-    color: #0f766e;
+    color: #3B82F6;
     font-weight: 700;
     margin-bottom: 0.25rem;
 }
