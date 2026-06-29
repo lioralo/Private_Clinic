@@ -178,14 +178,14 @@
                     {% endif %}
 
                     <h6 class="fw-bold text-primary mb-2"><i class="bi bi-key me-1"></i>{{ t('Change Admin Password') }}</h6>
-                    <p class="small text-muted mb-3">{{ t('Password change requires current password and authenticator code (two-step verification).') }}</p>
+                    <p class="small text-muted mb-3">{{ t('Set a new password. An authenticator code is required only if two-factor authentication is enabled.') }}</p>
                     <form method="post" action="{{ url_for('admin_change_password') }}" class="row g-2">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="col-md-6">
                             <input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required>
                         </div>
                         <div class="col-md-6">
-                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code') }}" required>
+                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code (leave blank if TOTP not set up)') }}" {{ 'required' if admin['totp_enabled'] else '' }}>
                         </div>
                         <div class="col-md-6">
                             <input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required>
