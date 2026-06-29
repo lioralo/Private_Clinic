@@ -3304,6 +3304,32 @@ def _run_db_migrations(db):
     db.execute('''CREATE INDEX IF NOT EXISTS idx_reminder_log_patient_status
         ON reminder_log (patient_id, status)''')
 
+    db.execute('''CREATE TABLE IF NOT EXISTS email_reminder_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL UNIQUE,
+        hours_before REAL NOT NULL DEFAULT 24.0,
+        subject_template TEXT NOT NULL DEFAULT 'Appointment Reminder',
+        body_template TEXT NOT NULL DEFAULT '',
+        enabled BOOLEAN NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    db.execute('''CREATE TABLE IF NOT EXISTS incoming_email (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id TEXT,
+        from_email TEXT NOT NULL,
+        from_name TEXT,
+        subject TEXT NOT NULL,
+        body_text TEXT,
+        body_html TEXT,
+        related_type TEXT,
+        related_id INTEGER,
+        is_read BOOLEAN DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_read ON incoming_email(is_read)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_created ON incoming_email(created_at)')
+
     db.commit()
 
 def _seed_admin_user(db):
@@ -5984,14 +6010,18 @@ def _send_appointment_email_reminders(db):
     if not settings['configured']:
         return 0
 
-    global_hours_before = int(app.config.get('REMINDER_HOURS_BEFORE', 24) or 24)
+    tpl = db.execute(
+        "SELECT hours_before, subject_template, body_template FROM email_reminder_templates "
+        "WHERE event_type = 'appointment_reminder' AND enabled = 1"
+    ).fetchone()
 
-    # Fetch appointments with their individual reminder_hours_before (if set) and
-    # compute target windows per-row.  Since timing can differ per appointment,
-    # fetch a wider window and then filter programmatically.
-    #
-    # We pull appointments scheduled within the next 7 days and then
-    # check which ones fall inside their own reminder window.
+    if tpl:
+        global_hours_before = int(tpl['hours_before'] or 24)
+        use_custom = True
+    else:
+        global_hours_before = int(app.config.get('REMINDER_HOURS_BEFORE', 24) or 24)
+        use_custom = False
+
     look_ahead = 7
     today_str = datetime.now().strftime('%Y-%m-%d')
     look_ahead_date = (datetime.now() + timedelta(days=look_ahead)).strftime('%Y-%m-%d')
@@ -6033,6 +6063,11 @@ def _send_appointment_email_reminders(db):
     sent_count = 0
     log_entries = []
 
+    def _fill_vars(text, **kw):
+        for k, v in kw.items():
+            text = text.replace('{{ ' + k + ' }}', v).replace('{{' + k + '}}', v)
+        return text
+
     def process_row(row):
         nonlocal sent_count
         recipient = (row['user_email'] or '').strip() or (row['patient_email'] or '').strip()
@@ -6045,30 +6080,44 @@ def _send_appointment_email_reminders(db):
         date_str = str(row['appointment_date'] or '')
 
         patient_name = row['patient_name']
-        try:
-            html_body = render_template('emails/reminder_en.html',
-                patient_name=patient_name, date_str=date_str, time_str=time_str,
-                meeting_type=meeting_type, meeting_title=meeting_title,
-                meeting_link=meeting_link, clinic_name='Private Clinic')
-            text_body = render_template('emails/reminder.txt',
-                patient_name=patient_name, date_str=date_str, time_str=time_str,
-                meeting_type=meeting_type, meeting_title=meeting_title,
-                meeting_link=meeting_link, clinic_name='Private Clinic')
-        except Exception:
-            text_body = (
-                f'Hello {patient_name},\n\n'
-                f'This is a reminder about your upcoming appointment:\n'
-                f'  Date: {date_str}\n'
-                f'  Time: {time_str}\n'
-                f'  Type: {meeting_type}'
-                f'{f" ({meeting_title})" if meeting_title else ""}'
-                f'{f"\n\nJoin link: {meeting_link}" if meeting_link else ""}\n\n'
-                f'If you need to reschedule or cancel, please contact the clinic.\n\n'
-                f'Private Clinic'
-            )
-            html_body = None
+        vars_dict = dict(
+            patient_name=patient_name,
+            date=date_str,
+            time=time_str,
+            meeting_type=meeting_type,
+            meeting_title=meeting_title,
+            meeting_link=meeting_link,
+            clinic_name='Private Clinic',
+        )
 
-        subject = f'Appointment Reminder: {patient_name} on {date_str}'
+        if use_custom:
+            subject = _fill_vars(tpl['subject_template'], **vars_dict)
+            text_body = _fill_vars(tpl['body_template'], **vars_dict)
+            html_body = None
+        else:
+            try:
+                html_body = render_template('emails/reminder_en.html',
+                    patient_name=patient_name, date_str=date_str, time_str=time_str,
+                    meeting_type=meeting_type, meeting_title=meeting_title,
+                    meeting_link=meeting_link, clinic_name='Private Clinic')
+                text_body = render_template('emails/reminder.txt',
+                    patient_name=patient_name, date_str=date_str, time_str=time_str,
+                    meeting_type=meeting_type, meeting_title=meeting_title,
+                    meeting_link=meeting_link, clinic_name='Private Clinic')
+            except Exception:
+                text_body = (
+                    f'Hello {patient_name},\n\n'
+                    f'This is a reminder about your upcoming appointment:\n'
+                    f'  Date: {date_str}\n'
+                    f'  Time: {time_str}\n'
+                    f'  Type: {meeting_type}'
+                    f'{f" ({meeting_title})" if meeting_title else ""}'
+                    f'{f"\n\nJoin link: {meeting_link}" if meeting_link else ""}\n\n'
+                    f'If you need to reschedule or cancel, please contact the clinic.\n\n'
+                    f'Private Clinic'
+                )
+                html_body = None
+            subject = f'Appointment Reminder: {patient_name} on {date_str}'
         success, msg = _send_smtp_email(recipient, subject, text_body, html_body)
 
         log_entries.append({

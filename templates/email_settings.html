@@ -1,0 +1,394 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-10 col-lg-11">
+        {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Email Settings')}]) }}
+
+        {% for category, message in get_flashed_messages(with_categories=true) %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white border-0 py-3">
+                        <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-envelope-paper me-2"></i>{{ t('Email Reminder System') }}</h4>
+                    </div>
+                    <div class="card-body p-4">
+                        <ul class="nav nav-pills nav-fill mb-4 gap-2" id="emailSettingsTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active rounded-pill px-4" id="templates-tab" data-bs-toggle="pill" data-bs-target="#templates" type="button" role="tab">
+                                    <i class="bi bi-file-text me-1"></i>{{ t('Reminder Templates') }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link rounded-pill px-4" id="one-time-tab" data-bs-toggle="pill" data-bs-target="#one-time" type="button" role="tab">
+                                    <i class="bi bi-send me-1"></i>{{ t('One-Time Email') }}
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link rounded-pill px-4" id="incoming-tab" data-bs-toggle="pill" data-bs-target="#incoming" type="button" role="tab">
+                                    <i class="bi bi-inbox me-1"></i>{{ t('Incoming Replies') }}
+                                    {% set unread = incoming|selectattr('is_read', 'equalto', 0)|list|length %}
+                                    {% if unread > 0 %}
+                                    <span class="badge bg-danger ms-1">{{ unread }}</span>
+                                    {% endif %}
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content">
+                            {# --- Reminder Templates Tab --- #}
+                            <div class="tab-pane fade show active" id="templates" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h5 class="fw-bold mb-0">{{ t('Manage Reminder Templates') }}</h5>
+                                    <button class="btn btn-primary btn-sm rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#newTemplateForm">
+                                        <i class="bi bi-plus-lg me-1"></i>{{ t('New Template') }}
+                                    </button>
+                                </div>
+
+                                <div class="collapse mb-4" id="newTemplateForm">
+                                    <div class="card border rounded-3">
+                                        <div class="card-body">
+                                            <form method="post" action="{{ url_for('.admin_email_settings_save_template') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="template_id" value="">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label small fw-semibold">{{ t('Event Type') }}</label>
+                                                        <select class="form-select form-select-sm" name="event_type" required>
+                                                            <option value="appointment_reminder">{{ t('Appointment Reminder') }}</option>
+                                                            <option value="appointment_cancelled">{{ t('Appointment Cancelled') }}</option>
+                                                            <option value="appointment_rescheduled">{{ t('Appointment Rescheduled') }}</option>
+                                                            <option value="new_appointment">{{ t('New Appointment') }}</option>
+                                                            <option value="group_session_reminder">{{ t('Group Session Reminder') }}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-semibold">{{ t('Hours Before') }}</label>
+                                                        <input type="number" class="form-control form-control-sm" name="hours_before" value="24" min="0.5" step="0.5" required>
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label small fw-semibold">{{ t('Email Subject') }}</label>
+                                                        <input type="text" class="form-control form-control-sm" name="subject_template" value="Appointment Reminder" required>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label small fw-semibold">{{ t('Email Body') }}</label>
+                                                        <textarea class="form-control form-control-sm" name="body_template" rows="6" placeholder="{% raw %}{% endraw %}{{ 'Use {{ patient_name }}, {{ date }}, {{ time }}, {{ meeting_type }}, {{ meeting_link }}' }}" dir="auto"></textarea>
+                                                        <div class="small text-muted mt-1">
+                                                            {{ t('Available variables') }}: <code>{% raw %}{{ patient_name }}{% endraw %}</code>, <code>{% raw %}{{ date }}{% endraw %}</code>, <code>{% raw %}{{ time }}{% endraw %}</code>, <code>{% raw %}{{ meeting_type }}{% endraw %}</code>, <code>{% raw %}{{ meeting_link }}{% endraw %}</code>, <code>{% raw %}{{ clinic_name }}{% endraw %}</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="enabled" id="newTplEnabled" checked>
+                                                            <label class="form-check-label small" for="newTplEnabled">{{ t('Enable this reminder') }}</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <button class="btn btn-primary btn-sm rounded-pill px-4" type="submit">
+                                                            <i class="bi bi-check-lg me-1"></i>{{ t('Save Template') }}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {% if templates %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>{{ t('Event Type') }}</th>
+                                                <th>{{ t('Hours Before') }}</th>
+                                                <th>{{ t('Subject') }}</th>
+                                                <th>{{ t('Status') }}</th>
+                                                <th>{{ t('Actions') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for tpl in templates %}
+                                            <tr>
+                                                <td class="small">
+                                                    {% if tpl.event_type == 'appointment_reminder' %}
+                                                    <i class="bi bi-bell me-1 text-warning"></i>{{ t('Appointment Reminder') }}
+                                                    {% elif tpl.event_type == 'appointment_cancelled' %}
+                                                    <i class="bi bi-x-circle me-1 text-danger"></i>{{ t('Cancelled') }}
+                                                    {% elif tpl.event_type == 'appointment_rescheduled' %}
+                                                    <i class="bi bi-arrow-repeat me-1 text-info"></i>{{ t('Rescheduled') }}
+                                                    {% elif tpl.event_type == 'new_appointment' %}
+                                                    <i class="bi bi-calendar-check me-1 text-success"></i>{{ t('New Appointment') }}
+                                                    {% elif tpl.event_type == 'group_session_reminder' %}
+                                                    <i class="bi bi-people me-1 text-primary"></i>{{ t('Group Session') }}
+                                                    {% else %}
+                                                    {{ tpl.event_type }}
+                                                    {% endif %}
+                                                </td>
+                                                <td class="small">{{ tpl.hours_before }}h</td>
+                                                <td class="small text-truncate" style="max-width:200px">{{ tpl.subject_template }}</td>
+                                                <td>
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input template-toggle" type="checkbox" data-template-id="{{ tpl.id }}" {% if tpl.enabled %}checked{% endif %}>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-outline-primary btn-sm py-0 px-2 rounded-pill edit-template-btn"
+                                                        data-id="{{ tpl.id }}"
+                                                        data-event-type="{{ tpl.event_type }}"
+                                                        data-hours="{{ tpl.hours_before }}"
+                                                        data-subject="{{ tpl.subject_template }}"
+                                                        data-body="{{ tpl.body_template }}"
+                                                        data-enabled="{{ tpl.enabled }}">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="collapse" id="editTemplateCollapse">
+                                    <div class="card border rounded-3 mt-3">
+                                        <div class="card-body">
+                                            <form method="post" action="{{ url_for('.admin_email_settings_save_template') }}" id="editTemplateForm">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="template_id" id="editTemplateId" value="">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label small fw-semibold">{{ t('Event Type') }}</label>
+                                                        <select class="form-select form-select-sm" name="event_type" id="editEventType" required>
+                                                            <option value="appointment_reminder">{{ t('Appointment Reminder') }}</option>
+                                                            <option value="appointment_cancelled">{{ t('Appointment Cancelled') }}</option>
+                                                            <option value="appointment_rescheduled">{{ t('Appointment Rescheduled') }}</option>
+                                                            <option value="new_appointment">{{ t('New Appointment') }}</option>
+                                                            <option value="group_session_reminder">{{ t('Group Session Reminder') }}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-semibold">{{ t('Hours Before') }}</label>
+                                                        <input type="number" class="form-control form-control-sm" name="hours_before" id="editHoursBefore" min="0.5" step="0.5" required>
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label small fw-semibold">{{ t('Email Subject') }}</label>
+                                                        <input type="text" class="form-control form-control-sm" name="subject_template" id="editSubject" required>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label class="form-label small fw-semibold">{{ t('Email Body') }} <button type="button" class="btn btn-sm btn-link p-0 ms-2" onclick="document.getElementById('editBody').value = defaultBodyTemplate"><small>{{ t('Reset to default') }}</small></button></label>
+                                                        <textarea class="form-control form-control-sm" name="body_template" id="editBody" rows="6" dir="auto"></textarea>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox" name="enabled" id="editEnabled">
+                                                            <label class="form-check-label small" for="editEnabled">{{ t('Enable this reminder') }}</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <button class="btn btn-primary btn-sm rounded-pill px-4" type="submit">
+                                                            <i class="bi bi-check-lg me-1"></i>{{ t('Update Template') }}
+                                                        </button>
+                                                        <button class="btn btn-outline-secondary btn-sm rounded-pill px-4" type="button" data-bs-toggle="collapse" data-bs-target="#editTemplateCollapse">
+                                                            {{ t('Cancel') }}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="text-center py-5 text-muted">
+                                    <i class="bi bi-file-text" style="font-size:2rem"></i>
+                                    <p class="mt-2">{{ t('No reminder templates yet. Create one to start sending automatic reminders.') }}</p>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {# --- One-Time Email Tab --- #}
+                            <div class="tab-pane fade" id="one-time" role="tabpanel">
+                                <h5 class="fw-bold mb-3">{{ t('Send One-Time Email') }}</h5>
+                                <form method="post" action="{{ url_for('.admin_email_settings_send_one_time') }}" class="row g-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold">{{ t('Recipient') }}</label>
+                                        <div class="d-flex gap-2">
+                                            <select class="form-select form-select-sm flex-grow-1" id="oneTimeRecipientSelect">
+                                                <option value="">{{ t('Choose a patient...') }}</option>
+                                                {% for p in patients %}
+                                                <option value="{{ p.email }}">{{ p.name }} ({{ p.email }})</option>
+                                                {% endfor %}
+                                            </select>
+                                            <input type="email" class="form-control form-control-sm" name="recipient" id="oneTimeRecipientInput" placeholder="custom@email.com" required>
+                                        </div>
+                                        <div class="small text-muted mt-1">{{ t('Select a patient or type a custom email address.') }}</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold">{{ t('Subject') }}</label>
+                                        <input type="text" class="form-control form-control-sm" name="subject" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-semibold">{{ t('Message') }}</label>
+                                        <textarea class="form-control" name="body" rows="8" dir="auto"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-primary rounded-pill px-4" type="submit">
+                                            <i class="bi bi-send me-1"></i>{{ t('Send Email') }}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            {# --- Incoming Replies Tab --- #}
+                            <div class="tab-pane fade" id="incoming" role="tabpanel">
+                                <h5 class="fw-bold mb-3">{{ t('Incoming Email Replies') }}</h5>
+                                {% if incoming %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>{{ t('From') }}</th>
+                                                <th>{{ t('Subject') }}</th>
+                                                <th>{{ t('Preview') }}</th>
+                                                <th>{{ t('Received') }}</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for email in incoming %}
+                                            <tr class="{% if not email.is_read %}fw-semibold bg-light{% endif %}">
+                                                <td class="small">{{ email.from_name or email.from_email }}</td>
+                                                <td class="small text-truncate" style="max-width:200px">{{ email.subject }}</td>
+                                                <td class="small text-muted text-truncate" style="max-width:250px">{{ (email.body_text or '')[:120] }}</td>
+                                                <td class="small text-nowrap">{{ email.created_at[:16] }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-outline-primary py-0 px-2 rounded-pill view-email-btn"
+                                                        data-from="{{ email.from_name or email.from_email }}"
+                                                        data-subject="{{ email.subject }}"
+                                                        data-body="{{ email.body_text or '' }}"
+                                                        data-id="{{ email.id }}"
+                                                        {% if not email.is_read %}data-unread="1"{% endif %}>
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <div class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox" style="font-size:2rem"></i>
+                                    <p class="mt-2">{{ t('No incoming email replies yet.') }}</p>
+                                    <p class="small">{{ t('Patient replies to reminder emails will appear here.') }}</p>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="viewEmailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewEmailModalTitle">{{ t('Email Reply') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <strong class="small">{{ t('From') }}:</strong> <span id="viewEmailFrom" class="small"></span>
+                </div>
+                <div class="mb-3">
+                    <strong class="small">{{ t('Subject') }}:</strong> <span id="viewEmailSubject" class="small"></span>
+                </div>
+                <hr>
+                <div id="viewEmailBody" class="small" style="white-space:pre-wrap;word-break:break-word" dir="auto"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill" data-bs-dismiss="modal">{{ t('Close') }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var defaultBodyTemplate = `Hello {{ patient_name }},
+
+This is a reminder about your upcoming {{ meeting_type }}:
+  Date: {{ date }}
+  Time: {{ time }}{% if meeting_link %}
+  Join link: {{ meeting_link }}{% endif %}
+
+If you need to reschedule or cancel, please contact the clinic.
+
+{{ clinic_name }}`;
+
+document.querySelectorAll('.edit-template-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('editTemplateId').value = this.dataset.id;
+        document.getElementById('editEventType').value = this.dataset.eventType;
+        document.getElementById('editHoursBefore').value = this.dataset.hours;
+        document.getElementById('editSubject').value = this.dataset.subject;
+        document.getElementById('editBody').value = this.dataset.body;
+        document.getElementById('editEnabled').checked = this.dataset.enabled === '1';
+        var collapse = new bootstrap.Collapse(document.getElementById('editTemplateCollapse'), {toggle: true});
+    });
+});
+
+document.querySelectorAll('.template-toggle').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        var id = this.dataset.templateId;
+        var enabled = this.checked;
+        var csrf = document.querySelector('[name=csrf_token]').value;
+        fetch('/admin/email-settings/template/' + id + '/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'csrf_token=' + encodeURIComponent(csrf)
+        }).then(function(r) { return r.json(); }).then(function(d) {
+            if (d.status !== 'ok') {
+                cb.checked = !enabled;
+            }
+        });
+    });
+});
+
+document.querySelectorAll('.view-email-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('viewEmailFrom').textContent = this.dataset.from;
+        document.getElementById('viewEmailSubject').textContent = this.dataset.subject;
+        document.getElementById('viewEmailBody').textContent = this.dataset.body;
+        var modal = new bootstrap.Modal(document.getElementById('viewEmailModal'));
+        modal.show();
+        if (this.dataset.unread) {
+            var id = this.dataset.id;
+            var csrf = document.querySelector('[name=csrf_token]').value;
+            fetch('/admin/email-settings/incoming/' + id + '/read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'csrf_token=' + encodeURIComponent(csrf)
+            });
+            this.dataset.unread = '';
+            var row = this.closest('tr');
+            if (row) {
+                row.classList.remove('fw-semibold', 'bg-light');
+            }
+        }
+    });
+});
+
+document.getElementById('oneTimeRecipientSelect').addEventListener('change', function() {
+    document.getElementById('oneTimeRecipientInput').value = this.value;
+});
+</script>
+{% endblock %}

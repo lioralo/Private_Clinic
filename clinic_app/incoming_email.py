@@ -116,6 +116,12 @@ def poll_incoming_email(app):
                         'INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
                         (user['id'], recipient_id, clean_body),
                     )
+                    db.execute(
+                        'INSERT INTO incoming_email (from_email, from_name, subject, body_text, message_id) '
+                        'VALUES (?, ?, ?, ?, ?)',
+                        (sender_email, from_addr[:200], subject[:500], clean_body,
+                         msg.get('Message-ID', '')[:500]),
+                    )
                     db.commit()
                     processed += 1
                 except Exception:

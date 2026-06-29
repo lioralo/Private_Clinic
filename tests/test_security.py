@@ -272,16 +272,25 @@ class SecurityTestCase(unittest.TestCase):
         self.assertIn(b'Your session was invalidated after a security change. Please sign in again.', rv.data)
 
     def test_admin_smtp_health_endpoint_reports_not_configured(self):
-        self.client.post('/login', data=dict(
-            username='admin',
-            password='admin'
-        ), follow_redirects=True)
+        prev_host = app.config.get('SMTP_HOST')
+        prev_email = app.config.get('SMTP_FROM_EMAIL')
+        app.config['SMTP_HOST'] = ''
+        app.config['SMTP_FROM_EMAIL'] = ''
+        try:
+            self.client.post('/login', data=dict(
+                username='admin',
+                password='admin'
+            ), follow_redirects=True)
 
-        rv = self.client.get('/admin/smtp/health')
-        self.assertEqual(rv.status_code, 200)
-        data = rv.get_json()
-        self.assertEqual(data['status'], 'error')
-        self.assertFalse(bool(data['configured']))
+            rv = self.client.get('/admin/smtp/health')
+            self.assertEqual(rv.status_code, 200)
+            data = rv.get_json()
+            self.assertEqual(data['status'], 'error')
+            self.assertFalse(bool(data['configured']))
+        finally:
+            app.config['SMTP_HOST'] = prev_host
+            app.config['SMTP_FROM_EMAIL'] = prev_email
+
 
     def test_admin_change_password_enforces_strong_policy(self):
         self.client.post('/login', data=dict(

@@ -1428,3 +1428,131 @@ def admin_profile_name():
         db.commit()
         flash('Display name updated.')
     return redirect(url_for('.admin_profile'))
+
+
+@admin_bp.route('/admin/email-settings')
+@login_required
+def admin_email_settings():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    count = db.execute('SELECT COUNT(*) AS cnt FROM email_reminder_templates').fetchone()['cnt']
+    if count == 0:
+        defaults = [
+            ('appointment_reminder', 24,
+             'Appointment Reminder: {{ patient_name }} on {{ date }}',
+             'Hello {{ patient_name }},\n\nThis is a reminder about your upcoming appointment:\n'
+             '  Date: {{ date }}\n  Time: {{ time }}\n  Type: {{ meeting_type }}\n'
+             'Join link: {{ meeting_link }}\n\n'
+             'If you need to reschedule or cancel, please contact the clinic.\n\n{{ clinic_name }}'),
+            ('appointment_cancelled', 0,
+             'Appointment Cancelled: {{ patient_name }} on {{ date }}',
+             'Hello {{ patient_name }},\n\nYour appointment scheduled for {{ date }} at {{ time }} has been cancelled.\n\n'
+             'If you have any questions, please contact the clinic.\n\n{{ clinic_name }}'),
+            ('appointment_rescheduled', 0,
+             'Appointment Rescheduled: {{ patient_name }} on {{ date }}',
+             'Hello {{ patient_name }},\n\nYour appointment has been rescheduled:\n'
+             '  New Date: {{ date }}\n  New Time: {{ time }}\n  Type: {{ meeting_type }}\n'
+             'Join link: {{ meeting_link }}\n\n'
+             'If this does not work for you, please contact the clinic.\n\n{{ clinic_name }}'),
+            ('new_appointment', 0,
+             'New Appointment Confirmed: {{ patient_name }} on {{ date }}',
+             'Hello {{ patient_name }},\n\nYour appointment has been confirmed:\n'
+             '  Date: {{ date }}\n  Time: {{ time }}\n  Type: {{ meeting_type }}\n'
+             'Join link: {{ meeting_link }}\n\n'
+             'Thank you,\n{{ clinic_name }}'),
+        ]
+        for et, hb, subj, body in defaults:
+            db.execute(
+                'INSERT OR IGNORE INTO email_reminder_templates (event_type, hours_before, subject_template, body_template, enabled) '
+                'VALUES (?, ?, ?, ?, 1)', (et, hb, subj, body))
+        db.commit()
+    templates = db.execute('SELECT * FROM email_reminder_templates ORDER BY event_type').fetchall()
+    incoming = db.execute('SELECT * FROM incoming_email ORDER BY created_at DESC LIMIT 50').fetchall()
+    patients = db.execute('SELECT id, name, email FROM patients WHERE COALESCE(is_deleted, 0) = 0 AND COALESCE(email, "") <> "" ORDER BY name COLLATE NOCASE ASC').fetchall()
+    smtp = _smtp_health_check()
+    return render_template('email_settings.html',
+        templates=templates, incoming=incoming, patients=patients, smtp_health=smtp)
+
+
+@admin_bp.route('/admin/email-settings/save-template', methods=['POST'])
+@login_required
+def admin_email_settings_save_template():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    template_id = request.form.get('template_id', '').strip()
+    event_type = (request.form.get('event_type') or '').strip()
+    hours_before = float(request.form.get('hours_before') or 24)
+    subject_template = (request.form.get('subject_template') or '').strip()
+    body_template = request.form.get('body_template', '').strip()
+    enabled = 1 if request.form.get('enabled') else 0
+
+    if not event_type:
+        flash('Event type is required.')
+        return redirect(url_for('.admin_email_settings'))
+
+    if template_id:
+        db.execute('''UPDATE email_reminder_templates SET
+            event_type=?, hours_before=?, subject_template=?, body_template=?, enabled=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?''', (event_type, hours_before, subject_template, body_template, enabled, template_id))
+    else:
+        db.execute('''INSERT OR REPLACE INTO email_reminder_templates
+            (event_type, hours_before, subject_template, body_template, enabled)
+            VALUES (?, ?, ?, ?, ?)''', (event_type, hours_before, subject_template, body_template, enabled))
+    db.commit()
+    flash('Reminder template saved.')
+    return redirect(url_for('.admin_email_settings'))
+
+
+@admin_bp.route('/admin/email-settings/template/<int:template_id>/toggle', methods=['POST'])
+@login_required
+def admin_email_settings_toggle_template(template_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    tpl = db.execute('SELECT enabled FROM email_reminder_templates WHERE id = ?', (template_id,)).fetchone()
+    if not tpl:
+        return jsonify({'error': 'Not found'}), 404
+    new_val = 0 if tpl['enabled'] else 1
+    db.execute('UPDATE email_reminder_templates SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_val, template_id))
+    db.commit()
+    return jsonify({'status': 'ok', 'enabled': bool(new_val)})
+
+
+@admin_bp.route('/admin/email-settings/send-one-time', methods=['POST'])
+@login_required
+def admin_email_settings_send_one_time():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    from app import _send_smtp_email
+    recipient = (request.form.get('recipient') or '').strip()
+    subject = (request.form.get('subject') or '').strip()
+    body = request.form.get('body', '').strip()
+
+    if not recipient or not subject:
+        flash('Recipient email and subject are required.')
+        return redirect(url_for('.admin_email_settings'))
+
+    success, msg = _send_smtp_email(recipient, subject, body, html_body=None)
+    if success:
+        flash(f'Email sent to {recipient}.')
+    else:
+        flash(f'Failed to send email: {msg}')
+    return redirect(url_for('.admin_email_settings'))
+
+
+@admin_bp.route('/admin/email-settings/incoming/<int:email_id>/read', methods=['POST'])
+@login_required
+def admin_email_settings_mark_read(email_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    db.execute('UPDATE incoming_email SET is_read = 1 WHERE id = ?', (email_id,))
+    db.commit()
+    return jsonify({'status': 'ok'})
+
+
+def _smtp_health_check():
+    from app import _smtp_health_check as _check
+    return _check()

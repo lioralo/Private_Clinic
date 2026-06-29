@@ -214,6 +214,12 @@
                         </div>
                     </form>
 
+                    <h6 class="fw-bold mb-2">{{ t('Email Reminder System') }}</h6>
+                    <p class="small text-muted mb-2">{{ t('Manage automatic reminder emails for appointments and group sessions.') }}</p>
+                    <a href="{{ url_for('admin.admin_email_settings') }}" class="btn btn-outline-primary btn-sm rounded-pill">
+                        <i class="bi bi-envelope-paper me-1"></i>{{ t('Manage Email Reminders') }}
+                    </a>
+                    <hr>
                     <h6 class="fw-bold mb-2">Recent Auth Security Events</h6>
                     {% if recent_auth_events %}
                     <div class="table-responsive">
