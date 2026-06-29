@@ -22,7 +22,184 @@
     </div>
 </div>
 
+{# ── Security Scanning & Compliance Panel ── #}
+<div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h3 class="h5 fw-bold mb-0 text-slate-800">
+                        <i class="bi bi-shield-check text-success me-2"></i>{{ t('Automated Security Scanning (Bandit & pip-audit)') }}
+                    </h3>
+                    <div>
+                        {% if not site_settings.get('security_scan_last_run_at') %}
+                        <span class="badge bg-secondary-subtle text-secondary border px-3 py-2 rounded-pill">{{ t('Never Run') }}</span>
+                        {% elif site_settings.get('security_scan_last_status') == 'ok' %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                            <i class="bi bi-check-circle-fill me-1"></i>{{ t('Healthy - No Vulnerabilities') }}
+                        </span>
+                        {% elif site_settings.get('security_scan_last_status') == 'warning' %}
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ t('Warning - Vulnerabilities Found') }}
+                        </span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill">
+                            <i class="bi bi-shield-slash-fill me-1"></i>{{ t('High Severity Issues Detected') }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if site_settings.get('security_scan_last_run_at') %}
+                <p class="text-muted small mb-3">
+                    <strong>{{ t('Last Run:') }}</strong> {{ site_settings.get('security_scan_last_run_at')[:19] }} (UTC)
+                </p>
+                {% endif %}
+
+                {% if scan_results %}
+                <div class="accordion" id="securityScanDetails">
+                    {# ── Bandit Findings ── #}
+                    <div class="accordion-item border-0 bg-light rounded-3 mb-2 overflow-hidden">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed bg-light shadow-none fw-semibold text-slate-700 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#banditDetails">
+                                <i class="bi bi-code-slash me-2 text-primary"></i>
+                                {{ t('Bandit Static Analysis:') }} 
+                                <span class="badge bg-dark ms-2">{{ scan_results.get('bandit', {}).get('total_issues', 0) }} {{ t('Issues') }}</span>
+                            </button>
+                        </h2>
+                        <div id="banditDetails" class="accordion-collapse collapse" data-bs-parent="#securityScanDetails">
+                            <div class="accordion-body bg-white border-top">
+                                {% if scan_results.get('bandit', {}).get('issues') %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0 text-slate-600">
+                                        <thead>
+                                            <tr>
+                                                <th>{{ t('File:Line') }}</th>
+                                                <th>{{ t('Severity') }}</th>
+                                                <th>{{ t('Finding') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for issue in scan_results.get('bandit', {}).get('issues') %}
+                                            <tr>
+                                                <td class="font-monospace small text-primary" style="white-space:nowrap">{{ issue.file }}:{{ issue.line }}</td>
+                                                <td>
+                                                    <span class="badge {% if issue.severity.upper() == 'HIGH' %}bg-danger-subtle text-danger{% else %}bg-warning-subtle text-warning{% endif %} text-uppercase font-monospace small">
+                                                        {{ issue.severity }}
+                                                    </span>
+                                                </td>
+                                                <td class="small">{{ issue.issue_text }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>{{ t('No code style or security vulnerabilities detected by Bandit.') }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {# ── pip-audit Findings ── #}
+                    <div class="accordion-item border-0 bg-light rounded-3 overflow-hidden">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed bg-light shadow-none fw-semibold text-slate-700 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#pipAuditDetails">
+                                <i class="bi bi-box-seam me-2 text-primary"></i>
+                                {{ t('pip-audit Vulnerability Report:') }} 
+                                <span class="badge bg-dark ms-2">{{ scan_results.get('pip_audit', {}).get('total_vulnerabilities', 0) }} {{ t('Vulnerabilities') }}</span>
+                            </button>
+                        </h2>
+                        <div id="pipAuditDetails" class="accordion-collapse collapse" data-bs-parent="#securityScanDetails">
+                            <div class="accordion-body bg-white border-top">
+                                {% if scan_results.get('pip_audit', {}).get('vulnerabilities') %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover align-middle mb-0 text-slate-600">
+                                        <thead>
+                                            <tr>
+                                                <th>{{ t('Package') }}</th>
+                                                <th>{{ t('CVE ID') }}</th>
+                                                <th>{{ t('Description') }}</th>
+                                                <th>{{ t('Recommended Fix') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for vuln in scan_results.get('pip_audit', {}).get('vulnerabilities') %}
+                                            <tr>
+                                                <td class="font-monospace small fw-bold" style="white-space:nowrap">{{ vuln.package }} ({{ vuln.version }})</td>
+                                                <td class="small text-danger">{{ vuln.id }}</td>
+                                                <td class="small">{{ vuln.description }}</td>
+                                                <td class="small font-monospace">
+                                                    {% if vuln.fix_versions %}
+                                                    Upgrade to {{ vuln.fix_versions | join(', ') }}
+                                                    {% else %}
+                                                    No fix version known
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="text-success small mb-0"><i class="bi bi-check-circle me-1"></i>{{ t('All third-party library dependencies match PyPA database safety standards.') }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="bg-light p-3 rounded-3 text-center">
+                    <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>{{ t('No scan data available. Click "Run Security Scan Now" to begin.') }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+                <form method="post" action="{{ url_for('admin_security_save_settings') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <h3 class="h5 fw-bold mb-3 text-slate-800">
+                        <i class="bi bi-sliders me-2 text-primary"></i>{{ t('Scan Settings') }}
+                    </h3>
+
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="security_scan_enabled" id="scanEnabledSwitch" {% if site_settings.get('security_scan_enabled') == '1' %}checked{% endif %}>
+                        <label class="form-check-label small fw-semibold text-slate-700" for="scanEnabledSwitch">
+                            {{ t('Enable Recurrent Scan') }}
+                        </label>
+                        <div class="form-text text-xs text-slate-400">{{ t('Scan will run in the background on the scheduler.') }}</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-semibold text-slate-700">{{ t('Scan Frequency') }}</label>
+                        <select name="security_scan_interval" class="form-select form-select-sm">
+                            <option value="daily" {% if site_settings.get('security_scan_interval') == 'daily' %}selected{% endif %}>{{ t('Daily (Recommended)') }}</option>
+                            <option value="weekly" {% if site_settings.get('security_scan_interval') == 'weekly' %}selected{% endif %}>{{ t('Weekly') }}</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill w-100 mb-3">
+                        <i class="bi bi-save me-1"></i>{{ t('Save Scan Settings') }}
+                    </button>
+                </form>
+
+                <form method="post" action="{{ url_for('admin_security_scan_now') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill w-100">
+                        <i class="bi bi-shield-check me-1"></i>{{ t('Run Security Scan Now') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 {# ── Filters ── #}
+
 <form method="get" class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <div class="row g-2 align-items-end">

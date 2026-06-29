@@ -824,7 +824,13 @@ DEFAULT_SITE_SETTINGS = {
     'gdocs_auto_sync_targets_config_json': '[]',
     'gdocs_auto_sync_last_run_at': '',
     'google_enabled_integrations': '["calendar","docs","sheets"]',
+    'security_scan_enabled': '0',
+    'security_scan_interval': 'daily',
+    'security_scan_last_run_at': '',
+    'security_scan_last_status': '',
+    'security_scan_last_results_json': '{}',
 }
+
 
 
 def get_site_settings(db=None):
@@ -1873,6 +1879,119 @@ def apply_security_headers(response):
     )
     response.headers.setdefault('Content-Security-Policy', csp_policy)
     return response
+
+
+def _run_security_scan_logic():
+    import subprocess
+    import json
+    
+    # Locate virtual environment Python to run bandit/pip-audit if possible
+    root_path = app.root_path
+    venv_dir = os.path.abspath(os.path.join(root_path, '../venv'))
+    if not os.path.isdir(venv_dir):
+        venv_dir = os.path.abspath(os.path.join(root_path, '.venv'))
+    
+    bandit_bin = os.path.join(venv_dir, 'bin/bandit') if os.path.isdir(venv_dir) else 'bandit'
+    pip_audit_bin = os.path.join(venv_dir, 'bin/pip-audit') if os.path.isdir(venv_dir) else 'pip-audit'
+    
+    # Run Bandit
+    bandit_count = 0
+    bandit_results = []
+    try:
+        cmd = [bandit_bin, '-r', 'app.py', 'clinic_app/', '-f', 'json', '-ll', '-ii']
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
+        if res.stdout:
+            data = json.loads(res.stdout)
+            bandit_count = len(data.get('results', []))
+            for item in data.get('results', []):
+                bandit_results.append({
+                    'file': item.get('filename'),
+                    'line': item.get('line_number'),
+                    'issue_text': item.get('issue_text'),
+                    'severity': item.get('issue_severity'),
+                    'confidence': item.get('issue_confidence'),
+                })
+    except Exception as exc:
+        bandit_results.append({'error': f'Failed to run bandit: {exc}'})
+        
+    # Run pip-audit
+    pip_audit_count = 0
+    pip_audit_results = []
+    try:
+        cmd = [pip_audit_bin, '-r', 'requirements.txt', '-f', 'json']
+        res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
+        if res.stdout:
+            data = json.loads(res.stdout)
+            dependencies = data if isinstance(data, list) else data.get('dependencies', [])
+            for dep in dependencies:
+                vulns = dep.get('vulns', [])
+                if vulns:
+                    pip_audit_count += len(vulns)
+                    for v in vulns:
+                        pip_audit_results.append({
+                            'package': dep.get('name'),
+                            'version': dep.get('version'),
+                            'id': v.get('id'),
+                            'fix_versions': v.get('fix_versions', []),
+                            'description': v.get('description'),
+                        })
+    except Exception as exc:
+        pip_audit_results.append({'error': f'Failed to run pip-audit: {exc}'})
+        
+    status = 'ok'
+    if bandit_count > 0 or pip_audit_count > 0:
+        status = 'warning'
+        for b in bandit_results:
+            if b.get('severity', '').upper() == 'HIGH':
+                status = 'error'
+                
+    summary = {
+        'status': status,
+        'run_at': datetime.now(timezone.utc).isoformat(),
+        'bandit': {
+            'total_issues': bandit_count,
+            'issues': bandit_results[:20],
+        },
+        'pip_audit': {
+            'total_vulnerabilities': pip_audit_count,
+            'vulnerabilities': pip_audit_results[:20],
+        }
+    }
+    return summary
+
+
+def _run_automated_security_scan(db, force=False):
+    settings = get_site_settings(db)
+    enabled = str(settings.get('security_scan_enabled') or '0') in {'1', 'true', 'yes', 'on'}
+    interval_key = settings.get('security_scan_interval') or 'daily'
+    
+    if not force:
+        if not enabled or interval_key == 'disabled':
+            return {'ran': False, 'reason': 'disabled'}
+        
+        last_run_raw = settings.get('security_scan_last_run_at')
+        if last_run_raw:
+            try:
+                last_run = datetime.fromisoformat(last_run_raw)
+                now = datetime.now(timezone.utc)
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                elapsed = (now - last_run).total_seconds()
+                interval_seconds = 24 * 3600 if interval_key == 'daily' else 7 * 24 * 3600
+                if elapsed < interval_seconds:
+                    return {'ran': False, 'reason': 'not-due'}
+            except Exception:
+                pass
+                
+    results = _run_security_scan_logic()
+    now_str = datetime.now(timezone.utc).isoformat()
+    save_site_settings(db, {
+        'security_scan_last_run_at': now_str,
+        'security_scan_last_status': results['status'],
+        'security_scan_last_results_json': json.dumps(results),
+    })
+    return {'ran': True, 'results': results}
+
 
 
 
@@ -6191,6 +6310,16 @@ def _scheduler_incoming_email_job():
         app.logger.exception('Incoming email polling job failed')
 
 
+def _scheduler_security_scan_job():
+    try:
+        with app.app_context():
+            db = get_db()
+            _run_automated_security_scan(db, force=False)
+            db.commit()
+    except Exception:
+        app.logger.exception('Scheduled security scan job failed')
+
+
 def ensure_appointment_reminder_worker_started():
     if app.config.get('TESTING'):
         return
@@ -6212,10 +6341,18 @@ def ensure_appointment_reminder_worker_started():
         name='Poll IMAP for incoming email replies',
         replace_existing=True,
     )
+    scheduler.add_job(
+        _scheduler_security_scan_job,
+        IntervalTrigger(seconds=3600),
+        id='security_scan_checker',
+        name='Check and run automated security scan',
+        replace_existing=True,
+    )
     if not scheduler.running:
         scheduler.start()
         app.logger.info('APScheduler started: reminders every %ss, incoming email every %ss',
                         interval, incoming_interval)
+
 
 
 def _notify_patient_appointment_change(change_type, db, appointment, patient, old_details=None):

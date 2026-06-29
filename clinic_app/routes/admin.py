@@ -1131,9 +1131,64 @@ def admin_security_log():
         LIMIT ? OFFSET ?
     ''', params + [per_page, offset]).fetchall()
     action_names = [r['action'] for r in db.execute('SELECT DISTINCT action FROM audit_logs ORDER BY action').fetchall()]
+    from app import get_site_settings
+    site_settings = get_site_settings(db)
+    scan_results = {}
+    results_raw = site_settings.get('security_scan_last_results_json')
+    if results_raw:
+        try:
+            scan_results = json.loads(results_raw)
+        except Exception:
+            pass
     return render_template('admin_security_log.html',
                            events=events, action_filter=action_filter, page=page, search=search,
-                           total=total, total_pages=total_pages, action_names=action_names)
+                           total=total, total_pages=total_pages, action_names=action_names,
+                           site_settings=site_settings, scan_results=scan_results)
+
+
+
+@admin_bp.route('/admin/security/scan-now', methods=['POST'])
+@login_required
+def admin_security_scan_now():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    from app import _run_automated_security_scan
+    try:
+        res = _run_automated_security_scan(db, force=True)
+        db.commit()
+        if res.get('ran'):
+            status = res['results']['status']
+            if status == 'ok':
+                flash('Security scan completed successfully. No issues found!')
+            elif status == 'warning':
+                flash('Security scan completed with warnings. Review findings below.', 'warning')
+            else:
+                flash('Security scan completed. High severity issues found!', 'error')
+        else:
+            flash('Security scan failed to run.', 'error')
+    except Exception as exc:
+        flash(f'Security scan failed: {exc}', 'error')
+    return redirect(url_for('.admin_security_log'))
+
+
+@admin_bp.route('/admin/security/save-settings', methods=['POST'])
+@login_required
+def admin_security_save_settings():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    from app import save_site_settings
+    enabled = '1' if request.form.get('security_scan_enabled') else '0'
+    interval = request.form.get('security_scan_interval') or 'daily'
+    save_site_settings(db, {
+        'security_scan_enabled': enabled,
+        'security_scan_interval': interval,
+    })
+    db.commit()
+    flash('Security scan settings updated successfully.')
+    return redirect(url_for('.admin_security_log'))
+
 
 
 @admin_bp.route('/admin/security-log/export')
