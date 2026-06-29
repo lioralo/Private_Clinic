@@ -1065,6 +1065,7 @@ def admin_profile():
         LIMIT 8
         '''
     ).fetchall()
+    recovery_codes = session.pop('mfa_recovery_codes', None)
     return render_template(
         'admin_profile.html',
         admin=admin,
@@ -1079,7 +1080,8 @@ def admin_profile():
         gdocs_auto_sync_health=gdocs_auto_sync_health,
         smtp_health=smtp_health,
         recent_auth_events=recent_auth_events,
-        totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None
+        totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None,
+        recovery_codes=recovery_codes
     )
 
 
@@ -1230,37 +1232,77 @@ def admin_smtp_test():
 @admin_bp.route('/admin/setup_authenticator', methods=['POST'])
 @login_required
 def setup_authenticator():
-    if current_user.role != 'admin':
+    if current_user.role not in ('admin', 'patient'):
         return "Unauthorized", 403
     action = request.form.get('action', '')
-    code = (request.form.get('code') or '').strip()
+    code = (request.form.get('code') or request.form.get('otp_code') or '').strip()
     db = get_db()
     user = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    
+    # Helper to check if client expects JSON response
+    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+    redirect_url = url_for('.admin_profile') if current_user.role == 'admin' else url_for('patient_settings')
+
     if action == 'generate' or action == 'start':
         secret = pyotp.random_base32()
         totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user['username'], issuer_name='Private Clinic')
         session['pending_totp_secret'] = secret
         session['pending_totp_uri'] = totp_uri
-        return jsonify({'secret': secret, 'uri': totp_uri})
+        if wants_json:
+            return jsonify({'secret': secret, 'uri': totp_uri})
+        return redirect(redirect_url)
+        
     elif action == 'verify':
-        secret = session.pop('pending_totp_secret', None)
+        secret = session.get('pending_totp_secret')
         if not secret:
-            return jsonify({'ok': False, 'message': 'No pending secret. Generate one first.'})
+            if wants_json:
+                return jsonify({'ok': False, 'message': 'No pending secret. Generate one first.'})
+            flash('No pending secret. Generate one first.', 'error')
+            return redirect(redirect_url)
         if not code:
-            return jsonify({'ok': False, 'message': 'Verification code is required.'})
+            if wants_json:
+                return jsonify({'ok': False, 'message': 'Verification code is required.'})
+            flash('Verification code is required.', 'error')
+            return redirect(redirect_url)
         if not pyotp.TOTP(secret).verify(code, valid_window=1):
-            return jsonify({'ok': False, 'message': 'Invalid code. Try again.'})
-        db.execute('UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?', (secret, current_user.id))
-        from flask import session as _sess
-        _sess.pop('pending_totp_uri', None)
+            if wants_json:
+                return jsonify({'ok': False, 'message': 'Invalid code. Try again.'})
+            flash('Invalid code. Try again.', 'error')
+            return redirect(redirect_url)
+            
+        session.pop('pending_totp_secret', None)
+        session.pop('pending_totp_uri', None)
+        
+        # Generate 5 recovery codes
+        import secrets
+        raw_codes = [secrets.token_hex(4) for _ in range(5)]
+        from werkzeug.security import generate_password_hash
+        hashed_codes = [generate_password_hash(c) for c in raw_codes]
+        
+        db.execute(
+            'UPDATE users SET totp_secret = ?, totp_enabled = 1, totp_recovery_codes = ? WHERE id = ?',
+            (secret, json.dumps(hashed_codes), current_user.id)
+        )
         db.commit()
-        return jsonify({'ok': True})
+        
+        # Store in session to display once to user on redirect
+        session['mfa_recovery_codes'] = raw_codes
+        
+        if wants_json:
+            return jsonify({'ok': True, 'recovery_codes': raw_codes})
+        flash('Authenticator verified successfully.')
+        return redirect(redirect_url)
+        
     elif action == 'disable':
-        db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?', (current_user.id,))
+        db.execute('UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_recovery_codes = NULL, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?', (current_user.id,))
         db.commit()
         flash('Two-factor authentication disabled.')
-        return redirect(url_for('.admin_profile'))
-    return jsonify({'ok': False, 'message': 'Unknown action.'})
+        return redirect(redirect_url)
+        
+    if wants_json:
+        return jsonify({'ok': False, 'message': 'Unknown action.'})
+    return redirect(redirect_url)
+
 
 
 @admin_bp.route('/admin/questionnaires/options')

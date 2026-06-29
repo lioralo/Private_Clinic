@@ -216,11 +216,34 @@ def register_auth_routes(
                 if not pending_user['totp_enabled'] or not pending_user['totp_secret']:
                     session.pop('pending_2fa_user_id', None)
                     session.pop('pending_2fa_username', None)
-                    flash('Authenticator is not configured for this admin account.')
+                    account_type = 'admin' if pending_user['role'] == 'admin' else 'patient'
+                    flash(f'Authenticator is not configured for this {account_type} account.')
                     return redirect(url_for('login'))
 
-                if verify_totp_code(pending_user['totp_secret'], otp_code):
-                    _log_auth_audit(db, 'auth_login_2fa_success', f"username={pending_user['username']}")
+                totp_ok = verify_totp_code(pending_user['totp_secret'], otp_code)
+                recovery_ok = False
+                
+                if not totp_ok and pending_user['totp_recovery_codes']:
+                    try:
+                        import json
+                        codes = json.loads(pending_user['totp_recovery_codes'] or '[]')
+                        matched_index = -1
+                        for idx, hashed in enumerate(codes):
+                            if check_password_hash(hashed, otp_code):
+                                matched_index = idx
+                                break
+                        if matched_index >= 0:
+                            codes.pop(matched_index)
+                            db.execute(
+                                'UPDATE users SET totp_recovery_codes = ? WHERE id = ?',
+                                (json.dumps(codes), pending_user['id'])
+                            )
+                            recovery_ok = True
+                    except Exception:
+                        pass
+
+                if totp_ok or recovery_ok:
+                    _log_auth_audit(db, 'auth_login_2fa_success', f"username={pending_user['username']} | recovery={recovery_ok}")
                     session.pop('pending_2fa_user_id', None)
                     session.pop('pending_2fa_username', None)
                     db.commit()
@@ -262,12 +285,11 @@ def register_auth_routes(
                 _log_auth_audit(db, 'auth_login_password_success', f"username={username}")
                 db.commit()
 
-                # REQUIRE 2FA for all admin accounts in PRODUCTION
-                # IN TESTING: Allow bypass for admin logins
-                if user['role'] == 'admin' and not app.config.get('TESTING'):
-                    if not user['totp_enabled'] or not user['totp_secret']:
-                        return login_redirect_for_user(user)
-
+                # REQUIRE 2FA for all admin accounts in PRODUCTION, and optionally for patients
+                is_admin_prod = user['role'] == 'admin' and not app.config.get('TESTING')
+                has_totp_configured = bool(user['totp_enabled'] and user['totp_secret'])
+                
+                if (is_admin_prod and has_totp_configured) or (user['role'] == 'patient' and has_totp_configured):
                     session['pending_2fa_user_id'] = int(user['id'])
                     session['pending_2fa_username'] = user['username']
                     flash('Two-factor authentication required. Check your authenticator app.')
@@ -280,8 +302,33 @@ def register_auth_routes(
             db.commit()
             if lockout_triggered and retry_after is not None:
                 flash(f'Too many failed login attempts. Please try again in {retry_after} seconds.')
+                try:
+                    ip = _request_client_ip()
+                    row = db.execute("SELECT setting_value FROM site_settings WHERE setting_key = 'about_email'").fetchone()
+                    admin_email = (row['setting_value'] or '').strip() if row else ''
+                    if not admin_email:
+                        admin_email = app.config.get('TLS_EMAIL') or 'admin@clinic.lior-clinic.org'
+                    
+                    email_body = (
+                        "SECURITY ALERT: Account Lockout Triggered\n\n"
+                        f"An account lockout was triggered on your clinic site.\n\n"
+                        f"* Target Username: {username}\n"
+                        f"* Source IP: {ip}\n"
+                        f"* Lockout Duration: {retry_after} seconds\n"
+                        f"* Timestamp: {datetime.now(timezone.utc).isoformat()} (UTC)\n\n"
+                        "This IP has been temporarily blocked from attempting further logins. "
+                        "If you did not initiate this, it could indicate a brute-force attempt."
+                    )
+                    send_smtp_email(
+                        admin_email,
+                        subject="[Security Alert] Clinic Account Lockout Triggered",
+                        body_text=email_body
+                    )
+                except Exception:
+                    pass
             else:
                 flash('Invalid username or password')
+
 
         if pending_user_id:
             return render_template('login.html', requires_otp=True, pending_username=pending_username)

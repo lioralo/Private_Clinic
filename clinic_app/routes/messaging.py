@@ -285,9 +285,17 @@ def contact_admin():
     if current_user.role != 'patient':
         return "Unauthorized", 403
 
+    db = get_db()
+    from clinic_app.utils import _check_db_rate_limit, _record_db_rate_limit
+    bucket_key = f"contact-admin-{current_user.id}"
+    retry_after = _check_db_rate_limit(db, bucket_key, 'contact', 10, 60) # 10 messages per minute
+    if retry_after:
+        flash(f'Too many messages. Please wait {retry_after} seconds.')
+        return redirect(url_for('patient_home'))
+    _record_db_rate_limit(db, bucket_key, 'contact')
+
     content = request.form['content']
     if content:
-        db = get_db()
         admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
         recipient_id = admin['id'] if admin else None
 

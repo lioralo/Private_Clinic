@@ -1,0 +1,94 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{{ url_for('patient_home') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Dashboard') }}
+    </a>
+</div>
+
+<div class="max-w-2xl mx-auto">
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 py-3">
+            <h4 class="mb-0 fw-bold text-slate-800"><i class="bi bi-shield-lock me-2 text-primary"></i>{{ t('Two-Factor Authentication Settings') }}</h4>
+        </div>
+        
+        <div class="card-body p-4">
+            {% if recovery_codes %}
+            <div class="alert alert-warning border border-warning-subtle rounded-4 p-3 mb-4">
+                <h6 class="fw-bold text-dark mb-2">
+                    <i class="bi bi-key-fill text-warning me-2"></i>{{ t('Two-Factor Authentication Recovery Codes') }}
+                </h6>
+                <p class="small text-muted mb-3">
+                    {{ t('Save these codes in a safe place. Each code can be used ONLY ONCE to log in if you lose access to your authenticator device.') }}
+                </p>
+                <div class="row g-2 mb-3">
+                    {% for code in recovery_codes %}
+                    <div class="col-6 col-sm-4">
+                        <code class="d-block text-center bg-white border rounded py-2 fw-bold font-monospace" style="font-size: 1.1rem; letter-spacing: 1px;">{{ code }}</code>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="text-end">
+                    <button class="btn btn-sm btn-dark rounded-pill px-3" onclick="window.print()">
+                        <i class="bi bi-printer me-1"></i>{{ t('Print Codes') }}
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <p class="small text-muted mb-3">{{ t('Protect your patient portal account using a double-factor authenticator app (Google Authenticator, Duo, etc.) to verify your logins.') }}</p>
+
+            {% if user['totp_enabled'] %}
+            <div class="alert alert-success py-2 small mb-3">
+                <i class="bi bi-check-circle me-1"></i>{{ t('Two-factor authentication is active on your account.') }}
+            </div>
+            <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="disable">
+                <button class="btn btn-outline-danger btn-sm rounded-pill px-4" type="submit">
+                    <i class="bi bi-shield-x me-1"></i>{{ t('Disable Authenticator') }}
+                </button>
+            </form>
+            {% else %}
+                <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="generate">
+                    <button class="btn btn-primary btn-sm rounded-pill px-4" type="submit">
+                        <i class="bi bi-qr-code-scan me-1"></i>{{ t('Enable Two-Factor Authentication') }}
+                    </button>
+                </form>
+            {% endif %}
+
+            {% if pending_totp_secret %}
+            <div class="border rounded-4 p-3 mt-4 bg-light">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-4 text-center">
+                        {% if totp_qr_url %}
+                        <img src="{{ totp_qr_url }}" alt="Authenticator QR" class="img-fluid rounded border bg-white p-2" style="max-width:180px;">
+                        {% endif %}
+                    </div>
+                    <div class="col-md-8">
+                        <p class="small mb-2">{{ t('Scan the QR with Google Authenticator or enter this setup key manually:') }}</p>
+                        <code class="d-block small mb-3 p-2 bg-white border rounded font-monospace">{{ pending_totp_secret }}</code>
+                        
+                        <form method="post" action="{{ url_for('setup_authenticator') }}" class="row g-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="verify">
+                            <div class="col-sm-7">
+                                <input type="text" name="otp_code" class="form-control form-control-sm" inputmode="numeric" placeholder="{{ t('Enter 6-digit code') }}" required>
+                            </div>
+                            <div class="col-sm-5 d-grid">
+                                <button class="btn btn-success btn-sm rounded-pill" type="submit">
+                                    <i class="bi bi-check2-circle me-1"></i>{{ t('Verify & Enable') }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

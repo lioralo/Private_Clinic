@@ -24,15 +24,41 @@ def get_or_create_backup_key():
     if env_key:
         return env_key.encode('utf-8')
 
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    key_path = backup_root / '.backup.key'
+    key_dir = Path('.clinic_keys')
+    key_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(key_dir, 0o700)
+    except Exception:
+        pass
+
+    key_path = key_dir / '.backup.key'
+
+    # Migrate key from old location inside backup dir if it exists
+    old_key_path = Path(BACKUP_DIR) / '.backup.key'
+    if not key_path.exists() and old_key_path.exists():
+        key_data = old_key_path.read_bytes()
+        key_path.write_bytes(key_data)
+        try:
+            os.chmod(key_path, 0o600)
+        except Exception:
+            pass
+        try:
+            old_key_path.unlink()
+        except Exception:
+            pass
+        return key_data.strip()
+
     if key_path.exists():
         return key_path.read_bytes().strip()
 
     key = Fernet.generate_key()
     key_path.write_bytes(key)
+    try:
+        os.chmod(key_path, 0o600)
+    except Exception:
+        pass
     return key
+
 
 
 def database_backup_fingerprint(db_file_path):

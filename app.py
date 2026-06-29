@@ -1875,7 +1875,8 @@ def apply_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data: https://api.qrserver.com https://*.googleusercontent.com; "
-        "connect-src 'self';"
+        "connect-src 'self'; "
+        "form-action 'self';"
     )
     response.headers.setdefault('Content-Security-Policy', csp_policy)
     return response
@@ -1884,6 +1885,7 @@ def apply_security_headers(response):
 def _run_security_scan_logic():
     import subprocess
     import json
+    import shutil
     
     # Locate virtual environment Python to run bandit/pip-audit if possible
     root_path = app.root_path
@@ -1894,49 +1896,58 @@ def _run_security_scan_logic():
     bandit_bin = os.path.join(venv_dir, 'bin/bandit') if os.path.isdir(venv_dir) else 'bandit'
     pip_audit_bin = os.path.join(venv_dir, 'bin/pip-audit') if os.path.isdir(venv_dir) else 'pip-audit'
     
+    bandit_available = shutil.which(bandit_bin) is not None
+    pip_audit_available = shutil.which(pip_audit_bin) is not None
+    
     # Run Bandit
     bandit_count = 0
     bandit_results = []
-    try:
-        cmd = [bandit_bin, '-r', 'app.py', 'clinic_app/', '-f', 'json', '-ll', '-ii']
-        res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
-        if res.stdout:
-            data = json.loads(res.stdout)
-            bandit_count = len(data.get('results', []))
-            for item in data.get('results', []):
-                bandit_results.append({
-                    'file': item.get('filename'),
-                    'line': item.get('line_number'),
-                    'issue_text': item.get('issue_text'),
-                    'severity': item.get('issue_severity'),
-                    'confidence': item.get('issue_confidence'),
-                })
-    except Exception as exc:
-        bandit_results.append({'error': f'Failed to run bandit: {exc}'})
+    if bandit_available:
+        try:
+            cmd = [bandit_bin, '-r', 'app.py', 'clinic_app/', '-f', 'json', '-ll']
+            res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
+            if res.stdout:
+                data = json.loads(res.stdout)
+                bandit_count = len(data.get('results', []))
+                for item in data.get('results', []):
+                    bandit_results.append({
+                        'file': item.get('filename'),
+                        'line': item.get('line_number'),
+                        'issue_text': item.get('issue_text'),
+                        'severity': item.get('issue_severity'),
+                        'confidence': item.get('issue_confidence'),
+                    })
+        except Exception as exc:
+            bandit_results.append({'error': f'Failed to run bandit: {exc}'})
+    else:
+        bandit_results.append({'error': 'bandit is not installed. Install with: pip install bandit'})
         
     # Run pip-audit
     pip_audit_count = 0
     pip_audit_results = []
-    try:
-        cmd = [pip_audit_bin, '-r', 'requirements.txt', '-f', 'json']
-        res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
-        if res.stdout:
-            data = json.loads(res.stdout)
-            dependencies = data if isinstance(data, list) else data.get('dependencies', [])
-            for dep in dependencies:
-                vulns = dep.get('vulns', [])
-                if vulns:
-                    pip_audit_count += len(vulns)
-                    for v in vulns:
-                        pip_audit_results.append({
-                            'package': dep.get('name'),
-                            'version': dep.get('version'),
-                            'id': v.get('id'),
-                            'fix_versions': v.get('fix_versions', []),
-                            'description': v.get('description'),
-                        })
-    except Exception as exc:
-        pip_audit_results.append({'error': f'Failed to run pip-audit: {exc}'})
+    if pip_audit_available:
+        try:
+            cmd = [pip_audit_bin, '-r', 'requirements.txt', '-f', 'json']
+            res = subprocess.run(cmd, capture_output=True, text=True, cwd=root_path)
+            if res.stdout:
+                data = json.loads(res.stdout)
+                dependencies = data if isinstance(data, list) else data.get('dependencies', [])
+                for dep in dependencies:
+                    vulns = dep.get('vulns', [])
+                    if vulns:
+                        pip_audit_count += len(vulns)
+                        for v in vulns:
+                            pip_audit_results.append({
+                                'package': dep.get('name'),
+                                'version': dep.get('version'),
+                                'id': v.get('id'),
+                                'fix_versions': v.get('fix_versions', []),
+                                'description': v.get('description'),
+                            })
+        except Exception as exc:
+            pip_audit_results.append({'error': f'Failed to run pip-audit: {exc}'})
+    else:
+        pip_audit_results.append({'error': 'pip-audit is not installed. Install with: pip install pip-audit'})
         
     status = 'ok'
     if bandit_count > 0 or pip_audit_count > 0:
@@ -2328,7 +2339,7 @@ def _export_json_backup(db_path):
 
 def _ensure_backup_key_consistency():
     """Ensure the backup encryption key is stored in both env and file, and log a warning if mismatched."""
-    key_dir = Path(BACKUP_DIR)
+    key_dir = Path(KEY_DIR)
     key_dir.mkdir(parents=True, exist_ok=True)
     env_key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
     file_key_path = key_dir / '.backup.key'
@@ -2899,6 +2910,11 @@ def _run_db_migrations(db):
         db.execute('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 0')
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN totp_recovery_codes TEXT')
+    except sqlite3.OperationalError:
+        pass
+
     try:
         db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
     except sqlite3.OperationalError:
@@ -4821,6 +4837,36 @@ def patient_change_password():
     return render_template('patient_change_password.html')
 
 
+@app.route('/patient/settings')
+@login_required
+def patient_settings():
+    if current_user.role != 'patient':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    user = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    if not user:
+        return "User not found", 404
+
+    from urllib.parse import quote
+    import pyotp
+    pending_secret = session.get('pending_totp_secret')
+    totp_uri = None
+    if pending_secret:
+        totp_uri = pyotp.totp.TOTP(pending_secret).provisioning_uri(name=user['username'], issuer_name='Private Clinic')
+
+    recovery_codes = session.pop('mfa_recovery_codes', None)
+
+    return render_template(
+        'patient_settings.html',
+        user=user,
+        pending_totp_secret=pending_secret,
+        totp_qr_url=f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={quote(totp_uri)}" if totp_uri else None,
+        recovery_codes=recovery_codes
+    )
+
+
+
 @app.route('/patient/home')
 @login_required
 def patient_home():
@@ -5039,12 +5085,20 @@ def request_cancel_appointment(appointment_id):
     if current_user.role != 'patient':
         return 'Unauthorized', 403
 
+    db = get_db()
+    from clinic_app.utils import _check_db_rate_limit, _record_db_rate_limit
+    bucket_key = f"cancel-appt-{current_user.id}"
+    retry_after = _check_db_rate_limit(db, bucket_key, 'cancel', 5, 3600) # Max 5 cancel requests per hour
+    if retry_after:
+        flash(f'Too many cancellation requests. Please wait {retry_after} seconds.')
+        return redirect(url_for('patient_home'))
+    _record_db_rate_limit(db, bucket_key, 'cancel')
+
     reason = (request.form.get('reason') or '').strip()
     if not reason:
         flash('Please explain why you want to cancel.')
         return redirect(url_for('patient_home'))
 
-    db = get_db()
     appointment = db.execute('''
         SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.meeting_type, p.name AS patient_name
         FROM appointments a
@@ -5105,12 +5159,20 @@ def request_booking_access():
     if current_user.role != 'patient':
         return 'Unauthorized', 403
 
+    db = get_db()
+    from clinic_app.utils import _check_db_rate_limit, _record_db_rate_limit
+    bucket_key = f"booking-access-{current_user.id}"
+    retry_after = _check_db_rate_limit(db, bucket_key, 'booking', 5, 3600) # Max 5 booking requests per hour
+    if retry_after:
+        flash(f'Too many booking requests. Please wait {retry_after} seconds.')
+        return redirect(url_for('patient_home'))
+    _record_db_rate_limit(db, bucket_key, 'booking')
+
     notes = (request.form.get('notes') or '').strip()
     if not notes:
         flash('Please add a note for your booking request.')
         return redirect(url_for('patient_home'))
 
-    db = get_db()
     patient = db.execute('SELECT id, name, can_self_schedule FROM patients WHERE id = ?', (current_user.patient_id,)).fetchone()
     if not patient:
         return 'Patient not found', 404
@@ -9774,11 +9836,15 @@ def upload_patient_photo(patient_id):
     photo = request.files.get('photo')
     if photo is None or not (photo.filename or '').strip():
         flash('Please choose an image file.')
+        if current_user.role == 'patient':
+            return redirect(url_for('patient_home'))
         return redirect_to_patient_tab(patient_id, 'info')
 
     extension = os.path.splitext(photo.filename)[1].lower()
     if extension not in {'.png', '.jpg', '.jpeg', '.gif', '.webp'}:
         flash('Please upload a PNG, JPG, GIF, or WEBP image.')
+        if current_user.role == 'patient':
+            return redirect(url_for('patient_home'))
         return redirect_to_patient_tab(patient_id, 'info')
 
     filename = secure_filename(f'patient_{patient_id}_{secrets.token_hex(6)}{extension}')
@@ -9801,6 +9867,8 @@ def upload_patient_photo(patient_id):
                 pass
 
     flash('Profile picture updated.')
+    if current_user.role == 'patient':
+        return redirect(url_for('patient_home'))
     return redirect_to_patient_tab(patient_id, 'info')
 
 

@@ -494,6 +494,8 @@
            class="text-black hover:text-teal-800 font-bold text-sm px-3 py-1.5 border border-slate-200 rounded-full transition-colors no-underline">
             {% if lang == 'en' %}עברית{% else %}English{% endif %}
         </a>
+        <a href="{{ url_for('patient_settings') }}"
+           class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline">{{ t('Settings') }}</a>
         <a href="{{ url_for('logout') }}"
            class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline">{{ t('Logout') }}</a>
     </div>

@@ -371,6 +371,46 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(second.status_code, 302)
         self.assertIn('/patients', second.headers.get('Location', ''))
 
+    def test_admin_totp_login_with_recovery_code(self):
+        import json
+        from werkzeug.security import generate_password_hash
+        
+        # Inject recovery codes for totp_admin user
+        with app.app_context():
+            db = get_db()
+            raw_codes = ["testrec1", "testrec2"]
+            hashed_codes = [generate_password_hash(c) for c in raw_codes]
+            db.execute(
+                'UPDATE users SET totp_recovery_codes = ? WHERE username = ?',
+                (json.dumps(hashed_codes), 'totp_admin')
+            )
+            db.commit()
+
+        # Step 1: Submit username/password to get to step 2 (requires OTP)
+        app.config['TESTING'] = False
+        try:
+            first = self.client.post('/login', data=dict(
+                username='totp_admin',
+                password='admin'
+            ), follow_redirects=False)
+        finally:
+            app.config['TESTING'] = True
+        self.assertEqual(first.status_code, 200)
+
+        # Step 2: Login using first recovery code
+        second = self.client.post('/login', data=dict(
+            otp_code="testrec1"
+        ), follow_redirects=False)
+        self.assertEqual(second.status_code, 302)
+        self.assertIn('/patients', second.headers.get('Location', ''))
+
+        # Verify that the recovery code was single-use and has been popped
+        with app.app_context():
+            db = get_db()
+            row = db.execute('SELECT totp_recovery_codes FROM users WHERE username = ?', ('totp_admin',)).fetchone()
+            current_codes = json.loads(row['totp_recovery_codes'])
+            self.assertEqual(len(current_codes), 1)
+
     def test_inactivity_timeout_updates_last_activity(self):
         # Login
         self.client.post('/login', data=dict(

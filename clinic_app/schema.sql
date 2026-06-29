@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN DEFAULT 1,
     session_version INTEGER DEFAULT 0,
     otp_secret TEXT,
+    totp_recovery_codes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients (id)
 );
