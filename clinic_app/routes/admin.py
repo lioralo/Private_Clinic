@@ -1050,6 +1050,12 @@ def admin_profile():
 
     backup_files = list_encrypted_backups()
     pending_secret = session.get('pending_totp_secret')
+    pending_created_at = session.get('pending_totp_created_at', 0)
+    if pending_secret and (datetime.utcnow().timestamp() - pending_created_at) > 600:
+        session.pop('pending_totp_secret', None)
+        session.pop('pending_totp_uri', None)
+        session.pop('pending_totp_created_at', None)
+        pending_secret = None
     totp_uri = _admin_totp_uri(admin, pending_secret) if pending_secret else None
     connected_google_docs = _list_connected_google_docs(db)
     gdocs_auto_sync_state = _get_google_docs_auto_sync_state(db, connected_docs=connected_google_docs)
@@ -1248,6 +1254,7 @@ def setup_authenticator():
         totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user['username'], issuer_name='Private Clinic')
         session['pending_totp_secret'] = secret
         session['pending_totp_uri'] = totp_uri
+        session['pending_totp_created_at'] = time.time()
         if wants_json:
             return jsonify({'secret': secret, 'uri': totp_uri})
         return redirect(redirect_url)
