@@ -130,12 +130,20 @@
                             <i class="bi bi-shield-x me-1"></i>{{ t('Disable Authenticator') }}
                         </button>
                     </form>
+                    {% elif pending_totp_secret %}
+                    <div class="alert alert-info py-2 small">
+                        <i class="bi bi-info-circle me-1"></i>{{ t('Scan the QR code below and enter the 6-digit code to activate.') }}
+                    </div>
                     {% else %}
-                        <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="action" value="generate">
+                    <div class="alert alert-secondary py-2 small border">
+                        <i class="bi bi-shield-plus me-1"></i>{{ t('Two-factor authentication is not configured.') }}
+                        <span class="text-muted">{{ t('Add an extra layer of security — requires a code from your authenticator app at login.') }}</span>
+                    </div>
+                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="generate">
                         <button class="btn btn-primary rounded-pill" type="submit">
-                            <i class="bi bi-qr-code-scan me-1"></i>{{ t('Start Authenticator Setup') }}
+                            <i class="bi bi-qr-code-scan me-1"></i>{{ t('Set Up Authenticator') }}
                         </button>
                     </form>
                     {% endif %}
