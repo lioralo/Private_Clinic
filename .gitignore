@@ -16,3 +16,4 @@ manual_backups/
 .clinic_keys/
 .env
 node_modules/
+.venv_test/
