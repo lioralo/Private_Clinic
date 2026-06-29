@@ -2,6 +2,54 @@
 
 ---
 
+## Session 80
+
+**Date:** 2026-06-29
+
+**Objective:** Security hardening, patient TOTP support, fixes for auth/admin redirects, and production deployment prep.
+
+**Release Summary:**
+
+1. **Security scanning dashboard** (`/admin/security/log`)
+   - CSP headers injection (`form-action 'self'`, script/style nonces).
+   - Programmatic Bandit & `pip-audit` scanners with cron scheduling.
+   - Security health badges, settings forms, and accordion scan reports.
+
+2. **Cryptographic key separation**
+   - Backup keys moved from `secure_backups/` to `.clinic_keys/` with `700` permissions.
+   - `_ensure_backup_key_consistency()` in `app.py` fixed to use `KEY_DIR`.
+
+3. **MFA recovery codes**
+   - 5 recovery codes generated on authenticator enrollment (admin + patient).
+   - Login fallback: recovery codes consumed one-time.
+   - Recovery codes displayed with "Print Codes" button.
+
+4. **Patient TOTP setup**
+   - New `/patient/settings` route with QR code + recovery codes display.
+   - New `templates/patient_settings.html`.
+   - "Settings" link in patient nav bar.
+
+5. **Rate limiting (DB-backed)**
+   - Patient cancellations: 5/hour.
+   - Patient booking requests: 5/hour.
+   - Contact admin messages: 10/minute.
+   - Registration: 3/15min. Password reset: 5/15min. Login: 10/15min + lockout.
+
+6. **Bug fixes**
+   - `auth.py`: MFA flash message now role-aware ("admin" vs "patient" account).
+   - `admin.py`: `setup_authenticator` redirects patients to `patient_settings` instead of `admin_profile`.
+   - `admin.py`: Restored `admin_change_password` / `admin_restore_backup` / `admin_profile_name` redirect targets after refactor.
+   - Lockout email body: plain-text alert stripped emoji.
+   - Security scanner: `shutil.which()` check for bandit/pip-audit availability.
+
+7. **Production prep**
+   - `bandit` and `pip-audit` installed in production venv.
+   - `.clinic_keys/` permissions locked down (`700`), stale key removed from `secure_backups/`.
+
+**Verification:**
+- `pytest tests/test_security.py tests/test_backup_db.py -q` — **43/43 passed**.
+- `git push origin main` — commit `8727531`.
+
 ## Session 79
 
 **Date:** 2026-05-27
