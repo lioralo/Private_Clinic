@@ -499,6 +499,8 @@ class SecurityTestCase(unittest.TestCase):
         self.assertEqual(rv.headers.get('X-Content-Type-Options'), 'nosniff')
         self.assertEqual(rv.headers.get('X-Frame-Options'), 'SAMEORIGIN')
         self.assertEqual(rv.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+        self.assertIsNotNone(rv.headers.get('Content-Security-Policy'))
+
 
     def _seed_webhook_channel(self, channel_id='abc'):
         """Insert a patient with the given gdoc_watch_channel so webhook lookups succeed."""

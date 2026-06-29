@@ -1863,7 +1863,17 @@ def apply_security_headers(response):
     response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
     response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    csp_policy = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: https://api.qrserver.com https://*.googleusercontent.com; "
+        "connect-src 'self';"
+    )
+    response.headers.setdefault('Content-Security-Policy', csp_policy)
     return response
+
 
 
 def _request_expects_json_error():
@@ -6044,7 +6054,7 @@ def _send_appointment_email_reminders(db):
     recurring_candidates = []
 
     for row in candidates:
-        actual_hours = int(row.get('reminder_hours_before') or global_hours_before)
+        actual_hours = int(row['reminder_hours_before'] if row['reminder_hours_before'] else global_hours_before)
         appt_date = str(row['appointment_date'] or '')
         appt_time = str(row['appointment_time'] or '')[:5]
         try:
@@ -6055,7 +6065,7 @@ def _send_appointment_email_reminders(db):
         reminder_end = appt_dt - timedelta(hours=actual_hours - 1)
         now_dt = datetime.now()
         if reminder_start <= now_dt <= reminder_end:
-            if row.get('is_recurring'):
+            if row['is_recurring']:
                 recurring_candidates.append(row)
             else:
                 non_recurring.append(row)
