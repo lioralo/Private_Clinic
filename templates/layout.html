@@ -130,6 +130,7 @@
             max-width: 85vw;
             will-change: transform;
             border-inline-end: 1px solid rgb(226 232 240);
+            overflow: hidden;
         }
 
         [data-bs-theme="dark"] .admin-sidebar {
@@ -330,16 +331,15 @@
 
     <div id="adminSidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden lg:hidden transition-opacity"></div>
 
-    {# Sidebar #}
-    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar h-screen flex-shrink-0 bg-white flex flex-col p-5 overflow-y-auto">
+    {# Sidebar - no scroll, all content must fit viewport #}
+    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar h-screen flex-shrink-0 bg-white flex flex-col px-4 py-3">
 
-        {# Brand #}
-        <div class="flex flex-col items-center mb-6 pt-1 px-1 flex-shrink-0">
-            <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="w-full rounded-xl object-contain mb-3" style="max-height:90px">
-            <h1 class="font-black text-teal-950 text-base text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
-            <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1 text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
-            <span class="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-100 text-teal-800 text-xs font-bold uppercase tracking-wider">{{ t('Admin') }}</span>
-            <p class="mt-1.5 text-xs text-slate-500 text-center leading-tight">{{ current_user.display_name or current_user.username }}</p>
+        {# Brand - compact #}
+        <div class="flex flex-col items-center mb-2 px-1 flex-shrink-0">
+            <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="w-10 h-10 rounded-xl object-contain mb-1">
+            <h1 class="font-black text-teal-950 text-xs text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
+            <p class="text-[8px] text-slate-500 uppercase tracking-widest text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
+            <span class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wider">{{ t('Admin') }}</span>
         </div>
 
         {# Main Nav #}
@@ -348,8 +348,8 @@
 
             {% macro nav_link(target, icon, label) %}
             <a href="{{ url_for(target) }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2.5 font-bold text-sm transition-colors duration-200 {% if endpoint_name == target %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
-                <i class="bi {{ icon }}" style="font-size:18px;width:20px;text-align:center"></i>
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 {% if endpoint_name == target %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                <i class="bi {{ icon }}" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ label }}</span>
             </a>
             {% endmacro %}
@@ -359,63 +359,66 @@
             {{ nav_link('weekly_calendar',  'bi-calendar3',    t('Calendar')) }}
             {{ nav_link('manage_resources', 'bi-folder2-open', t('Resources')) }}
             {{ nav_link('groups_dashboard', 'bi-people-fill',  t('Groups')) }}
-            {# Administration group: combines security log & contact inquiries #}
+            {# Administration group #}
             <div class="mb-1">
                 <button type="button"
-                   class="w-full flex items-center gap-3 rounded-lg px-4 py-2.5 font-bold text-sm transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
+                   class="w-full flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
                    data-bs-toggle="collapse" data-bs-target="#adminSubNav" aria-expanded="false" aria-controls="adminSubNav">
-                    <i class="bi bi-gear-wide-connected" style="font-size:18px;width:20px;text-align:center"></i>
+                    <i class="bi bi-gear-wide-connected" style="font-size:16px;width:18px;text-align:center"></i>
                     <span>{{ t('Administration') }}</span>
-                    <i class="bi bi-chevron-down ms-auto text-muted" style="font-size:12px"></i>
+                    <i class="bi bi-chevron-down ms-auto text-muted" style="font-size:11px"></i>
                 </button>
                 <div class="collapse" id="adminSubNav">
-                    <div class="ps-4 mt-1 space-y-0.5">
+                    <div class="ps-3 mt-1 space-y-0.5">
                         <a href="{{ url_for('admin_users') }}"
-                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_users' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
-                            <i class="bi bi-people" style="font-size:16px;width:18px;text-align:center"></i>
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'admin_users' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-people" style="font-size:14px;width:16px;text-align:center"></i>
                             <span>{{ t('Users') }}</span>
                         </a>
                         <a href="{{ url_for('admin_security_log') }}"
-                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_security_log' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
-                            <i class="bi bi-shield-lock" style="font-size:16px;width:18px;text-align:center"></i>
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'admin_security_log' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-shield-lock" style="font-size:14px;width:16px;text-align:center"></i>
                             <span>{{ t('Security Log') }}</span>
                         </a>
                         <a href="{{ url_for('admin_contact_inquiries') }}"
-                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_contact_inquiries' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
-                            <i class="bi bi-envelope-open" style="font-size:16px;width:18px;text-align:center"></i>
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'admin_contact_inquiries' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-envelope-open" style="font-size:14px;width:16px;text-align:center"></i>
                             <span>{{ t('Contact Inquiries') }}</span>
+                        </a>
+                        <a href="{{ url_for('admin_profile') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'admin_profile' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-person-gear" style="font-size:14px;width:16px;text-align:center"></i>
+                            <span>{{ t('Profile') }}</span>
+                        </a>
+                        <button id="themeToggle" type="button"
+                           class="w-full flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline">
+                            <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:14px;width:16px;text-align:center"></i>
+                            <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
+                        </button>
+                        <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline">
+                            <i class="bi bi-translate" style="font-size:14px;width:16px;text-align:center"></i>
+                            <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
                         </a>
                     </div>
                 </div>
             </div>
 
-            {% if current_user.is_authenticated and current_user.role == 'admin' %}
-            <hr class="my-3 opacity-25">
-            <form method="get" action="{{ url_for('admin_global_search') }}" class="px-1 mb-1">
-                <div class="input-group input-group-sm">
-                    <input type="text" name="q" class="form-control form-control-sm border-0 bg-gray-100 rounded-start-lg" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2" dir="auto">
-                    <button class="btn btn-sm btn-primary rounded-end-lg" type="submit">
-                        <i class="bi bi-search"></i>
-                    </button>
-                </div>
-            </form>
-            <hr class="my-3 opacity-25">
             <a href="{{ url_for('list_cancel_requests') }}"
                title="{{ t('Approve or reject patient appointment cancellation requests') }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2.5 font-bold text-sm transition-colors duration-200 no-underline {% if endpoint_name == 'list_cancel_requests' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %}">
-                <i class="bi bi-x-circle" style="font-size:18px;width:20px;text-align:center"></i>
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 no-underline {% if endpoint_name == 'list_cancel_requests' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %}">
+                <i class="bi bi-x-circle" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Cancellation Requests') }}</span>
                 {% if pending_cancel_count > 0 %}
                 <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ pending_cancel_count }}</span>
                 {% endif %}
             </a>
-            {% endif %}
 
             {# Messages #}
             <a href="#"
-               class="flex items-center gap-3 rounded-lg px-4 py-2.5 font-bold text-sm transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
                data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas">
-                <i class="bi bi-chat-dots-fill" style="font-size:18px;width:20px;text-align:center"></i>
+                <i class="bi bi-chat-dots-fill" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Messages') }}</span>
                 {% if unread_count is defined and unread_count > 0 %}
                 <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ unread_count }}</span>
@@ -425,44 +428,16 @@
 
         {# Add Patient CTA #}
         <a href="{{ url_for('add_patient') }}"
-           class="mt-4 mb-5 flex items-center justify-center gap-2 bg-primary text-white py-2.5 px-4 rounded-xl font-bold text-sm shadow-sm hover:opacity-90 transition-opacity flex-shrink-0">
-            <i class="bi bi-person-plus-fill" style="font-size:18px"></i>
+           class="mt-2 mb-2 flex items-center justify-center gap-2 bg-primary text-white py-1.5 px-4 rounded-xl font-bold text-xs shadow-sm hover:opacity-90 transition-opacity flex-shrink-0">
+            <i class="bi bi-person-plus-fill" style="font-size:15px"></i>
             <span>{{ t('Add Patient') }}</span>
         </a>
 
-        {# Notifications & Profile #}
-        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
-            <button type="button"
-               class="w-full flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline relative"
-               data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas">
-                <i class="bi bi-bell-fill" style="font-size:18px;width:20px;text-align:center"></i>
-                <span>{{ t('Notifications') }}</span>
-                {% if notification_unread_count is defined and notification_unread_count > 0 %}
-                <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ notification_unread_count }}</span>
-                {% endif %}
-            </button>
-            <a href="{{ url_for('admin_profile') }}"
-               class="flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
-                <i class="bi bi-person-gear" style="font-size:18px;width:20px;text-align:center"></i>
-                <span>{{ t('Profile') }}</span>
-            </a>
-        </div>
-
-        {# Bottom: theme toggle, language + logout #}
-        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
-            <button id="themeToggle" type="button"
-               class="w-full flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
-                <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:18px;width:20px;text-align:center"></i>
-                <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
-            </button>
-            <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-               class="flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
-                <i class="bi bi-translate" style="font-size:18px;width:20px;text-align:center"></i>
-                <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
-            </a>
+        {# Logout #}
+        <div class="border-t border-slate-200 pt-2 flex-shrink-0">
             <a href="{{ url_for('logout') }}"
-               class="flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
-                <i class="bi bi-box-arrow-right" style="font-size:18px;width:20px;text-align:center"></i>
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline">
+                <i class="bi bi-box-arrow-right" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Logout') }}</span>
             </a>
         </div>
@@ -471,11 +446,34 @@
     {# Main content column #}
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {# Mobile sidebar toggle (visible only on small screens) #}
-        <div class="lg:hidden flex items-center px-3 py-2 border-b border-slate-200 bg-white">
-            <button id="adminSidebarToggle" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
-                <i class="bi bi-list" style="font-size:20px"></i>
+        {# Top bar: mobile toggle + search toggle (visible on all screen sizes) #}
+        <div class="flex items-center px-3 py-2 border-b border-slate-200 bg-white gap-2">
+            <button id="adminSidebarToggle" type="button" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
+                <i class="bi bi-list" style="font-size:18px"></i>
             </button>
+            <button id="searchToggleBtn" type="button" class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Toggle search') }}" title="{{ t('Search') }}">
+                <i class="bi bi-search" style="font-size:16px"></i>
+            </button>
+            <div class="flex-1"></div>
+            {# Notification bell (visible in top bar on mobile, hidden on desktop where floating icon is used) #}
+            <button type="button" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors relative"
+                    data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
+                    aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
+                <i class="bi bi-bell-fill" style="font-size:16px"></i>
+                {% if notification_unread_count is defined and notification_unread_count > 0 %}
+                <span class="absolute top-0.5 w-2 h-2 bg-red-500 rounded-full border border-white" style="inset-inline-end:0.25rem;"></span>
+                {% endif %}
+            </button>
+        </div>
+
+        {# Search bar (collapsible) #}
+        <div id="searchBar" class="hidden px-3 py-2 border-b border-slate-200 bg-gray-50">
+            <form method="get" action="{{ url_for('admin_global_search') }}" class="flex gap-2">
+                <input type="text" name="q" class="form-control form-control-sm border-0 bg-white rounded-lg flex-1" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2" dir="auto">
+                <button class="btn btn-sm btn-primary rounded-lg" type="submit">
+                    <i class="bi bi-search"></i>
+                </button>
+            </form>
         </div>
 
         {# Page content wrapper #}
@@ -575,6 +573,18 @@
         </main>
     </div>{# /main content column #}
 </div>{# /flex wrapper #}
+
+{# Floating notification bell (desktop) #}
+<button type="button" id="floatingNotificationBtn"
+   class="hidden lg:inline-flex items-center justify-center w-12 h-12 rounded-full shadow-lg bg-white border border-slate-200 text-black hover:bg-gray-100 transition-colors fixed z-40 no-underline"
+   style="bottom:1.5rem;inset-inline-end:1.5rem"
+   data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
+   aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
+    <i class="bi bi-bell-fill" style="font-size:20px"></i>
+    {% if notification_unread_count is defined and notification_unread_count > 0 %}
+    <span class="absolute top-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" style="inset-inline-end:0.25rem;"></span>
+    {% endif %}
+</button>
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 </main>
 {% else %}
@@ -788,6 +798,19 @@
             e.stopImmediatePropagation();
         }, true);
         {% endif %}
+
+        // Search bar toggle
+        var searchToggleBtn = document.getElementById('searchToggleBtn');
+        var searchBar = document.getElementById('searchBar');
+        if (searchToggleBtn && searchBar) {
+            searchToggleBtn.addEventListener('click', function() {
+                searchBar.classList.toggle('hidden');
+                if (!searchBar.classList.contains('hidden')) {
+                    var input = searchBar.querySelector('input[name=q]');
+                    if (input) setTimeout(function() { input.focus(); }, 100);
+                }
+            });
+        }
 
         document.querySelectorAll('form').forEach((form) => {
             form.setAttribute('autocomplete', 'off');
