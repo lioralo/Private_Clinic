@@ -15,7 +15,7 @@
             <div class="d-flex flex-column flex-lg-row align-items-center align-items-lg-start gap-4">
                 <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="img-fluid" style="max-width:180px;">
                 <div class="flex-grow-1 text-center text-lg-start">
-                    <h1 class="display-6 fw-bold text-primary mb-2">{{ t('About the Clinic') }}</h1>
+                    <h2 class="display-6 fw-bold text-primary mb-2">{{ t('About the Clinic') }}</h2>
                     <p class="text-muted mb-0">{{ site_settings.get('about_text') or t('Private Psychotherapy Clinic') }}</p>
                 </div>
             </div>

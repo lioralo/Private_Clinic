@@ -10,9 +10,6 @@ from clinic_app.utils import _request_client_ip
 from clinic_app.models import get_db
 
 
-_LOGIN_RATE_LIMIT_BUCKETS = {}
-_PASSWORD_RESET_RATE_LIMIT_BUCKETS = {}
-_REGISTER_RATE_LIMIT_BUCKETS = {}
 _LOGIN_RATE_LIMIT_MAX = 5
 _LOGIN_RATE_LIMIT_WINDOW = 300
 _LOGIN_RATE_LIMIT_LOCKOUT = 900

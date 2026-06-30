@@ -359,8 +359,30 @@
             {{ nav_link('weekly_calendar',  'bi-calendar3',    t('Calendar')) }}
             {{ nav_link('manage_resources', 'bi-folder2-open', t('Resources')) }}
             {{ nav_link('groups_dashboard', 'bi-people-fill',  t('Groups')) }}
-            {{ nav_link('admin_security_log', 'bi-shield-lock', t('Security Log')) }}
-            {{ nav_link('admin_contact_inquiries', 'bi-envelope-open', t('Contact Inquiries')) }}
+            {# Administration group: combines security log & contact inquiries #}
+            <div class="mb-1">
+                <button type="button"
+                   class="w-full flex items-center gap-3 rounded-lg px-4 py-2.5 font-bold text-sm transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
+                   data-bs-toggle="collapse" data-bs-target="#adminSubNav" aria-expanded="false" aria-controls="adminSubNav">
+                    <i class="bi bi-gear-wide-connected" style="font-size:18px;width:20px;text-align:center"></i>
+                    <span>{{ t('Administration') }}</span>
+                    <i class="bi bi-chevron-down ms-auto text-muted" style="font-size:12px"></i>
+                </button>
+                <div class="collapse" id="adminSubNav">
+                    <div class="ps-4 mt-1 space-y-0.5">
+                        <a href="{{ url_for('admin_security_log') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_security_log' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-shield-lock" style="font-size:16px;width:18px;text-align:center"></i>
+                            <span>{{ t('Security Log') }}</span>
+                        </a>
+                        <a href="{{ url_for('admin_contact_inquiries') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_contact_inquiries' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-envelope-open" style="font-size:16px;width:18px;text-align:center"></i>
+                            <span>{{ t('Contact Inquiries') }}</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
 
             {% if current_user.is_authenticated and current_user.role == 'admin' %}
             <hr class="my-3 opacity-25">

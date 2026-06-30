@@ -67,10 +67,6 @@ class SecurityTestCase(unittest.TestCase):
         app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
         app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
 
-        # Clear stale in-memory rate limit state from previous tests
-        from clinic_app.routes.auth import _LOGIN_RATE_LIMIT_BUCKETS
-        _LOGIN_RATE_LIMIT_BUCKETS.clear()
-
         try:
             first = self.client.post('/login', data=dict(
                 username='admin',
@@ -106,10 +102,6 @@ class SecurityTestCase(unittest.TestCase):
         app.config['LOGIN_RATE_LIMIT_MAX_ATTEMPTS'] = 2
         app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 60
         app.config['LOGIN_RATE_LIMIT_LOCKOUT_SECONDS'] = 120
-
-        # Clear stale in-memory rate limit state from previous tests
-        from clinic_app.routes.auth import _LOGIN_RATE_LIMIT_BUCKETS
-        _LOGIN_RATE_LIMIT_BUCKETS.clear()
 
         try:
             fail_once = self.client.post('/login', data=dict(
@@ -218,10 +210,6 @@ class SecurityTestCase(unittest.TestCase):
         app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = True
         app.config['PASSWORD_RESET_RATE_LIMIT_MAX'] = 1
         app.config['PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS'] = 120
-
-        # Clear stale in-memory rate limit state from previous tests
-        from clinic_app.routes.auth import _PASSWORD_RESET_RATE_LIMIT_BUCKETS
-        _PASSWORD_RESET_RATE_LIMIT_BUCKETS.clear()
 
         try:
             first = self.client.post('/forgot-password', data={
@@ -624,10 +612,6 @@ class SecurityTestCase(unittest.TestCase):
         app.config['REGISTER_RATE_LIMIT_MAX'] = 2
         app.config['REGISTER_RATE_LIMIT_WINDOW_SECONDS'] = 3600
 
-        # Clear any stale in-memory state
-        from clinic_app.routes.auth import _REGISTER_RATE_LIMIT_BUCKETS
-        _REGISTER_RATE_LIMIT_BUCKETS.clear()
-
         try:
             for _ in range(2):
                 self.client.post('/register', data={'name': 'Rate Limit Test'})
@@ -637,7 +621,6 @@ class SecurityTestCase(unittest.TestCase):
             app.config['ENABLE_RATE_LIMIT_IN_TESTS'] = prev_enable
             app.config['REGISTER_RATE_LIMIT_MAX'] = prev_max
             app.config['REGISTER_RATE_LIMIT_WINDOW_SECONDS'] = prev_window
-            _REGISTER_RATE_LIMIT_BUCKETS.clear()
 
     def test_validate_patient_fields_rejects_bad_phone(self):
         from app import _validate_patient_fields

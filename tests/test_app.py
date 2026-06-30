@@ -1959,7 +1959,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         assert b'toggleStablePanel' in rv.data
         assert b'data-panel-id="noteCollapse' in rv.data
-        assert b'data-bs-toggle="collapse"' not in rv.data
+        assert b'data-bs-toggle="collapse" data-panel-id="noteCollapse' not in rv.data
 
     def test_group_past_meetings_use_stable_toggle_markup(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -1977,7 +1977,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         assert b'toggleStablePanel' in rv.data
         assert b'data-panel-id="pastSession' in rv.data
-        assert b'data-bs-toggle="collapse"' not in rv.data
+        assert b'data-bs-toggle="collapse" data-panel-id="pastSession' not in rv.data
 
     def test_group_session_record_generates_structured_summary_text(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -2446,9 +2446,10 @@ class ClinicTestCase(unittest.TestCase):
         with open(self.app_log_path, 'w', encoding='utf-8') as handle:
             handle.write('before backup log entry')
 
+        import clinic_app.config as _cfg
         with tempfile.TemporaryDirectory() as tmp_backup_dir:
-            original_backup_dir = app_module.BACKUP_DIR
-            app_module.BACKUP_DIR = tmp_backup_dir
+            original_backup_dir = _cfg.BACKUP_DIR
+            _cfg.BACKUP_DIR = tmp_backup_dir
             try:
                 with app.app_context():
                     encrypted_path = app_module.perform_encrypted_backup(app.config['DATABASE'])
@@ -2506,9 +2507,10 @@ class ClinicTestCase(unittest.TestCase):
                     with open(self.app_log_path, 'r', encoding='utf-8') as handle:
                         assert handle.read() == 'before backup log entry'
             finally:
-                app_module.BACKUP_DIR = original_backup_dir
+                _cfg.BACKUP_DIR = original_backup_dir
 
     def test_encrypted_backup_uses_artifact_snapshot_when_logs_change_mid_backup(self):
+        import clinic_app.config as _cfg
         with open(self.app_log_path, 'w', encoding='utf-8') as handle:
             handle.write('initial log line')
 
@@ -2520,8 +2522,8 @@ class ClinicTestCase(unittest.TestCase):
             return original_write_backup_bundle(bundle_path, db_path, artifact_root)
 
         with tempfile.TemporaryDirectory() as tmp_backup_dir:
-            original_backup_dir = app_module.BACKUP_DIR
-            app_module.BACKUP_DIR = tmp_backup_dir
+            original_backup_dir = _cfg.BACKUP_DIR
+            _cfg.BACKUP_DIR = tmp_backup_dir
             try:
                 with patch('app._write_backup_bundle', side_effect=mutate_live_log_then_write):
                     encrypted_path = app_module.perform_encrypted_backup(app.config['DATABASE'])
@@ -2530,7 +2532,7 @@ class ClinicTestCase(unittest.TestCase):
                 backups = app_module.list_encrypted_backups()
                 self.assertEqual(len(backups), 1)
             finally:
-                app_module.BACKUP_DIR = original_backup_dir
+                _cfg.BACKUP_DIR = original_backup_dir
 
     def test_vacancy_create_supports_one_time_and_weekly(self):
         """Admin can create vacancy slots as one-time or weekly recurring."""

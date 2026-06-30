@@ -42,7 +42,7 @@
             <span class="badge crm-method-badge rounded-pill px-3 py-2">{{ patient['treatment_method'] }}</span>
             {% endif %}
         </div>
-        <h1 class="text-3xl font-extrabold text-primary tracking-tight mb-1">{{ patient['name'] }}</h1>
+        <h2 class="h1 text-3xl font-extrabold text-primary tracking-tight mb-1">{{ patient['name'] }}</h2>
         <p class="text-slate-500 mb-0">
             {{ t('Patient ID') }} #{{ patient['id'] }}
             {% if patient['email'] %}<span class="mx-2">•</span>{{ patient['email'] }}{% endif %}

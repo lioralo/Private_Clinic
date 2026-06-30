@@ -177,6 +177,20 @@ def add_receipt(patient_id):
     return redirect_to_patient_tab(patient_id, 'billing')
 
 
+def _update_appointment_status(appointment_id, status):
+    db = get_db()
+    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    if not appt:
+        return None
+    db.execute('UPDATE appointments SET status = ? WHERE id = ?', (status, appointment_id))
+    db.execute(
+        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+        (appt['patient_id'], 'appointment-status', f'Appointment {appointment_id} marked {status}')
+    )
+    db.commit()
+    return appt
+
+
 @billing_bp.route('/appointment/<int:appointment_id>/set_status', methods=['POST'])
 @login_required
 def set_appointment_status(appointment_id):
@@ -186,16 +200,9 @@ def set_appointment_status(appointment_id):
     allowed_statuses = {'completed', 'no_show', 'scheduled', 'cancelled'}
     if status not in allowed_statuses:
         return "Invalid status", 400
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    appt = _update_appointment_status(appointment_id, status)
     if not appt:
         return "Appointment not found", 404
-    db.execute('UPDATE appointments SET status = ? WHERE id = ?', (status, appointment_id))
-    db.execute(
-        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-        (appt['patient_id'], 'appointment-status', f'Appointment {appointment_id} marked {status}')
-    )
-    db.commit()
     return redirect_to_patient_tab(appt['patient_id'], 'notes')
 
 
@@ -204,23 +211,13 @@ def set_appointment_status(appointment_id):
 def api_set_appointment_status(appointment_id):
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
-
     status = (request.form.get('status') or '').strip()
     allowed_statuses = {'completed', 'no_show', 'scheduled', 'cancelled'}
     if status not in allowed_statuses:
         return jsonify({'error': 'Invalid status'}), 400
-
-    db = get_db()
-    appt = db.execute('SELECT * FROM appointments WHERE id = ?', (appointment_id,)).fetchone()
+    appt = _update_appointment_status(appointment_id, status)
     if not appt:
         return jsonify({'error': 'Appointment not found'}), 404
-
-    db.execute('UPDATE appointments SET status = ? WHERE id = ?', (status, appointment_id))
-    db.execute(
-        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-        (appt['patient_id'], 'appointment-status', f'Appointment {appointment_id} marked {status}')
-    )
-    db.commit()
     return jsonify({
         'message': 'Appointment status updated.',
         'new_status': status,

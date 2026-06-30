@@ -39,7 +39,7 @@ except ImportError:
 
 admin_bp = Blueprint('admin', __name__)
 
-LEGACY_WAITING_STATUSES = {'candidate', 'waiting', 'waiting for scheduling'}
+
 
 
 # ---------------------------------------------------------------------------
@@ -1247,7 +1247,7 @@ def setup_authenticator():
     user = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
     
     # Helper to check if client expects JSON response
-    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     redirect_url = url_for('.admin_profile') if current_user.role == 'admin' else url_for('patient_settings')
 
     if action == 'generate' or action == 'start':
@@ -1364,9 +1364,11 @@ def admin_backup_now():
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
     try:
-        from app import _create_encrypted_backup
-        result = _create_encrypted_backup()
-        return jsonify({'status': 'success', 'path': str(result['path'])})
+        from flask import current_app
+        from clinic_app.backup import perform_encrypted_backup
+        db_path = current_app.config.get('DATABASE')
+        result = perform_encrypted_backup(db_path)
+        return jsonify({'status': 'success', 'path': str(result)})
     except Exception as exc:
         return jsonify({'status': 'error', 'message': str(exc)}), 500
 
@@ -1659,5 +1661,5 @@ def admin_email_settings_mark_read(email_id):
 
 
 def _smtp_health_check():
-    from app import _smtp_health_check as _check
+    from clinic_app.utils import _smtp_health_check as _check
     return _check()

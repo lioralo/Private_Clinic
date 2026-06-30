@@ -14,10 +14,9 @@ except ImportError:
 # Never set this in production — the production .env does not include it.
 import hashlib
 import threading
-import csv
 import smtplib
 from email.message import EmailMessage
-from io import BytesIO, StringIO
+from io import BytesIO
 import shutil
 import secrets
 import zipfile
@@ -30,7 +29,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, g, 
 from werkzeug.utils import secure_filename
 from flask_wtf.csrf import CSRFProtect
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 import re
 import pyotp
 from docx import Document
@@ -58,36 +57,34 @@ from clinic_app.utils import (
     redirect_to_patient_tab,
     _check_public_rate_limit,
 )
-
-
-def _import_optional_module(*module_names):
-    scripts_dir = Path(__file__).resolve().parent / 'scripts'
-    scripts_dir_str = str(scripts_dir)
-    if scripts_dir.is_dir() and scripts_dir_str not in sys.path:
-        # Allow importing optional modules that live in ./scripts without packaging changes.
-        sys.path.insert(0, scripts_dir_str)
-
-    for module_name in module_names:
-        try:
-            return importlib.import_module(module_name)
-        except ImportError:
-            continue
-
-    # Fallback: if callers pass scripts.<module> and scripts is not a package,
-    # retry by importing the module basename from the scripts path.
-    for module_name in module_names:
-        if module_name.startswith('scripts.'):
-            bare_name = module_name.split('.', 1)[1]
-            try:
-                return importlib.import_module(bare_name)
-            except ImportError:
-                continue
-
-    return None
-
-
-gcal = _import_optional_module('google_calendar', 'scripts.google_calendar')
-gdocs = _import_optional_module('google_docs', 'scripts.google_docs')
+from clinic_app.config import (
+    _import_optional_module,
+    gcal, gdocs,
+    DATABASE, DUMMY_PASSWORD_HASH, BACKUP_DIR, KEY_DIR, BACKUP_INTERVAL_HOURS,
+    ALLOWED_UPLOAD_EXTENSIONS, ALLOWED_DIAGNOSIS_EXTENSIONS,
+    GDOC_AUTO_SYNC_INTERVAL_SECONDS, GDOC_AUTO_SYNC_GROUP_MODES,
+    _GDOC_AUTO_SYNC_LOCK, _GDOC_AUTO_SYNC_LAST_CHECK_TS,
+    _GDOC_AUTO_SYNC_WORKER_STATE_LOCK, _GDOC_AUTO_SYNC_WORKER_STARTED,
+    _GDOC_AUTO_SYNC_STOP_EVENT,
+    _GDOC_MANUAL_SYNC_JOB_LOCK, _GDOC_MANUAL_SYNC_JOBS,
+    _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID, _GDOC_MANUAL_SYNC_MAX_JOBS,
+    _REMINDER_WORKER_STATE_LOCK, _REMINDER_WORKER_STARTED,
+    _REMINDER_WORKER_STOP_EVENT,
+    _SECURITY_RETENTION_LOCK, _SECURITY_RETENTION_LAST_CHECK_TS,
+    DEFAULT_SITE_SETTINGS, TRANSLATION_OVERRIDES_FILE,
+    HEBREW_TRANSLATIONS,
+    HEBREW_NUMBER_WORDS, BACKGROUND_REASON_TOPICS, BACKGROUND_THEME_TOPICS,
+    LEGACY_WAITING_STATUSES,
+)
+from clinic_app.backup import (
+    _resolve_backup_artifact_sources, _snapshot_artifact_tree,
+    _artifact_backup_fingerprint, _write_backup_bundle,
+    _is_encrypted_zip_backup, _restore_artifact_tree, _backup_live_artifacts,
+    _get_or_create_backup_key, _database_backup_fingerprint,
+    perform_encrypted_backup, _export_json_backup,
+    _ensure_backup_key_consistency, perform_routine_encrypted_backup,
+    list_encrypted_backups, perform_encrypted_restore, _perform_restore,
+)
 
 
 app = Flask(__name__)
@@ -332,44 +329,11 @@ app.config['REMINDER_HOURS_BEFORE'] = int(os.environ.get('REMINDER_HOURS_BEFORE'
 app.config['REMINDER_SCHEDULER_INTERVAL'] = int(os.environ.get('REMINDER_SCHEDULER_INTERVAL', '300') or 300)
 scheduler = BackgroundScheduler(daemon=True)
 csrf = CSRFProtect(app)
-DATABASE = os.environ.get('DATABASE', 'clinic.db')
 app.config['DATABASE'] = DATABASE
-DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
-BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
-KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
-BACKUP_INTERVAL_HOURS = 12
-GDOC_AUTO_SYNC_INTERVAL_SECONDS = {
-    'twice_daily': 12 * 60 * 60,
-    'daily': 24 * 60 * 60,
-    'twice_weekly': int(3.5 * 24 * 60 * 60),
-    'weekly': 7 * 24 * 60 * 60,
-    'biweekly': 14 * 24 * 60 * 60,
-    'monthly': 30 * 24 * 60 * 60,
-}
-GDOC_AUTO_SYNC_GROUP_MODES = {'pull', 'both'}
-_GDOC_AUTO_SYNC_LOCK = threading.Lock()
-_GDOC_AUTO_SYNC_LAST_CHECK_TS = 0.0
-_GDOC_AUTO_SYNC_WORKER_STATE_LOCK = threading.Lock()
-_GDOC_AUTO_SYNC_WORKER_STARTED = False
-_GDOC_AUTO_SYNC_STOP_EVENT = threading.Event()
-_GDOC_MANUAL_SYNC_JOB_LOCK = threading.Lock()
-_GDOC_MANUAL_SYNC_JOBS = {}
-_GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
-_REMINDER_WORKER_STATE_LOCK = threading.Lock()
-_REMINDER_WORKER_STARTED = False
-_REMINDER_WORKER_STOP_EVENT = threading.Event()
-_GDOC_MANUAL_SYNC_MAX_JOBS = 40
-
-
-_SECURITY_RETENTION_LOCK = threading.Lock()
-_SECURITY_RETENTION_LAST_CHECK_TS = 0.0
-
-ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
-ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
 
 def _allowed_upload(filename, allowed_set):
-    ext = os.path.splitext(filename)[1].lower()
-    return bool(ext) and ext in allowed_set
+    from clinic_app.utils import _allowed_upload as _impl
+    return _impl(filename, allowed_set)
 
 def ensure_runtime_paths():
     db_path = Path(app.config.get('DATABASE', DATABASE))
@@ -406,127 +370,34 @@ def _db_retry(max_attempts=3, delay=0.1):
 
 
 def _request_client_ip():
-    forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
-    if forwarded_for:
-        first_ip = forwarded_for.split(',')[0].strip()
-        if first_ip:
-            return first_ip
-    return request.remote_addr or 'unknown'
+    from clinic_app.utils import _request_client_ip as _impl
+    return _impl()
 
 
 def _smtp_settings_summary():
-    host = (app.config.get('SMTP_HOST') or '').strip()
-    port = int(app.config.get('SMTP_PORT', 587) or 587)
-    username = (app.config.get('SMTP_USERNAME') or '').strip()
-    from_email = (app.config.get('SMTP_FROM_EMAIL') or username).strip()
-    use_tls = bool(app.config.get('SMTP_USE_TLS', True))
-    configured = bool(host and from_email)
-    return {
-        'configured': configured,
-        'host': host,
-        'port': port,
-        'username': username,
-        'from_email': from_email,
-        'use_tls': use_tls,
-    }
+    from clinic_app.utils import _smtp_settings_summary as _impl
+    return _impl(app)
 
 
 def _smtp_health_check():
-    settings = _smtp_settings_summary()
-    if not settings['configured']:
-        return {
-            'configured': False,
-            'ok': False,
-            'message': 'SMTP is not configured (missing SMTP_HOST or SMTP_FROM_EMAIL).',
-        }
-
-    try:
-        with smtplib.SMTP(settings['host'], settings['port'], timeout=10) as smtp:
-            smtp.ehlo()
-            if settings['use_tls']:
-                smtp.starttls()
-                smtp.ehlo()
-            if settings['username']:
-                smtp.login(settings['username'], app.config.get('SMTP_PASSWORD') or '')
-        return {
-            'configured': True,
-            'ok': True,
-            'message': 'SMTP connection is healthy.',
-        }
-    except Exception as exc:
-        return {
-            'configured': True,
-            'ok': False,
-            'message': f'SMTP connection failed: {exc}',
-        }
+    from clinic_app.utils import _smtp_health_check as _impl
+    return _impl(app)
 
 
 def _send_smtp_email(recipient_email, subject, body_text, html_body=None):
-    settings = _smtp_settings_summary()
-    if not settings['configured']:
-        return False, 'SMTP is not configured.'
-
-    message = EmailMessage()
-    message['Subject'] = subject
-    message['From'] = settings['from_email']
-    message['To'] = recipient_email
-    message.set_content(body_text)
-    if html_body:
-        message.add_alternative(html_body, subtype='html')
-
-    try:
-        with smtplib.SMTP(settings['host'], settings['port'], timeout=15) as smtp:
-            smtp.ehlo()
-            if settings['use_tls']:
-                smtp.starttls()
-                smtp.ehlo()
-            if settings['username']:
-                smtp.login(settings['username'], app.config.get('SMTP_PASSWORD') or '')
-            smtp.send_message(message)
-    except Exception as exc:
-        return False, str(exc)
-
-    return True, 'sent'
+    from clinic_app.utils import _send_smtp_email as _impl
+    return _impl(recipient_email, subject, body_text, app=app)
 
 
 def _validate_patient_fields(name, phone=None, birth_date=None, email=None):
-    """Return a list of validation error strings for patient form fields."""
-    errors = []
-    if not (name or '').strip():
-        errors.append('Name is required.')
-
-    if phone:
-        # Strip whitespace and common separators, then check remaining chars are digits/+
-        cleaned = re.sub(r'[\s\-().]+', '', phone)
-        if not re.fullmatch(r'\+?[0-9]{7,15}', cleaned):
-            errors.append('Phone number appears invalid. Use digits, spaces, or dashes only (7–15 digits).')
-
-    if birth_date:
-        try:
-            datetime.strptime(birth_date, '%Y-%m-%d')
-        except ValueError:
-            errors.append('Birth date must be in YYYY-MM-DD format.')
-
-    if email:
-        if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
-            errors.append('Email address appears invalid.')
-
-    return errors
+    from clinic_app.utils import _validate_patient_fields as _impl
+    return _impl(name, phone=phone, birth_date=birth_date, email=email)
 
 
 
 def _validate_password_strength(password, username=None, email=None):
-    candidate = str(password or '')
-    if len(candidate) < 10:
-        return False, 'Password must include at least 10 characters.'
-    if not re.search(r'[A-Z]', candidate):
-        return False, 'Password must include at least one uppercase letter.'
-    if not re.search(r'[a-z]', candidate):
-        return False, 'Password must include at least one lowercase letter.'
-    if not re.search(r'\d', candidate):
-        return False, 'Password must include at least one number.'
-    if not re.search(r'[^A-Za-z0-9]', candidate):
-        return False, 'Password must include at least one special character.'
+    from clinic_app.utils import _validate_password_strength as _impl
+    return _impl(password, username=username, email=email)
 
     lowered = candidate.lower()
     for source in (username or '', email or ''):
@@ -609,132 +480,6 @@ def _validate_gdoc_webhook_request():
     return True
 
 
-def _resolve_backup_artifact_sources():
-    upload_folder = Path(app.config.get('UPLOAD_FOLDER', 'static/uploads'))
-    patient_logs_folder = Path(app.config.get('PATIENT_LOGS_FOLDER', 'patients_logs'))
-    app_log_file = Path(app.config.get('APP_LOG_FILE', 'app_log.txt'))
-    return {
-        'uploads': upload_folder,
-        'patients_logs': patient_logs_folder,
-        'app_log.txt': app_log_file,
-    }
-
-
-def _snapshot_artifact_tree(path, file_label=None):
-    if not path.exists():
-        return {'exists': False, 'files': []}
-
-    if path.is_file():
-        payload = path.read_bytes()
-        return {
-            'exists': True,
-            'files': [{
-                'path': file_label or path.name,
-                'size': len(payload),
-                'sha256': hashlib.sha256(payload).hexdigest(),
-            }]
-        }
-
-    files = []
-    for child in sorted(path.rglob('*')):
-        if not child.is_file():
-            continue
-        rel_path = child.relative_to(path).as_posix()
-        payload = child.read_bytes()
-        files.append({
-            'path': rel_path,
-            'size': len(payload),
-            'sha256': hashlib.sha256(payload).hexdigest(),
-        })
-    return {'exists': True, 'files': files}
-
-
-def _artifact_backup_fingerprint(base_override=None):
-    base_override = Path(base_override) if base_override else None
-    fingerprint = {}
-    for label, source_path in _resolve_backup_artifact_sources().items():
-        target_path = (base_override / label) if base_override else source_path
-        fingerprint[label] = _snapshot_artifact_tree(target_path, file_label=label)
-    return fingerprint
-
-
-def _write_backup_bundle(bundle_path, db_path, artifact_root=None):
-    db_source = Path(db_path)
-    artifact_root = Path(artifact_root) if artifact_root else None
-    manifest = {
-        'version': 2,
-        'created_at': datetime.now().isoformat(),
-        'database_name': db_source.name,
-        'artifacts': sorted(_resolve_backup_artifact_sources().keys()),
-    }
-
-    with zipfile.ZipFile(bundle_path, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
-        bundle.writestr('manifest.json', json.dumps(manifest, ensure_ascii=True, sort_keys=True))
-        bundle.write(db_source, arcname=f'database/{db_source.name}')
-
-        for label, source_path in _resolve_backup_artifact_sources().items():
-            if artifact_root:
-                source_path = artifact_root / label
-            if not source_path.exists():
-                continue
-            if source_path.is_file():
-                bundle.write(source_path, arcname=f'artifacts/{label}')
-                continue
-            child_files = [child for child in sorted(source_path.rglob('*')) if child.is_file()]
-            if not child_files:
-                bundle.writestr(f'artifacts/{label}/', b'')
-                continue
-            for child in child_files:
-                rel_path = child.relative_to(source_path).as_posix()
-                bundle.write(child, arcname=f'artifacts/{label}/{rel_path}')
-
-
-def _is_encrypted_zip_backup(payload):
-    return zipfile.is_zipfile(BytesIO(payload))
-
-
-def _restore_artifact_tree(source_root, destination_path):
-    source_root = Path(source_root)
-    destination_path = Path(destination_path)
-
-    if destination_path.exists():
-        if destination_path.is_dir():
-            shutil.rmtree(destination_path)
-        else:
-            destination_path.unlink()
-
-    if not source_root.exists():
-        return
-
-    if source_root.is_file():
-        destination_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_root, destination_path)
-        return
-
-    destination_path.mkdir(parents=True, exist_ok=True)
-    for child in sorted(source_root.rglob('*')):
-        rel_path = child.relative_to(source_root)
-        target = destination_path / rel_path
-        if child.is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(child, target)
-
-
-def _backup_live_artifacts(safety_root):
-    safety_root = Path(safety_root)
-    safety_root.mkdir(parents=True, exist_ok=True)
-    for label, source_path in _resolve_backup_artifact_sources().items():
-        if not source_path.exists():
-            continue
-        target = safety_root / label
-        if source_path.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_path, target)
-        else:
-            shutil.copytree(source_path, target, dirs_exist_ok=True)
-
 @app.template_filter('rjust')
 def rjust_filter(s, width, fillchar=' '):
     return str(s).rjust(width, fillchar)
@@ -782,21 +527,12 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-HEBREW_TRANSLATIONS = {
-    # Translations loaded from translations/he.json
-    # To add or update translations, edit that file directly.
-    # The inline dict was removed to reduce app.py size.
-    # See load_hebrew_translation_overrides() below.
-}
-
-TRANSLATION_OVERRIDES_FILE = Path(__file__).resolve().parent / 'translations' / 'he.json'
-
-
 def load_hebrew_translation_overrides():
-    if not TRANSLATION_OVERRIDES_FILE.exists():
+    overrides_file = Path(__file__).resolve().parent / 'translations' / 'he.json'
+    if not overrides_file.exists():
         return {}
     try:
-        payload = json.loads(TRANSLATION_OVERRIDES_FILE.read_text(encoding='utf-8'))
+        payload = json.loads(overrides_file.read_text(encoding='utf-8'))
         if not isinstance(payload, dict):
             return {}
         return {
@@ -810,26 +546,6 @@ def load_hebrew_translation_overrides():
 
 
 HEBREW_TRANSLATIONS.update(load_hebrew_translation_overrides())
-
-DEFAULT_SITE_SETTINGS = {
-    'about_enabled': '0',
-    'about_phone': '',
-    'about_email': '',
-    'about_text': '',
-    'about_map_url': '',
-    'questionnaires_source_sheet_url': '',
-    'gdocs_auto_sync_enabled': '0',
-    'gdocs_auto_sync_interval': 'daily',
-    'gdocs_auto_sync_targets_json': '[]',
-    'gdocs_auto_sync_targets_config_json': '[]',
-    'gdocs_auto_sync_last_run_at': '',
-    'google_enabled_integrations': '["calendar","docs","sheets"]',
-    'security_scan_enabled': '0',
-    'security_scan_interval': 'daily',
-    'security_scan_last_run_at': '',
-    'security_scan_last_status': '',
-    'security_scan_last_results_json': '{}',
-}
 
 
 
@@ -1099,8 +815,6 @@ def _is_transient_sync_error(error_text):
 
 
 def _run_sync_with_retry(sync_callable, max_attempts=3, base_delay_seconds=1.0):
-    import time
-
     attempt = 0
     while attempt < max_attempts:
         attempt += 1
@@ -1109,7 +823,7 @@ def _run_sync_with_retry(sync_callable, max_attempts=3, base_delay_seconds=1.0):
             return int(count or 0), None, attempt
         if attempt >= max_attempts or not _is_transient_sync_error(sync_err):
             return int(count or 0), str(sync_err), attempt
-        time.sleep(base_delay_seconds * (2 ** (attempt - 1)))
+        _time.sleep(base_delay_seconds * (2 ** (attempt - 1)))
     return 0, 'Sync failed after retries', max_attempts
 
 
@@ -1818,15 +1532,12 @@ def routine_backup_guard():
     if app.config.get('TESTING'):
         return
 
-    import os
-    import time
-
     db_path = app.config.get('DATABASE_PATH') or app.config.get('DATABASE', DATABASE)
     if not db_path or not os.path.exists(db_path):
         return
 
     last_modified = os.path.getmtime(db_path)
-    now = time.time()
+    now = _time.time()
 
     if now - last_modified > 86400: # 24 hours
         try:
@@ -2147,407 +1858,12 @@ register_auth_routes(
 )
 
 
-def _get_or_create_backup_key():
-    key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
-    if key:
-        return key.encode('utf-8')
-
-    key_dir = Path(KEY_DIR)
-    key_dir.mkdir(parents=True, exist_ok=True)
-    key_path = key_dir / '.backup.key'
-
-    # Migrate key from old location inside backup dir if it exists
-    old_key_path = Path(BACKUP_DIR) / '.backup.key'
-    if not key_path.exists() and old_key_path.exists():
-        key_data = old_key_path.read_bytes()
-        key_path.write_bytes(key_data)
-        try:
-            old_key_path.unlink()
-        except Exception:
-            pass
-        return key_data.strip()
-
-    if key_path.exists():
-        return key_path.read_bytes().strip()
-
-    from cryptography.fernet import Fernet
-    generated = Fernet.generate_key()
-    key_path.write_bytes(generated)
-    return generated
-
-
-def _database_backup_fingerprint(db_file_path):
-    """Build a compact fingerprint so backup verification checks meaningful data parity."""
-    conn = sqlite3.connect(str(db_file_path))
-    conn.row_factory = sqlite3.Row
+def _migrate_add_column(db, table, column, col_type, default=None):
+    default_clause = f" DEFAULT {default}" if default is not None else ""
     try:
-        tables = [
-            row['name'] for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            ).fetchall()
-        ]
-
-        table_counts = {}
-        table_counts = {table_name: 0 for table_name in tables}
-
-        # SQLite defaults to a max of 500 compound selects. Chunk to avoid OperationalError.
-        chunk_size = 200
-        for i in range(0, len(tables), chunk_size):
-            chunk = tables[i:i + chunk_size]
-            query_parts = []
-            for table_name in chunk:
-                escaped_literal = table_name.replace("'", "''")
-                escaped_identifier = table_name.replace('"', '""')
-                query_parts.append(
-                    f"SELECT '{escaped_literal}' AS t_name, COUNT(*) AS c FROM \"{escaped_identifier}\""
-                )
-            query = " UNION ALL ".join(query_parts)
-            if query:
-                for row in conn.execute(query).fetchall():
-                    table_counts[row['t_name']] = int(row['c'] if row['c'] is not None else 0)
-
-        appointment_stats = conn.execute('''
-            SELECT
-                COUNT(*) AS total,
-                SUM(CASE WHEN COALESCE(is_recurring, 0) = 1 THEN 1 ELSE 0 END) AS recurring_total,
-                SUM(CASE WHEN COALESCE(meeting_link, '') <> '' THEN 1 ELSE 0 END) AS with_meeting_link,
-                SUM(CASE WHEN COALESCE(recurrence_days, '') <> '' THEN 1 ELSE 0 END) AS with_recurrence_days,
-                SUM(CASE WHEN COALESCE(recurrence_interval, 0) > 0 THEN 1 ELSE 0 END) AS with_recurrence_interval,
-                SUM(CASE WHEN COALESCE(recurrence_end_date, '') <> '' THEN 1 ELSE 0 END) AS with_recurrence_end_date,
-                SUM(CASE WHEN COALESCE(recurrence_count, 0) > 0 THEN 1 ELSE 0 END) AS with_recurrence_count
-            FROM appointments
-        ''').fetchone()
-
-        return {
-            'table_counts': table_counts,
-            'appointment_stats': {
-                'total': int(appointment_stats['total'] or 0),
-                'recurring_total': int(appointment_stats['recurring_total'] or 0),
-                'with_meeting_link': int(appointment_stats['with_meeting_link'] or 0),
-                'with_recurrence_days': int(appointment_stats['with_recurrence_days'] or 0),
-                'with_recurrence_interval': int(appointment_stats['with_recurrence_interval'] or 0),
-                'with_recurrence_end_date': int(appointment_stats['with_recurrence_end_date'] or 0),
-                'with_recurrence_count': int(appointment_stats['with_recurrence_count'] or 0),
-            }
-        }
-    finally:
-        conn.close()
-
-
-def perform_encrypted_backup(db_path):
-    db_source = Path(db_path)
-    if not db_source.exists():
-        raise FileNotFoundError(f"Database not found: {db_path}")
-
-    # Guard against backing up a corrupted database.
-    src_check = sqlite3.connect(db_path)
-    try:
-        integrity = src_check.execute('PRAGMA integrity_check').fetchone()[0]
-        if integrity != 'ok':
-            raise RuntimeError(f"Backup aborted, source DB integrity check failed: {integrity}")
-    finally:
-        src_check.close()
-
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    raw_backup_path = backup_root / f'clinic_{timestamp}.bundle'
-    encrypted_path = backup_root / f'clinic_{timestamp}.db.enc'
-    artifact_snapshot_root = backup_root / f'.artifact_snapshot_{timestamp}'
-    verify_dir = backup_root / f'.verify_{timestamp}'
-
-    source_fingerprint = _database_backup_fingerprint(db_path)
-    _backup_live_artifacts(artifact_snapshot_root)
-    source_artifact_fingerprint = _artifact_backup_fingerprint(artifact_snapshot_root)
-
-    _write_backup_bundle(raw_backup_path, db_path, artifact_snapshot_root)
-
-    from cryptography.fernet import Fernet
-    cipher = Fernet(_get_or_create_backup_key())
-    raw_bytes = raw_backup_path.read_bytes()
-    encrypted_bytes = cipher.encrypt(raw_bytes)
-    encrypted_path.write_bytes(encrypted_bytes)
-
-    # Quick sanity check so we do not keep unreadable backups.
-    try:
-        probe = cipher.decrypt(encrypted_bytes)
-        if not _is_encrypted_zip_backup(probe):
-            raise RuntimeError('Encrypted backup verification failed: invalid backup bundle')
-
-        verify_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(BytesIO(probe), 'r') as bundle:
-            bundle.extractall(verify_dir)
-
-        extracted_dbs = sorted(path for path in (verify_dir / 'database').iterdir() if path.is_file()) if (verify_dir / 'database').exists() else []
-        if not extracted_dbs:
-            raise RuntimeError('Encrypted backup verification failed: database missing from bundle')
-
-        backup_fingerprint = _database_backup_fingerprint(extracted_dbs[0])
-        if backup_fingerprint != source_fingerprint:
-            raise RuntimeError('Encrypted backup verification failed: data fingerprint mismatch')
-
-        backup_artifact_fingerprint = _artifact_backup_fingerprint(verify_dir / 'artifacts')
-        if backup_artifact_fingerprint != source_artifact_fingerprint:
-            raise RuntimeError('Encrypted backup verification failed: artifact fingerprint mismatch')
-    except Exception as exc:
-        encrypted_path.unlink(missing_ok=True)
-        raw_backup_path.unlink(missing_ok=True)
-        shutil.rmtree(artifact_snapshot_root, ignore_errors=True)
-        shutil.rmtree(verify_dir, ignore_errors=True)
-        raise RuntimeError(f'Encrypted backup verification failed: {exc}')
-
-    raw_backup_path.unlink(missing_ok=True)
-    shutil.rmtree(artifact_snapshot_root, ignore_errors=True)
-    shutil.rmtree(verify_dir, ignore_errors=True)
-    return str(encrypted_path)
-
-
-def _export_json_backup(db_path):
-    """Create an unencrypted JSON export as a fallback restore option."""
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    export_path = backup_root / f'clinic_data_export_{timestamp}.json'
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    tables = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-    data = {}
-    for t in tables:
-        rows = c.execute(f'SELECT * FROM "{t}"').fetchall()
-        records = [dict(r) for r in rows]
-        if records:
-            clean = []
-            for r in records:
-                rec = {}
-                for k, v in r.items():
-                    if isinstance(v, datetime):
-                        rec[k] = v.isoformat()
-                    else:
-                        rec[k] = v
-                clean.append(rec)
-            data[t] = {"records": clean}
-    conn.close()
-
-    output = {"exported_at": datetime.now().isoformat(), "data": data}
-    export_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"JSON backup created: {export_path}")
-    return str(export_path)
-
-
-def _ensure_backup_key_consistency():
-    """Ensure the backup encryption key is stored in both env and file, and log a warning if mismatched."""
-    key_dir = Path(KEY_DIR)
-    key_dir.mkdir(parents=True, exist_ok=True)
-    env_key = os.environ.get('BACKUP_ENCRYPTION_KEY', '').strip()
-    file_key_path = key_dir / '.backup.key'
-
-    if env_key:
-        file_key_path.write_text(env_key)
-        key_info = {
-            'note': 'Backup encryption key fingerprint (not the key itself). Verify against BACKUP_ENCRYPTION_KEY in .env',
-            'key_fingerprint': hashlib.sha256(env_key.encode()).hexdigest()[:16],
-            'generated_at': datetime.now().isoformat(),
-            'instructions': 'Check .env for BACKUP_ENCRYPTION_KEY or ' + str(file_key_path)
-        }
-        (key_dir / 'KEY_RECOVERY.txt').write_text(json.dumps(key_info, indent=2))
-        return
-
-    if file_key_path.exists():
-        file_key = file_key_path.read_bytes().strip()
-        key_info = {
-            'note': 'Backup encryption key fingerprint (not the key itself).',
-            'key_fingerprint': hashlib.sha256(file_key).hexdigest()[:16],
-            'generated_at': datetime.now().isoformat(),
-            'instructions': 'The key is stored in ' + str(file_key_path)
-        }
-        (key_dir / 'KEY_RECOVERY.txt').write_text(json.dumps(key_info, indent=2))
-        print("Warning: BACKUP_ENCRYPTION_KEY not set in environment. Using file key only.")
-
-
-def perform_routine_encrypted_backup(db_path):
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-    marker = backup_root / '.last_backup_at'
-
-    now = datetime.now()
-    if marker.exists():
-        try:
-            last_run = datetime.fromisoformat(marker.read_text().strip())
-            if now - last_run < timedelta(hours=BACKUP_INTERVAL_HOURS):
-                return None
-        except ValueError:
-            pass
-
-    _ensure_backup_key_consistency()
-    encrypted_path = perform_encrypted_backup(db_path)
-    _export_json_backup(db_path)
-    marker.write_text(now.isoformat())
-    return encrypted_path
-
-
-def list_encrypted_backups():
-    if not os.path.exists(BACKUP_DIR):
-        return []
-    all_files = os.listdir(BACKUP_DIR)
-    backup_files = [f for f in all_files if (f.startswith('clinic_') and f.endswith('.db.enc')) or (f.endswith('.json') and (f.startswith('clinic_data_backup') or f.startswith('clinic_data_export')))]
-    backup_files.sort(key=lambda f: os.path.getmtime(os.path.join(BACKUP_DIR, f)), reverse=True)
-    return [
-        {
-            'name': f,
-            'path': os.path.join(BACKUP_DIR, f),
-            'size': os.path.getsize(os.path.join(BACKUP_DIR, f)),
-        }
-        for f in backup_files
-    ]
-
-
-def perform_encrypted_restore(db_path, backup_filename=None):
-    backup_root = Path(BACKUP_DIR)
-    backup_root.mkdir(parents=True, exist_ok=True)
-
-    backups = sorted(backup_root.glob('clinic_*.db.enc'))
-    if not backups:
-        raise FileNotFoundError('No encrypted backups found.')
-
-    if backup_filename:
-        safe_name = Path(backup_filename).name
-        target = backup_root / safe_name
-        if target not in backups or not target.exists():
-            raise FileNotFoundError('Selected backup file was not found.')
-    else:
-        target = backups[-1]
-
-    from cryptography.fernet import Fernet
-    cipher = Fernet(_get_or_create_backup_key())
-    decrypted = cipher.decrypt(target.read_bytes())
-
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    temp_restore = backup_root / f'.restore_tmp_{timestamp}'
-    safety_copy = backup_root / f'clinic_pre_restore_{timestamp}'
-
-    temp_restore.mkdir(parents=True, exist_ok=True)
-
-    if _is_encrypted_zip_backup(decrypted):
-        with zipfile.ZipFile(BytesIO(decrypted), 'r') as bundle:
-            bundle.extractall(temp_restore)
-        extracted_dbs = sorted(path for path in (temp_restore / 'database').iterdir() if path.is_file()) if (temp_restore / 'database').exists() else []
-        if not extracted_dbs:
-            raise RuntimeError('Backup restore failed: database missing from bundle.')
-        restore_db = extracted_dbs[0]
-    else:
-        restore_db = temp_restore / Path(db_path).name
-        restore_db.write_bytes(decrypted)
-        if not decrypted.startswith(b'SQLite format 3'):
-            raise RuntimeError('Backup decrypt succeeded but SQLite header is invalid.')
-
-    temp_conn = sqlite3.connect(str(restore_db))
-    try:
-        integrity = temp_conn.execute('PRAGMA integrity_check').fetchone()[0]
-        if integrity != 'ok':
-            raise RuntimeError(f'Restored backup integrity check failed: {integrity}')
-    finally:
-        temp_conn.close()
-
-    live_db = Path(db_path)
-    _backup_live_artifacts(safety_copy)
-    if live_db.exists():
-        shutil.copy2(live_db, safety_copy / live_db.name)
-
-    # Ensure no request-scoped DB handle stays open while replacing file.
-    existing = getattr(g, '_database', None)
-    if existing is not None:
-        existing.close()
-        g._database = None
-
-    shutil.copy2(restore_db, live_db)
-
-    artifacts_root = temp_restore / 'artifacts'
-    if artifacts_root.exists():
-        for label, destination in _resolve_backup_artifact_sources().items():
-            _restore_artifact_tree(artifacts_root / label, destination)
-
-    shutil.rmtree(temp_restore, ignore_errors=True)
-
-    verify_conn = sqlite3.connect(str(live_db))
-    try:
-        verify_integrity = verify_conn.execute('PRAGMA integrity_check').fetchone()[0]
-        if verify_integrity != 'ok':
-            raise RuntimeError(f'Post-restore database integrity check failed: {verify_integrity}')
-    finally:
-        verify_conn.close()
-
-    return str(target), str(safety_copy)
-
-
-def _perform_restore(backup_path):
-    """
-    Restore from a backup file. Supports:
-    - .db.enc encrypted backups (via perform_encrypted_restore)
-    - .json data exports (imports records safely)
-    - .bak / .db SQLite files (direct file swap)
-    """
-    path = Path(backup_path)
-    if not path.exists():
-        raise FileNotFoundError(f'Backup file not found: {backup_path}')
-
-    if path.suffix == '.enc':
-        result = perform_encrypted_restore(str(app.config.get('DATABASE', DATABASE)), backup_filename=path.name)
-        return {'tables_restored': 0, 'path': str(result[0])}
-
-    if path.suffix == '.json':
-        import json as _json
-        data = _json.loads(path.read_text(encoding='utf-8'))
-        raw = data.get('data') or data
-        conn = sqlite3.connect(str(app.config.get('DATABASE', DATABASE)))
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        total = 0
-        for table, content in raw.items():
-            if isinstance(content, dict) and 'records' in content:
-                records = content['records']
-            elif isinstance(content, list):
-                records = content
-            else:
-                continue
-            if not records:
-                continue
-            col_info = c.execute(f'PRAGMA table_info("{table}")').fetchall()
-            columns = [r['name'] for r in col_info]
-            has_id = 'id' in columns
-            pk_cols = [r['name'] for r in col_info if r['pk'] > 0]
-            pk_col = pk_cols[0] if pk_cols and has_id else None
-            for record in records:
-                existing = None
-                if pk_col:
-                    pk_val = record.get(pk_col)
-                    if pk_val is not None:
-                        existing = c.execute(f'SELECT id FROM "{table}" WHERE "{pk_col}" = ?', (pk_val,)).fetchone()
-                if existing:
-                    present_cols = [col for col in record if col in columns and col != pk_col]
-                    if present_cols:
-                        set_clause = ', '.join(f'"{col}" = ?' for col in present_cols)
-                        vals = [record[col] for col in present_cols]
-                        c.execute(f'UPDATE "{table}" SET {set_clause} WHERE id = ?', vals + [existing['id']])
-                else:
-                    insert_cols = [col for col in record if col in columns]
-                    placeholders = ', '.join('?' for _ in insert_cols)
-                    col_list = ', '.join(f'"{col}"' for col in insert_cols)
-                    c.execute(f'INSERT OR IGNORE INTO "{table}" ({col_list}) VALUES ({placeholders})', [record[col] for col in insert_cols])
-                total += 1
-        conn.commit()
-        conn.close()
-        return {'tables_restored': total}
-
-    if path.suffix in ('.db', '.bak'):
-        live_db = Path(str(app.config.get('DATABASE', DATABASE)))
-        live_db.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, live_db)
-        return {'tables_restored': 0}
-
-    raise ValueError(f'Unsupported backup format: {path.suffix}')
+        db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}')
+    except sqlite3.OperationalError:
+        pass
 
 
 def _run_db_migrations(db):
@@ -2566,94 +1882,28 @@ def _run_db_migrations(db):
     ''')
 
     # Handle column migrations
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-    except sqlite3.OperationalError:
-        pass # Column exists
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN is_recurring BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_interval INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_days TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN meeting_type TEXT DEFAULT "in-person"')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN meeting_link TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_end_date DATE')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_count INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN content_hebrew TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN note_date DATE')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN patient_appearance TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN key_topics TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN updated_at TIMESTAMP')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN behavior_checklist TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN mood_summary TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN behavior_notes TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN is_missed_meeting BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN missed_reason TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN appointment_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN session_number INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN needs_review BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'appointments', 'duration_minutes', 'INTEGER', '60') # Column exists
+    _migrate_add_column(db, 'appointments', 'is_recurring', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'appointments', 'recurrence_interval', 'INTEGER')
+    _migrate_add_column(db, 'appointments', 'recurrence_days', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'meeting_type', 'TEXT', '"in-person"')
+    _migrate_add_column(db, 'appointments', 'meeting_link', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'recurrence_end_date', 'DATE')
+    _migrate_add_column(db, 'appointments', 'recurrence_count', 'INTEGER')
+    _migrate_add_column(db, 'notes', 'content_hebrew', 'TEXT')
+    _migrate_add_column(db, 'notes', 'note_date', 'DATE')
+    _migrate_add_column(db, 'notes', 'patient_appearance', 'TEXT')
+    _migrate_add_column(db, 'notes', 'key_topics', 'TEXT')
+    _migrate_add_column(db, 'notes', 'updated_at', 'TIMESTAMP')
+    _migrate_add_column(db, 'notes', 'behavior_checklist', 'TEXT')
+    _migrate_add_column(db, 'notes', 'mood_summary', 'TEXT')
+    _migrate_add_column(db, 'notes', 'behavior_notes', 'TEXT')
+    _migrate_add_column(db, 'notes', 'is_missed_meeting', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'notes', 'missed_reason', 'TEXT')
+    _migrate_add_column(db, 'files', 'treatment_id', 'INTEGER')
+    _migrate_add_column(db, 'notes', 'appointment_id', 'INTEGER')
+    _migrate_add_column(db, 'notes', 'session_number', 'INTEGER')
+    _migrate_add_column(db, 'notes', 'needs_review', 'BOOLEAN', '0')
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2677,38 +1927,17 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE patient_resources ADD COLUMN assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE resources ADD COLUMN allow_patient_view BOOLEAN DEFAULT 1')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE resources ADD COLUMN allow_patient_download BOOLEAN DEFAULT 1')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'patient_resources', 'assigned_at', 'TIMESTAMP', 'CURRENT_TIMESTAMP')
+    _migrate_add_column(db, 'resources', 'allow_patient_view', 'BOOLEAN', '1')
+    _migrate_add_column(db, 'resources', 'allow_patient_download', 'BOOLEAN', '1')
     try:
         db.execute('UPDATE resources SET allow_patient_view = COALESCE(allow_patient_view, 1), allow_patient_download = COALESCE(allow_patient_download, 1)')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE files ADD COLUMN treatment_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN background TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN treatment_info TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN profile_image TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'files', 'treatment_id', 'INTEGER')
+    _migrate_add_column(db, 'patients', 'background', 'TEXT')
+    _migrate_add_column(db, 'patients', 'treatment_info', 'TEXT')
+    _migrate_add_column(db, 'patients', 'profile_image', 'TEXT')
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS site_settings (
             setting_key TEXT PRIMARY KEY,
@@ -2756,14 +1985,8 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN can_self_schedule BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'slots_override', 'duration_minutes', 'INTEGER', '60')
+    _migrate_add_column(db, 'patients', 'can_self_schedule', 'BOOLEAN', '0')
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS blocked_slots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2773,38 +1996,20 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE blocked_slots ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE blocked_slots ADD COLUMN title TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE blocked_slots ADD COLUMN is_private BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'blocked_slots', 'duration_minutes', 'INTEGER', '60')
+    _migrate_add_column(db, 'blocked_slots', 'title', 'TEXT')
+    _migrate_add_column(db, 'blocked_slots', 'is_private', 'BOOLEAN', '0')
     try:
         db.execute("ALTER TABLE blocked_slots ADD COLUMN block_type TEXT DEFAULT 'blocked'")
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE blocked_slots ADD COLUMN created_by INTEGER')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'blocked_slots', 'created_by', 'INTEGER')
     try:
         db.execute("ALTER TABLE patients ADD COLUMN patient_type TEXT DEFAULT 'private'")
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN intake_assessment TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN intake_questionnaire TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'patients', 'intake_assessment', 'TEXT')
+    _migrate_add_column(db, 'patients', 'intake_questionnaire', 'TEXT')
     try:
         db.execute("ALTER TABLE patients ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
     except sqlite3.OperationalError:
@@ -2817,22 +2022,10 @@ def _run_db_migrations(db):
         db.execute("ALTER TABLE patients ADD COLUMN deleted_reason TEXT")
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN birth_date DATE')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN id_number TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN has_intake_tab BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN has_questionnaire_tab BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'patients', 'birth_date', 'DATE')
+    _migrate_add_column(db, 'patients', 'id_number', 'TEXT')
+    _migrate_add_column(db, 'patients', 'has_intake_tab', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'patients', 'has_questionnaire_tab', 'BOOLEAN', '0')
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS patient_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2850,91 +2043,28 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     db.execute("UPDATE patients SET status = 'candidate' WHERE status IN ('waiting', 'waiting for scheduling')")
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN meeting_platform TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN meeting_title TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN missed_reason TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN save_to_google BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN excluded_dates TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN recurrence_group_id TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN display_name TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN email TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN phone TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN id_number TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN birth_date DATE')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN totp_secret TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN force_password_change BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN session_version INTEGER DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE users ADD COLUMN totp_recovery_codes TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'appointments', 'meeting_platform', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'meeting_title', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'missed_reason', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'save_to_google', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'appointments', 'excluded_dates', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'recurrence_group_id', 'TEXT')
+    _migrate_add_column(db, 'users', 'display_name', 'TEXT')
+    _migrate_add_column(db, 'users', 'email', 'TEXT')
+    _migrate_add_column(db, 'users', 'phone', 'TEXT')
+    _migrate_add_column(db, 'users', 'id_number', 'TEXT')
+    _migrate_add_column(db, 'users', 'birth_date', 'DATE')
+    _migrate_add_column(db, 'users', 'totp_secret', 'TEXT')
+    _migrate_add_column(db, 'users', 'totp_enabled', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'users', 'force_password_change', 'BOOLEAN', '0')
+    _migrate_add_column(db, 'users', 'session_version', 'INTEGER', '0')
+    _migrate_add_column(db, 'users', 'totp_recovery_codes', 'TEXT')
 
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN share_token TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_name TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN booked_by_phone TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN booked_notes TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE slots_override ADD COLUMN booked_at TIMESTAMP')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'slots_override', 'share_token', 'TEXT')
+    _migrate_add_column(db, 'slots_override', 'booked_by_name', 'TEXT')
+    _migrate_add_column(db, 'slots_override', 'booked_by_phone', 'TEXT')
+    _migrate_add_column(db, 'slots_override', 'booked_notes', 'TEXT')
+    _migrate_add_column(db, 'slots_override', 'booked_at', 'TIMESTAMP')
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS vacancy_recurring (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2946,10 +2076,7 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE vacancy_recurring ADD COLUMN duration_minutes INTEGER DEFAULT 60')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'vacancy_recurring', 'duration_minutes', 'INTEGER', '60')
 
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
@@ -2997,18 +2124,9 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE notifications ADD COLUMN title TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notifications ADD COLUMN recipient_user_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE notifications ADD COLUMN sender_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'notifications', 'title', 'TEXT')
+    _migrate_add_column(db, 'notifications', 'recipient_user_id', 'INTEGER')
+    _migrate_add_column(db, 'notifications', 'sender_id', 'INTEGER')
     try:
         db.execute("ALTER TABLE notifications ADD COLUMN audience TEXT DEFAULT 'admin'")
     except sqlite3.OperationalError:
@@ -3051,18 +2169,9 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE groups ADD COLUMN gdoc_id TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE groups ADD COLUMN gdoc_watch_channel TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE groups ADD COLUMN gdoc_watch_expiry TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'groups', 'gdoc_id', 'TEXT')
+    _migrate_add_column(db, 'groups', 'gdoc_watch_channel', 'TEXT')
+    _migrate_add_column(db, 'groups', 'gdoc_watch_expiry', 'TEXT')
 
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS group_members (
@@ -3099,22 +2208,10 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
 
-    try:
-        db.execute('ALTER TABLE group_sessions ADD COLUMN series_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE group_sessions ADD COLUMN occurrence_index INTEGER')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE group_sessions ADD COLUMN session_summary TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE group_sessions ADD COLUMN supervision_id INTEGER')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'group_sessions', 'series_id', 'INTEGER')
+    _migrate_add_column(db, 'group_sessions', 'occurrence_index', 'INTEGER')
+    _migrate_add_column(db, 'group_sessions', 'session_summary', 'TEXT')
+    _migrate_add_column(db, 'group_sessions', 'supervision_id', 'INTEGER')
 
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS group_member_history (
@@ -3166,10 +2263,7 @@ def _run_db_migrations(db):
         )''')
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE group_session_attendance ADD COLUMN notified_on_time BOOLEAN DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'group_session_attendance', 'notified_on_time', 'BOOLEAN', '0')
 
     # Performance indexes for common filters and sort paths.
     db.execute('CREATE INDEX IF NOT EXISTS idx_patients_status_deleted ON patients(status, is_deleted)')
@@ -3239,33 +2333,15 @@ def _run_db_migrations(db):
         db.execute("ALTER TABLE diagnosis_documents ADD COLUMN category TEXT NOT NULL DEFAULT 'test_document'")
     except sqlite3.OperationalError:
         pass
-    try:
-        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN title TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN original_filename TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN stored_filename TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE diagnosis_documents ADD COLUMN notes TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'diagnosis_documents', 'title', 'TEXT')
+    _migrate_add_column(db, 'diagnosis_documents', 'original_filename', 'TEXT')
+    _migrate_add_column(db, 'diagnosis_documents', 'stored_filename', 'TEXT')
+    _migrate_add_column(db, 'diagnosis_documents', 'notes', 'TEXT')
     db.execute('CREATE INDEX IF NOT EXISTS idx_diagnosis_documents_patient ON diagnosis_documents(patient_id, category, created_at)')
 
     # Google Calendar: add google_event_id to appointments and group_sessions
-    try:
-        db.execute('ALTER TABLE appointments ADD COLUMN google_event_id TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE group_sessions ADD COLUMN google_event_id TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'appointments', 'google_event_id', 'TEXT')
+    _migrate_add_column(db, 'group_sessions', 'google_event_id', 'TEXT')
     # Ensure google_calendar_tokens table exists
     db.execute('''
         CREATE TABLE IF NOT EXISTS google_calendar_tokens (
@@ -3279,14 +2355,8 @@ def _run_db_migrations(db):
     ''')
 
     # Treatment method tag and manual sort order for patients
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN treatment_method TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN sort_order INTEGER')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'patients', 'treatment_method', 'TEXT')
+    _migrate_add_column(db, 'patients', 'sort_order', 'INTEGER')
     db.execute('''CREATE TABLE IF NOT EXISTS treatment_method_options (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         label TEXT NOT NULL UNIQUE,
@@ -3298,39 +2368,15 @@ def _run_db_migrations(db):
         db.execute('INSERT OR IGNORE INTO treatment_method_options (label) VALUES (?)', (_label,))
 
     # Google Docs integration columns
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN gdoc_id TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_channel TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN gdoc_watch_expiry TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_file_id TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_file_url TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patients ADD COLUMN questionnaires_selected TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'patients', 'gdoc_id', 'TEXT')
+    _migrate_add_column(db, 'patients', 'gdoc_watch_channel', 'TEXT')
+    _migrate_add_column(db, 'patients', 'gdoc_watch_expiry', 'TEXT')
+    _migrate_add_column(db, 'patients', 'questionnaires_file_id', 'TEXT')
+    _migrate_add_column(db, 'patients', 'questionnaires_file_url', 'TEXT')
+    _migrate_add_column(db, 'patients', 'questionnaires_selected', 'TEXT')
 
-    try:
-        db.execute('ALTER TABLE notes ADD COLUMN link_url TEXT')
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute('ALTER TABLE patient_logs ADD COLUMN link_url TEXT')
-    except sqlite3.OperationalError:
-        pass
+    _migrate_add_column(db, 'notes', 'link_url', 'TEXT')
+    _migrate_add_column(db, 'patient_logs', 'link_url', 'TEXT')
 
     # Public contact inquiries submitted from the About page by unauthenticated visitors
     db.execute('''CREATE TABLE IF NOT EXISTS contact_inquiries (
@@ -3649,41 +2695,6 @@ def privacy_policy():
     settings = get_site_settings()
     return render_template('privacy_policy.html', site_settings=settings)
 
-
-HEBREW_NUMBER_WORDS = {
-    'אחד': '1',
-    'אחת': '1',
-    'שני': '2',
-    'שניים': '2',
-    'שתיים': '2',
-    'שתי': '2',
-    'שלושה': '3',
-    'שלוש': '3',
-    'ארבעה': '4',
-    'ארבע': '4',
-    'חמישה': '5',
-    'חמש': '5'
-}
-
-
-BACKGROUND_REASON_TOPICS = {
-    'אבל ואובדן': ['נפטר', 'פטירה', 'שבעה', 'אבל', 'אלמן', 'אלמנה'],
-    'חרדה ומתח': ['חרד', 'חרדה', 'פחד', 'חשש', 'דאג', 'לחץ'],
-    'קשיים במשפחה וביחסים קרובים': ['ילדים', 'ילד', 'בת', 'בן', 'בעל', 'אמא', 'אבא', 'משפחה', 'זוג'],
-    'קשיי תפקוד בעבודה או בלימודים': ['עבודה', 'מנהל', 'בוס', 'מפעל', 'מכללה', 'לומד', 'לומדת', 'צבא'],
-    'בושה, חריגות ודימוי עצמי': ['בושה', 'חריג', 'לא בסדר', 'אשם', 'לא נחמדה', 'רעה'],
-    'מחשבות אובססיביות או ירידה נפשית': ['אובסס', 'דיכא', 'בדידות', 'אין לו כח', 'אין לה כח', 'שעמום']
-}
-
-
-BACKGROUND_THEME_TOPICS = {
-    'יחסי קרבה, תלות ועצמאות': ['עצמאי', 'עצמאית', 'תלוי', 'תלות', 'להיעזר', 'להיתמך', 'לעזור', 'מרחק', 'קרובה'],
-    'ביקורת עצמית ותחושת חריגות': ['בושה', 'חריג', 'לא בסדר', 'אשם', 'רעה', 'לא נחמדה'],
-    'חרדה, דריכות וציפייה לפגיעה': ['חרד', 'פחד', 'חשש', 'לא בטוח', 'סכנה', 'מאיים', 'דריכות'],
-    'אבל, בדידות וחוויית אובדן': ['נפטר', 'פטירה', 'בדידות', 'שכול', 'שבעה', 'אובדן'],
-    'גבולות, עימותים וקונפליקטים': ['גבול', 'ריב', 'כעס', 'תוקפ', 'אסרטיב', 'מריבה', 'ויכוח'],
-    'עומס תפקודי בעבודה, לימודים או שירות': ['עבודה', 'מכללה', 'לימוד', 'צבא', 'משמרת', 'תפקיד', 'מפעל']
-}
 
 
 def normalize_summary_text(text):
@@ -4506,9 +3517,6 @@ def _get_patients_order_clause(sort_by):
         '''
     }
     return " ORDER BY " + order_map.get(sort_by, order_map['status_priority'])
-
-
-LEGACY_WAITING_STATUSES = {'candidate', 'waiting', 'waiting for scheduling'}
 
 
 def _normalize_patient_status(status):

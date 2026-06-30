@@ -55,12 +55,12 @@
 
 <div class="engagement-content-grid mb-4">
     <!-- Upcoming Appointments -->
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
-    <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center">
-        <h5 class="font-bold mb-0 text-primary">{{ t('Upcoming Sessions') }}</h5>
+<div class="card-dashboard">
+    <div class="card-dashboard-header d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 text-primary">{{ t('Upcoming Sessions') }}</h5>
         <a href="{{ url_for('patient_home') }}" class="btn btn-sm btn-outline-primary">{{ t('View Calendar') }}</a>
     </div>
-    <div class="p-5">
+    <div class="card-dashboard-body">
         {% if upcoming_appointments %}
         <div class="upcoming-list">
             {% for appt in upcoming_appointments %}
@@ -115,11 +115,11 @@
 
 <!-- Active Goals -->
 {% if goals %}
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
-    <div class="p-5 border-b border-slate-100">
-        <h5 class="font-bold mb-0 text-primary">{{ t('Therapy Goals') }}</h5>
+<div class="card-dashboard">
+    <div class="card-dashboard-header">
+        <h5 class="fw-bold mb-0 text-primary">{{ t('Therapy Goals') }}</h5>
     </div>
-    <div class="p-5">
+    <div class="card-dashboard-body">
         <div class="goals-list">
             {% for goal in goals %}
             <div class="goal-item">
@@ -141,11 +141,11 @@
 
 <!-- Recent Notes -->
 {% if recent_notes %}
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
-    <div class="p-5 border-b border-slate-100">
-        <h5 class="font-bold mb-0 text-primary">{{ t('Session Notes') }}</h5>
+<div class="card-dashboard mb-4">
+    <div class="card-dashboard-header">
+        <h5 class="fw-bold mb-0 text-primary">{{ t('Session Notes') }}</h5>
     </div>
-    <div class="p-5">
+    <div class="card-dashboard-body">
         <div class="notes-timeline">
             {% for note in recent_notes %}
             <div class="note-entry">
@@ -167,59 +167,7 @@
     </div>
 {% endif %}
 
-    <!-- Active Goals -->
-    {% if goals %}
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-header bg-white border-0">
-            <h6 class="fw-bold mb-0 text-primary">{{ t('Therapy Goals') }}</h6>
-        </div>
-        <div class="card-body">
-            <div class="goals-list">
-                {% for goal in goals %}
-                <div class="goal-item">
-                    <div class="goal-checkbox">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="goal{{ goal['id'] }}" disabled>
-                            <label class="form-check-label" for="goal{{ goal['id'] }}">
-                                {{ goal['description'] }}
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    {% endif %}
-</div>
 
-<!-- Recent Notes -->
-{% if recent_notes %}
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-header bg-white border-0">
-        <h6 class="fw-bold mb-0 text-primary">{{ t('Session Notes') }}</h6>
-    </div>
-    <div class="card-body">
-        <div class="notes-timeline">
-            {% for note in recent_notes %}
-            <div class="note-entry">
-                <div class="note-date">
-                    {{ note['created_at']|from_iso_datetime|strftime('%b %d, %Y') }}
-                </div>
-                <div class="note-content">
-                    {% if note['key_topics'] %}
-                    <strong>{{ t('Topics') }}:</strong> {{ note['key_topics'] }}<br>
-                    {% endif %}
-                    {% if note['mood_summary'] %}
-                    <strong>{{ t('Mood') }}:</strong> {{ note['mood_summary'] }}
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/patient_dashboard.css') }}">
 

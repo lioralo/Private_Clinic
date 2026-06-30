@@ -4,18 +4,11 @@
     <div class="col-xl-10 col-lg-11">
         {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Email Settings')}]) }}
 
-        {% for category, message in get_flashed_messages(with_categories=true) %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        {% endfor %}
-
         <div class="row g-3">
             <div class="col-12">
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-header bg-white border-0 py-3">
-                        <h4 class="mb-0 text-primary fw-bold"><i class="bi bi-envelope-paper me-2"></i>{{ t('Email Reminder System') }}</h4>
+                        <h2 class="h4 mb-0 text-primary fw-bold"><i class="bi bi-envelope-paper me-2"></i>{{ t('Email Reminder System') }}</h2>
                     </div>
                     <div class="card-body p-4">
                         <ul class="nav nav-pills nav-fill mb-4 gap-2" id="emailSettingsTabs" role="tablist">

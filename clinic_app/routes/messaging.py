@@ -15,7 +15,7 @@ from clinic_app.utils import redirect_to_patient_tab
 messaging_bp = Blueprint('messaging', __name__)
 
 
-LEGACY_WAITING_STATUSES = {'candidate', 'waiting', 'waiting for scheduling'}
+from clinic_app.config import LEGACY_WAITING_STATUSES
 
 
 def _get_admin_messages(db):

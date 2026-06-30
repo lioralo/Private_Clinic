@@ -131,7 +131,7 @@ def _smtp_health_check(app=None):
             'message': f'SMTP connection failed: {exc}',
         }
 
-def _send_smtp_email(recipient_email, subject, body_text, app=None):
+def _send_smtp_email(recipient_email, subject, body_text, app=None, html_body=None):
     if app is None:
         app = current_app
     settings = _smtp_settings_summary(app)
@@ -142,6 +142,8 @@ def _send_smtp_email(recipient_email, subject, body_text, app=None):
     message['From'] = settings['from_email']
     message['To'] = recipient_email
     message.set_content(body_text)
+    if html_body:
+        message.add_alternative(html_body, subtype='html')
     try:
         with smtplib.SMTP(settings['host'], settings['port'], timeout=15) as smtp:
             smtp.ehlo()
