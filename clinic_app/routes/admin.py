@@ -1350,7 +1350,7 @@ def admin_change_password():
     if not check_password_hash(user['password_hash'], current_pw):
         flash('Current password is incorrect.')
         return redirect(url_for('.admin_profile'))
-    db.execute('UPDATE users SET password_hash = ?, force_password_change = 0, session_version = session_version + 1 WHERE id = ?',
+    db.execute('UPDATE users SET password_hash = ?, force_password_change = 0, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?',
                (generate_password_hash(new_pw), current_user.id))
     db.commit()
     current_user.session_version += 1
@@ -1658,6 +1658,104 @@ def admin_email_settings_mark_read(email_id):
     db.execute('UPDATE incoming_email SET is_read = 1 WHERE id = ?', (email_id,))
     db.commit()
     return jsonify({'status': 'ok'})
+
+
+@admin_bp.route('/admin/users', methods=['GET', 'POST'])
+@login_required
+def admin_users():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    if request.method == 'POST':
+        action = request.form.get('action', '')
+        if action == 'add':
+            username = (request.form.get('username') or '').strip()
+            display_name = (request.form.get('display_name') or '').strip()
+            email = (request.form.get('email') or '').strip()
+            phone = (request.form.get('phone') or '').strip()
+            role = (request.form.get('role') or '').strip()
+            password = request.form.get('password', '')
+
+            if not username or not password:
+                flash('Username and password are required.', 'error')
+                return redirect(url_for('.admin_users'))
+            if role not in ('admin', 'patient'):
+                flash('Invalid role.', 'error')
+                return redirect(url_for('.admin_users'))
+
+            existing = db.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+            if existing:
+                flash(f'Username "{username}" is already taken.', 'error')
+                return redirect(url_for('.admin_users'))
+
+            db.execute(
+                'INSERT INTO users (username, display_name, email, phone, role, password_hash) VALUES (?, ?, ?, ?, ?, ?)',
+                (username, display_name or username, email or None, phone or None, role, generate_password_hash(password))
+            )
+            db.commit()
+            flash(f'User "{username}" created.', 'success')
+
+        elif action == 'edit':
+            user_id = request.form.get('user_id', type=int)
+            display_name = (request.form.get('display_name') or '').strip()
+            email = (request.form.get('email') or '').strip()
+            phone = (request.form.get('phone') or '').strip()
+            role = (request.form.get('role') or '').strip()
+
+            if not user_id:
+                flash('Missing user ID.', 'error')
+                return redirect(url_for('.admin_users'))
+            if role and role not in ('admin', 'patient'):
+                flash('Invalid role.', 'error')
+                return redirect(url_for('.admin_users'))
+
+            db.execute(
+                'UPDATE users SET display_name = ?, email = ?, phone = ?, role = ? WHERE id = ?',
+                (display_name, email or None, phone or None, role, user_id)
+            )
+            db.commit()
+            flash('User updated.', 'success')
+
+        elif action == 'toggle-active':
+            user_id = request.form.get('user_id', type=int)
+            if not user_id:
+                flash('Missing user ID.', 'error')
+                return redirect(url_for('.admin_users'))
+            if user_id == current_user.id:
+                flash('Cannot disable your own account.', 'error')
+                return redirect(url_for('.admin_users'))
+            user = db.execute('SELECT id, is_active FROM users WHERE id = ?', (user_id,)).fetchone()
+            if not user:
+                flash('User not found.', 'error')
+                return redirect(url_for('.admin_users'))
+            new_state = 0 if user['is_active'] else 1
+            db.execute('UPDATE users SET is_active = ? WHERE id = ?', (new_state, user_id))
+            db.commit()
+            status = 'enabled' if new_state else 'disabled'
+            flash(f'User {status}.', 'success')
+
+        elif action == 'reset-password':
+            user_id = request.form.get('user_id', type=int)
+            new_password = request.form.get('new_password', '')
+            if not user_id or not new_password:
+                flash('User ID and new password are required.', 'error')
+                return redirect(url_for('.admin_users'))
+            if len(new_password) < 4:
+                flash('Password must be at least 4 characters.', 'error')
+                return redirect(url_for('.admin_users'))
+            db.execute(
+                'UPDATE users SET password_hash = ?, force_password_change = 1, session_version = COALESCE(session_version, 0) + 1 WHERE id = ?',
+                (generate_password_hash(new_password), user_id)
+            )
+            db.commit()
+            flash('Password reset. User must change on next login.', 'success')
+
+        return redirect(url_for('.admin_users'))
+
+    users = db.execute(
+        'SELECT id, username, display_name, email, phone, role, is_active, totp_enabled, created_at FROM users ORDER BY role, username'
+    ).fetchall()
+    return render_template('admin_users.html', users=users)
 
 
 def _smtp_health_check():

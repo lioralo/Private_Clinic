@@ -132,6 +132,7 @@ _legacy_admin_endpoints = [
     ('delete_resource', 'delete_resource', '/admin/resources/<int:resource_id>/delete', ['POST']),
     ('unassign_resource', 'unassign_resource', '/patient/<int:patient_id>/unassign_resource/<int:resource_id>', ['POST']),
     ('assign_resource', 'assign_resource', '/patient/<int:patient_id>/assign_resource', ['POST']),
+    ('admin_users', 'admin_users', '/admin/users', ['GET', 'POST']),
 ]
 for _old_ep, _bp_ep, _rule, _methods in _legacy_admin_endpoints:
     _view = app.view_functions.get(f'admin.{_bp_ep}')

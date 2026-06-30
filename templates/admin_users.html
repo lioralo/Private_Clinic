@@ -1,0 +1,189 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('User Management') }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-10 col-lg-11">
+        <div class="card border-0 shadow-sm rounded-4 mb-4">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <h2 class="h4 mb-0 text-primary fw-bold"><i class="bi bi-people me-2"></i>{{ t('User Management') }}</h2>
+            </div>
+            {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Users')}]) }}
+            <div class="card-body p-4">
+
+                <div class="d-flex justify-content-end mb-3">
+                    <button class="btn btn-primary rounded-pill px-4" type="button" data-bs-toggle="collapse" data-bs-target="#addUserForm">
+                        <i class="bi bi-person-plus me-1"></i>{{ t('Add User') }}
+                    </button>
+                </div>
+
+                <div class="collapse mb-4" id="addUserForm">
+                    <div class="card border rounded-4 p-3 bg-light">
+                        <h6 class="fw-bold mb-3">{{ t('New User') }}</h6>
+                        <form method="post" class="row g-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="add">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Username') }} <span class="text-danger">*</span></label>
+                                <input class="form-control" name="username" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Display Name') }}</label>
+                                <input class="form-control" name="display_name">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Role') }} <span class="text-danger">*</span></label>
+                                <select class="form-select" name="role" required>
+                                    <option value="patient">{{ t('Patient') }}</option>
+                                    <option value="admin">{{ t('Admin') }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Email') }}</label>
+                                <input type="email" class="form-control" name="email">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Phone') }}</label>
+                                <input class="form-control" name="phone">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">{{ t('Password') }} <span class="text-danger">*</span></label>
+                                <input type="password" class="form-control" name="password" required>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-success rounded-pill px-4" type="submit">
+                                    <i class="bi bi-check2 me-1"></i>{{ t('Create User') }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>{{ t('Username') }}</th>
+                                <th>{{ t('Display Name') }}</th>
+                                <th>{{ t('Email') }}</th>
+                                <th>{{ t('Role') }}</th>
+                                <th>{{ t('Status') }}</th>
+                                <th>{{ t('TOTP') }}</th>
+                                <th>{{ t('Created') }}</th>
+                                <th>{{ t('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td class="small text-muted">{{ user.id }}</td>
+                                <td class="fw-semibold">{{ user.username }}</td>
+                                <td>{{ user.display_name or '-' }}</td>
+                                <td class="small">{{ user.email or '-' }}</td>
+                                <td>
+                                    {% if user.role == 'admin' %}
+                                    <span class="badge bg-primary">{{ t('Admin') }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ t('Patient') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.is_active %}
+                                    <span class="badge bg-success">{{ t('Active') }}</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">{{ t('Disabled') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.totp_enabled %}
+                                    <span class="badge bg-info text-dark"><i class="bi bi-shield-check me-1"></i>{{ t('On') }}</span>
+                                    {% else %}
+                                    <span class="text-muted small">{{ t('Off') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted">{{ user.created_at[:10] if user.created_at else '-' }}</td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#editUser{{ user.id }}">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form method="post" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <input type="hidden" name="action" value="toggle-active">
+                                            <button class="btn btn-sm btn-outline-{{ 'warning' if user.is_active else 'success' }} rounded-pill"
+                                                    type="submit" {% if user.id == current_user.id %}disabled{% endif %}>
+                                                <i class="bi bi-{{ 'pause' if user.is_active else 'play' }}"></i>
+                                            </button>
+                                        </form>
+                                        <button class="btn btn-sm btn-outline-danger rounded-pill" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#resetPw{{ user.id }}">
+                                            <i class="bi bi-key"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="collapse mt-2 border rounded-3 p-3 bg-light" id="editUser{{ user.id }}">
+                                        <h6 class="small fw-bold mb-2">{{ t('Edit') }}: {{ user.username }}</h6>
+                                        <form method="post" class="row g-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="edit">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <div class="col-md-4">
+                                                <label class="form-label small">{{ t('Display Name') }}</label>
+                                                <input class="form-control form-control-sm" name="display_name" value="{{ user.display_name or '' }}">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">{{ t('Email') }}</label>
+                                                <input class="form-control form-control-sm" name="email" value="{{ user.email or '' }}">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">{{ t('Phone') }}</label>
+                                                <input class="form-control form-control-sm" name="phone" value="{{ user.phone or '' }}">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">{{ t('Role') }}</label>
+                                                <select class="form-select form-select-sm" name="role">
+                                                    <option value="patient" {% if user.role == 'patient' %}selected{% endif %}>{{ t('Patient') }}</option>
+                                                    <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>{{ t('Admin') }}</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-12">
+                                                <button class="btn btn-sm btn-primary rounded-pill" type="submit">
+                                                    <i class="bi bi-check2 me-1"></i>{{ t('Save') }}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    <div class="collapse mt-2 border rounded-3 p-3 bg-light" id="resetPw{{ user.id }}">
+                                        <h6 class="small fw-bold mb-2">{{ t('Reset Password') }}: {{ user.username }}</h6>
+                                        <form method="post" class="row g-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="reset-password">
+                                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                                            <div class="col-md-8">
+                                                <input type="password" class="form-control form-control-sm" name="new_password" placeholder="{{ t('New password') }}" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <button class="btn btn-sm btn-danger rounded-pill" type="submit">
+                                                    <i class="bi bi-key me-1"></i>{{ t('Reset') }}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">{{ t('No users found.') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

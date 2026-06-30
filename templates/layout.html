@@ -370,6 +370,11 @@
                 </button>
                 <div class="collapse" id="adminSubNav">
                     <div class="ps-4 mt-1 space-y-0.5">
+                        <a href="{{ url_for('admin_users') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_users' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-people" style="font-size:16px;width:18px;text-align:center"></i>
+                            <span>{{ t('Users') }}</span>
+                        </a>
                         <a href="{{ url_for('admin_security_log') }}"
                            class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-sm transition-colors duration-200 {% if endpoint_name == 'admin_security_log' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
                             <i class="bi bi-shield-lock" style="font-size:16px;width:18px;text-align:center"></i>
