@@ -36,7 +36,7 @@ services:
       IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
       IMAP_POLL_INTERVAL: ${IMAP_POLL_INTERVAL:-300}
     volumes:
-      - ./data:/data
+      - clinic_app_data:/data
 
   caddy:
     image: caddy:2
@@ -57,5 +57,6 @@ services:
       - app
 
 volumes:
+  clinic_app_data:
   caddy_data:
   caddy_config:

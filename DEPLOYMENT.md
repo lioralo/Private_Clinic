@@ -17,9 +17,46 @@
 | `.env` | **Secret config file** — NOT committed to git (in `.gitignore`) |
 | `.env.prod.example` | Template for `.env` with all supported variables |
 
+## Data Persistence (IMPORTANT)
+
+> **All data (database, uploads, backups, encryption keys) is stored in a Docker named volume `clinic_clinic_app_data`.**
+> **This volume persists independently of the repo directory — data survives `git pull`, rebuilds, and even `docker compose down`.**
+
+### How it works
+
+The `docker-compose.prod.yml` mounts the named volume `clinic_app_data` (Docker auto-prefixes it as `clinic_clinic_app_data`) at `/data` inside the container.
+This contains:
+
+| Container path | Content | Persists on update? |
+|----------------|---------|---------------------|
+| `/data/clinic.db` | SQLite database (users, patients, appointments, settings, 2FA secrets, Google tokens) | ✅ |
+| `/data/uploads/` | Patient uploaded files | ✅ |
+| `/data/patients_logs/` | Session logs | ✅ |
+| `/data/secure_backups/` | Encrypted daily backups | ✅ |
+| `/data/.clinic_keys/` | Backup encryption keys | ✅ |
+| `/data/app_log.txt` | Application logs | ✅ |
+
+### What survives an update
+
+All of the following survive when you run `git pull && docker compose up -d --build`:
+- **Database** (patients, appointments, notes, billing)
+- **Users and passwords** (admin + patients)
+- **2FA/TOTP configuration**
+- **Google OAuth tokens** (Calendar, Docs integration)
+- **Site settings**
+- **Uploaded files and patient logs**
+- **Encrypted backup history**
+
+### ⚠️ What does NOT create a new database
+
+The app only creates a new admin user if `clinic.db` does not exist in the volume.
+If the volume already has a database (from a previous deployment), the app uses it as-is.
+
 ## Step-by-Step Deployment
 
 ### 1. Clone the repo on the EC2 instance
+
+Clone to ANY directory — data lives in the Docker volume, not in the repo:
 
 ```bash
 ssh -i your-key.pem ubuntu@<ec2-public-ip>
@@ -48,6 +85,7 @@ Fill in with your real values:
 | `SMTP_USERNAME` | SES SMTP username (from admin_credentials.csv) |
 | `SMTP_PASSWORD` | SES SMTP password (from admin_credentials.csv) |
 | `SMTP_FROM_EMAIL` | `admin@clinic.lior-clinic.org` |
+| `SESSION_COOKIE_SECURE` | `1` (required for HTTPS) |
 
 ### 3. Start the stack
 
@@ -87,7 +125,7 @@ Also add the SES DKIM CNAME records as described in `.env.prod.example`.
 
 **Change the password immediately after first login.**
 
-## Updating
+## Updating (Data-Safe)
 
 ```bash
 cd clinic
@@ -96,10 +134,23 @@ docker compose -f docker-compose.prod.yml build app
 docker compose -f docker-compose.prod.yml up -d app
 ```
 
+**The Docker volume `clinic_clinic_app_data` preserves all data across updates.**
+`docker compose down` does NOT remove named volumes (only `docker compose down -v` does).
+If you accidentally run `docker compose down -v`, restore from the latest backup in the Admin panel.
+
 ## Backup
 
-Backups are automatically encrypted to `./data/secure_backups/` every 12 hours.
+Backups are automatically encrypted to `/data/secure_backups/` (inside the Docker volume) every 12 hours.
 Manual backup available at: Admin Dashboard → Backup/Restore.
+
+### Restoring from backup in disaster recovery
+
+If the volume is lost (e.g., `docker compose down -v` was run):
+
+1. Create a fresh volume: `docker volume create clinic_app_data`
+2. Copy your latest `.db.enc` backup file into `/var/lib/docker/volumes/clinic_clinic_app_data/_data/secure_backups/`
+3. Start the stack
+4. Go to Admin Dashboard → Backup/Restore → select the backup file → Restore
 
 ## Troubleshooting
 

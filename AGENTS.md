@@ -45,5 +45,61 @@ $env:GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
 $env:GOOGLE_CLIENT_SECRET = "test-secret"
 ```
 
+## Deployment (Data Persistence)
+
+### Docker volumes for data persistence
+
+The production stack (`docker-compose.prod.yml`) uses a **named Docker volume** for all persistent data:
+
+| Volume | Mount | Content |
+|--------|-------|---------|
+| `clinic_app_data` (→ `clinic_clinic_app_data`) | `/data` | DB, uploads, logs, backups, encryption keys |
+
+**The volume persists across:**
+- `git pull` + rebuild
+- `docker compose down` (volumes are NOT removed by default)
+- Cloning the repo to a different directory
+
+**What is NOT lost on redeployment:**
+- Database (patients, appointments, notes, billing)
+- Users, passwords, 2FA/TOTP setup
+- Google OAuth tokens
+- Site settings
+- Uploaded files and patient logs
+- Backup history
+
+### Updating safely
+
+```bash
+cd clinic
+git pull
+docker compose -f docker-compose.prod.yml build app
+docker compose -f docker-compose.prod.yml up -d app
+```
+
+### ⚠️ Never run `docker compose down -v`
+
+The `-v` flag removes named volumes and destroys all data.
+If accidentally run, restore from the latest encrypted backup via Admin Dashboard → Backup/Restore.
+
+### First-time migration from bind-mount to volume
+
+If the old deployment used `./data:/data` (bind mount), migrate to the named volume:
+
+```bash
+# Stop old stack
+docker compose down
+
+# Create the named volume
+docker volume create clinic_app_data
+
+# Copy existing data into the volume
+sudo cp -a /path/to/old/data/. /var/lib/docker/volumes/clinic_clinic_app_data/_data/
+
+# Edit docker-compose.prod.yml: change `./data:/data` to `clinic_app_data:/data`
+# Start the stack
+docker compose up -d
+```
+
 ## Full Reference
 See [docs/FULL_REFERENCE.md](docs/FULL_REFERENCE.md) for complete documentation on setup, deployment, security, design system, and more.
