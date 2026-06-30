@@ -185,7 +185,7 @@
                             <input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required>
                         </div>
                         <div class="col-md-6">
-                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code (leave blank if TOTP not set up)') }}" {{ 'required' if admin['totp_enabled'] else '' }}>
+                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code (leave blank if TOTP not set up)') }}">
                         </div>
                         <div class="col-md-6">
                             <input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required>
