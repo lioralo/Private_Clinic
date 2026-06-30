@@ -189,6 +189,13 @@
             visibility: visible !important;
         }
 
+        /* Floating notification bell — visible on lg+ screens */
+        @media (min-width: 1024px) {
+            .float-noti-btn {
+                display: inline-flex !important;
+            }
+        }
+
         @media (max-width: 1023.98px) {
             .admin-sidebar {
                 position: fixed;
@@ -575,9 +582,9 @@
 </div>{# /flex wrapper #}
 
 {# Floating notification bell (desktop) #}
-<button type="button" id="floatingNotificationBtn"
-   class="hidden lg:inline-flex items-center justify-center w-12 h-12 rounded-full shadow-lg bg-white border border-slate-200 text-black hover:bg-gray-100 transition-colors fixed z-40 no-underline"
-   style="bottom:1.5rem;inset-inline-end:1.5rem"
+ <button type="button" id="floatingNotificationBtn"
+    class="hidden float-noti-btn items-center justify-center w-12 h-12 rounded-full shadow-lg bg-white border border-slate-200 text-black hover:bg-gray-100 transition-colors fixed z-40 no-underline"
+    style="bottom:1.5rem;inset-inline-end:1.5rem"
    data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
    aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
     <i class="bi bi-bell-fill" style="font-size:20px"></i>
@@ -839,7 +846,6 @@
                 cookieBanner.classList.add('hidden');
             });
         }
-    });
     </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 

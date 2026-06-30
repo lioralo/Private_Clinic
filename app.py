@@ -2577,24 +2577,8 @@ def _seed_admin_user(db):
             admin = db.execute("SELECT * FROM users WHERE id = ?", (legacy_admin['id'],)).fetchone()
             print(f'Legacy admin account migrated to {env_username}.')
 
-    # Rename admin if current username doesn't match env_username
-    if admin and env_username and admin['username'] != env_username:
-        collision = db.execute("SELECT id FROM users WHERE username = ? AND id <> ?", (env_username, admin['id'])).fetchone()
-        if not collision:
-            db.execute("UPDATE users SET username = ? WHERE id = ?", (env_username, admin['id']))
-            db.commit()
-            admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
-            print(f'Admin username updated to {env_username}.')
-
-    # Force reset password from env if ADMIN_PASSWORD_RESET=1
-    force_reset = os.environ.get('ADMIN_PASSWORD_RESET', '').strip() == '1'
-    if admin and env_password and force_reset:
-        new_hash = generate_password_hash(env_password)
-        db.execute("UPDATE users SET password_hash = ?, force_password_change = 0 WHERE id = ?", (new_hash, admin['id']))
-        db.commit()
-        print(f'Admin password force-reset from environment.')
-        admin = db.execute("SELECT * FROM users WHERE id = ?", (admin['id'],)).fetchone()
-
+    # Never modify existing admin user — env vars only apply on FIRST creation above
+    # This ensures password, TOTP, username changes persist across redeploys
     if admin and not admin['display_name']:
         db.execute('UPDATE users SET display_name = ? WHERE id = ?', ('Admin', admin['id']))
         db.commit()
