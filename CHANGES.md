@@ -2,6 +2,40 @@
 
 ---
 
+## Session 81
+
+**Date:** 2026-06-29
+
+**Objective:** Fix Google OAuth credentials for production, fix admin password persistence, fix TOTP setup flow, update UI for password change without 2FA, expire stale pending secrets.
+
+**Release Summary:**
+
+1. **Google OAuth production fix**
+   - Updated `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in production `.env` to match Google Cloud Console credentials.
+   - Added redirect URI `https://clinic.lior-clinic.org/admin/google-calendar/callback`.
+   - Removed `[GCAL DEBUG]` print statements from callback endpoint.
+
+2. **Admin password persistence**
+   - Set `ADMIN_PASSWORD_RESET=0` in production `.env` so password hash is no longer overwritten on container restart.
+   - Recreated container with `--force-recreate` to pick up the new env value.
+   - Cleared stale `rate_limits` entries that were blocking login (680s lockout).
+
+3. **TOTP authenticator fixes**
+   - Added `import time` to fix `NameError: name 'time' is not defined` in `setup_authenticator()`.
+   - Added `pending_totp_created_at` timestamp to session; stale pending secrets (>10 min) auto-expire on profile page load.
+   - This prevents showing a stale QR code / verify form from an old browser session.
+
+4. **Password change without TOTP**
+   - Made `otp_code` field optional in the "Change Admin Password" form when TOTP is not enabled.
+   - Backend already accepted password change without `otp_code`; only the HTML `required` attribute blocked it.
+   - Updated help text to clarify that authenticator code is only needed if 2FA is enabled.
+
+5. **TOTP UI text update**
+   - Renamed "Start Authenticator Setup" to "Set Up Authenticator" for clarity.
+   - Added "not configured" info message when TOTP is disabled.
+
+---
+
 ## Session 80
 
 **Date:** 2026-06-29
