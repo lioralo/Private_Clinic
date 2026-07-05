@@ -1,0 +1,139 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Take Assessment') }} — {{ patient['name'] }}{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="mb-4">
+    <a href="{{ url_for('assessments.view_patient_assessments', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+      <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Assessments') }}
+    </a>
+  </div>
+  <h1 class="text-2xl font-bold text-primary mb-4">{{ t('Take Assessment') }} — {{ patient['name'] }}</h1>
+
+  <form method="post" action="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">{{ t('Assessment Type') }}</label>
+      <select name="assessment_type_id" id="assessmentTypeSelect" class="form-select" required>
+        <option value="">{{ t('Select assessment type...') }}</option>
+        {% for at in assessment_types %}
+        <option value="{{ at['id'] }}" data-questions="{{ at['num_questions'] }}" data-name="{{ at['name'] }}">
+          {{ at['display_name'] }} ({{ at['num_questions'] }} {{ t('questions') }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div id="questionsContainer" class="d-none">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="font-bold mb-0"><i class="bi bi-question-circle me-2 text-primary"></i><span id="assessmentTitle">{{ t('Questions') }}</span></h5>
+          <span class="badge bg-light text-dark rounded-pill" id="questionCounter">{{ t('Over the last 2 weeks') }}</span>
+        </div>
+        <p class="text-muted small mb-3">{{ t('Over the last 2 weeks, how often have you been bothered by the following problems?') }}</p>
+
+        <div id="questionsList"></div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label">{{ t('Notes') }}</label>
+        <textarea name="notes" class="form-control" rows="2" placeholder="{{ t('Optional notes about this assessment...') }}"></textarea>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2">
+        <a href="{{ url_for('assessments.view_patient_assessments', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">{{ t('Cancel') }}</a>
+        <button type="submit" class="btn btn-primary rounded-pill px-5">{{ t('Score Assessment') }}</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const QUESTIONS = {
+    'PHQ-9': [
+      '{{ t("Little interest or pleasure in doing things") }}',
+      '{{ t("Feeling down, depressed, or hopeless") }}',
+      '{{ t("Trouble falling/staying asleep, or sleeping too much") }}',
+      '{{ t("Feeling tired or having little energy") }}',
+      '{{ t("Poor appetite or overeating") }}',
+      '{{ t("Feeling bad about yourself — or that you are a failure") }}',
+      '{{ t("Trouble concentrating on things, such as reading the newspaper") }}',
+      '{{ t("Moving/speaking so slowly that others noticed? Or the opposite — fidgety/restless") }}',
+      '{{ t("Thoughts that you would be better off dead or of hurting yourself") }}',
+    ],
+    'GAD-7': [
+      '{{ t("Feeling nervous, anxious, or on edge") }}',
+      '{{ t("Not being able to stop or control worrying") }}',
+      '{{ t("Worrying too much about different things") }}',
+      '{{ t("Trouble relaxing") }}',
+      '{{ t("Being so restless that it is hard to sit still") }}',
+      '{{ t("Becoming easily annoyed or irritable") }}',
+      '{{ t("Feeling afraid as if something awful might happen") }}',
+    ]
+  };
+
+  const OPTIONS = [
+    { value: '0', label: '{{ t("Not at all") }}' },
+    { value: '1', label: '{{ t("Several days") }}' },
+    { value: '2', label: '{{ t("More than half the days") }}' },
+    { value: '3', label: '{{ t("Nearly every day") }}' },
+  ];
+
+  const select = document.getElementById('assessmentTypeSelect');
+  const container = document.getElementById('questionsContainer');
+  const questionsList = document.getElementById('questionsList');
+  const assessmentTitle = document.getElementById('assessmentTitle');
+  const questionCounter = document.getElementById('questionCounter');
+
+  select.addEventListener('change', function() {
+    const selected = select.options[select.selectedIndex];
+    if (!selected || !selected.value) {
+      container.classList.add('d-none');
+      return;
+    }
+    const name = selected.dataset.name;
+    const questions = QUESTIONS[name] || [];
+    if (questions.length === 0) {
+      container.classList.add('d-none');
+      return;
+    }
+
+    assessmentTitle.textContent = selected.text.split(' (')[0];
+    questionCounter.textContent = questions.length + ' {{ t("questions") }}';
+    container.classList.remove('d-none');
+
+    questionsList.innerHTML = questions.map(function(q, i) {
+      return `
+        <div class="border rounded-3 p-3 mb-2">
+          <div class="fw-semibold mb-2">${i + 1}. ${q}</div>
+          <div class="d-flex flex-wrap gap-2">
+            ${OPTIONS.map(function(opt) {
+              return `
+                <label class="btn btn-outline-secondary btn-sm rounded-pill assessment-option">
+                  <input type="radio" name="q_${i}" value="${opt.value}" required class="d-none">
+                  ${opt.label}
+                </label>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.assessment-option input[type="radio"]').forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        document.querySelectorAll(`input[name="${radio.name}"]`).forEach(function(r) {
+          r.closest('.assessment-option').classList.remove('btn-primary', 'text-white');
+        });
+        if (radio.checked) {
+          radio.closest('.assessment-option').classList.add('btn-primary', 'text-white');
+        }
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -17,6 +17,8 @@ class FixCalendarTimesTestCase(unittest.TestCase):
         os.environ['DATABASE'] = self.db_path
 
         with app.app_context():
+            import app as app_module
+            app_module._db_initialized = False
             init_db()
 
         self.db = sqlite3.connect(self.db_path)

@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 from pathlib import Path
 import unittest.mock
@@ -137,7 +138,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             db.execute('''
-                INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
+                INSERT INTO availability (slot_date, slot_time, status, duration_minutes)
                 VALUES (?, ?, 'available', ?)
             ''', (date_iso, time_text, duration_minutes))
             db.commit()
@@ -808,7 +809,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             row = db.execute('''
-                SELECT is_recurring, recurrence_interval, recurrence_days
+                SELECT is_recurring
                 FROM appointments
                 WHERE patient_id = 1
                 ORDER BY id DESC
@@ -816,11 +817,6 @@ class ClinicTestCase(unittest.TestCase):
             ''').fetchone()
             assert row is not None
             assert int(row['is_recurring'] or 0) == 1
-            assert int(row['recurrence_interval'] or 0) == 1
-
-            booked_day = datetime.strptime(booking_date, '%Y-%m-%d').date()
-            expected_day_code = str((booked_day.weekday() + 1) % 7)
-            assert row['recurrence_days'] == expected_day_code
 
     def test_calendar_booking_sets_candidate_as_one_time(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -1031,14 +1027,14 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             row = db.execute(
-                'SELECT id, is_recurring, excluded_dates, recurrence_end_date FROM appointments WHERE id = 1'
+                'SELECT id, is_recurring, cancelled_dates, recurrence_end_date FROM appointments WHERE id = 1'
             ).fetchone()
             # The series row must still exist
             assert row is not None
             assert int(row['is_recurring'] or 0) == 1
-            # Jan 19 must be excluded
-            excluded = (row['excluded_dates'] or '').split(',')
-            assert '2026-01-19' in excluded
+            # Jan 19 must be cancelled
+            cancelled = json.loads(row['cancelled_dates'] or '[]')
+            assert '2026-01-19' in cancelled
             # Series end date must be unchanged
             assert row['recurrence_end_date'] == '2026-12-28'
             # Only 1 row in the DB (no new rows created)
@@ -1127,8 +1123,9 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200 and rv.get_json()['status'] == 'success'
         with app.app_context():
             db = get_db()
-            row = db.execute('SELECT excluded_dates, is_recurring FROM appointments WHERE id=?', (sole_id,)).fetchone()
-            assert '2026-02-16' in (row['excluded_dates'] or '')
+            row = db.execute('SELECT cancelled_dates, is_recurring FROM appointments WHERE id=?', (sole_id,)).fetchone()
+            cancelled = json.loads(row['cancelled_dates'] or '[]')
+            assert '2026-02-16' in cancelled
             assert int(row['is_recurring'] or 0) == 1   # series still alive
 
         # ---- scope=upcoming ----
@@ -1377,13 +1374,13 @@ class ClinicTestCase(unittest.TestCase):
             db = get_db()
             rows = db.execute('''
                 SELECT id, appointment_date, appointment_time, is_recurring,
-                       excluded_dates, meeting_type
+                       cancelled_dates, meeting_type
                 FROM appointments
                 WHERE patient_id = 1
                 ORDER BY id ASC
             ''').fetchall()
-            # Original series should have excluded_dates containing 2026-02-02
-            assert '2026-02-02' in (rows[0]['excluded_dates'] or '')
+            # Original series should have cancelled_dates containing 2026-02-02
+            assert '2026-02-02' in json.loads(rows[0]['cancelled_dates'] or '[]')
             # A new standalone appointment on Feb 3 should exist
             standalone = next((r for r in rows if r['appointment_date'] == '2026-02-03'), None)
             assert standalone is not None
@@ -1437,7 +1434,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             rows = db.execute('''
-                SELECT appointment_date, appointment_time, duration_minutes, meeting_type, recurrence_days
+                SELECT appointment_date, appointment_time, duration_minutes, meeting_type
                 FROM appointments
                 WHERE patient_id = 1
                 ORDER BY appointment_date ASC
@@ -1452,9 +1449,6 @@ class ClinicTestCase(unittest.TestCase):
             assert int(rows[1]['duration_minutes'] or 0) == 60
             assert rows[0]['meeting_type'] == 'zoom'
             assert rows[1]['meeting_type'] == 'zoom'
-            # Tuesday in app custom weekday mapping where Sunday=0.
-            assert rows[0]['recurrence_days'] == '2'
-            assert rows[1]['recurrence_days'] == '2'
 
     def test_patient_background_summary_uses_documented_note_history(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -2159,7 +2153,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             row = db.execute('''
-                SELECT is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                SELECT is_recurring, recurrence_end_date
                 FROM appointments
                 WHERE patient_id = 1
                 ORDER BY id DESC
@@ -2167,8 +2161,6 @@ class ClinicTestCase(unittest.TestCase):
             ''').fetchone()
             assert row is not None
             assert int(row['is_recurring'] or 0) == 1
-            assert int(row['recurrence_interval'] or 0) == 1
-            assert row['recurrence_days'] is not None
             assert row['recurrence_end_date'] is not None
 
     def test_initial_intake_allows_multiple_one_time_meetings(self):
@@ -2565,7 +2557,7 @@ class ClinicTestCase(unittest.TestCase):
 
         with app.app_context():
             db = get_db()
-            recurring = db.execute('SELECT * FROM vacancy_recurring WHERE id = ?', (weekly_data['recurring_id'],)).fetchone()
+            recurring = db.execute('SELECT * FROM availability WHERE id = ?', (weekly_data['recurring_id'],)).fetchone()
             assert recurring is not None
 
     def test_weekly_vacancy_appears_in_next_week_snapshot(self):
@@ -2611,7 +2603,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             override_row = db.execute(
-                "SELECT id FROM slots_override WHERE slot_date = ? AND slot_time = '13:00'",
+                "SELECT id FROM availability WHERE slot_date = ? AND slot_time = '13:00'",
                 (future_day,)
             ).fetchone()
             override_id = override_row['id']
@@ -2625,7 +2617,7 @@ class ClinicTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             slot = db.execute(
-                "SELECT status, booked_by_name FROM slots_override WHERE id = ?",
+                "SELECT status, booked_by_name FROM availability WHERE id = ?",
                 (override_id,)
             ).fetchone()
             assert slot['status'] == 'booked'
@@ -2651,7 +2643,7 @@ class ClinicTestCase(unittest.TestCase):
         assert rv.status_code == 200
         items = rv.get_json().get('items', [])
         assert any(i['kind'] == 'one-time' and i['date'] == future_day and i['status'] == 'available' for i in items)
-        assert any(i['kind'] == 'weekly' and i['status'] == 'active' for i in items)
+        assert any(i['kind'] == 'weekly' and i['status'] == 'available' for i in items)
 
     def test_admin_can_delete_weekly_vacancy(self):
         self.login('lioraloni', 'Flo@tingind4')
@@ -2671,7 +2663,7 @@ class ClinicTestCase(unittest.TestCase):
 
         with app.app_context():
             db = get_db()
-            row = db.execute('SELECT id FROM vacancy_recurring WHERE id = ?', (recurring_id,)).fetchone()
+            row = db.execute('SELECT id FROM availability WHERE id = ?', (recurring_id,)).fetchone()
             assert row is None
 
     def test_group_member_history_tracks_join_leave_cycles(self):

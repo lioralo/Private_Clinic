@@ -1,0 +1,166 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Assessment Results') }} — {{ patient['name'] }}{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-pill mb-2">
+        <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Patient') }}
+      </a>
+      <h1 class="text-2xl font-bold text-primary mt-2">{{ t('Assessment Results') }} — {{ patient['name'] }}</h1>
+    </div>
+    <a href="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
+      <i class="bi bi-plus-circle me-1"></i>{{ t('New Assessment') }}
+    </a>
+  </div>
+
+  {% if assessments %}
+  {% set grouped = assessments|groupby('assessment_type_name') %}
+  {% for type_name, type_assessments in grouped %}
+  {% set latest = type_assessments|first %}
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-4 border-b border-slate-100 d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h5 class="font-bold mb-0">
+        <i class="bi bi-clipboard-data me-2 text-primary"></i>
+        {{ latest['display_name'] or type_name }}
+        <span class="badge bg-light text-dark ms-2 rounded-pill">{{ type_assessments|length }} {{ t('assessments') }}</span>
+      </h5>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge {% if latest['severity'] in ('minimal','none') %}bg-success{% elif latest['severity'] in ('mild','situational') %}bg-info{% elif latest['severity'] == 'moderate' %}bg-warning text-dark{% else %}bg-danger{% endif %} rounded-pill px-3 py-2">
+          {{ t(latest['severity']|title) if latest['severity'] else t('N/A') }}: {{ latest['total_score'] }}
+        </span>
+        <button class="btn btn-sm btn-outline-primary rounded-pill toggle-chart" data-type="{{ type_name }}">
+          <i class="bi bi-graph-up me-1"></i>{{ t('Chart') }}
+        </button>
+      </div>
+    </div>
+
+    <div class="chart-container d-none bg-light-subtle p-4 border-b border-slate-100" data-type="{{ type_name }}">
+      <h6 class="text-muted mb-3"><i class="bi bi-bar-chart-line me-1"></i>{{ t('Score Over Time') }}</h6>
+      <canvas id="chart_{{ type_name|replace(' ', '_') }}" height="200"></canvas>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>{{ t('Date') }}</th>
+            <th>{{ t('Score') }}</th>
+            <th>{{ t('Severity') }}</th>
+            <th>{{ t('Notes') }}</th>
+            <th>{{ t('Actions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in type_assessments %}
+          <tr>
+            <td class="text-nowrap">{{ a['administered_date'] }}</td>
+            <td>
+              <span class="fw-semibold">{{ a['total_score'] }}</span>
+            </td>
+            <td>
+              <span class="badge {% if a['severity'] in ('minimal','none') %}bg-success{% elif a['severity'] in ('mild','situational') %}bg-info{% elif a['severity'] == 'moderate' %}bg-warning text-dark{% elif a['severity'] in ('moderately severe','moderate_to_severe') %}bg-orange text-dark{% else %}bg-danger{% endif %} rounded-pill">
+                {{ t(a['severity']|title) if a['severity'] else t('N/A') }}
+              </span>
+            </td>
+            <td class="text-truncate" style="max-width:200px;">{{ a['notes'] or '-' }}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#details_{{ a['id'] }}" aria-expanded="false">
+                <i class="bi bi-eye"></i>
+              </button>
+              <form method="post" action="{{ url_for('assessments.delete_assessment', assessment_id=a['id']) }}" data-confirm-modal data-confirm-message="{{ t('Delete this assessment?') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          <tr class="collapse" id="details_{{ a['id'] }}">
+            <td colspan="5" class="bg-light-subtle p-3">
+              <strong>{{ t('Raw Scores') }}:</strong>
+              <span class="text-muted small ms-2">{{ a['response_data']|from_json|join(', ') }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-clipboard-data text-muted" style="font-size:3rem;"></i>
+    <p class="text-muted mt-3">{{ t('No assessments recorded yet.') }}</p>
+    <a href="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
+      <i class="bi bi-plus-circle me-1"></i>{{ t('Take First Assessment') }}
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if assessments %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const chartData = {{ chart_data|tojson|safe }};
+
+  document.querySelectorAll('.toggle-chart').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const type = this.dataset.type;
+      const container = document.querySelector('.chart-container[data-type="' + type + '"]');
+      if (!container) return;
+      const isHidden = container.classList.contains('d-none');
+      container.classList.toggle('d-none');
+      this.querySelector('i').classList.toggle('bi-graph-up');
+      this.querySelector('i').classList.toggle('bi-graph-down-arrow');
+      if (isHidden && chartData[type] && chartData[type].length > 0) {
+        const canvasId = 'chart_' + type.replace(/ /g, '_');
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (window._charts && window._charts[canvasId]) {
+          window._charts[canvasId].destroy();
+        }
+        window._charts = window._charts || {};
+        window._charts[canvasId] = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: chartData[type].map(function(p) { return p.date; }),
+            datasets: [{
+              label: '{{ t("Score") }}',
+              data: chartData[type].map(function(p) { return p.score; }),
+              borderColor: '#0d6efd',
+              backgroundColor: 'rgba(13,110,253,0.1)',
+              tension: 0.3,
+              fill: true,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  afterLabel: function(ctx) {
+                    const pt = chartData[type][ctx.dataIndex];
+                    return pt.severity ? '{{ t("Severity") }}: ' + pt.severity : '';
+                  }
+                }
+              }
+            },
+            scales: {
+              y: { beginAtZero: true, title: { display: true, text: '{{ t("Score") }}' } },
+              x: { title: { display: true, text: '{{ t("Date") }}' } }
+            }
+          }
+        });
+      }
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

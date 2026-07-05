@@ -17,6 +17,7 @@ from clinic_app.utils import (
     ensure_ongoing_patients_have_upcoming_bookings,
     ensure_default_recurring_vacancies,
     redirect_to_patient_tab, parse_recurrence_days, recurring_occurrences_between,
+    get_cancelled_dates, get_recurring_occurrences,
 )
 from clinic_app.models import get_db
 
@@ -32,61 +33,11 @@ def _login_json_required(f):
 
 
 def _parse_recurrence_days(appt):
-    raw = (appt['recurrence_days'] if 'recurrence_days' in appt.keys() else '').strip()
-    if raw:
-        days = []
-        for part in raw.split(','):
-            part = part.strip()
-            if part.isdigit():
-                val = int(part)
-                if 0 <= val <= 6:
-                    days.append(val)
-        if days:
-            return sorted(set(days))
-    base_date = parse_date_safe(appt['appointment_date'] if 'appointment_date' in appt.keys() else '')
-    if not base_date:
-        return [0]
-    return [custom_weekday(base_date)]
+    return parse_recurrence_days(appt)
 
 
 def _recurring_occurrences_for_week(appt, week_start, week_end):
-    base_date = parse_date_safe(appt['appointment_date'])
-    if not base_date:
-        return []
-    interval = int(appt['recurrence_interval'] or 1) if 'recurrence_interval' in appt.keys() else 1
-    if interval <= 0:
-        interval = 1
-    recurrence_end = parse_date_safe(appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else '')
-    recurrence_count = int(appt['recurrence_count'] or 0) if 'recurrence_count' in appt.keys() else 0
-    days = _parse_recurrence_days(appt)
-    excluded_raw = (appt['excluded_dates'] if 'excluded_dates' in appt.keys() else '') or ''
-    excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
-    anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
-    result = []
-    produced = 0
-    week_index = 0
-    while True:
-        block_week_start = anchor_week_start + timedelta(weeks=week_index * interval)
-        if block_week_start > week_end:
-            break
-        for day_code in days:
-            occ_date = block_week_start + timedelta(days=day_code)
-            if occ_date < base_date:
-                continue
-            if recurrence_end and occ_date > recurrence_end:
-                continue
-            if occ_date.isoformat() in excluded:
-                produced += 1
-                if recurrence_count and produced > recurrence_count:
-                    return result
-                continue
-            produced += 1
-            if recurrence_count and produced > recurrence_count:
-                return result
-            if week_start <= occ_date <= week_end:
-                result.append(occ_date)
-        week_index += 1
-    return sorted(result)
+    return recurring_occurrences_between(appt, week_start, week_end)
 
 
 def _process_calendar_follow_ups(db, today):
@@ -276,39 +227,35 @@ def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
 
 
 def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied):
-    vacancy_rows = db.execute('''
-        SELECT id, slot_date, slot_time, duration_minutes
-        FROM slots_override
-        WHERE status = 'available' AND slot_date BETWEEN ? AND ?
+    rows = db.execute('''
+        SELECT id, slot_date, slot_time, duration_minutes, recurrence, weekday
+        FROM availability
+        WHERE (slot_date BETWEEN ? AND ?)
+           OR (recurrence IS NOT NULL AND recurrence != '')
         ORDER BY slot_date ASC, slot_time ASC
     ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
-    recurring_rows = db.execute('''
-        SELECT id, weekday, slot_time, duration_minutes
-        FROM vacancy_recurring
-        WHERE COALESCE(is_active, 1) = 1
-        ORDER BY weekday ASC, slot_time ASC
-    ''').fetchall()
     virtual_vacancies = []
-    for row in vacancy_rows:
-        virtual_vacancies.append({
-            'source_kind': 'one-time',
-            'source_id': row['id'],
-            'slot_date': row['slot_date'],
-            'slot_time': row['slot_time'],
-            'duration_minutes': row['duration_minutes'],
-        })
-    for row in recurring_rows:
-        weekday = int(row['weekday'])
-        for day in daterange(week_start, week_end):
-            if custom_weekday(day) != weekday:
-                continue
+    for row in rows:
+        if row['slot_date']:
             virtual_vacancies.append({
-                'source_kind': 'weekly',
+                'source_kind': 'one-time',
                 'source_id': row['id'],
-                'slot_date': day.isoformat(),
+                'slot_date': row['slot_date'],
                 'slot_time': row['slot_time'],
                 'duration_minutes': row['duration_minutes'],
             })
+        elif row['recurrence'] == 'weekly' and row['weekday'] is not None:
+            weekday = int(row['weekday'])
+            for day in daterange(week_start, week_end):
+                if custom_weekday(day) != weekday:
+                    continue
+                virtual_vacancies.append({
+                    'source_kind': 'weekly',
+                    'source_id': row['id'],
+                    'slot_date': day.isoformat(),
+                    'slot_time': row['slot_time'],
+                    'duration_minutes': row['duration_minutes'],
+                })
     available_slots = []
     seen_slots = set()
     for row in virtual_vacancies:
@@ -542,16 +489,6 @@ def _api_calendar_book_special(db, current_user, anchor, booking_time, duration,
               VALUES (?, ?, ?, ?, 1, 'blocked', ?)
         ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
               special_title or 'Special Occasion', current_user.id))
-        db.execute('''
-            UPDATE slots_override
-            SET status = 'booked', booked_by_name = ?, booked_at = ?
-            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', (
-            special_title or 'Special Occasion',
-            datetime.now().isoformat(),
-            d.isoformat(),
-            parsed_booking_time.strftime('%H:%M')
-        ))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -563,8 +500,6 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
         is_recurring = 0
     else:
         is_recurring = 1 if patient_status == 'ongoing' else 0
-    recurrence_interval = 1 if is_recurring else None
-    recurrence_days = str(custom_weekday(anchor)) if is_recurring else None
     start_dt = combine_dt(anchor, parsed_booking_time.strftime('%H:%M'))
     end_dt = start_dt + timedelta(minutes=duration)
 
@@ -591,8 +526,8 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
     recurrence_group_id = secrets.token_hex(16) if is_recurring else None
     db.execute('''
         INSERT INTO appointments
-        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date, recurrence_group_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?)
+        (patient_id, appointment_date, appointment_time, duration_minutes, meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, status, is_recurring, recurrence_end_date, recurrence_group_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
     ''', (
         patient_id,
         booking_date,
@@ -604,21 +539,9 @@ def _api_calendar_book_regular(db, current_user, anchor, booking_date, booking_t
         meeting_remarks or None,
         save_to_google,
         is_recurring,
-        recurrence_interval,
-        recurrence_days,
         recurrence_end_date,
         recurrence_group_id
     ))
-    booked_label = 'Appointment'
-    if patient_id:
-        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
-        if patient and patient['name']:
-            booked_label = patient['name']
-    db.execute('''
-        UPDATE slots_override
-        SET status = 'booked', booked_by_name = ?, booked_at = ?
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-    ''', (booked_label, datetime.now().isoformat(), booking_date, parsed_booking_time.strftime('%H:%M')))
     db.commit()
     response_payload = {'status': 'success'}
     if patient_id:
@@ -695,13 +618,8 @@ def api_calendar_block():
         if conflict_message:
             return jsonify({'status': 'error', 'message': f'{conflict_message} ({block_day.isoformat()})'}), 409
     if dates_to_create:
-        now_iso = datetime.now().isoformat()
         blocked_slots_data = [
             (block_day.isoformat(), parsed_start.strftime('%H:%M'), duration_value, title or None, is_private, block_type, current_user.id)
-            for block_day in dates_to_create
-        ]
-        slots_override_data = [
-            (title or 'Blocked Slot', now_iso, block_day.isoformat(), parsed_start.strftime('%H:%M'))
             for block_day in dates_to_create
         ]
         db.executemany('''
@@ -709,11 +627,6 @@ def api_calendar_block():
             (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', blocked_slots_data)
-        db.executemany('''
-            UPDATE slots_override
-            SET status = 'booked', booked_by_name = ?, booked_at = ?
-            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-        ''', slots_override_data)
     db.commit()
     return jsonify({'status': 'success', 'created': len(dates_to_create)})
 
@@ -816,22 +729,22 @@ def api_calendar_vacancy():
     if recurrence_pattern == 'weekly':
         weekday = custom_weekday(date_obj)
         db.execute('''
-            DELETE FROM vacancy_recurring
-            WHERE weekday = ? AND slot_time = ?
+            DELETE FROM availability
+            WHERE weekday = ? AND slot_time = ? AND recurrence = 'weekly'
         ''', (weekday, start_time.strftime('%H:%M')))
         insert_cur = db.execute('''
-            INSERT INTO vacancy_recurring (weekday, slot_time, duration_minutes, is_active)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO availability (weekday, slot_time, duration_minutes, recurrence, status)
+            VALUES (?, ?, ?, 'weekly', 'available')
         ''', (weekday, start_time.strftime('%H:%M'), duration))
         db.commit()
         return jsonify({'status': 'success', 'recurrence_pattern': 'weekly', 'recurring_id': insert_cur.lastrowid})
     db.execute('''
-        DELETE FROM slots_override
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+        DELETE FROM availability
+        WHERE slot_date = ? AND slot_time = ? AND recurrence IS NULL
     ''', (slot_date, start_time.strftime('%H:%M')))
     insert_cur = db.execute('''
-        INSERT INTO slots_override (slot_date, slot_time, status, duration_minutes)
-        VALUES (?, ?, 'available', ?)
+        INSERT INTO availability (slot_date, slot_time, duration_minutes, status)
+        VALUES (?, ?, ?, 'available')
     ''', (slot_date, start_time.strftime('%H:%M'), duration))
     db.commit()
     return jsonify({'status': 'success', 'recurrence_pattern': 'one-time', 'override_id': insert_cur.lastrowid})
@@ -846,57 +759,49 @@ def api_calendar_vacancies():
     today = datetime.now().date()
     rows = db.execute('''
         SELECT id, slot_date, slot_time, duration_minutes, status,
-               booked_by_name, booked_by_phone, booked_at
-        FROM slots_override
-        WHERE slot_date >= ?
+               booked_by_name, booked_by_phone, booked_at, recurrence, weekday
+        FROM availability
+        WHERE slot_date >= ? OR recurrence IS NOT NULL
         ORDER BY slot_date ASC, slot_time ASC
     ''', ((today - timedelta(days=7)).isoformat(),)).fetchall()
-    recurring_rows = db.execute('''
-        SELECT id, weekday, slot_time, duration_minutes
-        FROM vacancy_recurring
-        WHERE COALESCE(is_active, 1) = 1
-        ORDER BY weekday ASC, slot_time ASC
-    ''').fetchall()
     weekday_names = {0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday'}
     items = []
     for row in rows:
-        date_obj = parse_date_safe(row['slot_date'])
-        t_obj = parse_time_safe(row['slot_time'])
-        duration = int(row['duration_minutes'] or 60)
-        end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
-        items.append({
-            'id': row['id'],
-            'kind': 'one-time',
-            'date': row['slot_date'],
-            'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
-            'end_time': end_dt.strftime('%H:%M') if end_dt else '',
-            'duration_minutes': duration,
-            'status': row['status'],
-            'booked_by_name': row['booked_by_name'] if 'booked_by_name' in row.keys() else '',
-            'booked_by_phone': row['booked_by_phone'] if 'booked_by_phone' in row.keys() else '',
-            'booked_at': row['booked_at'] if 'booked_at' in row.keys() else '',
-        })
-    for row in recurring_rows:
-        t_obj = parse_time_safe(row['slot_time'])
-        duration = int(row['duration_minutes'] or 60)
-        end_dt = None
-        if t_obj:
-            tmp_start = datetime.combine(today, t_obj)
-            end_dt = tmp_start + timedelta(minutes=duration)
-        weekday = int(row['weekday'])
-        weekday_label = weekday_names.get(weekday, str(weekday))
-        items.append({
-            'id': row['id'],
-            'kind': 'weekly',
-            'date': f'Weekly ({weekday_label})',
-            'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
-            'end_time': end_dt.strftime('%H:%M') if end_dt else '',
-            'duration_minutes': duration,
-            'status': 'active',
-            'booked_by_name': '',
-            'booked_by_phone': '',
-            'booked_at': '',
-        })
+        is_weekly = row['recurrence'] == 'weekly'
+        if is_weekly:
+            weekday = int(row['weekday'])
+            weekday_label = weekday_names.get(weekday, str(weekday))
+            t_obj = parse_time_safe(row['slot_time'])
+            duration = int(row['duration_minutes'] or 60)
+            items.append({
+                'id': row['id'],
+                'kind': 'weekly',
+                'date': f'Weekly ({weekday_label})',
+                'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
+                'end_time': '',
+                'duration_minutes': duration,
+                'status': row['status'],
+                'booked_by_name': '',
+                'booked_by_phone': '',
+                'booked_at': '',
+            })
+        else:
+            date_obj = parse_date_safe(row['slot_date'])
+            t_obj = parse_time_safe(row['slot_time'])
+            duration = int(row['duration_minutes'] or 60)
+            end_dt = datetime.combine(date_obj, t_obj) + timedelta(minutes=duration) if date_obj and t_obj else None
+            items.append({
+                'id': row['id'],
+                'kind': 'one-time',
+                'date': row['slot_date'],
+                'time': t_obj.strftime('%H:%M') if t_obj else row['slot_time'],
+                'end_time': end_dt.strftime('%H:%M') if end_dt else '',
+                'duration_minutes': duration,
+                'status': row['status'],
+                'booked_by_name': row['booked_by_name'] if 'booked_by_name' in row.keys() else '',
+                'booked_by_phone': row['booked_by_phone'] if 'booked_by_phone' in row.keys() else '',
+                'booked_at': row['booked_at'] if 'booked_at' in row.keys() else '',
+            })
     return jsonify({'items': items})
 
 
@@ -907,7 +812,7 @@ def api_calendar_vacancy_occupy(override_id):
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
     db = get_db()
     row = db.execute(
-        "SELECT * FROM slots_override WHERE id = ? AND status = 'available'",
+        "SELECT * FROM availability WHERE id = ? AND status = 'available'",
         (override_id,)
     ).fetchone()
     if not row:
@@ -939,16 +844,14 @@ def api_calendar_vacancy_occupy(override_id):
         db.execute('''
             INSERT INTO appointments
             (patient_id, appointment_date, appointment_time, status, duration_minutes,
-             is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_title)
-            VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, 'in-person', '### private meeting')
+             is_recurring, meeting_type, meeting_title)
+            VALUES (?, ?, ?, 'scheduled', ?, ?, 'in-person', '### private meeting')
         ''', (
             patient_id,
             row['slot_date'],
             row['slot_time'],
             duration,
             1 if is_ongoing else 0,
-            1 if is_ongoing else None,
-            str(custom_weekday(date_obj)) if is_ongoing else None,
         ))
         booked_label = patient['name']
     else:
@@ -958,7 +861,7 @@ def api_calendar_vacancy_occupy(override_id):
         ''', (row['slot_date'], row['slot_time'], duration, occupant_name))
         booked_label = occupant_name
     db.execute('''
-        UPDATE slots_override
+        UPDATE availability
         SET status = 'booked', booked_by_name = ?, booked_at = ?
         WHERE id = ?
     ''', (booked_label, datetime.now().isoformat(), override_id))
@@ -971,12 +874,8 @@ def api_calendar_vacancy_occupy(override_id):
 def api_calendar_vacancy_delete(override_id):
     if current_user.role != 'admin':
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-    delete_kind = (request.form.get('kind') or 'one-time').strip().lower()
     db = get_db()
-    if delete_kind == 'weekly':
-        db.execute('DELETE FROM vacancy_recurring WHERE id = ?', (override_id,))
-    else:
-        db.execute('DELETE FROM slots_override WHERE id = ?', (override_id,))
+    db.execute('DELETE FROM availability WHERE id = ?', (override_id,))
     db.commit()
     return jsonify({'status': 'success'})
 
@@ -1148,8 +1047,7 @@ def estimate_recurring_series_end(appt):
 # --- Moved from app.py: find_related_recurring_appointments ---
 def find_related_recurring_appointments(db, appt):
     signature_days = canonical_recurrence_days(appt)
-    interval = max(int(appt['recurrence_interval'] or 1), 1)
-    cadence_days = max(interval * 7, 1)
+    cadence_days = 7
 
     rows = db.execute('''
         SELECT *
@@ -1158,13 +1056,11 @@ def find_related_recurring_appointments(db, appt):
           AND COALESCE(is_recurring, 0) = 1
           AND appointment_time = ?
           AND COALESCE(duration_minutes, 60) = ?
-          AND COALESCE(recurrence_interval, 1) = ?
         ORDER BY appointment_date ASC, id ASC
     ''', (
         appt['patient_id'],
         appt['appointment_time'],
         int(appt['duration_minutes'] or 60),
-        interval,
     )).fetchall()
 
     candidates = [row for row in rows if canonical_recurrence_days(row) == signature_days]
@@ -1411,7 +1307,7 @@ def api_public_calendar_book(token):
     ''', (patient_id, booking_date.isoformat(), booking_time.strftime('%H:%M'), duration))
 
     db.execute('''
-        UPDATE slots_override
+        UPDATE availability
         SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
         WHERE slot_date = ? AND slot_time = ? AND status = 'available'
     ''', (
@@ -1485,13 +1381,13 @@ def open_booking_page(token):
     """Public booking page � no login required. Patients use this to book a shared vacancy slot."""
     db = get_db()
     row = db.execute(
-        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
+        "SELECT * FROM availability WHERE share_token = ? AND status = 'available'",
         (token,)
     ).fetchone()
 
     if not row:
         booked_row = db.execute(
-            "SELECT * FROM slots_override WHERE share_token = ?",
+            "SELECT * FROM availability WHERE share_token = ?",
             (token,)
         ).fetchone()
         if booked_row:
@@ -1530,7 +1426,7 @@ def api_open_slot_book(token):
 
     db = get_db()
     row = db.execute(
-        "SELECT * FROM slots_override WHERE share_token = ? AND status = 'available'",
+        "SELECT * FROM availability WHERE share_token = ? AND status = 'available'",
         (token,)
     ).fetchone()
 
@@ -1548,11 +1444,11 @@ def api_open_slot_book(token):
 
     conflict = has_time_conflict(db, date_obj, slot_start, slot_end)
     if conflict:
-        return jsonify({'status': 'error', 'message': 'This slot is no longer available � another booking was just made.'}), 409
+        return jsonify({'status': 'error', 'message': 'This slot is no longer available \u2014 another booking was just made.'}), 409
 
     full_title = booker_name
     if booker_notes:
-        full_title = f"{booker_name} � {booker_notes}"
+        full_title = f"{booker_name} \u2014 {booker_notes}"
 
     db.execute('''
         INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
@@ -1560,7 +1456,7 @@ def api_open_slot_book(token):
     ''', (row['slot_date'], row['slot_time'], duration, full_title))
 
     db.execute('''
-        UPDATE slots_override
+        UPDATE availability
         SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
         WHERE id = ?
     ''', (booker_name, booker_phone, datetime.now().isoformat(), row['id']))
@@ -1737,15 +1633,12 @@ def api_calendar_appointment_delete(appointment_id):
         occ_date = parse_date_safe(occurrence_date_raw)
         if not occ_date:
             return jsonify({'status': 'error', 'message': 'Invalid occurrence date.'}), 400
-        try:
-            existing_excluded = appt['excluded_dates'] or ''
-        except (KeyError, IndexError):
-            existing_excluded = ''
-        excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-        if occ_date.isoformat() not in excluded_list:
-            excluded_list.append(occ_date.isoformat())
-        db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-                   (','.join(excluded_list), appointment_id))
+        cancelled = get_cancelled_dates(appt)
+        occ_iso = occ_date.isoformat()
+        if occ_iso not in cancelled:
+            cancelled.add(occ_iso)
+        db.execute('UPDATE appointments SET cancelled_dates = ? WHERE id = ?',
+                   (json.dumps(sorted(cancelled)), appointment_id))
         db.commit()
         return jsonify({'status': 'success'})
 
@@ -1818,23 +1711,22 @@ def _handle_appointment_update_one(db, appt, appointment_id, occurrence_date_raw
     conflict = has_time_conflict(db, new_day, new_start_dt, new_end_dt, exclude_appointment_id=appointment_id)
     if conflict:
         return jsonify({'status': 'error', 'message': conflict}), 409
-    existing_excluded = appt['excluded_dates'] or ''
-    excluded_list = [d for d in existing_excluded.split(',') if d.strip()]
-    if occ_date.isoformat() not in excluded_list:
-        excluded_list.append(occ_date.isoformat())
+    cancelled = get_cancelled_dates(appt)
+    occ_iso = occ_date.isoformat()
+    cancelled.add(occ_iso)
     # Prevent duplicate: if the new date is also a valid occurrence of the recurring series,
-    # exclude it from the series too so the moved standalone is the only event on that day.
-    if new_day and new_day.isoformat() != occ_date.isoformat():
+    # cancel it from the series too so the moved standalone is the only event on that day.
+    if new_day and new_day.isoformat() != occ_iso:
         series_days = parse_recurrence_days(appt)
         series_base = parse_date_safe(appt['appointment_date'])
         series_end = parse_date_safe(appt['recurrence_end_date'] or '') if appt['recurrence_end_date'] else None
         if (custom_weekday(new_day) in series_days
                 and series_base and new_day >= series_base
                 and (not series_end or new_day <= series_end)
-                and new_day.isoformat() not in excluded_list):
-            excluded_list.append(new_day.isoformat())
-    db.execute('UPDATE appointments SET excluded_dates = ? WHERE id = ?',
-               (','.join(excluded_list), appointment_id))
+                and new_day.isoformat() not in cancelled):
+            cancelled.add(new_day.isoformat())
+    db.execute('UPDATE appointments SET cancelled_dates = ? WHERE id = ?',
+               (json.dumps(sorted(cancelled)), appointment_id))
     new_row = db.execute('''
         INSERT INTO appointments
         (patient_id, appointment_date, appointment_time, duration_minutes,
@@ -1892,21 +1784,16 @@ def _handle_appointment_update_upcoming(db, appt, related_rows, occurrence_date_
     if conflict:
         db.rollback()
         return jsonify({'status': 'error', 'message': conflict}), 409
-    # Use the new date's weekday for the new series so occurrences land on the new day.
-    rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-    rec_interval = max(int(appt['recurrence_interval'] or 1), 1)
     rec_end = inherited_end.isoformat() if inherited_end and inherited_end >= new_day else None
     new_row = db.execute('''
         INSERT INTO appointments
         (patient_id, appointment_date, appointment_time, duration_minutes,
-         is_recurring, recurrence_days, recurrence_interval, recurrence_end_date,
+         is_recurring, recurrence_end_date,
          meeting_type, meeting_link, meeting_platform, meeting_title, save_to_google, recurrence_group_id)
-        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
     ''', (appt['patient_id'], new_day.isoformat(),
           parse_time_safe(booking_time).strftime('%H:%M'), duration,
-          rec_days, rec_interval, rec_end,
+          rec_end,
           meeting_type, meeting_link or None, meeting_platform or None,
           meeting_title or None, save_to_google, recurrence_group_id or build_recurrence_group_id()))
     db.commit()
@@ -1925,10 +1812,6 @@ def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, 
     new_day = parse_date_safe(booking_date)
     occ_date = parse_date_safe(occurrence_date_raw) or parse_date_safe(appt['appointment_date'])
     delta_days = (new_day - occ_date).days if new_day and occ_date else 0
-    new_rec_days = str(custom_weekday(new_day)) if new_day else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
-
     for row in related_rows:
         row_base = parse_date_safe(row['appointment_date'])
         if not row_base:
@@ -1955,11 +1838,11 @@ def _handle_appointment_update_all(db, appt, related_rows, occurrence_date_raw, 
             UPDATE appointments
             SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
                 meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-                meeting_title = ?, save_to_google = ?, recurrence_days = ?
+                meeting_title = ?, save_to_google = ?
             WHERE id = ?
         ''', (shifted_day.isoformat(), parse_time_safe(booking_time).strftime('%H:%M'), duration,
               meeting_type, meeting_link or None, meeting_platform or None,
-              meeting_title or None, save_to_google, new_rec_days, row['id']))
+              meeting_title or None, save_to_google, row['id']))
     db.commit()
     sync_message = _sync_multiple_appointments_with_google(db, [row['id'] for row in related_rows])
     response = {'status': 'success'}
@@ -2035,21 +1918,16 @@ def api_calendar_appointment_update(appointment_id):
     if conflict_message:
         return jsonify({'status': 'error', 'message': conflict_message}), 409
 
-    # For recurring appointments, update recurrence_days to match the new date's weekday
-    # so the entire series shifts to the new day rather than still generating old-weekday occurrences.
-    new_rec_days = str(custom_weekday(day_obj)) if (is_recurring and day_obj) else (
-        appt['recurrence_days'] if 'recurrence_days' in appt.keys() else None
-    )
     old_details = {'date': str(appt['appointment_date'] or ''), 'time': str(appt['appointment_time'] or '')[:5]}
     db.execute('''
         UPDATE appointments
         SET appointment_date = ?, appointment_time = ?, duration_minutes = ?,
             meeting_type = ?, meeting_link = ?, meeting_platform = ?,
-            meeting_title = ?, save_to_google = ?, recurrence_days = ?
+            meeting_title = ?, save_to_google = ?
         WHERE id = ?
     ''', (booking_date, parse_time_safe(booking_time).strftime('%H:%M'), duration,
           meeting_type, meeting_link or None, meeting_platform or None, meeting_title or None,
-          save_to_google, new_rec_days, appointment_id))
+          save_to_google, appointment_id))
     db.commit()
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (appt['patient_id'],)).fetchone()
     if patient:
@@ -2066,17 +1944,16 @@ def api_calendar_appointment_update(appointment_id):
 
 # --- Moved from app.py: _insert_appointment_db ---
 def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
-                           recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                           recurrence_end_date, recurrence_count, meeting_title, save_to_google):
+                           recurrence_end_date, meeting_type, meeting_link,
+                           meeting_title, save_to_google):
     if is_recurring:
         cursor = db.execute(
             "INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, "
-            "is_recurring, recurrence_interval, recurrence_days, meeting_type, meeting_link, "
-            "recurrence_end_date, recurrence_count, meeting_title, save_to_google, recurrence_group_id) "
-            "VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (patient_id, date, time, cost, duration, recurrence_interval,
-             recurrence_days, meeting_type, meeting_link, recurrence_end_date, recurrence_count,
-             meeting_title or None, save_to_google, build_recurrence_group_id()))
+            "is_recurring, meeting_type, meeting_link, "
+            "recurrence_end_date, meeting_title, save_to_google, recurrence_group_id) "
+            "VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)",
+            (patient_id, date, time, cost, duration, meeting_type, meeting_link,
+             recurrence_end_date, meeting_title or None, save_to_google, build_recurrence_group_id()))
     else:
         cursor = db.execute(
             "INSERT INTO appointments (patient_id, appointment_date, appointment_time, cost, duration_minutes, "
@@ -2098,14 +1975,13 @@ def _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurr
 @calendar_bp.route('/patient/<int:patient_id>/add_appointment', methods=('POST',))
 @login_required
 def add_appointment(patient_id):
-    from app import _validate_appointment_datetime, _extract_recurrence_data
+    from app import _validate_appointment_datetime
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
     date = request.form.get('date', '').strip()
     time = request.form.get('time', '').strip()
     
-    # Properly handle cost - convert to float with default 0
     cost_input = request.form.get('cost', '').strip()
     try:
         cost = float(cost_input) if cost_input else 0
@@ -2131,21 +2007,14 @@ def add_appointment(patient_id):
     if patient_type in ('initial-intake', 'diagnosee'):
         is_recurring = 0
 
-    recurrence_interval = None
-    recurrence_days = None
     recurrence_end_date = None
-    recurrence_count = None
-
     if is_recurring:
-        recurrence_interval, recurrence_days, recurrence_end_date, recurrence_count, rec_error = _extract_recurrence_data(request.form)
-        if rec_error:
-            flash(rec_error, 'error')
-            return redirect(url_for('patient_detail', patient_id=patient_id))
+        recurrence_end_date = request.form.get('recurrence_end_date', '').strip() or (parse_date_safe(date) + timedelta(days=365)).isoformat()
 
     try:
         appointment_id = _insert_appointment_db(db, patient_id, date, time, cost, duration, is_recurring,
-                                                recurrence_interval, recurrence_days, meeting_type, meeting_link,
-                                                recurrence_end_date, recurrence_count, meeting_title, save_to_google)
+                                                recurrence_end_date, meeting_type, meeting_link,
+                                                meeting_title, save_to_google)
         db.commit()
         appt_msg = "Recurring appointment series added successfully." if is_recurring else "Single appointment added."
         flash(appt_msg)

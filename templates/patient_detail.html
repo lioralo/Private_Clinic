@@ -71,6 +71,8 @@
         {{ t('Messages') }}{% if unread_messages_count %} <span class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}
     </a>
     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='supervision') }}" class="btn rounded-pill {% if active_tab == 'supervision' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Supervision') }}</a>
+    <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn rounded-pill btn-outline-secondary"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Treatment Plans') }}</a>
+    <a href="{{ url_for('assessments.view_patient_assessments', patient_id=patient['id']) }}" class="btn rounded-pill btn-outline-secondary"><i class="bi bi-clipboard-data me-1"></i>{{ t('Assessments') }}</a>
     {% if intake_enabled %}
     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake') }}" class="btn rounded-pill {% if active_tab == 'intake' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Intake') }}</a>
     {% endif %}
@@ -159,11 +161,22 @@
         </button>
     </div>
     <div class="p-5 d-none" id="patientTreatmentPlanBody">
+        <p class="text-muted mb-3">{{ t('Create and manage structured treatment plans with SMART goals.') }}</p>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill">
+                <i class="bi bi-eye me-1"></i>{{ t('View Plans') }}
+            </a>
+            <a href="{{ url_for('treatment_plans.create_plan', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
+                <i class="bi bi-plus-circle me-1"></i>{{ t('New Plan') }}
+            </a>
+        </div>
+        <hr class="my-3">
         <form method="post" action="{{ url_for('update_treatment_plan', patient_id=patient['id']) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <textarea name="treatment_plan" class="form-control" rows="6" placeholder="{{ t('Describe the overall treatment plan, therapeutic approach, and long-term goals...') }}">{{ patient['treatment_plan'] or '' }}</textarea>
+            <label class="form-label small text-muted">{{ t('Legacy treatment plan notes (quick notes)') }}</label>
+            <textarea name="treatment_plan" class="form-control" rows="4" placeholder="{{ t('Describe the overall treatment plan, therapeutic approach, and long-term goals...') }}">{{ patient['treatment_plan'] or '' }}</textarea>
             <div class="mt-2 d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Treatment Plan') }}</button>
+                <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">{{ t('Save') }}</button>
             </div>
         </form>
     </div>

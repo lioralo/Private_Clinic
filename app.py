@@ -43,6 +43,8 @@ from clinic_app.routes.google_calendar import google_calendar_bp
 from clinic_app.routes.messaging import messaging_bp
 from clinic_app.routes.admin import admin_bp
 from clinic_app.routes.google_docs import google_docs_bp
+from clinic_app.routes.treatment_plans import treatment_plans_bp
+from clinic_app.routes.assessments import assessments_bp
 from clinic_app.utils import (
     parse_recurrence_days,
     recurring_occurrences_between,
@@ -96,6 +98,8 @@ app.register_blueprint(messaging_bp)
 app.register_blueprint(google_calendar_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(google_docs_bp)
+app.register_blueprint(treatment_plans_bp)
+app.register_blueprint(assessments_bp)
 
 # Keep pre-refactor endpoint names stable for tests and backward compatibility.
 # Map: old_endpoint_name -> (blueprint_endpoint_name, url_rule, methods)
@@ -238,6 +242,33 @@ for _endpoint, _rule, _methods in _legacy_google_calendar_aliases:
         app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
 del _legacy_google_calendar_aliases
 
+# Keep pre-refactor endpoint names stable for tests and backward compatibility.
+_legacy_treatment_plan_aliases = [
+    ('view_patient_plans', '/treatment-plans/patient/<int:patient_id>', ['GET']),
+    ('create_plan', '/treatment-plans/patient/<int:patient_id>/create', ['GET', 'POST']),
+    ('edit_plan', '/treatment-plans/<int:plan_id>/edit', ['GET', 'POST']),
+    ('view_plan', '/treatment-plans/<int:plan_id>/view', ['GET']),
+    ('delete_plan', '/treatment-plans/<int:plan_id>/delete', ['POST']),
+    ('update_goal_progress', '/treatment-plans/api/goal/<int:goal_id>/update-progress', ['POST']),
+]
+for _endpoint, _rule, _methods in _legacy_treatment_plan_aliases:
+    _view = app.view_functions.get(f'treatment_plans.{_endpoint}')
+    if _view and _endpoint not in app.view_functions:
+        app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
+del _legacy_treatment_plan_aliases
+
+_legacy_assessment_aliases = [
+    ('view_patient_assessments', '/assessments/patient/<int:patient_id>', ['GET']),
+    ('take_assessment', '/assessments/patient/<int:patient_id>/take', ['GET', 'POST']),
+    ('assessment_progress_api', '/assessments/api/patient/<int:patient_id>/progress', ['GET']),
+    ('delete_assessment', '/assessments/<int:assessment_id>/delete', ['POST']),
+]
+for _endpoint, _rule, _methods in _legacy_assessment_aliases:
+    _view = app.view_functions.get(f'assessments.{_endpoint}')
+    if _view and _endpoint not in app.view_functions:
+        app.add_url_rule(_rule, endpoint=_endpoint, view_func=_view, methods=_methods)
+del _legacy_assessment_aliases
+
 # Re-export moved helpers for test backward compatibility
 from clinic_app.routes.google_calendar import (
     _generate_google_oauth_state,
@@ -328,6 +359,9 @@ app.config['PUBLIC_BOOKING_RATE_LIMIT_MAX'] = int(os.environ.get('PUBLIC_BOOKING
 app.config['PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS'] = int(os.environ.get('PUBLIC_BOOKING_RATE_LIMIT_WINDOW_SECONDS', '60') or 60)
 app.config['REMINDER_HOURS_BEFORE'] = int(os.environ.get('REMINDER_HOURS_BEFORE', '24') or 24)
 app.config['REMINDER_SCHEDULER_INTERVAL'] = int(os.environ.get('REMINDER_SCHEDULER_INTERVAL', '300') or 300)
+app.config['TWILIO_ACCOUNT_SID'] = (os.environ.get('TWILIO_ACCOUNT_SID') or '').strip()
+app.config['TWILIO_AUTH_TOKEN'] = os.environ.get('TWILIO_AUTH_TOKEN', '')
+app.config['TWILIO_FROM_NUMBER'] = (os.environ.get('TWILIO_FROM_NUMBER') or '').strip()
 scheduler = BackgroundScheduler(daemon=True)
 csrf = CSRFProtect(app)
 app.config['DATABASE'] = DATABASE
@@ -523,6 +557,17 @@ def israeli_date_filter(value):
         return value.strftime('%d.%m.%Y')
     except AttributeError:
         return value
+
+@app.template_filter('from_json')
+def from_json_filter(value):
+    if value is None:
+        return []
+    try:
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -1977,11 +2022,19 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
-        db.execute('''CREATE TABLE IF NOT EXISTS slots_override (
+        db.execute('''CREATE TABLE IF NOT EXISTS availability (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            slot_date DATE NOT NULL,
+            slot_date DATE,
             slot_time TIME NOT NULL,
+            duration_minutes INTEGER DEFAULT 60,
+            recurrence TEXT,
+            weekday INTEGER CHECK(weekday >= 0 AND weekday <= 6),
             status TEXT NOT NULL DEFAULT 'available',
+            booked_by_name TEXT,
+            booked_by_phone TEXT,
+            booked_notes TEXT,
+            booked_at TIMESTAMP,
+            share_token TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
     except sqlite3.OperationalError:
@@ -2049,7 +2102,10 @@ def _run_db_migrations(db):
     _migrate_add_column(db, 'appointments', 'missed_reason', 'TEXT')
     _migrate_add_column(db, 'appointments', 'save_to_google', 'BOOLEAN', '0')
     _migrate_add_column(db, 'appointments', 'excluded_dates', 'TEXT')
+    _migrate_add_column(db, 'appointments', 'cancelled_dates', 'TEXT')
     _migrate_add_column(db, 'appointments', 'recurrence_group_id', 'TEXT')
+    _migrate_add_column(db, 'group_sessions', 'cancelled_dates', 'TEXT')
+    _migrate_add_column(db, 'group_sessions', 'recurrence_group_id', 'TEXT')
     _migrate_add_column(db, 'users', 'display_name', 'TEXT')
     _migrate_add_column(db, 'users', 'email', 'TEXT')
     _migrate_add_column(db, 'users', 'phone', 'TEXT')
@@ -2078,7 +2134,6 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     _migrate_add_column(db, 'vacancy_recurring', 'duration_minutes', 'INTEGER', '60')
-
     try:
         db.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2286,9 +2341,10 @@ def _run_db_migrations(db):
     db.execute('CREATE INDEX IF NOT EXISTS idx_messages_recipient_read_time ON messages(recipient_id, is_read, timestamp)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient_time ON messages(sender_id, recipient_id, timestamp)')
 
-    db.execute('CREATE INDEX IF NOT EXISTS idx_slots_override_date_time_status ON slots_override(slot_date, slot_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_availability_date_time_status ON availability(slot_date, slot_time, status)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_availability_weekday_recurrence ON availability(weekday, recurrence)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_availability_share_token ON availability(share_token)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_blocked_slots_date_time ON blocked_slots(blocked_date, blocked_time)')
-    db.execute('CREATE INDEX IF NOT EXISTS idx_vacancy_recurring_weekday_active_time ON vacancy_recurring(weekday, is_active, slot_time)')
 
     db.execute('CREATE INDEX IF NOT EXISTS idx_group_members_patient_left ON group_members(patient_id, left_at)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_group_sessions_date_time_status ON group_sessions(session_date, session_time, status)')
@@ -4993,56 +5049,7 @@ def daterange(start_date, end_date):
 
 
 def recurring_occurrences_for_week(appt, week_start, week_end):
-    base_date = parse_date_safe(appt['appointment_date'])
-    if not base_date:
-        return []
-
-    interval = int(appt['recurrence_interval'] or 1)
-    if interval <= 0:
-        interval = 1
-
-    recurrence_end = parse_date_safe(appt['recurrence_end_date'])
-    recurrence_count = int(appt['recurrence_count'] or 0)
-    days = parse_recurrence_days(appt)
-
-    try:
-        excluded_raw = appt['excluded_dates'] or ''
-    except (KeyError, IndexError):
-        excluded_raw = ''
-    excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
-
-    anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
-    result = []
-    produced = 0
-    week_index = 0
-
-    while True:
-        block_week_start = anchor_week_start + timedelta(weeks=week_index * interval)
-        if block_week_start > week_end:
-            break
-
-        for day_code in days:
-            occ_date = block_week_start + timedelta(days=day_code)
-            if occ_date < base_date:
-                continue
-            if recurrence_end and occ_date > recurrence_end:
-                continue
-            if occ_date.isoformat() in excluded:
-                produced += 1
-                if recurrence_count and produced > recurrence_count:
-                    return result
-                continue
-
-            produced += 1
-            if recurrence_count and produced > recurrence_count:
-                return result
-
-            if week_start <= occ_date <= week_end:
-                result.append(occ_date)
-
-        week_index += 1
-
-    return sorted(result)
+    return recurring_occurrences_between(appt, week_start, week_end)
 
 
 
@@ -5186,6 +5193,103 @@ def send_appointment_reminders(db):
             'is_tomorrow': days_away == 1,
         })
     return reminders
+
+
+def _sms_settings_summary():
+    sid = app.config.get('TWILIO_ACCOUNT_SID', '')
+    token = app.config.get('TWILIO_AUTH_TOKEN', '')
+    configured = bool(sid and token)
+    return {
+        'configured': configured,
+        'from_number': app.config.get('TWILIO_FROM_NUMBER', ''),
+    }
+
+
+def send_sms(phone, message):
+    """Send an SMS via Twilio if configured, otherwise log to sms_logs.
+    Returns (status, gateway_response)."""
+    settings = _sms_settings_summary()
+    status = 'pending'
+    gateway_response = None
+
+    if settings['configured']:
+        try:
+            from twilio.rest import Client
+            client = Client(settings['sid'], settings['token'])
+            twilio_msg = client.messages.create(
+                body=message,
+                from_=settings['from_number'],
+                to=phone,
+            )
+            status = 'sent'
+            gateway_response = twilio_msg.sid
+        except Exception as exc:
+            status = 'failed'
+            gateway_response = str(exc)
+    else:
+        gateway_response = 'Twilio not configured; SMS logged only'
+        status = 'pending'
+
+    db = get_db()
+    db.execute(
+        'INSERT INTO sms_logs (recipient_phone, message_body, status, gateway_response) VALUES (?, ?, ?, ?)',
+        (phone, message, status, gateway_response))
+    db.commit()
+    return status, gateway_response
+
+
+def _send_appointment_sms_reminders(db):
+    """Send SMS reminders for upcoming appointments within the reminder window."""
+    from_number = _sms_settings_summary()['from_number']
+    look_ahead = 7
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    look_ahead_date = (datetime.now() + timedelta(days=look_ahead)).strftime('%Y-%m-%d')
+
+    candidates = db.execute('''
+        SELECT a.*, p.name AS patient_name, p.phone AS patient_phone
+        FROM appointments a
+        JOIN patients p ON p.id = a.patient_id
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND COALESCE(p.reminder_sms_enabled, 0) = 1
+          AND p.phone IS NOT NULL AND p.phone != ''
+          AND a.appointment_date BETWEEN ? AND ?
+        ORDER BY a.appointment_date ASC, a.appointment_time ASC
+    ''', (today_str, look_ahead_date)).fetchall()
+
+    sent_count = 0
+
+    for row in candidates:
+        appt_date = str(row['appointment_date'] or '')
+        appt_time = str(row['appointment_time'] or '')[:5]
+        try:
+            appt_dt = datetime.strptime(f'{appt_date} {appt_time}', '%Y-%m-%d %H:%M')
+        except (ValueError, TypeError):
+            continue
+        hours_before = int(row['reminder_hours_before'] if row['reminder_hours_before'] else 24)
+        reminder_start = appt_dt - timedelta(hours=hours_before + 1)
+        reminder_end = appt_dt - timedelta(hours=hours_before - 1)
+        now_dt = datetime.now()
+        if not (reminder_start <= now_dt <= reminder_end):
+            continue
+
+        meeting_type = row['meeting_type'] or 'in-person'
+        meeting_title = row['meeting_title'] or ''
+        message = (
+            f'Reminder: {row["patient_name"]}, you have a {meeting_type} appointment'
+            f'{f" ({meeting_title})" if meeting_title else ""}'
+            f' on {appt_date} at {appt_time}.'
+            f' Please contact the clinic if you need to reschedule.'
+        )
+        if from_number:
+            message = message + f' From: {from_number}'
+
+        phone = row['patient_phone']
+        status, _ = send_sms(phone, message)
+        if status == 'sent':
+            sent_count += 1
+
+    return sent_count
 
 
 def _send_appointment_email_reminders(db):
@@ -5353,6 +5457,7 @@ def _scheduler_reminder_job():
         with app.app_context():
             db = get_db()
             _send_appointment_email_reminders(db)
+            _send_appointment_sms_reminders(db)
     except Exception:
         app.logger.exception('Scheduled reminder job failed')
 
@@ -5708,44 +5813,35 @@ def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
 
 
 def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied):
-    # Available slots are restricted to admin-enabled vacancy overrides and recurring vacancy templates.
-    vacancy_rows = db.execute('''
-        SELECT id, slot_date, slot_time, duration_minutes
-        FROM slots_override
-        WHERE status = 'available' AND slot_date BETWEEN ? AND ?
+    rows = db.execute('''
+        SELECT id, slot_date, slot_time, duration_minutes, recurrence, weekday
+        FROM availability
+        WHERE (slot_date BETWEEN ? AND ?)
+           OR (recurrence IS NOT NULL AND recurrence != '')
         ORDER BY slot_date ASC, slot_time ASC
     ''', (week_start.isoformat(), week_end.isoformat())).fetchall()
-
-    recurring_rows = db.execute('''
-        SELECT id, weekday, slot_time, duration_minutes
-        FROM vacancy_recurring
-        WHERE COALESCE(is_active, 1) = 1
-        ORDER BY weekday ASC, slot_time ASC
-    ''').fetchall()
-
     virtual_vacancies = []
-    for row in vacancy_rows:
-        virtual_vacancies.append({
-            'source_kind': 'one-time',
-            'source_id': row['id'],
-            'slot_date': row['slot_date'],
-            'slot_time': row['slot_time'],
-            'duration_minutes': row['duration_minutes']
-        })
-
-    for row in recurring_rows:
-        weekday = int(row['weekday'])
-        for day in daterange(week_start, week_end):
-            if custom_weekday(day) != weekday:
-                continue
+    for row in rows:
+        if row['slot_date']:
             virtual_vacancies.append({
-                'source_kind': 'weekly',
+                'source_kind': 'one-time',
                 'source_id': row['id'],
-                'slot_date': day.isoformat(),
+                'slot_date': row['slot_date'],
                 'slot_time': row['slot_time'],
-                'duration_minutes': row['duration_minutes']
+                'duration_minutes': row['duration_minutes'],
             })
-
+        elif row['recurrence'] == 'weekly' and row['weekday'] is not None:
+            weekday = int(row['weekday'])
+            for day in daterange(week_start, week_end):
+                if custom_weekday(day) != weekday:
+                    continue
+                virtual_vacancies.append({
+                    'source_kind': 'weekly',
+                    'source_id': row['id'],
+                    'slot_date': day.isoformat(),
+                    'slot_time': row['slot_time'],
+                    'duration_minutes': row['duration_minutes'],
+                })
     available_slots = []
     seen_slots = set()
     for row in virtual_vacancies:
@@ -5773,7 +5869,6 @@ def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied
                 'time': slot_start.strftime('%H:%M'),
                 'duration_minutes': duration
             })
-            # Show vacant slots as calendar events for admins
             if user.role == 'admin':
                 events.append({
                     'id': f"vacancy-{day.isoformat()}-{slot_start.strftime('%H:%M')}",
@@ -5788,7 +5883,7 @@ def _process_calendar_vacancies(db, week_start, week_end, user, events, occupied
                         'slot_kind': row['source_kind'],
                         'recurring_id': row['source_id'] if row['source_kind'] == 'weekly' else None,
                         'duration_minutes': duration,
-                        'can_delete': True
+                        'can_delete': True,
                     }
                 })
     return available_slots
@@ -8984,6 +9079,7 @@ def edit_patient(patient_id):
         id_number = (request.form.get('id_number') or '').strip() or None
         can_self_schedule = 1 if request.form.get('can_self_schedule') else 0
         reminder_email_enabled = 1 if request.form.get('reminder_email_enabled') else 0
+        reminder_sms_enabled = 1 if request.form.get('reminder_sms_enabled') else 0
         patient_type = request.form.get('patient_type', 'private')
         if patient_type not in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
             patient_type = 'private'
@@ -9018,13 +9114,13 @@ def edit_patient(patient_id):
                 treatment_method = request.form.get('treatment_method', '').strip() or None
                 db.execute('''UPDATE patients
                               SET name = ?, status = ?, email = ?, phone = ?, birth_date = ?, id_number = ?, can_self_schedule = ?,
-                                  reminder_email_enabled = ?,
+                                  reminder_email_enabled = ?, reminder_sms_enabled = ?,
                                   patient_type = ?, has_intake_tab = ?, has_questionnaire_tab = ?, intake_assessment = ?, intake_questionnaire = ?,
                                   treatment_method = ?
                               WHERE id = ?''',
-                           (name, status, email, phone, birth_date, id_number, can_self_schedule,
-                            reminder_email_enabled, patient_type,
-                            has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
+                             (name, status, email, phone, birth_date, id_number, can_self_schedule,
+                              reminder_email_enabled, reminder_sms_enabled, patient_type,
+                              has_intake_tab, has_questionnaire_tab, intake_assessment or None, intake_questionnaire or None, treatment_method, patient_id))
                 db.commit()
                 flash('Patient updated successfully.')
                 return redirect(url_for('patient_detail', patient_id=patient_id))

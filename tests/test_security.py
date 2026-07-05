@@ -497,7 +497,7 @@ class SecurityTestCase(unittest.TestCase):
         with app.app_context():
             db = get_db()
             db.execute('''
-                CREATE TABLE IF NOT EXISTS slots_override (
+                CREATE TABLE IF NOT EXISTS availability (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     share_token TEXT,
                     status TEXT,

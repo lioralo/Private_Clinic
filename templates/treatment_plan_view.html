@@ -1,0 +1,147 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Treatment Plans') }} — {{ patient['name'] }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-pill mb-2">
+        <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Patient') }}
+      </a>
+      <h1 class="text-2xl font-bold text-primary mt-2">{{ t('Treatment Plans') }} — {{ patient['name'] }}</h1>
+    </div>
+    <a href="{{ url_for('treatment_plans.create_plan', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
+      <i class="bi bi-plus-circle me-1"></i>{{ t('New Treatment Plan') }}
+    </a>
+  </div>
+
+  {% if focus_plan %}
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span class="badge {% if focus_plan['status'] == 'active' %}bg-success{% elif focus_plan['status'] == 'completed' %}bg-primary{% elif focus_plan['status'] == 'review' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 py-2">
+          {{ t(focus_plan['status']|capitalize) }}
+        </span>
+        <span class="ms-2 text-muted small">{{ t('Created') }}: {{ focus_plan['created_date'] }}</span>
+        {% if focus_plan['next_review_date'] %}
+        <span class="ms-2 text-muted small">{{ t('Review by') }}: {{ focus_plan['next_review_date'] }}</span>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('treatment_plans.edit_plan', plan_id=focus_plan['id']) }}" class="btn btn-outline-primary btn-sm rounded-pill">
+          <i class="bi bi-pencil me-1"></i>{{ t('Edit') }}
+        </a>
+        <form method="post" action="{{ url_for('treatment_plans.delete_plan', plan_id=focus_plan['id']) }}" data-confirm-modal data-confirm-message="{{ t('Delete this treatment plan and all its goals?') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash me-1"></i>{{ t('Delete') }}</button>
+        </form>
+      </div>
+    </div>
+    <div class="p-5">
+      {% if focus_plan['diagnosis_code'] or focus_plan['diagnosis_description'] %}
+      <div class="mb-4">
+        <strong>{{ t('Diagnosis') }}:</strong>
+        {% if focus_plan['diagnosis_code'] %}<span class="badge bg-light text-dark border me-2">{{ focus_plan['diagnosis_code'] }}</span>{% endif %}
+        {{ focus_plan['diagnosis_description'] or '' }}
+      </div>
+      {% endif %}
+      {% if focus_plan['problem_statement'] %}
+      <div class="mb-4">
+        <strong>{{ t('Problem Statement') }}:</strong>
+        <p class="text-slate-700 mt-1" style="white-space: pre-wrap;">{{ focus_plan['problem_statement'] }}</p>
+      </div>
+      {% endif %}
+      {% if focus_plan['strengths'] %}
+      <div class="mb-4">
+        <strong>{{ t('Strengths') }}:</strong>
+        <p class="text-slate-700 mt-1" style="white-space: pre-wrap;">{{ focus_plan['strengths'] }}</p>
+      </div>
+      {% endif %}
+      {% if focus_plan['notes'] %}
+      <div class="mb-4">
+        <strong>{{ t('Notes') }}:</strong>
+        <p class="text-slate-700 mt-1" style="white-space: pre-wrap;">{{ focus_plan['notes'] }}</p>
+      </div>
+      {% endif %}
+
+      <h5 class="font-bold mb-3 mt-4"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('SMART Goals') }}</h5>
+      {% if goals %}
+      <div class="d-grid gap-2">
+        {% for goal in goals %}
+        <div class="border rounded-4 p-3 {% if goal['status'] == 'achieved' %}bg-success-subtle border-success{% elif goal['status'] == 'discontinued' %}bg-light{% else %}bg-white{% endif %}">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div class="flex-grow-1">
+              <div class="fw-semibold">{{ goal['goal_number'] }}. {{ goal['goal_description'] }}</div>
+              {% if goal['objectives'] %}
+              <div class="text-muted small mt-1"><strong>{{ t('Objectives') }}:</strong> {{ goal['objectives'] }}</div>
+              {% endif %}
+              {% if goal['interventions'] %}
+              <div class="text-muted small mt-1"><strong>{{ t('Interventions') }}:</strong> {{ goal['interventions'] }}</div>
+              {% endif %}
+              {% if goal['target_date'] %}
+              <div class="text-muted small mt-1"><strong>{{ t('Target') }}:</strong> {{ goal['target_date'] }}</div>
+              {% endif %}
+            </div>
+            <div class="d-flex flex-column align-items-end gap-1">
+              <span class="badge {% if goal['status'] == 'achieved' %}bg-success{% elif goal['status'] == 'in_progress' %}bg-info{% elif goal['status'] == 'discontinued' %}bg-secondary{% else %}bg-warning text-dark{% endif %} rounded-pill">
+                {{ t(goal['status']|replace('_', ' ')|title) }}
+              </span>
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <div class="progress" style="width:80px;height:8px;">
+                  <div class="progress-bar bg-primary" role="progressbar" style="width:{{ goal['progress_percentage'] }}%"></div>
+                </div>
+                <span class="small text-muted">{{ goal['progress_percentage'] }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">{{ t('No goals defined for this plan.') }}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not focus_plan %}
+  {% if plans %}
+  <div class="d-grid gap-3">
+    {% for plan in plans %}
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <span class="badge {% if plan['status'] == 'active' %}bg-success{% elif plan['status'] == 'completed' %}bg-primary{% elif plan['status'] == 'review' %}bg-warning text-dark{% else %}bg-secondary{% endif %} rounded-pill px-3 py-2">
+            {{ t(plan['status']|capitalize) }}
+          </span>
+          <span class="ms-2 text-muted small">{{ plan['created_date'] }}</span>
+          {% if plan['diagnosis_code'] %}
+          <span class="ms-2 badge bg-light text-dark border">{{ plan['diagnosis_code'] }}</span>
+          {% endif %}
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('treatment_plans.view_plan', plan_id=plan['id']) }}" class="btn btn-outline-primary btn-sm rounded-pill">
+            <i class="bi bi-eye me-1"></i>{{ t('View') }}
+          </a>
+          <a href="{{ url_for('treatment_plans.edit_plan', plan_id=plan['id']) }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-pencil me-1"></i>
+          </a>
+        </div>
+      </div>
+      {% if plan['problem_statement'] %}
+      <p class="text-slate-600 mt-2 mb-0 small">{{ plan['problem_statement'][:200] }}{% if plan['problem_statement']|length > 200 %}...{% endif %}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-clipboard2-pulse text-muted" style="font-size:3rem;"></i>
+    <p class="text-muted mt-3">{{ t('No treatment plans yet.') }}</p>
+    <a href="{{ url_for('treatment_plans.create_plan', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
+      <i class="bi bi-plus-circle me-1"></i>{{ t('Create First Treatment Plan') }}
+    </a>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -209,7 +209,7 @@ def combine_dt(date_obj, time_str):
     return None
 
 def daterange(start_date, end_date):
-    for n in range(int((end_date - start_date).days)):
+    for n in range(int((end_date - start_date).days) + 1):
         yield start_date + timedelta(n)
 
 def custom_weekday(date_obj):
@@ -283,8 +283,61 @@ def _clear_db_rate_limits(db, bucket_key, scope=None):
         db.execute('DELETE FROM rate_limits WHERE bucket_key = ?', (bucket_key,))
 
 
+def get_cancelled_dates(appt):
+    """Parse cancelled_dates JSON field. Returns a set of date strings (YYYY-MM-DD)."""
+    try:
+        raw = appt.get('cancelled_dates') if isinstance(appt, dict) else (appt['cancelled_dates'] if 'cancelled_dates' in appt.keys() else '[]')
+    except (AttributeError, IndexError):
+        raw = '[]'
+    if not raw:
+        return set()
+    if isinstance(raw, str):
+        try:
+            items = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return set()
+    elif isinstance(raw, (list, set)):
+        items = raw
+    else:
+        return set()
+    return {str(d).strip() for d in items if d}
+
+
+def get_recurring_occurrences(appt, range_start, range_end, max_occurrences=600):
+    """Simplified recurring occurrence generator.
+    Uses appointment_date weekday + recurrence_end_date + cancelled_dates.
+    Returns sorted list of dates within [range_start, range_end].
+    """
+    base_date = parse_date_safe(appt['appointment_date'] if 'appointment_date' in appt.keys() else '')
+    if not base_date:
+        return []
+    is_recurring = int(appt['is_recurring'] or 0) == 1
+    if not is_recurring:
+        if range_start <= base_date <= range_end:
+            return [base_date]
+        return []
+    recurrence_end = parse_date_safe(appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else '')
+    cancelled = get_cancelled_dates(appt)
+    day_code = custom_weekday(base_date)
+    occurrences = []
+    current = base_date
+    for _ in range(max_occurrences):
+        if recurrence_end and current > recurrence_end:
+            break
+        if current.isoformat() not in cancelled and range_start <= current <= range_end:
+            occurrences.append(current)
+        if len(occurrences) >= max_occurrences:
+            break
+        current += timedelta(days=7)
+    return sorted(occurrences)
+
+
 def parse_recurrence_days(appt):
-    raw = (appt['recurrence_days'] or '').strip()
+    try:
+        raw = (appt.get('recurrence_days', '') if isinstance(appt, dict) else (appt['recurrence_days'] if 'recurrence_days' in appt.keys() else '') or '')
+    except (AttributeError, IndexError):
+        raw = ''
+    raw = raw.strip()
     if raw:
         days = []
         for part in raw.split(','):
@@ -295,7 +348,10 @@ def parse_recurrence_days(appt):
                     days.append(val)
         if days:
             return sorted(set(days))
-    base_date = parse_date_safe(appt['appointment_date'])
+    try:
+        base_date = parse_date_safe(appt['appointment_date'] if 'appointment_date' in appt.keys() else '')
+    except (AttributeError, IndexError):
+        return [0]
     if not base_date:
         return [0]
     return [custom_weekday(base_date)]
@@ -385,12 +441,9 @@ def ensure_ongoing_recurrence_from_previous_week(db, reference_date=None):
         db.execute('''
             UPDATE appointments
             SET is_recurring = 1,
-                recurrence_interval = 1,
-                recurrence_days = ?,
-                recurrence_end_date = ?,
-                recurrence_count = NULL
+                recurrence_end_date = ?
             WHERE id = ?
-        ''', (recurrence_day, recurrence_end, row['appointment_id']))
+        ''', (recurrence_end, row['appointment_id']))
         converted += 1
     if converted:
         db.commit()
@@ -456,9 +509,8 @@ def _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, no
             INSERT INTO appointments (
                 patient_id, appointment_date, appointment_time, duration_minutes,
                 meeting_type, meeting_link, meeting_platform, meeting_title,
-                save_to_google, status, is_recurring, recurrence_interval,
-                recurrence_days, recurrence_end_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, 1, ?, ?)
+                save_to_google, status, is_recurring, recurrence_end_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 1, ?)
         ''', (
             patient_id,
             booking_day.isoformat(),
@@ -469,7 +521,6 @@ def _ensure_patient_has_upcoming_booking(db, patient_id, patient_type, today, no
             meeting_platform,
             meeting_title,
             save_to_google,
-            str(day_code),
             (booking_day + timedelta(days=365)).isoformat()
         ))
         booked = True
@@ -498,19 +549,10 @@ def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, hori
 
 
 def ensure_default_recurring_vacancies(db):
-    has_future_override = db.execute('''
-        SELECT 1
-        FROM slots_override
-        WHERE status = 'available' AND slot_date >= ?
-        LIMIT 1
-    ''', (datetime.now().date().isoformat(),)).fetchone()
-    has_recurring = db.execute('''
-        SELECT 1
-        FROM vacancy_recurring
-        WHERE COALESCE(is_active, 1) = 1
-        LIMIT 1
+    has_any = db.execute('''
+        SELECT 1 FROM availability WHERE 1=1 LIMIT 1
     ''').fetchone()
-    if has_future_override or has_recurring:
+    if has_any:
         return 0
     default_slots = [
         (0, '09:00', 60), (0, '15:00', 60),
@@ -521,28 +563,31 @@ def ensure_default_recurring_vacancies(db):
     ]
     for weekday, slot_time, duration in default_slots:
         db.execute('''
-            INSERT INTO vacancy_recurring (weekday, slot_time, duration_minutes, is_active)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO availability (weekday, slot_time, duration_minutes, recurrence, status)
+            VALUES (?, ?, ?, 'weekly', 'available')
         ''', (weekday, slot_time, duration))
     db.commit()
     return len(default_slots)
 
 
 def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=600):
-    base_date = parse_date_safe(appt['appointment_date'])
+    base_date = parse_date_safe(appt['appointment_date'] if 'appointment_date' in appt.keys() else '')
     if not base_date:
         return []
-    interval = int(appt['recurrence_interval'] or 1)
+    is_recurring = int(appt['is_recurring'] or 0) == 1
+    if not is_recurring:
+        if range_start <= base_date <= range_end:
+            return [base_date]
+        return []
+    recurrence_interval_raw = appt.get('recurrence_interval', 1) if isinstance(appt, dict) else (appt['recurrence_interval'] if 'recurrence_interval' in appt.keys() else 1)
+    interval = int(recurrence_interval_raw) if recurrence_interval_raw else 1
     if interval <= 0:
         interval = 1
-    recurrence_end = parse_date_safe(appt['recurrence_end_date'])
-    recurrence_count = int(appt['recurrence_count'] or 0)
+    recurrence_end = parse_date_safe(appt['recurrence_end_date'] if 'recurrence_end_date' in appt.keys() else '')
+    recurrence_count_raw = appt.get('recurrence_count', 0) if isinstance(appt, dict) else (appt['recurrence_count'] if 'recurrence_count' in appt.keys() else 0)
+    recurrence_count = int(recurrence_count_raw) if recurrence_count_raw else 0
     days = parse_recurrence_days(appt)
-    try:
-        excluded_raw = appt['excluded_dates'] or ''
-    except (KeyError, IndexError):
-        excluded_raw = ''
-    excluded = {d.strip() for d in excluded_raw.split(',') if d.strip()}
+    cancelled = get_cancelled_dates(appt)
     anchor_week_start = base_date - timedelta(days=custom_weekday(base_date))
     occurrences = []
     produced = 0
@@ -557,7 +602,7 @@ def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=
                 continue
             if recurrence_end and occ_date > recurrence_end:
                 continue
-            if occ_date.isoformat() in excluded:
+            if occ_date.isoformat() in cancelled:
                 produced += 1
                 if recurrence_count and produced > recurrence_count:
                     return occurrences
@@ -703,4 +748,86 @@ def build_booking_management_payload(db, mode='upcoming', future_days=180, histo
         'range_start': range_start.isoformat(),
         'range_end': range_end.isoformat(),
         'items': items
+    }
+
+
+# ---------------------------------------------------------------------------
+# Assessment scoring engine
+# ---------------------------------------------------------------------------
+
+ASSESSMENT_QUESTIONS = {
+    'PHQ-9': [
+        'Little interest or pleasure in doing things',
+        'Feeling down, depressed, or hopeless',
+        'Trouble falling/staying asleep, or sleeping too much',
+        'Feeling tired or having little energy',
+        'Poor appetite or overeating',
+        'Feeling bad about yourself — or that you are a failure',
+        'Trouble concentrating on things, such as reading the newspaper',
+        'Moving/speaking so slowly that others noticed? Or the opposite — fidgety/restless',
+        'Thoughts that you would be better off dead or of hurting yourself',
+    ],
+    'GAD-7': [
+        'Feeling nervous, anxious, or on edge',
+        'Not being able to stop or control worrying',
+        'Worrying too much about different things',
+        'Trouble relaxing',
+        'Being so restless that it is hard to sit still',
+        'Becoming easily annoyed or irritable',
+        'Feeling afraid as if something awful might happen',
+    ],
+}
+
+ASSESSMENT_OPTIONS = [
+    ('0', 'Not at all'),
+    ('1', 'Several days'),
+    ('2', 'More than half the days'),
+    ('3', 'Nearly every day'),
+]
+
+
+def _score_assessment(assessment_type, raw_scores):
+    """Score an assessment based on its type's rules.
+    
+    Args:
+        assessment_type: dict with scoring_method, scoring_rules_json, interpretation_json
+        raw_scores: list of int scores per question
+    
+    Returns:
+        dict with total_score, severity_level, interpretation
+    """
+    try:
+        method = assessment_type.get('scoring_method', 'sum')
+        rules = json.loads(assessment_type.get('scoring_rules_json', '{}'))
+        interpretations = json.loads(assessment_type.get('interpretation_json', '[]'))
+    except (json.JSONDecodeError, TypeError):
+        return {'total_score': None, 'severity_level': None, 'interpretation': None}
+
+    scores = []
+    for s in raw_scores:
+        try:
+            scores.append(int(s))
+        except (TypeError, ValueError):
+            scores.append(0)
+
+    if method == 'sum':
+        total = sum(scores)
+    elif method == 'average':
+        total = sum(scores) / max(len(scores), 1)
+    else:
+        total = sum(scores)
+
+    severity_level = None
+    interpretation = None
+    for item in interpretations:
+        r = item.get('range', [0, 999])
+        if len(r) == 2 and r[0] <= total <= r[1]:
+            severity_level = item.get('severity')
+            interpretation = item.get('label')
+            break
+
+    return {
+        'total_score': total,
+        'severity_level': severity_level,
+        'interpretation': interpretation,
     }

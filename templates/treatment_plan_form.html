@@ -1,0 +1,232 @@
+{% extends 'layout.html' %}
+{% block page_title %}{% if plan %}{{ t('Edit Treatment Plan') }}{% else %}{{ t('New Treatment Plan') }}{% endif %} — {{ patient['name'] }}{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+  <div class="mb-4">
+    <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+      <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Plans') }}
+    </a>
+  </div>
+  <h1 class="text-2xl font-bold text-primary mb-4">
+    {% if plan %}{{ t('Edit Treatment Plan') }}{% else %}{{ t('New Treatment Plan') }}{% endif %}
+    <span class="text-slate-500 text-xl">— {{ patient['name'] }}</span>
+  </h1>
+
+  <form method="post" action="{% if plan %}{{ url_for('treatment_plans.edit_plan', plan_id=plan['id']) }}{% else %}{{ url_for('treatment_plans.create_plan', patient_id=patient['id']) }}{% endif %}" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <label class="form-label">{{ t('Diagnosis Code') }} <span class="text-muted">({{ t('optional') }})</span></label>
+        <input type="text" name="diagnosis_code" class="form-control" value="{{ plan['diagnosis_code'] or '' }}" placeholder="e.g. F41.1">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">{{ t('Diagnosis Description') }}</label>
+        <input type="text" name="diagnosis_description" class="form-control" value="{{ plan['diagnosis_description'] or '' }}" placeholder="e.g. Generalized Anxiety Disorder">
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">{{ t('Problem Statement') }}</label>
+      <textarea name="problem_statement" class="form-control" rows="4" placeholder="{{ t('Describe the presenting problems and clinical formulation...') }}">{{ plan['problem_statement'] or '' }}</textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">{{ t('Strengths & Protective Factors') }}</label>
+      <textarea name="strengths" class="form-control" rows="3" placeholder="{{ t('Patient strengths, resources, and protective factors...') }}">{{ plan['strengths'] or '' }}</textarea>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <label class="form-label">{{ t('Status') }}</label>
+        <select name="status" class="form-select">
+          <option value="active" {% if (plan and plan['status'] == 'active') or not plan %}selected{% endif %}>{{ t('Active') }}</option>
+          <option value="review" {% if plan and plan['status'] == 'review' %}selected{% endif %}>{{ t('Under Review') }}</option>
+          <option value="completed" {% if plan and plan['status'] == 'completed' %}selected{% endif %}>{{ t('Completed') }}</option>
+          <option value="discontinued" {% if plan and plan['status'] == 'discontinued' %}selected{% endif %}>{{ t('Discontinued') }}</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">{{ t('Next Review Date') }}</label>
+        <input type="date" name="next_review_date" class="form-control" value="{{ plan['next_review_date'] or '' }}">
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">{{ t('Notes') }}</label>
+      <textarea name="notes" class="form-control" rows="3" placeholder="{{ t('Additional notes about this treatment plan...') }}">{{ plan['notes'] or '' }}</textarea>
+    </div>
+
+    <hr class="my-4">
+    <h5 class="font-bold mb-3"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('SMART Goals') }}</h5>
+    <p class="text-muted small mb-3">{{ t('Define specific, measurable, achievable, relevant, and time-bound goals.') }}</p>
+
+    <div id="goalsContainer">
+      {% if goals %}
+      {% for goal in goals %}
+      <div class="goal-entry border rounded-3 p-3 mb-3 bg-light-subtle">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="goal-number">{{ t('Goal') }} {{ loop.index }}</strong>
+          <button type="button" class="btn btn-sm btn-outline-danger rounded-pill remove-goal"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label small">{{ t('Goal Description') }}</label>
+            <input type="text" name="goal_description[]" class="form-control" value="{{ goal['goal_description'] }}" placeholder="{{ t('e.g. Reduce anxiety symptoms from moderate to mild') }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ t('Objectives (how, measurable steps)') }}</label>
+            <textarea name="objectives[]" class="form-control" rows="2" placeholder="{{ t('Specific behavioral steps...') }}">{{ goal['objectives'] or '' }}</textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ t('Interventions (clinical methods)') }}</label>
+            <textarea name="interventions[]" class="form-control" rows="2" placeholder="{{ t('CBT techniques, mindfulness, etc.') }}">{{ goal['interventions'] or '' }}</textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Target Date') }}</label>
+            <input type="date" name="target_date[]" class="form-control" value="{{ goal['target_date'] or '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Status') }}</label>
+            <select name="goal_status[]" class="form-select form-select-sm">
+              <option value="active" {% if goal['status'] == 'active' %}selected{% endif %}>{{ t('Active') }}</option>
+              <option value="in_progress" {% if goal['status'] == 'in_progress' %}selected{% endif %}>{{ t('In Progress') }}</option>
+              <option value="achieved" {% if goal['status'] == 'achieved' %}selected{% endif %}>{{ t('Achieved') }}</option>
+              <option value="discontinued" {% if goal['status'] == 'discontinued' %}selected{% endif %}>{{ t('Discontinued') }}</option>
+              <option value="revised" {% if goal['status'] == 'revised' %}selected{% endif %}>{{ t('Revised') }}</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Progress %') }}</label>
+            <input type="number" name="progress_percentage[]" class="form-control" min="0" max="100" value="{{ goal['progress_percentage'] or 0 }}">
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="goal-entry border rounded-3 p-3 mb-3 bg-light-subtle">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="goal-number">{{ t('Goal') }} 1</strong>
+          <button type="button" class="btn btn-sm btn-outline-danger rounded-pill remove-goal"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label small">{{ t('Goal Description') }}</label>
+            <input type="text" name="goal_description[]" class="form-control" placeholder="{{ t('e.g. Reduce anxiety symptoms from moderate to mild') }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ t('Objectives') }}</label>
+            <textarea name="objectives[]" class="form-control" rows="2" placeholder="{{ t('Specific behavioral steps...') }}"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ t('Interventions') }}</label>
+            <textarea name="interventions[]" class="form-control" rows="2" placeholder="{{ t('CBT techniques, mindfulness, etc.') }}"></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Target Date') }}</label>
+            <input type="date" name="target_date[]" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Status') }}</label>
+            <select name="goal_status[]" class="form-select form-select-sm">
+              <option value="active">{{ t('Active') }}</option>
+              <option value="in_progress">{{ t('In Progress') }}</option>
+              <option value="achieved">{{ t('Achieved') }}</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">{{ t('Progress %') }}</label>
+            <input type="number" name="progress_percentage[]" class="form-control" min="0" max="100" value="0">
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <button type="button" id="addGoalBtn" class="btn btn-outline-primary rounded-pill mb-4">
+      <i class="bi bi-plus-circle me-1"></i>{{ t('Add Goal') }}
+    </button>
+
+    <hr class="my-4">
+    <div class="d-flex justify-content-end gap-2">
+      <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">{{ t('Cancel') }}</a>
+      <button type="submit" class="btn btn-primary rounded-pill px-5">
+        {% if plan %}{{ t('Update Plan') }}{% else %}{{ t('Create Plan') }}{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let goalCounter = {{ goals|length if goals else 1 }};
+
+  function createGoalEntry(number) {
+    const div = document.createElement('div');
+    div.className = 'goal-entry border rounded-3 p-3 mb-3 bg-light-subtle';
+    div.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="goal-number">{{ t('Goal') }} ${number}</strong>
+        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill remove-goal"><i class="bi bi-x"></i></button>
+      </div>
+      <div class="row g-2">
+        <div class="col-12">
+          <label class="form-label small">{{ t('Goal Description') }}</label>
+          <input type="text" name="goal_description[]" class="form-control" placeholder="{{ t('e.g. Reduce anxiety symptoms') }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small">{{ t('Objectives') }}</label>
+          <textarea name="objectives[]" class="form-control" rows="2" placeholder="{{ t('Specific behavioral steps...') }}"></textarea>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small">{{ t('Interventions') }}</label>
+          <textarea name="interventions[]" class="form-control" rows="2" placeholder="{{ t('CBT techniques, mindfulness, etc.') }}"></textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">{{ t('Target Date') }}</label>
+          <input type="date" name="target_date[]" class="form-control">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">{{ t('Status') }}</label>
+          <select name="goal_status[]" class="form-select form-select-sm">
+            <option value="active">{{ t('Active') }}</option>
+            <option value="in_progress">{{ t('In Progress') }}</option>
+            <option value="achieved">{{ t('Achieved') }}</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">{{ t('Progress %') }}</label>
+          <input type="number" name="progress_percentage[]" class="form-control" min="0" max="100" value="0">
+        </div>
+      </div>
+    `;
+    div.querySelector('.remove-goal').addEventListener('click', function() {
+      div.remove();
+      renumberGoals();
+    });
+    return div;
+  }
+
+  function renumberGoals() {
+    document.querySelectorAll('.goal-entry .goal-number').forEach(function(el, idx) {
+      el.textContent = '{{ t("Goal") }} ' + (idx + 1);
+    });
+  }
+
+  document.getElementById('addGoalBtn').addEventListener('click', function() {
+    goalCounter++;
+    const container = document.getElementById('goalsContainer');
+    container.appendChild(createGoalEntry(goalCounter));
+  });
+
+  document.querySelectorAll('.remove-goal').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      btn.closest('.goal-entry').remove();
+      renumberGoals();
+    });
+  });
+})();
+</script>
+{% endblock %}

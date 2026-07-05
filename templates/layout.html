@@ -7,6 +7,11 @@
     <title>{% if lang == 'he' %}ליאור אלוני - קליניק{% else %}Lior Aloni Clinic{% endif %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="mobile-web-app-capable" content="yes">
 
     <!-- Bootstrap CSS (forms, tabs, modals, offcanvas) -->
     {% if lang == 'he' %}
@@ -440,8 +445,42 @@
             <span>{{ t('Add Patient') }}</span>
         </a>
 
-        {# Logout #}
-        <div class="border-t border-slate-200 pt-2 flex-shrink-0">
+        {# Notifications & Profile #}
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+            <button type="button"
+               class="w-full flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline relative"
+               data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas">
+                <i class="bi bi-bell-fill" style="font-size:18px;width:20px;text-align:center"></i>
+                <span>{{ t('Notifications') }}</span>
+                {% if notification_unread_count is defined and notification_unread_count > 0 %}
+                <span class="ms-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">{{ notification_unread_count }}</span>
+                {% endif %}
+            </button>
+            <a href="{{ url_for('admin_profile') }}"
+               class="flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
+                <i class="bi bi-person-gear" style="font-size:18px;width:20px;text-align:center"></i>
+                <span>{{ t('Profile') }}</span>
+            </a>
+            <button id="installPwaBtn" type="button"
+               class="d-none w-full flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline"
+               onclick="pwaInstall()">
+                <i class="bi bi-download" style="font-size:18px;width:20px;text-align:center"></i>
+                <span>{{ t('Install App') }}</span>
+            </button>
+        </div>
+
+        {# Bottom: theme toggle, language + logout #}
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+            <button id="themeToggle" type="button"
+               class="w-full flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
+                <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:18px;width:20px;text-align:center"></i>
+                <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
+            </button>
+            <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
+               class="flex items-center gap-3 text-black hover:bg-gray-100 rounded-lg px-4 py-2.5 transition-colors duration-200 text-sm font-bold no-underline">
+                <i class="bi bi-translate" style="font-size:18px;width:20px;text-align:center"></i>
+                <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
+            </a>
             <a href="{{ url_for('logout') }}"
                class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline">
                 <i class="bi bi-box-arrow-right" style="font-size:16px;width:18px;text-align:center"></i>
@@ -974,5 +1013,40 @@
     </style>
 
     {% block scripts %}{% endblock %}
+
+    <script>
+    window.pwaInstall = function() {
+      if (window.deferredPrompt) {
+        window.deferredPrompt.prompt();
+        window.deferredPrompt.userChoice.then(function(choice) {
+          window.deferredPrompt = null;
+        });
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('{{ url_for("static", filename="service-worker.js") }}').then(function(reg) {
+          console.log('Service worker registered:', reg.scope);
+        }, function(err) {
+          console.log('Service worker registration failed:', err);
+        });
+      });
+
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        var btn = document.getElementById('installPwaBtn');
+        if (btn) btn.classList.remove('d-none');
+      });
+
+      window.addEventListener('appinstalled', function() {
+        var btn = document.getElementById('installPwaBtn');
+        if (btn) btn.remove();
+        console.log('PWA installed');
+      });
+    }
+    </script>
 </body>
 </html>

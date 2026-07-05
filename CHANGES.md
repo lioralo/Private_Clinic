@@ -28,11 +28,74 @@
 4. **Password change without TOTP**
    - Made `otp_code` field optional in the "Change Admin Password" form when TOTP is not enabled.
    - Backend already accepted password change without `otp_code`; only the HTML `required` attribute blocked it.
-   - Updated help text to clarify that authenticator code is only needed if 2FA is enabled.
+    - Updated help text to clarify that authenticator code is only needed if 2FA is enabled.
 
 5. **TOTP UI text update**
-   - Renamed "Start Authenticator Setup" to "Set Up Authenticator" for clarity.
-   - Added "not configured" info message when TOTP is disabled.
+    - Renamed "Start Authenticator Setup" to "Set Up Authenticator" for clarity.
+    - Added "not configured" info message when TOTP is disabled.
+
+---
+
+## Session 82
+
+**Date:** 2026-07-05
+
+**Objective:** Implement structured treatment plans with SMART goals, clinical outcome measures (PHQ-9/GAD-7), SMS appointment reminders, PWA mobile support, and unify calendar schema.
+
+**Release Summary:**
+
+1. **Structured Treatment Plans** (`/treatment-plans/`)
+    - New blueprint `treatment_plans.py` with full CRUD for plans + goals.
+    - SMART goals with progress percentage, status per goal (active/in_progress/achieved/discontinued/revised).
+    - Template: `treatment_plan_view.html` with per-goal progress bars + `treatment_plan_form.html` with dynamic JS add/remove goals.
+    - Tables: `treatment_plans` + `treatment_plan_goals` (Alembic `e7a2b9c4d1f0`).
+
+2. **Clinical Outcome Assessments** (`/assessments/`)
+    - New blueprint `assessments.py` with take-assessment flow + results view.
+    - PHQ-9 (depression, 9 items, 0-27) and GAD-7 (anxiety, 7 items, 0-21) pre-seeded in `assessment_types`.
+    - Scoring engine in `utils.py` (`_score_assessment()`) with sum/average methods + severity level lookup.
+    - Templates: `assessment_take.html` (dynamic question renderer), `assessment_results.html` (grouped by type + Chart.js line chart over time).
+    - Tables: `assessment_types` + `assessments` (stores raw scores JSON, total, severity, interpretation).
+
+3. **SMS Appointment Reminders**
+    - `send_sms()` utility in `app.py` — sends via Twilio when `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_FROM_NUMBER` are configured; logs to `sms_logs` otherwise.
+    - `_send_appointment_sms_reminders()` runs alongside email reminders in the APScheduler job (every 5 min, 7-day lookahead, 2-hour send window).
+    - Per-patient toggle: `reminder_sms_enabled` checkbox in `edit_patient.html`.
+    - Table: `sms_logs` for audit trail of all SMS attempts.
+
+4. **PWA (Progressive Web App)**
+    - `static/manifest.json` — standalone display, theme color `#0d6efd`, app icons.
+    - `static/service-worker.js` — cache-first for static assets, network-first for API calls.
+    - `templates/layout.html` — manifest link, meta tags (theme-color, apple-mobile-web-app-capable), service worker registration, install button in sidebar.
+    - Install prompt intercepted via `beforeinstallprompt` event.
+
+5. **Calendar Schema Refactor**
+    - Unified `availability` table replacing `slots_override` + `vacancy_recurring`.
+    - Recurrence logic extracted to `recurring_occurrences_between()` and `get_cancelled_dates()` in `utils.py`. Recurrence days parsed by `parse_recurrence_days()`. Cancelled dates stored as JSON array (`cancelled_dates`).
+    - Hebrew translations updated (~90 new keys).
+
+6. **Infrastructure**
+    - Both new blueprints registered in `app.py` with legacy URL aliases for backward compat.
+    - `from_json` Jinja2 filter registered.
+    - Patient detail page tabs updated with Treatment Plans + Assessments links.
+    - Migration `e7a2b9c4d1f0` applied (depends on `c9199256007c`).
+    - `twilio` package not in `requirements.txt` — install separately if SMS sending is needed.
+
+**Files Modified:**
+- `app.py`, `clinic_app/utils.py`, `clinic_app/routes/calendar.py`
+- `templates/layout.html`, `templates/edit_patient.html`, `templates/patient_detail.html`
+- `translations/he.json`
+- `tests/test_app.py`, `tests/test_fix_calendar_times.py`, `tests/test_security.py`
+- `alembic/versions/e7a2b9c4d1f0_add_treatment_plans_and_assessments.py`
+- `.gitignore`
+
+**Files Added:**
+- `clinic_app/routes/treatment_plans.py`, `clinic_app/routes/assessments.py`
+- `templates/treatment_plan_view.html`, `templates/treatment_plan_form.html`
+- `templates/assessment_take.html`, `templates/assessment_results.html`
+- `static/manifest.json`, `static/service-worker.js`
+
+**Test Results:** 339 total tests, all passing. Test run ~8 min (known performance issue).
 
 ---
 

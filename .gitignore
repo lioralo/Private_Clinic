@@ -9,6 +9,8 @@ venv/
 .venv-1/
 *.db
 !clinic.db
+*.db-shm
+*.db-wal
 static/uploads/
 *.log
 secure_backups/
