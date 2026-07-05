@@ -1231,9 +1231,16 @@ def admin_smtp_test():
         return jsonify({'error': 'Unauthorized'}), 403
     recipient = (request.form.get('test_email') or '').strip()
     if not recipient:
-        return jsonify({'ok': False, 'message': 'Test email address is required.'})
+        flash('Test email address is required.', 'error')
+        return redirect(url_for('.admin_profile'))
     success, msg = _send_smtp_email(recipient, 'SMTP Test from Private Clinic', 'This is a test email from your clinic management system.')
-    return jsonify({'ok': success, 'message': msg})
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': success, 'message': msg})
+    if success:
+        flash(f'SMTP test email sent to {recipient}.', 'success')
+    else:
+        flash(f'SMTP test failed: {msg}', 'error')
+    return redirect(url_for('.admin_profile'))
 
 
 @admin_bp.route('/admin/setup_authenticator', methods=['POST'])
