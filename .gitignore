@@ -19,3 +19,4 @@ manual_backups/
 .env
 node_modules/
 .venv_test/
+data/

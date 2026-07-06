@@ -6396,7 +6396,7 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
         return None
 
     group_members = db.execute('''
-        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, gm.joined_at, gm.left_at
+        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, p.status, (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring, gm.joined_at, gm.left_at
         FROM group_members gm
         JOIN patients p ON p.id = gm.patient_id
                 WHERE gm.group_id = ?
