@@ -2462,6 +2462,10 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute("ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute("ALTER TABLE appointments ADD COLUMN reminder_sent_at TIMESTAMP")
     except sqlite3.OperationalError:
         pass
