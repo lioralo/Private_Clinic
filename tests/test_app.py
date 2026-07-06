@@ -3180,8 +3180,9 @@ class ClinicTestCase(unittest.TestCase):
             patient = db.execute('SELECT gdoc_id FROM patients WHERE id = 1').fetchone()
             self.assertEqual(patient['gdoc_id'], 'test-doc-123')
 
+    @patch('clinic_app.routes.google_docs._google_docs_dependency_error', return_value=None)
     @patch('clinic_app.routes.google_docs._pull_gdoc_notes')
-    def test_sync_from_gdoc_returns_success_message(self, mock_pull_gdoc_notes):
+    def test_sync_from_gdoc_returns_success_message(self, mock_pull_gdoc_notes, mock_dep_check):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Sync Patient', status='ongoing'), follow_redirects=True)
 
@@ -3394,8 +3395,9 @@ class ClinicTestCase(unittest.TestCase):
             patient = db.execute('SELECT gdoc_id FROM patients WHERE id = 1').fetchone()
             self.assertEqual(patient['gdoc_id'], 'test-doc-123')
 
+    @patch('clinic_app.routes.google_docs._google_docs_dependency_error', return_value=None)
     @patch('clinic_app.routes.google_docs._pull_gdoc_notes')
-    def test_sync_from_gdoc_returns_success_message(self, mock_pull_gdoc_notes):
+    def test_sync_from_gdoc_returns_success_message(self, mock_pull_gdoc_notes, mock_dep_check):
         self.login('lioraloni', 'Flo@tingind4')
         self.client.post('/add_patient', data=dict(name='Sync Patient', status='ongoing'), follow_redirects=True)
 
