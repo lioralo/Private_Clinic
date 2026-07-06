@@ -7,10 +7,12 @@ import smtplib
 import shutil
 import zipfile
 import secrets
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from io import BytesIO
 from pathlib import Path
 from email.message import EmailMessage
+from email.utils import formataddr, formatdate
 from flask import request, session, g, current_app, jsonify, url_for
 from werkzeug.security import generate_password_hash
 from clinic_app.models import get_db
@@ -90,6 +92,7 @@ def _smtp_settings_summary(app=None):
     port = int(app.config.get('SMTP_PORT', 587) or 587)
     username = (app.config.get('SMTP_USERNAME') or '').strip()
     from_email = (app.config.get('SMTP_FROM_EMAIL') or username).strip()
+    from_name = (app.config.get('SMTP_FROM_NAME') or '').strip()
     use_tls = bool(app.config.get('SMTP_USE_TLS', True))
     configured = bool(host and from_email)
     return {
@@ -98,6 +101,7 @@ def _smtp_settings_summary(app=None):
         'port': port,
         'username': username,
         'from_email': from_email,
+        'from_name': from_name,
         'use_tls': use_tls,
     }
 
@@ -137,10 +141,52 @@ def _send_smtp_email(recipient_email, subject, body_text, app=None, html_body=No
     settings = _smtp_settings_summary(app)
     if not settings['configured']:
         return False, 'SMTP is not configured.'
+
+    password = app.config.get('SMTP_PASSWORD') or ''
+
+    # Use SendGrid v3 API when configured with SendGrid
+    if settings['host'] == 'smtp.sendgrid.net' and password.startswith('SG.'):
+        try:
+            from_obj = {'email': settings['from_email']}
+            if settings['from_name']:
+                from_obj['name'] = settings['from_name']
+            payload = {
+                'personalizations': [{'to': [{'email': recipient_email}]}],
+                'from': from_obj,
+                'reply_to': from_obj,
+                'subject': subject,
+                'content': [{'type': 'text/plain', 'value': body_text}],
+            }
+            if html_body:
+                payload['content'].append({'type': 'text/html', 'value': html_body})
+
+            data = json.dumps(payload).encode()
+            req = urllib.request.Request(
+                'https://api.sendgrid.com/v3/mail/send',
+                data=data,
+                headers={
+                    'Authorization': f'Bearer {password}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
+            )
+            urllib.request.urlopen(req, timeout=15)
+            return True, 'sent'
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors='replace')[:500]
+            return False, f'SendGrid API error {exc.code}: {body}'
+        except Exception as exc:
+            return False, str(exc)
+
+    # Fallback to standard SMTP for non-SendGrid providers
     message = EmailMessage()
     message['Subject'] = subject
-    message['From'] = settings['from_email']
+    from_header = formataddr((settings['from_name'], settings['from_email'])) if settings['from_name'] else settings['from_email']
+    message['From'] = from_header
     message['To'] = recipient_email
+    message['Reply-To'] = from_header
+    message['Message-ID'] = f'{secrets.token_hex(8)}@clinic'
+    message['Date'] = formatdate(localtime=True)
     message.set_content(body_text)
     if html_body:
         message.add_alternative(html_body, subtype='html')
@@ -151,7 +197,7 @@ def _send_smtp_email(recipient_email, subject, body_text, app=None, html_body=No
                 smtp.starttls()
                 smtp.ehlo()
             if settings['username']:
-                smtp.login(settings['username'], app.config.get('SMTP_PASSWORD') or '')
+                smtp.login(settings['username'], password)
             smtp.send_message(message)
     except Exception as exc:
         return False, str(exc)
