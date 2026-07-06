@@ -6521,7 +6521,8 @@ def update_group_info(group_id):
         flash('Group name is required.')
         if return_to == 'dashboard':
             return redirect(url_for('groups_dashboard'))
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     db = get_db()
     db.execute('''
@@ -6533,7 +6534,8 @@ def update_group_info(group_id):
     flash('Group information updated.')
     if return_to == 'dashboard':
         return redirect(url_for('groups_dashboard'))
-    return redirect(url_for('group_detail', group_id=group_id))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(group_id, active_tab)
 
 
 # ── Group supervision ─────────────────────────────────────────────────────────
@@ -6551,14 +6553,16 @@ def add_group_supervision(group_id):
     content = (request.form.get('content') or '').strip()
     if not sup_date or not content:
         flash('Date and content are required.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
     db.execute(
         'INSERT INTO supervisions (group_id, supervision_date, supervisor_name, content) VALUES (?,?,?,?)',
         (group_id, sup_date, supervisor or None, content)
     )
     db.commit()
     flash('Supervision record added.')
-    return redirect(url_for('group_detail', group_id=group_id))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(group_id, active_tab)
 
 
 @app.route('/groups/<int:group_id>/supervision/<int:sup_id>/delete', methods=['POST'])
@@ -6570,7 +6574,16 @@ def delete_group_supervision(group_id, sup_id):
     db.execute('DELETE FROM supervisions WHERE id = ? AND group_id = ?', (sup_id, group_id))
     db.commit()
     flash('Supervision record deleted.')
-    return redirect(url_for('group_detail', group_id=group_id))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(group_id, active_tab)
+
+
+def _redirect_to_group(group_id, active_tab=None):
+    """Redirect to group_detail, preserving the active management tab."""
+    dest = url_for('group_detail', group_id=group_id)
+    if active_tab:
+        dest += f'?tab={active_tab}'
+    return redirect(dest)
 
 
 @app.route('/groups/<int:group_id>/members', methods=['POST'])
@@ -6582,17 +6595,20 @@ def add_group_member(group_id):
     patient_id_raw = (request.form.get('patient_id') or '').strip()
     if not patient_id_raw.isdigit():
         flash('Valid patient is required.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     db = get_db()
     patient_id = int(patient_id_raw)
     patient_row = db.execute('SELECT id, patient_type FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if not patient_row:
         flash('Patient not found.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
     if (patient_row['patient_type'] or 'private') != 'group':
         flash('Only group-type patients can be added to groups.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     existing_active = db.execute('''
         SELECT 1
@@ -6602,7 +6618,8 @@ def add_group_member(group_id):
     ''', (group_id, patient_id)).fetchone()
     if existing_active:
         flash('Patient is already an active member in this group.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     db.execute('''
         INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
@@ -6626,7 +6643,8 @@ def add_group_member(group_id):
 
     db.commit()
     flash('Patient added to group.')
-    return redirect(url_for('group_detail', group_id=group_id))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(group_id, active_tab)
 
 
 @app.route('/groups/<int:group_id>/members/<int:patient_id>/remove', methods=['POST'])
@@ -6648,10 +6666,12 @@ def remove_group_member(group_id, patient_id):
 
     if not group or not patient:
         flash('Group member not found.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
     if not active_membership:
         flash('Patient is not an active member in this group.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     db.execute('''
         UPDATE group_members
@@ -6680,7 +6700,8 @@ def remove_group_member(group_id, patient_id):
 
     db.commit()
     flash(message)
-    return redirect(url_for('group_detail', group_id=group_id))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(group_id, active_tab)
 
 
 def sync_group_member_current_record(db, group_id, patient_id):
@@ -6885,7 +6906,8 @@ def add_group_session(group_id):
 
     if not parsed_date or not parsed_time:
         flash('Valid session date and start time are required.')
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     duration = _calculate_group_session_duration(parsed_time, parsed_end)
     db = get_db()
@@ -6897,7 +6919,8 @@ def add_group_session(group_id):
 
     if error_msg:
         flash(error_msg)
-        return redirect(url_for('group_detail', group_id=group_id))
+        active_tab = (request.form.get('active_tab') or '').strip()
+        return _redirect_to_group(group_id, active_tab)
 
     recurrence_dates = [parsed_date]
     if data['recurrence_mode'] == 'weekly':
@@ -6914,7 +6937,8 @@ def add_group_session(group_id):
         conflict_message = has_time_conflict(db, date_item, start_at, end_at)
         if conflict_message:
             flash(f'{conflict_message} ({date_item.isoformat()})')
-            return redirect(url_for('group_detail', group_id=group_id))
+            active_tab = (request.form.get('active_tab') or '').strip()
+            return _redirect_to_group(group_id, active_tab)
 
     series_id, last_session_id = _insert_group_sessions(
         db, group_id, parsed_date, parsed_time, duration, recurrence_dates,
@@ -6929,9 +6953,13 @@ def add_group_session(group_id):
     else:
         flash('Group session added.')
 
+    active_tab = (request.form.get('active_tab') or '').strip()
     destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
     if last_session_id:
         destination = f'{destination}#session-record-{last_session_id}'
+    if active_tab:
+        sep = '&' if '?' in destination else '?'
+        destination = f'{destination}{sep}tab={active_tab}'
     return redirect(destination)
 
 
@@ -7094,7 +7122,11 @@ def record_group_session(session_id):
             destination_args['show_past'] = 'all'
         else:
             destination_args['show_upcoming'] = 'all'
+    active_tab = (request.form.get('active_tab') or '').strip()
     destination = url_for('group_detail', **destination_args)
+    if active_tab:
+        sep = '&' if '?' in destination else '?'
+        destination = f'{destination}{sep}tab={active_tab}'
     return redirect(f'{destination}#session-record-{session_id}')
 
 
@@ -7810,7 +7842,8 @@ def delete_group_session(session_id):
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
     db.commit()
     flash('Group session deleted.')
-    return redirect(url_for('group_detail', group_id=int(existing['group_id'])))
+    active_tab = (request.form.get('active_tab') or '').strip()
+    return _redirect_to_group(int(existing['group_id']), active_tab)
 
 
 @app.route('/api/groups/sessions/<int:session_id>/delete', methods=['POST'])
