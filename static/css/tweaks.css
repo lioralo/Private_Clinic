@@ -27,6 +27,7 @@
     background: linear-gradient(90deg, #e2e5e7 25%, #f0f2f4 50%, #e2e5e7 75%);
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    will-change: background-position;
     border-radius: 0.375rem;
 }
 [data-bs-theme="dark"] .skeleton {
@@ -38,6 +39,7 @@
     100% { background-position: -200% 0; }
 }
 .skeleton-text { height: 1rem; margin-bottom: 0.5rem; width: 100%; }
+.skeleton-circle { border-radius: 9999px; }
 .skeleton-text-sm { height: 0.75rem; width: 60%; }
 .skeleton-heading { height: 1.5rem; width: 40%; margin-bottom: 1rem; }
 .skeleton-avatar { width: 2.5rem; height: 2.5rem; border-radius: 9999px; }

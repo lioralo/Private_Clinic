@@ -16,7 +16,7 @@
         </div>
     </div>
     {% if patient['can_self_schedule'] %}
-    <a href="{{ url_for('weekly_calendar') }}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-all">
+    <a href="{{ url_for('weekly_calendar') }}" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-opacity">
         <i class="bi bi-calendar3" style="font-size:18px"></i>
         {{ t('Schedule Appointment') }}
     </a>

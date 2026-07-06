@@ -3,6 +3,7 @@
 ## [Unreleased] - 2026-07-05
 
 ### Added
+- will-change: background-position added to skeleton shimmer for GPU acceleration
 - **Treatment Plans:** Structured treatment plans with SMART goals, diagnosis codes, problem statements, strengths, and progress tracking per goal. Full CRUD via dedicated blueprint (`/treatment-plans/`).
 - **Clinical Assessments:** PHQ-9 (depression) and GAD-7 (anxiety) outcome measures with scoring engine, severity levels, and progress-over-time chart using Chart.js.
 - **SMS Reminders:** Appointment SMS reminders via Twilio (optional). Per-patient toggle in edit form. Logs all attempts to `sms_logs` table. Scheduler runs alongside existing email reminders.
@@ -15,6 +16,7 @@
 - **SendGrid v3 API:** Email sending now uses the SendGrid HTTP API (not raw SMTP) with proper DKIM signing and error reporting. Fallback to SMTP for non-SendGrid providers.
 
 ### Fixed
+- transition-all replaced with specific transition-* classes across all templates and App.tsx for perf
 - Tests updated to match refactored schema (`cancelled_dates` JSON array, `availability` table, removed `recurrence_interval`/`recurrence_days` from appointment queries).
 - `test_fix_calendar_times.py` re-initializes DB state properly.
 - `admin_smtp_test` route redirects with flash message instead of returning raw JSON.

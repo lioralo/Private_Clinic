@@ -152,7 +152,7 @@
 <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
 <div class="relative w-full md:w-96 group">
 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">search</span>
-<input class="w-full pl-12 pr-4 py-3 bg-surface-container-highest border-none rounded-lg focus:ring-2 focus:ring-primary-fixed focus:bg-surface-container-lowest transition-all placeholder:text-outline font-body" placeholder="Search by name, ID or treatment..." type="text"/>
+<input class="w-full pl-12 pr-4 py-3 bg-surface-container-highest border-none rounded-lg focus:ring-2 focus:ring-primary-fixed focus:bg-surface-container-lowest transition-colors transition-shadow placeholder:text-outline font-body" placeholder="Search by name, ID or treatment..." type="text"/>
 </div>
 <div class="flex items-center gap-3 w-full md:w-auto">
 <div class="flex items-center gap-2 bg-surface-container-highest px-4 py-3 rounded-lg cursor-pointer hover:bg-surface-container-high transition-colors text-on-surface-variant font-medium text-sm">
@@ -434,27 +434,27 @@
 </div>
 </div>
 <nav class="flex-1 space-y-1">
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined">dashboard</span>
 <span>Dashboard</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined">person</span>
 <span>Patients</span>
 </a>
-<a class="flex items-center gap-3 bg-teal-800 text-white rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 bg-teal-800 text-white rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
 <span>Calendar</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined">folder_open</span>
 <span>Resources</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined">group</span>
 <span>Groups</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200 transform active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 transform active:scale-95" href="#">
 <span class="material-symbols-outlined">chat_bubble</span>
 <span>Messages</span>
 </a>
@@ -464,11 +464,11 @@
                 New Appointment
             </button>
 <div class="mt-auto border-t border-slate-200 dark:border-slate-800 pt-4 space-y-1">
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200" href="#">
 <span class="material-symbols-outlined">translate</span>
 <span>Language</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-all duration-200" href="#">
+<a class="flex items-center gap-3 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg px-4 py-3 transition-colors transition-transform duration-200" href="#">
 <span class="material-symbols-outlined">logout</span>
 <span>Logout</span>
 </a>
@@ -846,19 +846,19 @@
 <div class="text-xs text-secondary opacity-70">Medical Administration</div>
 </div>
 <nav class="flex flex-col gap-1">
-<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 active:scale-95" href="#">
 <span class="material-symbols-outlined">dashboard</span>
 <span>Dashboard</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 active:scale-95" href="#">
 <span class="material-symbols-outlined">person</span>
 <span>Patients</span>
 </a>
-<a class="flex items-center gap-3 bg-teal-800 text-white rounded-lg px-4 py-3 shadow-md transition-all duration-200 active:scale-95" href="#">
+<a class="flex items-center gap-3 bg-teal-800 text-white rounded-lg px-4 py-3 shadow-md transition-colors transition-transform duration-200 active:scale-95" href="#">
 <span class="material-symbols-outlined">group</span>
 <span>Groups</span>
 </a>
-<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-all duration-200 active:scale-95" href="#">
+<a class="flex items-center gap-3 text-slate-600 hover:bg-slate-200 rounded-lg px-4 py-3 transition-colors transition-transform duration-200 active:scale-95" href="#">
 <span class="material-symbols-outlined">calendar_today</span>
 <span>Calendar</span>
 </a>
@@ -892,7 +892,7 @@
 <h1 class="text-4xl font-extrabold text-primary tracking-tight">קבוצת גברים</h1>
 </div>
 <div class="flex gap-3">
-<button class="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg font-bold shadow-md hover:bg-primary-container transition-all">
+<button class="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg font-bold shadow-md hover:bg-primary-container transition-colors">
 <span class="material-symbols-outlined">add</span>
                             מפגש חדש
                         </button>
@@ -1035,9 +1035,9 @@
 </div>
 <div class="p-6">
 <label class="block text-sm font-bold text-secondary mb-3" for="meeting-notes">מה קרה במפגש הזה?</label>
-<textarea class="w-full bg-surface-container-highest border-none rounded-lg focus:ring-2 focus:ring-primary-fixed focus:bg-surface-container-lowest transition-all p-4 placeholder:text-slate-400" id="meeting-notes" placeholder="הכנס כאן את סיכום המפגש, תובנות מרכזיות ונושאים למעקב..." rows="4"></textarea>
+<textarea class="w-full bg-surface-container-highest border-none rounded-lg focus:ring-2 focus:ring-primary-fixed focus:bg-surface-container-lowest transition-colors transition-shadow p-4 placeholder:text-slate-400" id="meeting-notes" placeholder="הכנס כאן את סיכום המפגש, תובנות מרכזיות ונושאים למעקב..." rows="4"></textarea>
 <div class="mt-4 flex justify-end">
-<button class="px-6 py-2 bg-primary text-white rounded-lg font-bold shadow-md hover:opacity-90 transition-all">שמור סיכום</button>
+<button class="px-6 py-2 bg-primary text-white rounded-lg font-bold shadow-md hover:opacity-90 transition-opacity">שמור סיכום</button>
 </div>
 </div>
 </div>
@@ -1149,7 +1149,7 @@
 <h1 class="text-3xl font-extrabold font-headline text-primary tracking-tight">Clinical Dashboard</h1>
 <p class="text-secondary font-medium mt-1">Welcome back, Dr. Aris. You have 4 sessions today.</p>
 </div>
-<button class="bg-gradient-to-br from-primary-container to-primary text-on-primary px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-sm active:scale-95 transition-all">
+<button class="bg-gradient-to-br from-primary-container to-primary text-on-primary px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 shadow-sm active:scale-95 transition-transform transition-colors">
 <span class="material-symbols-outlined">add</span>
                 New Session
             </button>
@@ -1198,22 +1198,22 @@
 <form class="p-8 space-y-8 overflow-y-auto max-h-[calc(100vh-200px)]">
 <div>
 <label class="block text-sm font-bold text-secondary mb-2 tracking-tight">Session Title</label>
-<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium placeholder:text-slate-400" placeholder="e.g., Mindfulness &amp; Recovery Group A" type="text"/>
+<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium placeholder:text-slate-400" placeholder="e.g., Mindfulness &amp; Recovery Group A" type="text"/>
 </div>
 <div class="grid grid-cols-3 gap-6">
 <div>
 <label class="block text-sm font-bold text-secondary mb-2 tracking-tight">Date</label>
 <div class="relative">
-<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium" type="date"/>
+<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium" type="date"/>
 </div>
 </div>
 <div>
 <label class="block text-sm font-bold text-secondary mb-2 tracking-tight">Start Time</label>
-<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium" type="time"/>
+<input class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium" type="time"/>
 </div>
 <div>
 <label class="block text-sm font-bold text-secondary mb-2 tracking-tight">Duration</label>
-<select class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium appearance-none">
+<select class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium appearance-none">
 <option>45 Minutes</option>
 <option>60 Minutes</option>
 <option>90 Minutes</option>
@@ -1230,24 +1230,24 @@
 <label class="flex items-center cursor-pointer group">
 <div class="relative">
 <input class="sr-only peer" type="checkbox"/>
-<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:bg-primary"></div>
 </div>
 <span class="ml-3 text-sm font-semibold text-secondary">Online (Zoom)</span>
 </label>
 </div>
 <div class="relative">
 <span class="material-symbols-outlined absolute left-4 top-4 text-slate-400">location_on</span>
-<input class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 pl-12 focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium" placeholder="Physical Room or Meeting URL" type="text"/>
+<input class="w-full bg-surface-container-lowest border border-outline-variant/20 rounded-lg p-4 pl-12 focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium" placeholder="Physical Room or Meeting URL" type="text"/>
 </div>
 </div>
 <div>
 <label class="block text-sm font-bold text-secondary mb-2 tracking-tight">Session Description</label>
-<textarea class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-all text-on-surface font-medium placeholder:text-slate-400 resize-none" placeholder="Outline clinical goals, required materials, or patient guidelines..." rows="4"></textarea>
+<textarea class="w-full bg-surface-container-highest border-none rounded-lg p-4 focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary-fixed transition-colors transition-shadow text-on-surface font-medium placeholder:text-slate-400 resize-none" placeholder="Outline clinical goals, required materials, or patient guidelines..." rows="4"></textarea>
 </div>
 </form>
 <footer class="p-8 bg-slate-50/50 flex items-center justify-end gap-4 border-t border-slate-200/50">
 <button class="px-6 py-2.5 text-primary font-bold hover:bg-teal-50/50 transition-colors rounded-lg">Cancel</button>
-<button class="bg-gradient-to-br from-primary-container to-primary text-on-primary px-10 py-3 rounded-lg font-bold shadow-md active:scale-95 transition-all flex items-center gap-2">
+<button class="bg-gradient-to-br from-primary-container to-primary text-on-primary px-10 py-3 rounded-lg font-bold shadow-md active:scale-95 transition-transform transition-colors flex items-center gap-2">
 <span class="material-symbols-outlined text-[20px]">save</span>
                     Save Session
                 </button>

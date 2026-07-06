@@ -32,28 +32,28 @@
 
 {# ── Quick Access Cards ──────────────────────────────────────── #}
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
-    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-shadow transition-colors text-decoration-none">
         <i class="bi bi-archive text-primary" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Archived') }}</div>
             <div class="text-2xl font-bold text-primary mt-1">{{ counts['archived'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-shadow transition-colors text-decoration-none">
         <i class="bi bi-trash text-danger" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Deleted') }}</div>
             <div class="text-2xl font-bold text-danger mt-1">{{ counts.get('deleted', 0) }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-shadow transition-colors text-decoration-none">
         <i class="bi bi-heart-fill text-success" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Ongoing') }}</div>
             <div class="text-2xl font-bold text-success mt-1">{{ counts['ongoing'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-all text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-shadow transition-colors text-decoration-none">
         <i class="bi bi-hourglass-split text-warning" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Candidates') }}</div>
