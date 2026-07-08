@@ -604,6 +604,11 @@ def ensure_default_recurring_vacancies(db):
         SELECT 1 FROM availability WHERE 1=1 LIMIT 1
     ''').fetchone()
     if has_any:
+        db.execute(
+            "INSERT INTO site_settings (setting_key, setting_value) VALUES ('vacancies_auto_seeded', '1') "
+            "ON CONFLICT(setting_key) DO UPDATE SET setting_value='1'"
+        )
+        db.commit()
         return 0
     default_slots = [
         (0, '09:00', 60), (0, '15:00', 60),
