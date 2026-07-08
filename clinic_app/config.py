@@ -118,6 +118,7 @@ DEFAULT_SITE_SETTINGS = {
     'security_scan_last_run_at': '',
     'security_scan_last_status': '',
     'security_scan_last_results_json': '{}',
+    'vacancies_auto_seeded': '0',
 }
 
 HEBREW_TRANSLATIONS = {}

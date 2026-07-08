@@ -595,6 +595,11 @@ def ensure_ongoing_patients_have_upcoming_bookings(db, reference_date=None, hori
 
 
 def ensure_default_recurring_vacancies(db):
+    already_seeded = db.execute(
+        "SELECT setting_value FROM site_settings WHERE setting_key = 'vacancies_auto_seeded'"
+    ).fetchone()
+    if already_seeded and already_seeded['setting_value'] == '1':
+        return 0
     has_any = db.execute('''
         SELECT 1 FROM availability WHERE 1=1 LIMIT 1
     ''').fetchone()
@@ -612,6 +617,10 @@ def ensure_default_recurring_vacancies(db):
             INSERT INTO availability (weekday, slot_time, duration_minutes, recurrence, status)
             VALUES (?, ?, ?, 'weekly', 'available')
         ''', (weekday, slot_time, duration))
+    db.execute(
+        "INSERT INTO site_settings (setting_key, setting_value) VALUES ('vacancies_auto_seeded', '1') "
+        "ON CONFLICT(setting_key) DO UPDATE SET setting_value='1'"
+    )
     db.commit()
     return len(default_slots)
 
