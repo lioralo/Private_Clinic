@@ -700,19 +700,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return new Promise((resolve) => {
-            // Ensure any previous modal is fully cleaned up
-            if (actionModal._isShown) {
-                actionModal.hide();
-            }
-            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
-
             modalTitle.textContent = config.title || I18N.notice;
             modalBody.innerHTML = config.message || '';
             modalConfirmBtn.textContent = config.confirmText || I18N.ok;
-            modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
+            modalConfirmBtn.className = 'btn ' + (config.confirmClass || 'btn-primary');
 
             if (config.showCancel) {
                 modalCancelBtn.classList.remove('d-none');
@@ -721,24 +712,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 modalCancelBtn.classList.add('d-none');
             }
 
-            // Clear any stale onclick set by openAppointmentEditor so it doesn't
-            // fire alongside our new confirmHandler and cause unexpected side-effects.
             modalConfirmBtn.onclick = null;
 
-            let resolved = false;
-            const confirmHandler = () => {
+            var resolved = false;
+            var result = false;
+            var confirmHandler = function() {
                 if (resolved) return;
                 resolved = true;
+                result = true;
                 actionModal.hide();
-                resolve(true);
             };
-            const hiddenHandler = () => {
+            var hiddenHandler = function() {
                 modalConfirmBtn.removeEventListener('click', confirmHandler);
                 modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
                 if (!resolved) {
                     resolved = true;
-                    resolve(false);
+                    result = false;
                 }
+                document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                resolve(result);
             };
 
             modalConfirmBtn.addEventListener('click', confirmHandler);
@@ -1416,17 +1411,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 }).then(r => r.json()).then(data => {
                     if (data.status === 'success') {
                         actionModal.hide();
-                        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                        document.body.classList.remove('modal-open');
-                        document.body.style.overflow = '';
-                        loadSnapshot();
-                        loadVacancies();
+                        modalRoot.addEventListener('hidden.bs.modal', function() {
+                            loadSnapshot();
+                            loadVacancies();
+                        }, { once: true });
                     } else {
                         showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete vacancy.' });
                     }
                 }).catch(() => {
                     actionModal.hide();
-                    setTimeout(() => showActionModal({ title: 'Error', message: 'Network error — could not reach server.' }), 150);
+                    modalRoot.addEventListener('hidden.bs.modal', function() {
+                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
+                    }, { once: true });
                 });
             };
         }
@@ -1528,9 +1524,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         body: new URLSearchParams({ kind })
                     }).then(r => r.json()).then(data => {
                         if (data.status === 'success') {
-                            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                            document.body.classList.remove('modal-open');
-                            document.body.style.overflow = '';
                             loadSnapshot();
                             loadVacancies();
                         } else {
@@ -1656,9 +1649,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         body: new URLSearchParams({ kind: kind })
                     }).then(function(r) { return r.json(); }).then(function(data) {
                         if (data.status === 'success') {
-                            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-                            document.body.classList.remove('modal-open');
-                            document.body.style.overflow = '';
                             loadSnapshot();
                             loadVacancySlots();
                         } else {
