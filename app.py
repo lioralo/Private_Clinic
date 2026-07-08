@@ -2458,20 +2458,7 @@ def _run_db_migrations(db):
 
     # Appointment reminder columns
     try:
-        db.execute("ALTER TABLE patients ADD COLUMN reminder_email_enabled BOOLEAN DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute("ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    # Set all existing patients to reminder-disabled (opt-in model)
-    try:
-        db.execute("UPDATE patients SET reminder_email_enabled = 0")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        db.execute("UPDATE patients SET reminder_sms_enabled = 0")
+        db.execute("ALTER TABLE patients ADD COLUMN reminder_email_enabled BOOLEAN DEFAULT 1")
     except sqlite3.OperationalError:
         pass
     try:
@@ -2590,131 +2577,6 @@ def _run_db_migrations(db):
     )''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_read ON incoming_email(is_read)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_created ON incoming_email(created_at)')
-
-    # Treatment plans (fix 500 error — these tables are only in alembic migrations)
-    try:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS treatment_plans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL REFERENCES patients(id),
-                diagnosis_code TEXT,
-                diagnosis_description TEXT,
-                problem_statement TEXT,
-                strengths TEXT,
-                created_date DATE NOT NULL DEFAULT (DATE('now')),
-                review_date DATE,
-                next_review_date DATE,
-                status TEXT NOT NULL DEFAULT 'active'
-                    CHECK(status IN ('active', 'completed', 'review', 'discontinued')),
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP
-            )
-        ''')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON treatment_plans(patient_id)')
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS treatment_plan_goals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                plan_id INTEGER NOT NULL REFERENCES treatment_plans(id),
-                goal_number INTEGER NOT NULL,
-                goal_description TEXT NOT NULL,
-                objectives TEXT,
-                interventions TEXT,
-                target_date DATE,
-                status TEXT NOT NULL DEFAULT 'active'
-                    CHECK(status IN ('active', 'in_progress', 'achieved', 'discontinued', 'revised')),
-                progress_percentage INTEGER DEFAULT 0
-                    CHECK(progress_percentage >= 0 AND progress_percentage <= 100),
-                revised_from_goal_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP
-            )
-        ''')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_treatment_plan_goals_plan ON treatment_plan_goals(plan_id)')
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS assessment_types (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                display_name TEXT NOT NULL,
-                description TEXT,
-                category TEXT NOT NULL DEFAULT 'mental_health',
-                num_questions INTEGER NOT NULL,
-                scoring_method TEXT NOT NULL DEFAULT 'sum'
-                    CHECK(scoring_method IN ('sum', 'average', 'custom')),
-                scoring_rules_json TEXT NOT NULL DEFAULT '{}',
-                interpretation_json TEXT NOT NULL DEFAULT '[]',
-                min_score REAL DEFAULT 0,
-                max_score REAL,
-                is_active BOOLEAN NOT NULL DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS assessments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id INTEGER NOT NULL REFERENCES patients(id),
-                assessment_type_id INTEGER NOT NULL REFERENCES assessment_types(id),
-                admin_user_id INTEGER REFERENCES users(id),
-                appointment_id INTEGER REFERENCES appointments(id),
-                raw_scores_json TEXT NOT NULL DEFAULT '[]',
-                total_score REAL,
-                severity_level TEXT,
-                interpretation TEXT,
-                notes TEXT,
-                taken_at DATE NOT NULL DEFAULT (DATE('now')),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_patient ON assessments(patient_id)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_type ON assessments(assessment_type_id)')
-        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_date ON assessments(taken_at)')
-    except sqlite3.OperationalError:
-        pass
-
-    # Seed built-in assessment types
-    try:
-        db.execute('''
-            INSERT OR IGNORE INTO assessment_types
-                (name, display_name, description, category, num_questions,
-                 scoring_method, scoring_rules_json, interpretation_json,
-                 min_score, max_score)
-            VALUES
-                ('PHQ-9', 'Patient Health Questionnaire (PHQ-9)',
-                 '9-item depression screening. Scores 0-27: None (0-4), Mild (5-9), Moderate (10-14), Moderately Severe (15-19), Severe (20-27).',
-                 'depression', 9, 'sum', '{"min_per_item":0,"max_per_item":3}',
-                 '[{"range":[0,4],"label":"None","severity":"none"},{"range":[5,9],"label":"Mild","severity":"mild"},{"range":[10,14],"label":"Moderate","severity":"moderate"},{"range":[15,19],"label":"Moderately Severe","severity":"moderately_severe"},{"range":[20,27],"label":"Severe","severity":"severe"}]',
-                 0, 27)
-        ''')
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        db.execute('''
-            INSERT OR IGNORE INTO assessment_types
-                (name, display_name, description, category, num_questions,
-                 scoring_method, scoring_rules_json, interpretation_json,
-                 min_score, max_score)
-            VALUES
-                ('GAD-7', 'Generalized Anxiety Disorder (GAD-7)',
-                 '7-item anxiety screening. Scores 0-21: None (0-4), Mild (5-9), Moderate (10-14), Severe (15-21).',
-                 'anxiety', 7, 'sum', '{"min_per_item":0,"max_per_item":3}',
-                 '[{"range":[0,4],"label":"None","severity":"none"},{"range":[5,9],"label":"Mild","severity":"mild"},{"range":[10,14],"label":"Moderate","severity":"moderate"},{"range":[15,21],"label":"Severe","severity":"severe"}]',
-                 0, 21)
-        ''')
-    except sqlite3.OperationalError:
-        pass
 
     db.commit()
 
@@ -3651,7 +3513,7 @@ def _get_patients_select_clause(admin_user_id):
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
 
-def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived=False):
+def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
     where_query = ""
     params = []
 
@@ -3660,10 +3522,6 @@ def _get_patients_where_clause(status, patient_type, search_query, include_group
     elif status != 'all':
         where_query += ' AND p.status = ?'
         params.append(status)
-
-    # Hide archived patients by default unless explicitly viewing archived or toggled on
-    if status != 'archived' and not show_archived:
-        where_query += " AND p.status != 'archived'"
 
     if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
         where_query += ' AND COALESCE(p.patient_type, "private") = ?'
@@ -3711,9 +3569,9 @@ def _normalize_patient_status(status):
     return 'candidate'
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all', show_archived=False):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
     select_clause = _get_patients_select_clause(admin_user_id)
-    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
     order_clause = _get_patients_order_clause(sort_by)
 
     final_query = f"{select_clause}{where_clause}{order_clause}"
@@ -3737,8 +3595,6 @@ def crm_dashboard():
     treatment_method = request.args.get('treatment_method', saved_filters.get('treatment_method', 'all')).strip()
     show_deleted_raw = request.args.get('show_deleted', saved_filters.get('show_deleted', 'false'))
     show_deleted = show_deleted_raw == 'true'
-    show_archived_raw = request.args.get('show_archived', saved_filters.get('show_archived', 'false'))
-    show_archived = show_archived_raw == 'true'
 
     status = _normalize_patient_status(status) if status != 'all' else 'all'
     if status not in {'all', 'ongoing', 'candidate', 'archived'}:
@@ -3755,8 +3611,7 @@ def crm_dashboard():
         'sort': sort_by,
         'include_group': 'true' if include_group else 'false',
         'treatment_method': treatment_method,
-        'show_deleted': 'true' if show_deleted else 'false',
-        'show_archived': 'true' if show_archived else 'false'
+        'show_deleted': 'true' if show_deleted else 'false'
     }
     
     patient_type = clinic_type
@@ -3816,12 +3671,10 @@ def crm_dashboard():
         final_query = f"{select_clause}{where_clause}{order_clause}"
         patients = db.execute(final_query, tuple(params)).fetchall()
     else:
-        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method, show_archived=show_archived)
+        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
     
     count_where = ['COALESCE(is_deleted, 0) = 0']
     count_params = []
-    if status != 'archived' and not show_archived:
-        count_where.append("status != 'archived'")
     if clinic_type != 'all':
         count_where.append('patient_type = ?')
         count_params.append(clinic_type)
@@ -3934,8 +3787,7 @@ def crm_dashboard():
                            treatment_method_options=treatment_method_labels,
                            today_appointments=today_appointments,
                            avg_wait_time=avg_wait_time,
-                           show_deleted=show_deleted,
-                           show_archived=show_archived)
+                           show_deleted=show_deleted)
 
 
 
@@ -5470,7 +5322,7 @@ def _send_appointment_email_reminders(db):
         LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND COALESCE(u.is_active, 1) = 1
         WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(p.is_deleted, 0) = 0
-          AND COALESCE(p.reminder_email_enabled, 0) = 1
+          AND COALESCE(p.reminder_email_enabled, 1) = 1
           AND a.reminder_sent_at IS NULL
           AND a.appointment_date BETWEEN ? AND ?
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
@@ -6539,15 +6391,17 @@ def build_group_detail_payload(db, group_id, show_all_past=False, show_all_upcom
     if not group:
         return None
 
-    group_members = db.execute('''
-        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name, p.status, (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring, gm.joined_at, gm.left_at
+    group_members = [dict(row) for row in db.execute('''
+        SELECT gm.group_id, p.id AS patient_id, p.name AS patient_name,
+               gm.joined_at, gm.left_at, p.status,
+               (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring
         FROM group_members gm
         JOIN patients p ON p.id = gm.patient_id
                 WHERE gm.group_id = ?
                     AND gm.left_at IS NULL
                     AND COALESCE(p.is_deleted, 0) = 0
         ORDER BY p.name ASC
-        ''', (group_id,)).fetchall()
+        ''', (group_id,)).fetchall()]
 
     group_sessions = db.execute('''
         SELECT gs.*, g.name AS group_name,
@@ -6665,8 +6519,7 @@ def update_group_info(group_id):
         flash('Group name is required.')
         if return_to == 'dashboard':
             return redirect(url_for('groups_dashboard'))
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db = get_db()
     db.execute('''
@@ -6678,8 +6531,7 @@ def update_group_info(group_id):
     flash('Group information updated.')
     if return_to == 'dashboard':
         return redirect(url_for('groups_dashboard'))
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(group_id, active_tab)
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 # ── Group supervision ─────────────────────────────────────────────────────────
@@ -6697,16 +6549,14 @@ def add_group_supervision(group_id):
     content = (request.form.get('content') or '').strip()
     if not sup_date or not content:
         flash('Date and content are required.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
     db.execute(
         'INSERT INTO supervisions (group_id, supervision_date, supervisor_name, content) VALUES (?,?,?,?)',
         (group_id, sup_date, supervisor or None, content)
     )
     db.commit()
     flash('Supervision record added.')
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(group_id, active_tab)
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/<int:group_id>/supervision/<int:sup_id>/delete', methods=['POST'])
@@ -6718,16 +6568,7 @@ def delete_group_supervision(group_id, sup_id):
     db.execute('DELETE FROM supervisions WHERE id = ? AND group_id = ?', (sup_id, group_id))
     db.commit()
     flash('Supervision record deleted.')
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(group_id, active_tab)
-
-
-def _redirect_to_group(group_id, active_tab=None):
-    """Redirect to group_detail, preserving the active management tab."""
-    dest = url_for('group_detail', group_id=group_id)
-    if active_tab:
-        dest += f'?tab={active_tab}'
-    return redirect(dest)
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/<int:group_id>/members', methods=['POST'])
@@ -6739,20 +6580,17 @@ def add_group_member(group_id):
     patient_id_raw = (request.form.get('patient_id') or '').strip()
     if not patient_id_raw.isdigit():
         flash('Valid patient is required.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db = get_db()
     patient_id = int(patient_id_raw)
     patient_row = db.execute('SELECT id, patient_type FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0', (patient_id,)).fetchone()
     if not patient_row:
         flash('Patient not found.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
     if (patient_row['patient_type'] or 'private') != 'group':
         flash('Only group-type patients can be added to groups.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     existing_active = db.execute('''
         SELECT 1
@@ -6762,8 +6600,7 @@ def add_group_member(group_id):
     ''', (group_id, patient_id)).fetchone()
     if existing_active:
         flash('Patient is already an active member in this group.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db.execute('''
         INSERT INTO group_members (group_id, patient_id, joined_at, left_at, role)
@@ -6787,8 +6624,7 @@ def add_group_member(group_id):
 
     db.commit()
     flash('Patient added to group.')
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(group_id, active_tab)
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 @app.route('/groups/<int:group_id>/members/<int:patient_id>/remove', methods=['POST'])
@@ -6810,12 +6646,10 @@ def remove_group_member(group_id, patient_id):
 
     if not group or not patient:
         flash('Group member not found.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
     if not active_membership:
         flash('Patient is not an active member in this group.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     db.execute('''
         UPDATE group_members
@@ -6844,8 +6678,7 @@ def remove_group_member(group_id, patient_id):
 
     db.commit()
     flash(message)
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(group_id, active_tab)
+    return redirect(url_for('group_detail', group_id=group_id))
 
 
 def sync_group_member_current_record(db, group_id, patient_id):
@@ -7050,8 +6883,7 @@ def add_group_session(group_id):
 
     if not parsed_date or not parsed_time:
         flash('Valid session date and start time are required.')
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     duration = _calculate_group_session_duration(parsed_time, parsed_end)
     db = get_db()
@@ -7063,8 +6895,7 @@ def add_group_session(group_id):
 
     if error_msg:
         flash(error_msg)
-        active_tab = (request.form.get('active_tab') or '').strip()
-        return _redirect_to_group(group_id, active_tab)
+        return redirect(url_for('group_detail', group_id=group_id))
 
     recurrence_dates = [parsed_date]
     if data['recurrence_mode'] == 'weekly':
@@ -7081,8 +6912,7 @@ def add_group_session(group_id):
         conflict_message = has_time_conflict(db, date_item, start_at, end_at)
         if conflict_message:
             flash(f'{conflict_message} ({date_item.isoformat()})')
-            active_tab = (request.form.get('active_tab') or '').strip()
-            return _redirect_to_group(group_id, active_tab)
+            return redirect(url_for('group_detail', group_id=group_id))
 
     series_id, last_session_id = _insert_group_sessions(
         db, group_id, parsed_date, parsed_time, duration, recurrence_dates,
@@ -7097,13 +6927,9 @@ def add_group_session(group_id):
     else:
         flash('Group session added.')
 
-    active_tab = (request.form.get('active_tab') or '').strip()
     destination = url_for('group_detail', group_id=group_id, show_upcoming='all')
     if last_session_id:
         destination = f'{destination}#session-record-{last_session_id}'
-    if active_tab:
-        sep = '&' if '?' in destination else '?'
-        destination = f'{destination}{sep}tab={active_tab}'
     return redirect(destination)
 
 
@@ -7266,11 +7092,7 @@ def record_group_session(session_id):
             destination_args['show_past'] = 'all'
         else:
             destination_args['show_upcoming'] = 'all'
-    active_tab = (request.form.get('active_tab') or '').strip()
     destination = url_for('group_detail', **destination_args)
-    if active_tab:
-        sep = '&' if '?' in destination else '?'
-        destination = f'{destination}{sep}tab={active_tab}'
     return redirect(f'{destination}#session-record-{session_id}')
 
 
@@ -7986,8 +7808,7 @@ def delete_group_session(session_id):
     db.execute('DELETE FROM group_sessions WHERE id = ?', (session_id,))
     db.commit()
     flash('Group session deleted.')
-    active_tab = (request.form.get('active_tab') or '').strip()
-    return _redirect_to_group(int(existing['group_id']), active_tab)
+    return redirect(url_for('group_detail', group_id=int(existing['group_id'])))
 
 
 @app.route('/api/groups/sessions/<int:session_id>/delete', methods=['POST'])
@@ -8647,8 +8468,13 @@ def _pull_group_gdoc_notes(db, group):
             ORDER BY session_date ASC, session_time ASC, id ASC
         ''', (group['id'],)).fetchall()
         title_session_map = {}
+        def _title_key_no_date(title_value):
+            t = _normalize_meeting_title(title_value)
+            t = re.sub(r'\s*[-:]\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$', '', t).strip()
+            t = re.sub(r'\s*\|\s*\d{4}-\d{2}-\d{2}\s*$', '', t).strip()
+            return t
         for session_row in ordered_sessions:
-            lookup_title = _normalize_meeting_title(session_row['title'] if 'title' in session_row.keys() else None)
+            lookup_title = _title_key_no_date(session_row['title'] if 'title' in session_row.keys() else None)
             if lookup_title and lookup_title not in title_session_map:
                 title_session_map[lookup_title] = session_row
 
@@ -8675,7 +8501,7 @@ def _pull_group_gdoc_notes(db, group):
                 ).fetchone()
 
             if target is None and meeting_title:
-                target = title_session_map.get(_normalize_meeting_title(meeting_title))
+                target = title_session_map.get(_title_key_no_date(meeting_title))
 
             if target is None and note_date:
                 target = db.execute('''
@@ -8703,6 +8529,11 @@ def _pull_group_gdoc_notes(db, group):
                         'UPDATE group_sessions SET title = ? WHERE id = ?',
                         (meeting_title, target['id'])
                     )
+                if note_date:
+                    db.execute(
+                        'UPDATE group_sessions SET session_date = ? WHERE id = ?',
+                        (note_date, target['id'])
+                    )
                 target_date = note_date or (target['session_date'] if 'session_date' in target.keys() else None)
                 target_time = target['session_time'] if 'session_time' in target.keys() else None
                 _apply_attendance_from_doc(
@@ -8715,19 +8546,21 @@ def _pull_group_gdoc_notes(db, group):
                 )
                 continue
 
-            inferred_date = note_date or datetime.now().date().isoformat()
+            if not note_date:
+                continue
+
             title = meeting_title or (f"Imported Session {session_number}" if session_number else 'Imported Session')
             db.execute('''
                 INSERT INTO group_sessions (
                     group_id, session_date, session_time, duration_minutes, title, status, session_summary
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', structured_summary or content))
+            ''', (group['id'], note_date, '00:00', 60, title, 'completed', structured_summary or content))
             created_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
             _apply_attendance_from_doc(
                 int(created_id),
                 participant_entries or participants,
                 missing_note_entries or missing_entries,
-                session_date=inferred_date,
+                session_date=note_date,
                 session_time='00:00',
                 session_title=title,
             )

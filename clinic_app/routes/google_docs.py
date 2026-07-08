@@ -1,7 +1,6 @@
 import os
 import re
 import json
-from datetime import datetime, timezone
 from functools import wraps
 
 from flask import (
@@ -602,8 +601,13 @@ def _pull_group_gdoc_notes(db, group):
             ORDER BY session_date ASC, session_time ASC, id ASC
         ''', (group['id'],)).fetchall()
         title_session_map = {}
+        def _title_key_no_date(title_value):
+            t = _normalize_meeting_title(title_value)
+            t = re.sub(r'\s*[-:]\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$', '', t).strip()
+            t = re.sub(r'\s*\|\s*\d{4}-\d{2}-\d{2}\s*$', '', t).strip()
+            return t
         for session_row in ordered_sessions:
-            lookup_title = _normalize_meeting_title(session_row['title'] if 'title' in session_row.keys() else None)
+            lookup_title = _title_key_no_date(session_row['title'] if 'title' in session_row.keys() else None)
             if lookup_title and lookup_title not in title_session_map:
                 title_session_map[lookup_title] = session_row
 
@@ -630,7 +634,7 @@ def _pull_group_gdoc_notes(db, group):
                 ).fetchone()
 
             if target is None and meeting_title:
-                target = title_session_map.get(_normalize_meeting_title(meeting_title))
+                target = title_session_map.get(_title_key_no_date(meeting_title))
 
             if target is None and note_date:
                 target = db.execute('''
@@ -658,6 +662,11 @@ def _pull_group_gdoc_notes(db, group):
                         'UPDATE group_sessions SET title = ? WHERE id = ?',
                         (meeting_title, target['id'])
                     )
+                if note_date:
+                    db.execute(
+                        'UPDATE group_sessions SET session_date = ? WHERE id = ?',
+                        (note_date, target['id'])
+                    )
                 target_date = note_date or (target['session_date'] if 'session_date' in target.keys() else None)
                 target_time = target['session_time'] if 'session_time' in target.keys() else None
                 _apply_attendance_from_doc(
@@ -670,19 +679,21 @@ def _pull_group_gdoc_notes(db, group):
                 )
                 continue
 
-            inferred_date = note_date or datetime.now().date().isoformat()
+            if not note_date:
+                continue
+
             title = meeting_title or (f"Imported Session {session_number}" if session_number else 'Imported Session')
             db.execute('''
                 INSERT INTO group_sessions (
                     group_id, session_date, session_time, duration_minutes, title, status, session_summary
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (group['id'], inferred_date, '00:00', 60, title, 'completed', structured_summary or content))
+            ''', (group['id'], note_date, '00:00', 60, title, 'completed', structured_summary or content))
             created_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
             _apply_attendance_from_doc(
                 int(created_id),
                 participant_entries or participants,
                 missing_note_entries or missing_entries,
-                session_date=inferred_date,
+                session_date=note_date,
                 session_time='00:00',
                 session_title=title,
             )
