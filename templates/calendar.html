@@ -1349,122 +1349,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const vacanciesContainer = document.getElementById('vacanciesContainer');
     const vacancyCount = document.getElementById('vacancyCount');
 
-    function openVacancyManager(payload) {
-        if (!payload || !payload.slot_id) {
-            showActionModal({ title: 'Error', message: 'Vacancy slot data missing.' });
-            return;
-        }
-
-        const patientOptions = Array.from(
-            (document.getElementById('bookingPatient') || {}).options || []
-        ).filter(o => o.value && o.value !== '' && o.value !== 'other')
-         .map(o => `<option value="${o.value}">${o.text}</option>`)
-         .join('');
-
-        modalTitle.textContent = 'Open Vacancy Slot';
-        modalBody.innerHTML = `
-            <div class="d-flex gap-2 mb-3 small text-muted">
-                <span><i class="bi bi-calendar3 me-1"></i>${payload.date}</span>
-                <span><i class="bi bi-clock me-1"></i>${payload.time}–${payload.end_time}</span>
-                <span>${payload.duration_minutes} min</span>
-            </div>
-            <p class="small fw-semibold mb-2">Manually Occupy This Slot</p>
-                <div class="mb-2">
-                    <label class="form-label small">{{ t('Meeting Remarks') }}</label>
-                    <input type="text" name="meeting_remarks" id="meetingRemarksInput" class="form-control form-control-sm" placeholder="">
-                </div>
-                <div class="mb-2">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="recurringCheckbox" name="is_recurring">
-                        <label class="form-check-label small" for="recurringCheckbox">
-                            {{ t('Recurring Meeting') }}
-                        </label>
-                    </div>
-                    <div class="form-text">{{ t('When enabled, creates a weekly recurring meeting until specified date.') }}</div>
-                </div>
-                <div class="mb-3 d-none" id="recurringDateWrap">
-                    <label class="form-label small">{{ t('Repeat Until') }}</label>
-                    <input type="date" id="recurringUntilDate" name="recurrence_end_date" class="form-control form-control-sm">
-                </div>
-                    ${patientOptions}
-                </select>
-            </div>
-            <div class="mb-2" id="vacMgrNameWrap">
-                <label class="form-label small">Or Enter Name Directly</label>
-                <input type="text" class="form-control form-control-sm" id="vacMgrName" placeholder="Name / guest">
-            </div>
-            <div id="vacMgrFeedback" class="d-none small mt-2"></div>
-            <button type="button" class="btn btn-sm btn-outline-danger mt-3" id="vacMgrDeleteBtn">Delete This Vacancy</button>
-        `;
-
-        modalConfirmBtn.textContent = 'Occupy Slot';
-        modalConfirmBtn.className = 'btn btn-success';
-        modalCancelBtn.classList.remove('d-none');
-        actionModal.show();
-
-        const patientSelect = document.getElementById('vacMgrPatient');
-        const nameWrap = document.getElementById('vacMgrNameWrap');
-        if (patientSelect) {
-            patientSelect.addEventListener('change', function() {
-                if (nameWrap) nameWrap.classList.toggle('d-none', !!this.value);
-            });
-        }
-
-        const deleteBtn = document.getElementById('vacMgrDeleteBtn');
-        if (deleteBtn) {
-            deleteBtn.onclick = function() {
-                fetch(`/api/calendar/vacancy/${payload.slot_id}/delete`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': csrfToken }
-                }).then(r => r.json()).then(data => {
-                    if (data.status === 'success') {
-                        actionModal.hide();
-                        modalRoot.addEventListener('hidden.bs.modal', function() {
-                            loadSnapshot();
-                            loadVacancies();
-                        }, { once: true });
-                    } else {
-                        showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete vacancy.' });
-                    }
-                }).catch(() => {
-                    actionModal.hide();
-                    modalRoot.addEventListener('hidden.bs.modal', function() {
-                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
-                    }, { once: true });
-                });
-            };
-        }
-
-        modalConfirmBtn.onclick = function() {
-            const patientId = patientSelect ? patientSelect.value : '';
-            const nameInput = document.getElementById('vacMgrName');
-            const occupantName = nameInput ? nameInput.value.trim() : '';
-            if (!patientId && !occupantName) {
-                const fb = document.getElementById('vacMgrFeedback');
-                if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = 'Select a patient or enter a name.'; }
-                return;
+    function doDeleteVacancy(id, kind) {
+        if (!confirm('Remove this vacancy slot?')) return;
+        fetch('/api/calendar/vacancy/' + id + '/delete', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ kind: kind || 'one-time' })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.status === 'success') {
+                loadSnapshot();
+                loadVacancies();
+                loadVacancySlots();
+            } else {
+                alert(data.message || 'Delete failed.');
             }
-            const body = new URLSearchParams({ patient_id: patientId, occupant_name: occupantName });
-            fetch(`/api/calendar/vacancy/${payload.slot_id}/occupy`, {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: body.toString()
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'success') {
-                    actionModal.hide();
-                    loadSnapshot();
-                    loadVacancies();
-                    loadBookingManagement();
-                    showActionModal({ title: 'Slot Occupied', message: data.message || 'Done.' });
-                } else {
-                    const fb = document.getElementById('vacMgrFeedback');
-                    if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = data.message || 'Failed.'; }
-                }
-            }).catch(() => {
-                const fb = document.getElementById('vacMgrFeedback');
-                if (fb) { fb.classList.remove('d-none'); fb.className = 'small mt-2 text-danger'; fb.textContent = 'Network error.'; }
-            });
-        };
+        }).catch(function() {
+            alert('Network error.');
+        });
     }
 
     function renderVacancies(items) {
@@ -1504,43 +1405,28 @@ document.addEventListener('DOMContentLoaded', function() {
         vacanciesContainer.querySelectorAll('.vac-occupy').forEach(btn => {
             btn.addEventListener('click', function() {
                 const item = JSON.parse(decodeURIComponent(this.dataset.item || '{}'));
-                openVacancyManager({
-                    slot_id: item.id,
-                    date: item.date,
-                    time: item.time,
-                    end_time: item.end_time,
-                    duration_minutes: item.duration_minutes
-                });
+                var name = prompt('Enter name to occupy:\n' + item.time + ' - ' + item.end_time + ' (' + item.duration_minutes + ' min)');
+                if (!name) return;
+                fetch('/api/calendar/vacancy/' + item.id + '/occupy', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ occupant_name: name })
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.status === 'success') {
+                        loadSnapshot();
+                        loadVacancies();
+                        loadVacancySlots();
+                        loadBookingManagement();
+                    } else {
+                        alert(data.message || 'Failed.');
+                    }
+                }).catch(function() { alert('Network error.'); });
             });
         });
 
         vacanciesContainer.querySelectorAll('.vac-del').forEach(btn => {
             btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                const kind = this.dataset.kind || 'one-time';
-                showActionModal({
-                    title: 'Delete Vacancy',
-                    message: 'Remove this vacancy slot?',
-                    confirmText: 'Delete',
-                    confirmClass: 'btn-danger',
-                    showCancel: true
-                }).then(confirmed => {
-                    if (!confirmed) return;
-                    fetch(`/api/calendar/vacancy/${id}/delete`, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ kind })
-                    }).then(r => r.json()).then(data => {
-                        if (data.status === 'success') {
-                            loadSnapshot();
-                            loadVacancies();
-                        } else {
-                            showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
-                        }
-                    }).catch(() => {
-                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
-                    });
-                });
+                doDeleteVacancy(this.dataset.id, this.dataset.kind);
             });
         });
     }
@@ -1639,31 +1525,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         vacancySlotsBody.querySelectorAll('.vacancy-delete').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                var id = this.dataset.id;
-                var kind = this.dataset.kind || 'one-time';
-                showActionModal({
-                    title: 'Delete Vacancy',
-                    message: 'Remove this vacancy slot?',
-                    confirmText: 'Delete',
-                    confirmClass: 'btn-danger',
-                    showCancel: true
-                }).then(function(confirmed) {
-                    if (!confirmed) return;
-                    fetch('/api/calendar/vacancy/' + id + '/delete', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ kind: kind })
-                    }).then(function(r) { return r.json(); }).then(function(data) {
-                        if (data.status === 'success') {
-                            loadSnapshot();
-                            loadVacancySlots();
-                        } else {
-                            showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
-                        }
-                    }).catch(function() {
-                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
-                    });
-                });
+                doDeleteVacancy(this.dataset.id, this.dataset.kind);
             });
         });
     }
@@ -1685,10 +1547,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     loadSnapshot();
                     loadVacancySlots();
                 } else {
-                    showActionModal({ title: 'Error', message: data.message || 'Failed to ' + label + ' vacancy.' });
+                    alert(data.message || 'Failed.');
                 }
             }).catch(function() {
-                showActionModal({ title: 'Error', message: 'Network error — could not ' + label + ' vacancy.' });
+                alert('Network error.');
             });
         });
     }
@@ -1991,61 +1853,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function createVacancyFromSelectedSlot() {
         if (!bookingDate.value || !bookingTime.value) {
-            showActionModal({ title: 'Time Required', message: 'Please select a time on the calendar first.' });
+            alert('Please select a time on the calendar first.');
             return;
         }
         if (bookingEndTimeInput && bookingEndTimeInput.value) {
             bookingEndTime.value = bookingEndTimeInput.value;
         }
         if (!bookingEndTime.value) {
-            showActionModal({ title: 'End Time Required', message: 'Please set an end time for the vacancy.' });
+            alert('Please set an end time.');
             return;
         }
 
-        modalTitle.textContent = 'Vacancy Type';
-        modalBody.innerHTML = `
-            <div class="mb-2 small text-muted">Should this vacancy apply only once or recur every week?</div>
-            <div class="mb-2">
-                <label class="form-label small">Vacancy Pattern</label>
-                <select class="form-select form-select-sm" id="vacancyPatternChoice">
-                    <option value="one-time">One-time (this date only)</option>
-                    <option value="weekly" selected>Weekly recurring</option>
-                </select>
-            </div>
-        `;
-        modalConfirmBtn.textContent = 'Create Vacancy';
-        modalConfirmBtn.className = 'btn btn-success';
-        modalCancelBtn.classList.remove('d-none');
-        actionModal.show();
-
-        modalConfirmBtn.onclick = function() {
-            const patternNode = document.getElementById('vacancyPatternChoice');
-            const recurrencePattern = patternNode ? patternNode.value : 'weekly';
-            fetch('/api/calendar/vacancy', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    slot_date: bookingDate.value,
-                    slot_time: bookingTime.value,
-                    end_time: bookingEndTime.value,
-                    recurrence_pattern: recurrencePattern
-                })
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'success') {
-                    actionModal.hide();
-                    loadSnapshot();
-                    loadVacancies();
-                    const msg = recurrencePattern === 'weekly'
-                        ? 'Weekly recurring vacancy created. Patients can book this same time each week unless occupied.'
-                        : 'One-time vacancy created for this date.';
-                    showActionModal({ title: 'Vacancy Created', message: msg });
-                } else {
-                    showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
-                }
-            }).catch(() => {
-                showActionModal({ title: 'Error', message: 'Network error — could not create vacancy.' });
-            });
-        };
+        var recurring = confirm('Weekly recurring vacancy?\n\nOK = recurring every week\nCancel = one-time only');
+        var pattern = recurring ? 'weekly' : 'one-time';
+        fetch('/api/calendar/vacancy', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                slot_date: bookingDate.value,
+                slot_time: bookingTime.value,
+                end_time: bookingEndTime.value,
+                recurrence_pattern: pattern
+            })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.status === 'success') {
+                loadSnapshot();
+                loadVacancies();
+                loadVacancySlots();
+            } else {
+                alert(data.message || 'Failed.');
+            }
+        }).catch(function() {
+            alert('Network error.');
+        });
     }
 
     if (createVacancyBtn) {
