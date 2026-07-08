@@ -1412,6 +1412,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         showActionModal({ title: 'Delete Failed', message: data.message || 'Could not delete vacancy.' });
                     }
+                }).catch(() => {
+                    actionModal.hide();
+                    setTimeout(() => showActionModal({ title: 'Error', message: 'Network error — could not reach server.' }), 150);
                 });
             };
         }
@@ -1518,6 +1521,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
                         }
+                    }).catch(() => {
+                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
                     });
                 });
             });
@@ -2327,8 +2332,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.classList.remove('btn-outline-primary');
                 this.classList.add('btn-primary');
                 loadBookingManagement();
-            });
-        });
+                loadVacancies();
+            })
+            .catch(() => console.warn('loadSnapshot failed'));
     }
 
     if (calendarPrevWeek) {
