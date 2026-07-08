@@ -52,7 +52,7 @@
 
                 <div class="col-md-12">
                     <div class="form-check form-switch mt-1">
-                        <input class="form-check-input" type="checkbox" role="switch" name="reminder_email_enabled" id="reminder_email_enabled" value="1" {% if patient['reminder_email_enabled'] == 1 or patient['reminder_email_enabled'] is none %}checked{% endif %}>
+                        <input class="form-check-input" type="checkbox" role="switch" name="reminder_email_enabled" id="reminder_email_enabled" value="1" {% if patient['reminder_email_enabled'] == 1 %}checked{% endif %}>
                         <label class="form-check-label" for="reminder_email_enabled">
                             <i class="bi bi-envelope me-1"></i>Send email reminders
                         </label>

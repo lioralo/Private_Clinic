@@ -2458,11 +2458,20 @@ def _run_db_migrations(db):
 
     # Appointment reminder columns
     try:
-        db.execute("ALTER TABLE patients ADD COLUMN reminder_email_enabled BOOLEAN DEFAULT 1")
+        db.execute("ALTER TABLE patients ADD COLUMN reminder_email_enabled BOOLEAN DEFAULT 0")
     except sqlite3.OperationalError:
         pass
     try:
-        db.execute("ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 1")
+        db.execute("ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    # Set all existing patients to reminder-disabled (opt-in model)
+    try:
+        db.execute("UPDATE patients SET reminder_email_enabled = 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("UPDATE patients SET reminder_sms_enabled = 0")
     except sqlite3.OperationalError:
         pass
     try:
@@ -2581,6 +2590,131 @@ def _run_db_migrations(db):
     )''')
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_read ON incoming_email(is_read)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_created ON incoming_email(created_at)')
+
+    # Treatment plans (fix 500 error — these tables are only in alembic migrations)
+    try:
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS treatment_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL REFERENCES patients(id),
+                diagnosis_code TEXT,
+                diagnosis_description TEXT,
+                problem_statement TEXT,
+                strengths TEXT,
+                created_date DATE NOT NULL DEFAULT (DATE('now')),
+                review_date DATE,
+                next_review_date DATE,
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK(status IN ('active', 'completed', 'review', 'discontinued')),
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        ''')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON treatment_plans(patient_id)')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS treatment_plan_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL REFERENCES treatment_plans(id),
+                goal_number INTEGER NOT NULL,
+                goal_description TEXT NOT NULL,
+                objectives TEXT,
+                interventions TEXT,
+                target_date DATE,
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK(status IN ('active', 'in_progress', 'achieved', 'discontinued', 'revised')),
+                progress_percentage INTEGER DEFAULT 0
+                    CHECK(progress_percentage >= 0 AND progress_percentage <= 100),
+                revised_from_goal_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        ''')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_treatment_plan_goals_plan ON treatment_plan_goals(plan_id)')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS assessment_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                description TEXT,
+                category TEXT NOT NULL DEFAULT 'mental_health',
+                num_questions INTEGER NOT NULL,
+                scoring_method TEXT NOT NULL DEFAULT 'sum'
+                    CHECK(scoring_method IN ('sum', 'average', 'custom')),
+                scoring_rules_json TEXT NOT NULL DEFAULT '{}',
+                interpretation_json TEXT NOT NULL DEFAULT '[]',
+                min_score REAL DEFAULT 0,
+                max_score REAL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS assessments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL REFERENCES patients(id),
+                assessment_type_id INTEGER NOT NULL REFERENCES assessment_types(id),
+                admin_user_id INTEGER REFERENCES users(id),
+                appointment_id INTEGER REFERENCES appointments(id),
+                raw_scores_json TEXT NOT NULL DEFAULT '[]',
+                total_score REAL,
+                severity_level TEXT,
+                interpretation TEXT,
+                notes TEXT,
+                taken_at DATE NOT NULL DEFAULT (DATE('now')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_patient ON assessments(patient_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_type ON assessments(assessment_type_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_assessments_date ON assessments(taken_at)')
+    except sqlite3.OperationalError:
+        pass
+
+    # Seed built-in assessment types
+    try:
+        db.execute('''
+            INSERT OR IGNORE INTO assessment_types
+                (name, display_name, description, category, num_questions,
+                 scoring_method, scoring_rules_json, interpretation_json,
+                 min_score, max_score)
+            VALUES
+                ('PHQ-9', 'Patient Health Questionnaire (PHQ-9)',
+                 '9-item depression screening. Scores 0-27: None (0-4), Mild (5-9), Moderate (10-14), Moderately Severe (15-19), Severe (20-27).',
+                 'depression', 9, 'sum', '{"min_per_item":0,"max_per_item":3}',
+                 '[{"range":[0,4],"label":"None","severity":"none"},{"range":[5,9],"label":"Mild","severity":"mild"},{"range":[10,14],"label":"Moderate","severity":"moderate"},{"range":[15,19],"label":"Moderately Severe","severity":"moderately_severe"},{"range":[20,27],"label":"Severe","severity":"severe"}]',
+                 0, 27)
+        ''')
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        db.execute('''
+            INSERT OR IGNORE INTO assessment_types
+                (name, display_name, description, category, num_questions,
+                 scoring_method, scoring_rules_json, interpretation_json,
+                 min_score, max_score)
+            VALUES
+                ('GAD-7', 'Generalized Anxiety Disorder (GAD-7)',
+                 '7-item anxiety screening. Scores 0-21: None (0-4), Mild (5-9), Moderate (10-14), Severe (15-21).',
+                 'anxiety', 7, 'sum', '{"min_per_item":0,"max_per_item":3}',
+                 '[{"range":[0,4],"label":"None","severity":"none"},{"range":[5,9],"label":"Mild","severity":"mild"},{"range":[10,14],"label":"Moderate","severity":"moderate"},{"range":[15,21],"label":"Severe","severity":"severe"}]',
+                 0, 21)
+        ''')
+    except sqlite3.OperationalError:
+        pass
 
     db.commit()
 
@@ -5326,7 +5460,7 @@ def _send_appointment_email_reminders(db):
         LEFT JOIN users u ON u.patient_id = p.id AND u.role = 'patient' AND COALESCE(u.is_active, 1) = 1
         WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(p.is_deleted, 0) = 0
-          AND COALESCE(p.reminder_email_enabled, 1) = 1
+          AND COALESCE(p.reminder_email_enabled, 0) = 1
           AND a.reminder_sent_at IS NULL
           AND a.appointment_date BETWEEN ? AND ?
         ORDER BY a.appointment_date ASC, a.appointment_time ASC

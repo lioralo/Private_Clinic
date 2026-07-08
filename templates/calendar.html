@@ -29,6 +29,11 @@
     <li class="nav-item" role="presentation">
         <button class="nav-link" id="booking-tab" data-bs-toggle="tab" data-bs-target="#booking-pane" type="button" role="tab" aria-controls="booking-pane" aria-selected="false">{{ t('Booking Panel') }}</button>
     </li>
+    {% if current_user.role == 'admin' %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="vacancy-tab" data-bs-toggle="tab" data-bs-target="#vacancy-pane" type="button" role="tab" aria-controls="vacancy-pane" aria-selected="false">{{ t('Vacant Slots') }}</button>
+    </li>
+    {% endif %}
 </ul>
 
 <div class="tab-content" id="calendarTabContent">
@@ -396,6 +401,59 @@
     </div>
     {% endif %}
 </div>
+
+{% if current_user.role == 'admin' %}
+<div class="tab-pane fade" id="vacancy-pane" role="tabpanel" aria-labelledby="vacancy-tab" tabindex="0">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+        <div class="p-5 border-b border-slate-100">
+            <h5 class="font-bold mb-0" style="color:#10b981;">{{ t('Vacant Slots Management') }}</h5>
+        </div>
+        <div class="p-5">
+            <form id="vacancyForm" class="row g-2 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label small">{{ t('Date') }}</label>
+                    <input type="date" name="slot_date" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">{{ t('Start Time') }}</label>
+                    <input type="time" name="slot_time" class="form-control form-control-sm" required step="900">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">{{ t('End Time') }}</label>
+                    <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">{{ t('Recurrence') }}</label>
+                    <select name="recurrence_pattern" class="form-select form-select-sm">
+                        <option value="one-time">{{ t('One-time') }}</option>
+                        <option value="weekly">{{ t('Weekly recurring') }}</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex justify-content-end">
+                    <button type="submit" class="btn btn-sm rounded-pill" style="background:#10b981;color:#fff;">{{ t('Add Vacant Slot') }}</button>
+                </div>
+            </form>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ t('Date / Repeat') }}</th>
+                            <th>{{ t('Time') }}</th>
+                            <th>{{ t('Duration') }}</th>
+                            <th>{{ t('Status') }}</th>
+                            <th>{{ t('Booked By') }}</th>
+                            <th class="text-end">{{ t('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vacancySlotsBody">
+                        <tr><td colspan="6" class="text-muted small">{{ t('Loading vacancies...') }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 </div>
 
 <div class="modal fade" id="calendarActionModal" tabindex="-1" aria-hidden="true">
@@ -1476,6 +1534,139 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    /* ------------------------------------------------------------------ */
+    /*  Vacant Slots Tab  */
+    /* ------------------------------------------------------------------ */
+    const vacancySlotsBody = document.getElementById('vacancySlotsBody');
+    const vacancyForm = document.getElementById('vacancyForm');
+
+    function loadVacancySlots() {
+        if (!isAdmin || !vacancySlotsBody) return;
+        fetch('/api/calendar/vacancies')
+            .then(r => r.json())
+            .then(data => renderVacancySlotsTable(data.items || []))
+            .catch(() => {
+                if (vacancySlotsBody) vacancySlotsBody.innerHTML = '<tr><td colspan="6" class="text-danger small">Failed loading vacancies.</td></tr>';
+            });
+    }
+
+    function renderVacancySlotsTable(items) {
+        if (!vacancySlotsBody) return;
+        if (!items || !items.length) {
+            vacancySlotsBody.innerHTML = '<tr><td colspan="6" class="text-muted small">No vacant slots defined.</td></tr>';
+            return;
+        }
+        vacancySlotsBody.innerHTML = items.map(function(item) {
+            const isWeekly = item.kind === 'weekly';
+            const isOpen = item.status === 'available' || (isWeekly && item.status === 'available');
+            const dateLabel = isWeekly ? item.date : (item.date || '');
+            const timeLabel = item.time + (item.end_time ? '\u2013' + item.end_time : '');
+            const durationLabel = item.duration_minutes + ' min';
+            let statusBadge = '<span class="badge bg-secondary border">Booked</span>';
+            if (isOpen && isWeekly) {
+                statusBadge = '<span class="badge bg-success border">Weekly Open</span>';
+            } else if (isOpen) {
+                statusBadge = '<span class="badge bg-success border">Open</span>';
+            } else if (item.booked_by_name) {
+                statusBadge = '<span class="badge bg-secondary border">Booked \u00b7 ' + escapeHtml(item.booked_by_name) + '</span>';
+            }
+            const actions = '<div class="d-flex gap-1 justify-content-end">'
+                + (isOpen
+                    ? '<button type="button" class="btn btn-sm btn-outline-primary vacancy-edit" data-id="' + item.id + '" data-kind="' + (isWeekly ? 'weekly' : 'one-time') + '" data-date="' + escapeHtml(item.date) + '" data-time="' + item.time + '" data-end="' + (item.end_time || '') + '" data-duration="' + item.duration_minutes + '"><i class="bi bi-pencil"></i></button>'
+                    : '')
+                + '<button type="button" class="btn btn-sm btn-outline-danger vacancy-delete" data-id="' + item.id + '" data-kind="' + (isWeekly ? 'weekly' : 'one-time') + '"><i class="bi bi-trash"></i></button>'
+                + '</div>';
+            return '<tr><td class="small">' + escapeHtml(dateLabel) + '</td><td class="small">' + escapeHtml(timeLabel) + '</td><td class="small">' + durationLabel + '</td><td>' + statusBadge + '</td><td class="small">' + escapeHtml(item.booked_by_name || '') + '</td><td class="text-end">' + actions + '</td></tr>';
+        }).join('');
+
+        vacancySlotsBody.querySelectorAll('.vacancy-edit').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = this.dataset.id;
+                var kind = this.dataset.kind;
+                var dateVal = this.dataset.date;
+                var timeVal = this.dataset.time;
+                var endVal = this.dataset.end;
+                var durationVal = this.dataset.duration;
+                showActionModal({
+                    title: 'Edit Vacant Slot',
+                    message: '<div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editVacDate" value="' + escapeHtml(dateVal) + '"></div>'
+                        + '<div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editVacTime" value="' + escapeHtml(timeVal) + '" step="900"></div>'
+                        + '<div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editVacEnd" value="' + escapeHtml(endVal) + '" step="900"></div>',
+                    confirmText: 'Save',
+                    confirmClass: 'btn-primary',
+                    showCancel: true
+                }).then(function(confirmed) {
+                    if (!confirmed) return;
+                    var newDate = document.getElementById('editVacDate').value;
+                    var newTime = document.getElementById('editVacTime').value;
+                    var newEnd = document.getElementById('editVacEnd').value;
+                    fetch('/api/calendar/vacancy/' + id + '/update', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ slot_date: newDate, slot_time: newTime, end_time: newEnd, recurrence_pattern: kind })
+                    }).then(function(r) { return r.json(); }).then(function(data) {
+                        if (data.status === 'success') {
+                            loadSnapshot();
+                            loadVacancySlots();
+                        } else {
+                            showActionModal({ title: 'Error', message: data.message || 'Update failed.' });
+                        }
+                    });
+                });
+            });
+        });
+
+        vacancySlotsBody.querySelectorAll('.vacancy-delete').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = this.dataset.id;
+                var kind = this.dataset.kind || 'one-time';
+                showActionModal({
+                    title: 'Delete Vacancy',
+                    message: 'Remove this vacancy slot?',
+                    confirmText: 'Delete',
+                    confirmClass: 'btn-danger',
+                    showCancel: true
+                }).then(function(confirmed) {
+                    if (!confirmed) return;
+                    fetch('/api/calendar/vacancy/' + id + '/delete', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({ kind: kind })
+                    }).then(function(r) { return r.json(); }).then(function(data) {
+                        if (data.status === 'success') {
+                            loadSnapshot();
+                            loadVacancySlots();
+                        } else {
+                            showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    if (vacancyForm) {
+        vacancyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(vacancyForm);
+            fetch('/api/calendar/vacancy', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: new URLSearchParams(formData)
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.status === 'success') {
+                    vacancyForm.reset();
+                    loadSnapshot();
+                    loadVacancySlots();
+                } else {
+                    showActionModal({ title: 'Error', message: data.message || 'Failed to create vacancy.' });
+                }
+            });
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
+
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -1655,6 +1846,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (scheduleTabEl) {
         scheduleTabEl.addEventListener('shown.bs.tab', function () {
             calendar.updateSize();
+        });
+    }
+
+    const vacancyTabEl = document.getElementById('vacancy-tab');
+    if (vacancyTabEl) {
+        vacancyTabEl.addEventListener('shown.bs.tab', function () {
+            loadVacancySlots();
         });
     }
 
@@ -2114,6 +2312,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderOngoingList(data.events || []);
                 loadBookingManagement();
                 loadVacancies();
+                loadVacancySlots();
             });
     }
 

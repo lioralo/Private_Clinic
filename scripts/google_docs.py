@@ -53,15 +53,19 @@ except ImportError:
 #   פגישה 1- 05/08/25                         (Hebrew, DD/MM/YY, dash)
 #   פגישה 1- 05/08/2025                       (Hebrew, DD/MM/YYYY, dash)
 #   פגישה #1- 05/06/25                        (Hebrew, optional #, dash)
-#   ~פגישה 6- 23/02/26                        (Hebrew, leading tilde marker)
+#   ~פגישה 6- 23/02/26                         (Hebrew, leading tilde marker)
+#   מפגש 3 | 2026-04-01 [note:new]            (Hebrew alternative label)
+#   מפגש 1- 05/08/25                           (Hebrew alternative, dash)
+#   SESSION 1: 2026-04-01                      (English, colon separator)
+#   פגישה 1: 05/08/25                          (Hebrew, colon separator)
 # ---------------------------------------------------------------------------
 _SESSION_RE = re.compile(
-    r'^\s*[~•*\-–—]?\s*(?P<label>SESSION|פגישה)\s*(?:#\s*)?'
+    r'^\s*[~•*\-–—]?\s*(?P<label>SESSION|פגישה|מפגש)\s*(?:#\s*)?'
     r'(?:'
         r'(?P<number>\d+)\s*(?:'
-            r'\|\s*(?P<iso>\d{4}-\d{2}-\d{2})'
+            r'[:|]\s*(?P<iso>\d{4}-\d{2}-\d{2})'
             r'|'
-            r'[-־–—]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
+            r'[\-־–—–—:]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
         r')'
         r'|'
         r'(?P<title_date>\d{1,2}/\d{1,2}/\d{2,4})'

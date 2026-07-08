@@ -869,6 +869,58 @@ def api_calendar_vacancy_occupy(override_id):
     return jsonify({'status': 'success', 'message': f'Slot occupied by {booked_label}.'})
 
 
+@calendar_bp.route('/api/calendar/vacancy/<int:vacancy_id>/update', methods=['POST'])
+@_login_json_required
+def api_calendar_vacancy_update(vacancy_id):
+    if current_user.role != 'admin':
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    db = get_db()
+    row = db.execute('SELECT * FROM availability WHERE id = ?', (vacancy_id,)).fetchone()
+    if not row:
+        return jsonify({'status': 'error', 'message': 'Vacancy not found.'}), 404
+
+    slot_date = (request.form.get('slot_date') or '').strip()
+    slot_time = (request.form.get('slot_time') or '').strip()
+    end_time_raw = (request.form.get('end_time') or '').strip()
+    recurrence_pattern = (request.form.get('recurrence_pattern') or 'one-time').strip().lower()
+    if recurrence_pattern not in ('one-time', 'weekly'):
+        recurrence_pattern = 'one-time'
+
+    date_obj = parse_date_safe(slot_date) if slot_date else parse_date_safe(row['slot_date'])
+    start_time = parse_time_safe(slot_time) if slot_time else parse_time_safe(row['slot_time'])
+    if not date_obj or not start_time:
+        return jsonify({'status': 'error', 'message': 'Invalid date or time.'}), 400
+
+    if end_time_raw:
+        end_time = parse_time_safe(end_time_raw)
+        if end_time:
+            duration = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
+            if duration <= 0:
+                return jsonify({'status': 'error', 'message': 'End time must be after start time.'}), 400
+        else:
+            duration = int(row['duration_minutes'] or 60)
+    else:
+        duration = int(row['duration_minutes'] or 60)
+
+    if recurrence_pattern == 'weekly':
+        weekday = custom_weekday(date_obj)
+        db.execute('''
+            UPDATE availability
+            SET weekday = ?, slot_time = ?, duration_minutes = ?, recurrence = 'weekly', status = 'available',
+                slot_date = NULL, booked_by_name = NULL, booked_by_phone = NULL, booked_notes = NULL, booked_at = NULL
+            WHERE id = ?
+        ''', (weekday, start_time.strftime('%H:%M'), duration, vacancy_id))
+    else:
+        db.execute('''
+            UPDATE availability
+            SET slot_date = ?, slot_time = ?, duration_minutes = ?, recurrence = NULL, status = 'available',
+                weekday = NULL, booked_by_name = NULL, booked_by_phone = NULL, booked_notes = NULL, booked_at = NULL
+            WHERE id = ?
+        ''', (slot_date or row['slot_date'], start_time.strftime('%H:%M'), duration, vacancy_id))
+    db.commit()
+    return jsonify({'status': 'success'})
+
+
 @calendar_bp.route('/api/calendar/vacancy/<int:override_id>/delete', methods=['POST'])
 @_login_json_required
 def api_calendar_vacancy_delete(override_id):
