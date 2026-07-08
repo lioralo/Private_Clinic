@@ -59,6 +59,6 @@ services:
 volumes:
   clinic_app_data:
     name: private_clinic_clinic_app_data
-    external: false
+    external: true
   caddy_data:
   caddy_config:

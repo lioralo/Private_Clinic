@@ -701,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         return new Promise((resolve) => {
             modalTitle.textContent = config.title || I18N.notice;
-            modalBody.textContent = config.message || '';
+            modalBody.innerHTML = config.message || '';
             modalConfirmBtn.textContent = config.confirmText || I18N.ok;
             modalConfirmBtn.className = `btn ${config.confirmClass || 'btn-primary'}`;
 
@@ -1616,6 +1616,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             showActionModal({ title: 'Error', message: data.message || 'Update failed.' });
                         }
+                    }).catch(function() {
+                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
                     });
                 });
             });
@@ -1644,6 +1646,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else {
                             showActionModal({ title: 'Error', message: data.message || 'Delete failed.' });
                         }
+                    }).catch(function() {
+                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
                     });
                 });
             });
