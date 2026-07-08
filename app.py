@@ -8495,6 +8495,9 @@ def _pull_group_gdoc_notes(db, group):
             if not content and not structured_summary:
                 continue
 
+            if not note_date:
+                continue
+
             target = None
             if isinstance(note_tag, int):
                 target = db.execute(
@@ -8546,9 +8549,6 @@ def _pull_group_gdoc_notes(db, group):
                     session_time=target_time,
                     session_title=meeting_title or (target['title'] if 'title' in target.keys() else None),
                 )
-                continue
-
-            if not note_date:
                 continue
 
             title = meeting_title or (f"Imported Session {session_number}" if session_number else 'Imported Session')

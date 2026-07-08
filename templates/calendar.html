@@ -533,6 +533,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalCancelBtn = document.getElementById('calendarModalCancelBtn');
     const actionModal = modalRoot ? new bootstrap.Modal(modalRoot) : null;
 
+    // Persistent backdrop cleanup — fires every time the modal is hidden, regardless of which code path triggered it
+    if (modalRoot) {
+        modalRoot.addEventListener('hidden.bs.modal', function() {
+            document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        });
+    }
+
     function initBookingSectionToggles() {
         if (!bookingPane) return;
         const sectionCards = bookingPane.querySelectorAll(':scope > .card');
@@ -729,10 +739,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     resolved = true;
                     result = false;
                 }
-                document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
-                document.body.classList.remove('modal-open');
-                document.body.style.overflow = '';
-                document.body.style.paddingRight = '';
                 resolve(result);
             };
 
