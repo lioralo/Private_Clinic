@@ -410,27 +410,29 @@
         </div>
         <div class="p-5">
             <form id="vacancyForm" class="row g-2 mb-3">
+                <input type="hidden" name="edit_id" id="vacancyEditId" value="">
                 <div class="col-md-3">
                     <label class="form-label small">{{ t('Date') }}</label>
-                    <input type="date" name="slot_date" class="form-control form-control-sm" required>
+                    <input type="date" name="slot_date" id="vacancySlotDate" class="form-control form-control-sm" required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small">{{ t('Start Time') }}</label>
-                    <input type="time" name="slot_time" class="form-control form-control-sm" required step="900">
+                    <input type="time" name="slot_time" id="vacancySlotTime" class="form-control form-control-sm" required step="900">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small">{{ t('End Time') }}</label>
-                    <input type="time" name="end_time" class="form-control form-control-sm" required step="900">
+                    <input type="time" name="end_time" id="vacancySlotEnd" class="form-control form-control-sm" required step="900">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small">{{ t('Recurrence') }}</label>
-                    <select name="recurrence_pattern" class="form-select form-select-sm">
+                    <select name="recurrence_pattern" id="vacancySlotPattern" class="form-select form-select-sm">
                         <option value="one-time">{{ t('One-time') }}</option>
                         <option value="weekly">{{ t('Weekly recurring') }}</option>
                     </select>
                 </div>
-                <div class="col-12 d-flex justify-content-end">
-                    <button type="submit" class="btn btn-sm rounded-pill" style="background:#10b981;color:#fff;">{{ t('Add Vacant Slot') }}</button>
+                <div class="col-12 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill d-none" id="vacancyCancelEditBtn">{{ t('Cancel Edit') }}</button>
+                    <button type="submit" class="btn btn-sm rounded-pill" id="vacancySubmitBtn" style="background:#10b981;color:#fff;">{{ t('Add Vacant Slot') }}</button>
                 </div>
             </form>
             <div class="table-responsive">
@@ -1550,7 +1552,33 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => renderVacancies(data.items || []))
             .catch(() => {
                 if (vacanciesContainer) vacanciesContainer.innerHTML = '<div class="small text-danger">Failed loading vacancies.</div>';
-            });
+        });
+    }
+
+    function resetVacancyForm() {
+        vacancyForm.reset();
+        document.getElementById('vacancyEditId').value = '';
+        document.getElementById('vacancySubmitBtn').textContent = 'Add Vacant Slot';
+        document.getElementById('vacancyCancelEditBtn').classList.add('d-none');
+    }
+
+    function fillVacancyFormForEdit(id, kind, dateVal, timeVal, endVal) {
+        document.getElementById('vacancyEditId').value = id;
+        document.getElementById('vacancySlotDate').value = dateVal;
+        document.getElementById('vacancySlotTime').value = timeVal;
+        document.getElementById('vacancySlotEnd').value = endVal;
+        document.getElementById('vacancySlotPattern').value = kind;
+        document.getElementById('vacancySubmitBtn').textContent = 'Update Vacant Slot';
+        document.getElementById('vacancySubmitBtn').style.background = '#0d6efd';
+        document.getElementById('vacancyCancelEditBtn').classList.remove('d-none');
+        document.getElementById('vacancy-pane').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    if (document.getElementById('vacancyCancelEditBtn')) {
+        document.getElementById('vacancyCancelEditBtn').addEventListener('click', function() {
+            resetVacancyForm();
+            document.getElementById('vacancySubmitBtn').style.background = '#10b981';
+        });
     }
 
     /* ------------------------------------------------------------------ */
@@ -1605,35 +1633,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 var dateVal = this.dataset.date;
                 var timeVal = this.dataset.time;
                 var endVal = this.dataset.end;
-                var durationVal = this.dataset.duration;
-                showActionModal({
-                    title: 'Edit Vacant Slot',
-                    message: '<div class="mb-2"><label class="form-label small">Date</label><input type="date" class="form-control form-control-sm" id="editVacDate" value="' + escapeHtml(dateVal) + '"></div>'
-                        + '<div class="mb-2"><label class="form-label small">Start Time</label><input type="time" class="form-control form-control-sm" id="editVacTime" value="' + escapeHtml(timeVal) + '" step="900"></div>'
-                        + '<div class="mb-2"><label class="form-label small">End Time</label><input type="time" class="form-control form-control-sm" id="editVacEnd" value="' + escapeHtml(endVal) + '" step="900"></div>',
-                    confirmText: 'Save',
-                    confirmClass: 'btn-primary',
-                    showCancel: true
-                }).then(function(confirmed) {
-                    if (!confirmed) return;
-                    var newDate = document.getElementById('editVacDate').value;
-                    var newTime = document.getElementById('editVacTime').value;
-                    var newEnd = document.getElementById('editVacEnd').value;
-                    fetch('/api/calendar/vacancy/' + id + '/update', {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: new URLSearchParams({ slot_date: newDate, slot_time: newTime, end_time: newEnd, recurrence_pattern: kind })
-                    }).then(function(r) { return r.json(); }).then(function(data) {
-                        if (data.status === 'success') {
-                            loadSnapshot();
-                            loadVacancySlots();
-                        } else {
-                            showActionModal({ title: 'Error', message: data.message || 'Update failed.' });
-                        }
-                    }).catch(function() {
-                        showActionModal({ title: 'Error', message: 'Network error — could not reach server.' });
-                    });
-                });
+                fillVacancyFormForEdit(id, kind, dateVal, timeVal, endVal);
+            });
             });
         });
 
@@ -1671,19 +1672,24 @@ document.addEventListener('DOMContentLoaded', function() {
     if (vacancyForm) {
         vacancyForm.addEventListener('submit', function(e) {
             e.preventDefault();
+            var editId = document.getElementById('vacancyEditId').value;
             var formData = new FormData(vacancyForm);
-            fetch('/api/calendar/vacancy', {
+            var url = editId ? '/api/calendar/vacancy/' + editId + '/update' : '/api/calendar/vacancy';
+            var label = editId ? 'update' : 'create';
+            fetch(url, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrfToken },
                 body: new URLSearchParams(formData)
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.status === 'success') {
-                    vacancyForm.reset();
+                    resetVacancyForm();
                     loadSnapshot();
                     loadVacancySlots();
                 } else {
-                    showActionModal({ title: 'Error', message: data.message || 'Failed to create vacancy.' });
+                    showActionModal({ title: 'Error', message: data.message || 'Failed to ' + label + ' vacancy.' });
                 }
+            }).catch(function() {
+                showActionModal({ title: 'Error', message: 'Network error — could not ' + label + ' vacancy.' });
             });
         });
     }
@@ -2037,6 +2043,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     showActionModal({ title: 'Failed', message: data.message || 'Could not create vacant slot.' });
                 }
+            }).catch(() => {
+                showActionModal({ title: 'Error', message: 'Network error — could not create vacancy.' });
             });
         };
     }
@@ -2525,6 +2533,8 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 showActionModal({ title: 'Booking Failed', message: data.message || 'Booking failed.' });
             }
+        }).catch(() => {
+            showActionModal({ title: 'Error', message: 'Network error — could not save booking.' });
         });
     });
 

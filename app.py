@@ -1778,6 +1778,15 @@ def handle_not_found(error):
     return render_template('404.html'), 404
 
 
+@app.errorhandler(400)
+def handle_bad_request(error):
+    if _request_expects_json_error():
+        msg = str(error) if str(error) else 'Bad request'
+        msg = re.sub(r'<[^>]+>', '', msg).strip()
+        return jsonify({'status': 'error', 'message': msg}), 400
+    return '<h1>400 Bad Request</h1>', 400
+
+
 @app.errorhandler(500)
 def handle_internal_error(error):
     app.logger.exception('Unhandled server error: %s', error)
