@@ -59,27 +59,33 @@
         <input type="hidden" name="sort" value="{{ sort_by }}">
         <input type="hidden" name="treatment_method" value="{{ treatment_method }}">
         <input type="hidden" name="include_group" value="{{ 'false' if include_group else 'true' }}">
+        <input type="hidden" name="show_archived" value="{{ 'true' if show_archived else 'false' }}">
     </form>
     <div class="form-check form-switch mb-0">
         <input class="form-check-input" type="checkbox" id="includeGroupToggle" {% if include_group %}checked{% endif %} onchange="document.getElementById('includeGroupForm').submit()">
         <label class="form-check-label small text-muted" for="includeGroupToggle">{{ t('Include group-type patients') }}</label>
     </div>
+    <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="showArchivedToggle" {% if show_archived %}checked{% endif %} onchange="document.getElementById('includeGroupForm').submit()">
+        <label class="form-check-label small text-muted" for="showArchivedToggle">{{ t('Show archived patients') }}</label>
+    </div>
     
     <!-- Quick access to patient filters -->
     <div class="d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('crm_dashboard', status='all', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'all' and not show_deleted %}is-selected{% endif %} rounded-pill">
+        {% set filter_base = dict(clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false', show_archived='true' if show_archived else 'false') %}
+        <a href="{{ url_for('crm_dashboard', status='all', **filter_base) }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'all' and not show_deleted %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-people-fill me-1"></i>{{ t('All') }} ({{ counts.get('all', 0) }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='candidate', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}is-selected{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='candidate', **filter_base) }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status in ['candidate', 'waiting', 'waiting for scheduling'] %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-hourglass-split me-1"></i>{{ t('Candidates') }} ({{ counts.get('waiting', 0) }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='ongoing', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'ongoing' %}is-selected{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='ongoing', **filter_base) }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'ongoing' %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-heart-pulse me-1"></i>{{ t('Active') }} ({{ counts['ongoing'] }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'archived' %}is-selected{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status='archived', **filter_base) }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'archived' %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-archive me-1"></i>{{ t('Archived') }} ({{ counts['archived'] }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status=status, clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='true') }}" class="btn btn-sm btn-outline-danger stable-filter-btn {% if show_deleted %}is-selected{% endif %} rounded-pill">
+        <a href="{{ url_for('crm_dashboard', status=status, **dict(filter_base, show_deleted='true')) }}" class="btn btn-sm btn-outline-danger stable-filter-btn {% if show_deleted %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-trash me-1"></i>{{ t('Deleted') }} ({{ counts.get('deleted', 0) }})
         </a>
     </div>
@@ -123,6 +129,7 @@
             <form method="get" action="{{ url_for('crm_dashboard') }}" class="crm-filter-grid mt-3">
                 <input type="hidden" name="status" value="{{ status }}">
                 <input type="hidden" name="include_group" value="{{ 'true' if include_group else 'false' }}">
+                <input type="hidden" name="show_archived" value="{{ 'true' if show_archived else 'false' }}">
                 <div>
                     <label class="form-label small">{{ t('Search') }}</label>
                     <input type="text" class="form-control form-control-sm" name="q" value="{{ search_query or '' }}" placeholder="{{ t('Name, email, or phone') }}">

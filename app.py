@@ -3651,7 +3651,7 @@ def _get_patients_select_clause(admin_user_id):
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
 
-def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
+def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived=False):
     where_query = ""
     params = []
 
@@ -3660,6 +3660,10 @@ def _get_patients_where_clause(status, patient_type, search_query, include_group
     elif status != 'all':
         where_query += ' AND p.status = ?'
         params.append(status)
+
+    # Hide archived patients by default unless explicitly viewing archived or toggled on
+    if status != 'archived' and not show_archived:
+        where_query += " AND p.status != 'archived'"
 
     if patient_type in ('private', 'residency', 'initial-intake', 'diagnosee', 'group'):
         where_query += ' AND COALESCE(p.patient_type, "private") = ?'
@@ -3707,9 +3711,9 @@ def _normalize_patient_status(status):
     return 'candidate'
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all', show_archived=False):
     select_clause = _get_patients_select_clause(admin_user_id)
-    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived)
     order_clause = _get_patients_order_clause(sort_by)
 
     final_query = f"{select_clause}{where_clause}{order_clause}"
@@ -3733,6 +3737,8 @@ def crm_dashboard():
     treatment_method = request.args.get('treatment_method', saved_filters.get('treatment_method', 'all')).strip()
     show_deleted_raw = request.args.get('show_deleted', saved_filters.get('show_deleted', 'false'))
     show_deleted = show_deleted_raw == 'true'
+    show_archived_raw = request.args.get('show_archived', saved_filters.get('show_archived', 'false'))
+    show_archived = show_archived_raw == 'true'
 
     status = _normalize_patient_status(status) if status != 'all' else 'all'
     if status not in {'all', 'ongoing', 'candidate', 'archived'}:
@@ -3749,7 +3755,8 @@ def crm_dashboard():
         'sort': sort_by,
         'include_group': 'true' if include_group else 'false',
         'treatment_method': treatment_method,
-        'show_deleted': 'true' if show_deleted else 'false'
+        'show_deleted': 'true' if show_deleted else 'false',
+        'show_archived': 'true' if show_archived else 'false'
     }
     
     patient_type = clinic_type
@@ -3809,10 +3816,12 @@ def crm_dashboard():
         final_query = f"{select_clause}{where_clause}{order_clause}"
         patients = db.execute(final_query, tuple(params)).fetchall()
     else:
-        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
+        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method, show_archived=show_archived)
     
     count_where = ['COALESCE(is_deleted, 0) = 0']
     count_params = []
+    if status != 'archived' and not show_archived:
+        count_where.append("status != 'archived'")
     if clinic_type != 'all':
         count_where.append('patient_type = ?')
         count_params.append(clinic_type)
@@ -3925,7 +3934,8 @@ def crm_dashboard():
                            treatment_method_options=treatment_method_labels,
                            today_appointments=today_appointments,
                            avg_wait_time=avg_wait_time,
-                           show_deleted=show_deleted)
+                           show_deleted=show_deleted,
+                           show_archived=show_archived)
 
 
 

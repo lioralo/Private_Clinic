@@ -171,6 +171,13 @@ def _get_dashboard_missing_recurring(db):
                 AND a.is_recurring = 1
                 AND COALESCE(a.status, 'scheduled') = 'scheduled'
           )
+          AND NOT EXISTS (
+              SELECT 1 FROM group_members gm
+              JOIN group_session_series gss ON gss.group_id = gm.group_id
+              WHERE gm.patient_id = patients.id
+                AND gm.left_at IS NULL
+                AND COALESCE(gss.is_active, 1) = 1
+          )
         ORDER BY name ASC
         LIMIT 6
     ''').fetchall()
