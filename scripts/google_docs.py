@@ -65,7 +65,7 @@ _SESSION_RE = re.compile(
         r'(?P<number>\d+)\s*(?:'
             r'[:|]\s*(?P<iso>\d{4}-\d{2}-\d{2})'
             r'|'
-            r'[\-־–—–—:]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
+            r'[\-־–—:]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
         r')'
         r'|'
         r'(?P<title_date>\d{1,2}/\d{1,2}/\d{2,4})'
