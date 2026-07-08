@@ -852,6 +852,8 @@ def _is_transient_sync_error(error_text):
         'connection reset',
         'connection aborted',
         'connection refused',
+        'database is locked',
+        'database locked',
         '503',
         '502',
         '500',
@@ -860,7 +862,7 @@ def _is_transient_sync_error(error_text):
     return any(signal in text for signal in transient_signals)
 
 
-def _run_sync_with_retry(sync_callable, max_attempts=3, base_delay_seconds=1.0):
+def _run_sync_with_retry(sync_callable, max_attempts=5, base_delay_seconds=2.0):
     attempt = 0
     while attempt < max_attempts:
         attempt += 1
