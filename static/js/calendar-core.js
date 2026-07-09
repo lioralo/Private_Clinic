@@ -232,48 +232,53 @@ document.addEventListener('DOMContentLoaded', function() {
         Cal.loadSnapshot();
     };
 
+    Cal._modalQueue = Promise.resolve();
+
     Cal.showActionModal = function(config) {
-        if (!Cal.actionModal) {
-            return Promise.resolve(true);
-        }
-
-        return new Promise(function(resolve) {
-            Cal.modalTitle.textContent = config.title || I18N.notice;
-            Cal.modalBody.innerHTML = config.message || '';
-            Cal.modalConfirmBtn.textContent = config.confirmText || I18N.ok;
-            Cal.modalConfirmBtn.className = 'btn ' + (config.confirmClass || 'btn-primary');
-
-            if (config.showCancel) {
-                Cal.modalCancelBtn.classList.remove('d-none');
-                Cal.modalCancelBtn.textContent = config.cancelText || I18N.cancel;
-            } else {
-                Cal.modalCancelBtn.classList.add('d-none');
+        var _show = function() {
+            if (!Cal.actionModal) {
+                return Promise.resolve(true);
             }
 
-            Cal.modalConfirmBtn.onclick = null;
+            return new Promise(function(resolve) {
+                Cal.modalTitle.textContent = config.title || I18N.notice;
+                Cal.modalBody.innerHTML = config.message || '';
+                Cal.modalConfirmBtn.textContent = config.confirmText || I18N.ok;
+                Cal.modalConfirmBtn.className = 'btn ' + (config.confirmClass || 'btn-primary');
 
-            var resolved = false;
-            var result = false;
-            var confirmHandler = function() {
-                if (resolved) return;
-                resolved = true;
-                result = true;
-                Cal.actionModal.hide();
-            };
-            var hiddenHandler = function() {
-                Cal.modalConfirmBtn.removeEventListener('click', confirmHandler);
-                Cal.modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
-                if (!resolved) {
-                    resolved = true;
-                    result = false;
+                if (config.showCancel) {
+                    Cal.modalCancelBtn.classList.remove('d-none');
+                    Cal.modalCancelBtn.textContent = config.cancelText || I18N.cancel;
+                } else {
+                    Cal.modalCancelBtn.classList.add('d-none');
                 }
-                resolve(result);
-            };
 
-            Cal.modalConfirmBtn.addEventListener('click', confirmHandler);
-            Cal.modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
-            Cal.actionModal.show();
-        });
+                Cal.modalConfirmBtn.onclick = null;
+
+                var resolved = false;
+                var result = false;
+                var confirmHandler = function() {
+                    if (resolved) return;
+                    resolved = true;
+                    result = true;
+                    Cal.actionModal.hide();
+                };
+                var hiddenHandler = function() {
+                    Cal.modalConfirmBtn.removeEventListener('click', confirmHandler);
+                    Cal.modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
+                    if (!resolved) {
+                        resolved = true;
+                        result = false;
+                    }
+                    resolve(result);
+                };
+
+                Cal.modalConfirmBtn.addEventListener('click', confirmHandler);
+                Cal.modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
+                Cal.actionModal.show();
+            });
+        };
+        return Cal._modalQueue = Cal._modalQueue.then(_show, _show);
     };
 
     Cal.escapeHtml = function(value) {
@@ -286,37 +291,40 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     Cal.showScopeModal = function(config) {
-        if (!Cal.actionModal) return Promise.resolve(null);
-        return new Promise(function(resolve) {
-            Cal.modalTitle.textContent = config.title || I18N.notice;
-            var optionsHtml = (config.options || []).map(function(opt, i) {
-                return '<div class="form-check mb-2">' +
-                    '<input class="form-check-input" type="radio" name="calScopeChoice" id="calScope_' + i + '" value="' + Cal.escapeHtml(opt.value) + '" ' + (i === 0 ? 'checked' : '') + '>' +
-                    '<label class="form-check-label" for="calScope_' + i + '">' + Cal.escapeHtml(opt.label) + '</label>' +
-                '</div>';
-            }).join('');
-            Cal.modalBody.innerHTML = (config.message ? '<p class="small text-muted mb-3">' + Cal.escapeHtml(config.message) + '</p>' : '') + optionsHtml;
-            Cal.modalConfirmBtn.textContent = config.confirmText || I18N.ok;
-            Cal.modalConfirmBtn.className = 'btn ' + (config.confirmClass || 'btn-primary');
-            Cal.modalCancelBtn.classList.remove('d-none');
-            Cal.modalCancelBtn.textContent = config.cancelText || I18N.cancel;
-            Cal.modalConfirmBtn.onclick = null;
-            Cal.actionModal.show();
-            var resolved = false;
-            var confirmHandler = function() {
-                if (resolved) return;
-                resolved = true;
-                var sel = Cal.modalBody.querySelector('input[name="calScopeChoice"]:checked');
-                Cal.actionModal.hide();
-                resolve(sel ? sel.value : null);
-            };
-            var hiddenHandler = function() {
-                Cal.modalConfirmBtn.removeEventListener('click', confirmHandler);
-                Cal.modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
-                if (!resolved) { resolved = true; resolve(null); }
-            };
-            Cal.modalConfirmBtn.addEventListener('click', confirmHandler);
-            Cal.modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
-        });
+        var _show = function() {
+            if (!Cal.actionModal) return Promise.resolve(null);
+            return new Promise(function(resolve) {
+                Cal.modalTitle.textContent = config.title || I18N.notice;
+                var optionsHtml = (config.options || []).map(function(opt, i) {
+                    return '<div class="form-check mb-2">' +
+                        '<input class="form-check-input" type="radio" name="calScopeChoice" id="calScope_' + i + '" value="' + Cal.escapeHtml(opt.value) + '" ' + (i === 0 ? 'checked' : '') + '>' +
+                        '<label class="form-check-label" for="calScope_' + i + '">' + Cal.escapeHtml(opt.label) + '</label>' +
+                    '</div>';
+                }).join('');
+                Cal.modalBody.innerHTML = (config.message ? '<p class="small text-muted mb-3">' + Cal.escapeHtml(config.message) + '</p>' : '') + optionsHtml;
+                Cal.modalConfirmBtn.textContent = config.confirmText || I18N.ok;
+                Cal.modalConfirmBtn.className = 'btn ' + (config.confirmClass || 'btn-primary');
+                Cal.modalCancelBtn.classList.remove('d-none');
+                Cal.modalCancelBtn.textContent = config.cancelText || I18N.cancel;
+                Cal.modalConfirmBtn.onclick = null;
+                Cal.actionModal.show();
+                var resolved = false;
+                var confirmHandler = function() {
+                    if (resolved) return;
+                    resolved = true;
+                    var sel = Cal.modalBody.querySelector('input[name="calScopeChoice"]:checked');
+                    Cal.actionModal.hide();
+                    resolve(sel ? sel.value : null);
+                };
+                var hiddenHandler = function() {
+                    Cal.modalConfirmBtn.removeEventListener('click', confirmHandler);
+                    Cal.modalRoot.removeEventListener('hidden.bs.modal', hiddenHandler);
+                    if (!resolved) { resolved = true; resolve(null); }
+                };
+                Cal.modalConfirmBtn.addEventListener('click', confirmHandler);
+                Cal.modalRoot.addEventListener('hidden.bs.modal', hiddenHandler);
+            });
+        };
+        return Cal._modalQueue = Cal._modalQueue.then(_show, _show);
     };
 });

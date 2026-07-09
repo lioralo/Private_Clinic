@@ -1823,6 +1823,8 @@ def enforce_2fa_timeout():
     if time.time() - float(otp_verified_at) > 1800:
         session.pop('otp_verified_at', None)
         logout_user()
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.path.startswith('/api/'):
+            return jsonify({'status': 'session_expired', 'message': 'Session expired due to inactivity.'}), 401
         flash('Session expired due to inactivity. Please log in again.', 'warning')
         return redirect(url_for('login'))
     session['otp_verified_at'] = time.time()
@@ -3497,15 +3499,41 @@ def _get_patients_select_clause(admin_user_id):
     return f'''
         SELECT p.*,
         (SELECT COUNT(*) FROM appointments a WHERE a.patient_id = p.id AND a.is_recurring = 1 AND COALESCE(a.status, 'scheduled') = 'scheduled') as has_recurring,
-        (SELECT MIN(a0.appointment_date) FROM appointments a0 WHERE a0.patient_id = p.id AND COALESCE(a0.status, 'scheduled') = 'scheduled' AND a0.appointment_date >= DATE('now')) AS next_appointment_date,
         (
-            SELECT a1.appointment_time
-            FROM appointments a1
-            WHERE a1.patient_id = p.id
-              AND COALESCE(a1.status, 'scheduled') = 'scheduled'
-              AND a1.appointment_date >= DATE('now')
-            ORDER BY a1.appointment_date ASC, a1.appointment_time ASC
-            LIMIT 1
+            SELECT MIN(event_date) FROM (
+                SELECT MIN(a0.appointment_date) as event_date
+                FROM appointments a0
+                WHERE a0.patient_id = p.id
+                  AND COALESCE(a0.status, 'scheduled') = 'scheduled'
+                  AND a0.appointment_date >= DATE('now')
+                UNION ALL
+                SELECT MIN(gs.session_date)
+                FROM group_sessions gs
+                JOIN group_members gm ON gm.group_id = gs.group_id AND gm.patient_id = p.id
+                WHERE COALESCE(gs.status, 'scheduled') = 'scheduled'
+                  AND gs.session_date >= DATE('now')
+                  AND date(COALESCE(gm.joined_at, gs.session_date)) <= date(gs.session_date)
+                  AND (gm.left_at IS NULL OR date(gm.left_at) >= date(gs.session_date))
+            )
+        ) AS next_appointment_date,
+        (
+            SELECT event_time FROM (
+                SELECT a1.appointment_date as event_date, a1.appointment_time as event_time
+                FROM appointments a1
+                WHERE a1.patient_id = p.id
+                  AND COALESCE(a1.status, 'scheduled') = 'scheduled'
+                  AND a1.appointment_date >= DATE('now')
+                UNION ALL
+                SELECT gs2.session_date, gs2.session_time
+                FROM group_sessions gs2
+                JOIN group_members gm2 ON gm2.group_id = gs2.group_id AND gm2.patient_id = p.id
+                WHERE COALESCE(gs2.status, 'scheduled') = 'scheduled'
+                  AND gs2.session_date >= DATE('now')
+                  AND date(COALESCE(gm2.joined_at, gs2.session_date)) <= date(gs2.session_date)
+                  AND (gm2.left_at IS NULL OR date(gm2.left_at) >= date(gs2.session_date))
+                ORDER BY 1 ASC, 2 ASC
+                LIMIT 1
+            )
         ) AS next_appointment_time,
         {unread_case} AS unread_messages,
         (
@@ -3810,6 +3838,40 @@ def crm_dashboard():
                 dict(p, next_appointment_date=next_occurrences[p['id']][0].isoformat(),
                         next_appointment_time=next_occurrences[p['id']][1])
                 if (p['has_recurring'] and (not p['next_appointment_date'] or not p['next_appointment_time']) and p['id'] in next_occurrences)
+                else dict(p)
+                for p in patients
+            ]
+
+        # For patients who still have no next_appointment after checking recurring,
+        # check if they have upcoming group sessions.
+        patients_missing_next = [p for p in patients
+                                  if (not p.get('next_appointment_date') or not p.get('next_appointment_time'))]
+        if patients_missing_next:
+            pid_list = [p['id'] for p in patients_missing_next]
+            placeholders = ','.join('?' * len(pid_list))
+            group_next = db.execute(
+                f'''SELECT gm.patient_id, MIN(gs.session_date) as next_date, gs.session_time
+                    FROM group_sessions gs
+                    JOIN group_members gm ON gm.group_id = gs.group_id
+                    WHERE gm.patient_id IN ({placeholders})
+                      AND COALESCE(gs.status, 'scheduled') = 'scheduled'
+                      AND gs.session_date >= DATE('now')
+                      AND date(COALESCE(gm.joined_at, gs.session_date)) <= date(gs.session_date)
+                      AND (gm.left_at IS NULL OR date(gm.left_at) >= date(gs.session_date))
+                    GROUP BY gm.patient_id
+                    ORDER BY gs.session_date ASC
+                ''',
+                pid_list
+            ).fetchall()
+            group_map = {}
+            for row in group_next:
+                pid = row['patient_id']
+                if pid not in group_map or row['next_date'] < group_map[pid][0]:
+                    group_map[pid] = (row['next_date'], row['session_time'])
+            patients = [
+                dict(p, next_appointment_date=group_map[p['id']][0],
+                        next_appointment_time=group_map[p['id']][1])
+                if p['id'] in group_map
                 else dict(p)
                 for p in patients
             ]
@@ -4785,6 +4847,10 @@ def add_patient_encounter_log(patient_id):
     db.execute(
         'INSERT INTO patient_logs (patient_id, encounter_date, title, content, link_url) VALUES (?, ?, ?, ?, ?)',
         (patient_id, encounter_date, title, content, link_url)
+    )
+    db.execute(
+        'INSERT INTO notes (patient_id, note_date, content, link_url) VALUES (?, ?, ?, ?)',
+        (patient_id, encounter_date, f"{title}: {content}" if title else content, link_url)
     )
     db.commit()
     flash('Encounter note added.', 'success')
