@@ -292,6 +292,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    Cal.nowWeekAnchor = window.CALENDAR_CONFIG ? window.CALENDAR_CONFIG.initialWeekStart : null;
+    if (!Cal.nowWeekAnchor || Cal.nowWeekAnchor === 'null') {
+        Cal.nowWeekAnchor = Cal.getWeekStartString(new Date());
+    }
+
     var calendarEl = document.getElementById('weeklyCalendar');
 
     Cal.calendar = new FullCalendar.Calendar(calendarEl, {
@@ -1061,10 +1066,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    Cal.nowWeekAnchor = window.CALENDAR_CONFIG ? window.CALENDAR_CONFIG.initialWeekStart : null;
-    if (!Cal.nowWeekAnchor || Cal.nowWeekAnchor === 'null') {
-        Cal.nowWeekAnchor = Cal.getWeekStartString(new Date());
-    }
     Cal.syncWeekFromAnchor();
     Cal.refreshWeekOptions();
     Cal.calendar.gotoDate(Cal.parseIsoDate(Cal.nowWeekAnchor));
