@@ -1807,6 +1807,28 @@ def _gdocs_auto_sync_worker_loop():
             _GDOC_AUTO_SYNC_LOCK.release()
 
 
+@app.before_request
+def enforce_2fa_timeout():
+    if request.path.startswith('/static/'):
+        return
+    if app.config.get('TESTING'):
+        return
+    if not current_user.is_authenticated:
+        return
+    if not session.get('totp_enabled'):
+        return
+
+    import time
+    otp_verified_at = session.get('otp_verified_at', 0)
+    if time.time() - float(otp_verified_at) > 1800:
+        session.pop('otp_verified_at', None)
+        logout_user()
+        flash('Session expired due to inactivity. Please log in again.', 'warning')
+        return redirect(url_for('login'))
+    session['otp_verified_at'] = time.time()
+
+
+
 def ensure_gdocs_auto_sync_worker_started():
     if app.config.get('TESTING'):
         return
@@ -1883,7 +1905,11 @@ def _login_redirect_for_user(user_row):
         user_row['session_version'],
     )
     login_user(user_obj)
+    session.permanent = True
     session['session_version'] = int(user_row['session_version'] or 0)
+    import time
+    session['otp_verified_at'] = time.time()
+    session['totp_enabled'] = bool(user_row['totp_enabled'] and user_row['totp_secret'])
 
     if user_row['role'] == 'admin':
         if not user_row['totp_enabled'] or not user_row['totp_secret']:
@@ -3526,7 +3552,9 @@ def _get_patients_where_clause(status, patient_type, search_query, include_group
 
     if status in LEGACY_WAITING_STATUSES:
         where_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
-    elif status != 'all':
+    elif status == 'all':
+        where_query += " AND COALESCE(p.status, 'candidate') != 'archived'"
+    else:
         where_query += ' AND p.status = ?'
         params.append(status)
 

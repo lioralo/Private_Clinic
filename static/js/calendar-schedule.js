@@ -448,10 +448,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (Cal.bookingPatient && isAdmin) {
                     Cal.bookingPatient.focus();
                 }
-                Cal.showActionModal({
-                    title: 'Vacancy Selected',
-                    message: 'Use Book Selected Slot to book it now, or Create Vacancy to keep it open.'
-                });
             }
         }
     });
