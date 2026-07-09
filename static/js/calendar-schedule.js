@@ -456,8 +456,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    Cal.calendar.render();
-
     var scheduleTabEl = document.getElementById('schedule-tab');
     if (scheduleTabEl) {
         scheduleTabEl.addEventListener('shown.bs.tab', function () {
@@ -881,6 +879,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(function() { console.warn('loadSnapshot failed'); });
     };
+
+    Cal.calendar.render();
 
     if (Cal.bookingManagementMode) {
         Cal.bookingManagementMode.querySelectorAll('button[data-mode]').forEach(function(btn) {
