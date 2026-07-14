@@ -101,6 +101,7 @@
                                 id="username" 
                                 name="username" 
                                 placeholder="{{ t('Enter your username') }}" 
+                                value="{{ request.form.get('username', '') }}"
                                 required 
                                 autofocus>
                         </div>
@@ -119,7 +120,7 @@
                         </div>
                     </div>
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3">
+                        <button type="submit" class="btn btn-primary py-2 fw-bold rounded-3" onclick="this.form.submit(); this.disabled=true; return true;">
                             {{ t('Sign In') }} <i class="bi bi-arrow-right ms-2"></i>
                         </button>
                     </div>

@@ -3,6 +3,7 @@
 {% block page_title %}{{ patient['name'] }}{% endblock %}
 
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': url_for('crm_dashboard'), 'label': t('Patients')}, {'url': '', 'label': patient['name']}]) }}
 {% set intake_enabled = patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] %}
 {% set questionnaire_tab_enabled = questionnaire_enabled if questionnaire_enabled is defined else (patient['patient_type'] == 'diagnosee' or patient.get('has_questionnaire_tab')) %}
 {% set canonical_status = 'candidate' if patient['status'] in ['candidate', 'waiting', 'waiting for scheduling'] else patient['status'] %}

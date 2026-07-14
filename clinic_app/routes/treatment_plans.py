@@ -124,33 +124,37 @@ def edit_plan(plan_id):
         ''', (diagnosis_code, diagnosis_description, problem_statement,
               strengths, status, next_review_date, notes, plan_id))
 
-        db.execute('DELETE FROM treatment_plan_goals WHERE plan_id = ?', (plan_id,))
+        try:
+            db.execute('DELETE FROM treatment_plan_goals WHERE plan_id = ?', (plan_id,))
 
-        goal_descriptions = request.form.getlist('goal_description[]')
-        objectives_list = request.form.getlist('objectives[]')
-        interventions_list = request.form.getlist('interventions[]')
-        target_dates = request.form.getlist('target_date[]')
-        goal_statuses = request.form.getlist('goal_status[]')
-        progress_pcts = request.form.getlist('progress_percentage[]')
+            goal_descriptions = request.form.getlist('goal_description[]')
+            objectives_list = request.form.getlist('objectives[]')
+            interventions_list = request.form.getlist('interventions[]')
+            target_dates = request.form.getlist('target_date[]')
+            goal_statuses = request.form.getlist('goal_status[]')
+            progress_pcts = request.form.getlist('progress_percentage[]')
 
-        for i in range(len(goal_descriptions)):
-            desc = (goal_descriptions[i] or '').strip()
-            if not desc:
-                continue
-            obj = (objectives_list[i] if i < len(objectives_list) else '')
-            inter = (interventions_list[i] if i < len(interventions_list) else '')
-            td = (target_dates[i] if i < len(target_dates) else '') or None
-            gs = (goal_statuses[i] if i < len(goal_statuses) else 'active')
-            pp = int(progress_pcts[i]) if i < len(progress_pcts) and progress_pcts[i].isdigit() else 0
-            db.execute('''
-                INSERT INTO treatment_plan_goals
-                    (plan_id, goal_number, goal_description, objectives, interventions,
-                     target_date, status, progress_percentage)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (plan_id, i + 1, desc, obj, inter, td, gs, pp))
+            for i in range(len(goal_descriptions)):
+                desc = (goal_descriptions[i] or '').strip()
+                if not desc:
+                    continue
+                obj = (objectives_list[i] if i < len(objectives_list) else '')
+                inter = (interventions_list[i] if i < len(interventions_list) else '')
+                td = (target_dates[i] if i < len(target_dates) else '') or None
+                gs = (goal_statuses[i] if i < len(goal_statuses) else 'active')
+                pp = int(progress_pcts[i]) if i < len(progress_pcts) and progress_pcts[i].isdigit() else 0
+                db.execute('''
+                    INSERT INTO treatment_plan_goals
+                        (plan_id, goal_number, goal_description, objectives, interventions,
+                         target_date, status, progress_percentage)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (plan_id, i + 1, desc, obj, inter, td, gs, pp))
 
-        db.commit()
-        flash('Treatment plan updated.')
+            db.commit()
+            flash('Treatment plan updated.', 'success')
+        except Exception:
+            db.rollback()
+            flash('Error updating treatment plan. Please try again.', 'error')
         return redirect(url_for('treatment_plans.view_patient_plans', patient_id=plan['patient_id']))
 
     return render_template('treatment_plan_form.html', patient=patient, plan=plan, goals=goals)

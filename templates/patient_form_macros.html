@@ -1,7 +1,7 @@
-{% macro patient_identity_fields(name='', status='ongoing', candidate_selected=False, status_label='Initial Status') -%}
+{% macro patient_identity_fields(name='', status='ongoing', candidate_selected=False, status_label='Initial Status', autofocus=False) -%}
 <div class="col-md-8">
     <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }}</label>
-    <input type="text" class="form-control" name="name" id="name" value="{{ name }}" placeholder="{{ t('Full Name') }}" required>
+    <input type="text" class="form-control" name="name" id="name" value="{{ name }}" placeholder="{{ t('Full Name') }}" required{% if autofocus %} autofocus{% endif %}>
     <div class="invalid-feedback">{{ t('Please enter the patient name.') }}</div>
 </div>
 

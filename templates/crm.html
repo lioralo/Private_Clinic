@@ -3,6 +3,7 @@
 {% block page_title %}{{ t('Patients') }}{% endblock %}
 
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Patients')}]) }}
 <div class="bg-white border border-slate-100 shadow-sm rounded-2xl p-4 p-lg-5 mb-4">
 <div class="flex justify-between items-start flex-wrap gap-3">
     <div>

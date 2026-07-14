@@ -160,20 +160,24 @@ def add_receipt(patient_id):
     count = db.execute('SELECT COUNT(*) as c FROM receipts').fetchone()['c']
     receipt_number = f'RCPT-{count + 1:06d}'
 
-    cur = db.execute(
-        'INSERT INTO receipts (patient_id, amount, description, receipt_number, status) VALUES (?, ?, ?, ?, ?)',
-        (patient_id, total, f'{len(items)} item(s)', receipt_number, 'paid')
-    )
-    receipt_id = cur.lastrowid
-
-    for sid, qty, price, line_total, desc in items:
-        db.execute(
-            'INSERT INTO receipt_items (receipt_id, service_type_id, quantity, unit_price, line_total, description) VALUES (?, ?, ?, ?, ?, ?)',
-            (receipt_id, sid, qty, price, line_total, desc or None)
+    try:
+        cur = db.execute(
+            'INSERT INTO receipts (patient_id, amount, description, receipt_number, status) VALUES (?, ?, ?, ?, ?)',
+            (patient_id, total, f'{len(items)} item(s)', receipt_number, 'paid')
         )
+        receipt_id = cur.lastrowid
 
-    db.commit()
-    flash(f'Receipt {receipt_number} created for ${total:.2f}.')
+        for sid, qty, price, line_total, desc in items:
+            db.execute(
+                'INSERT INTO receipt_items (receipt_id, service_type_id, quantity, unit_price, line_total, description) VALUES (?, ?, ?, ?, ?, ?)',
+                (receipt_id, sid, qty, price, line_total, desc or None)
+            )
+
+        db.commit()
+        flash(f'Receipt {receipt_number} created for ${total:.2f}.', 'success')
+    except Exception:
+        db.rollback()
+        flash('Error creating receipt. Please try again.', 'error')
     return redirect_to_patient_tab(patient_id, 'billing')
 
 

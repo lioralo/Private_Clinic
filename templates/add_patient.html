@@ -17,7 +17,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <div class="row g-4">
-                        {{ patient_identity_fields(status_label='Initial Status') }}
+                        {{ patient_identity_fields(status_label='Initial Status', autofocus=True) }}
                         {{ patient_contact_fields() }}
                         {{ patient_birth_and_id_fields() }}
                         {{ patient_type_fields(patient_type='private') }}

@@ -493,10 +493,14 @@
                 <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
             </a>
             <a href="{{ url_for('logout') }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline">
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-black hover:bg-gray-100 no-underline"
+               onclick="event.preventDefault(); this.nextElementSibling.submit();">
                 <i class="bi bi-box-arrow-right" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Logout') }}</span>
             </a>
+            <form method="post" action="{{ url_for('logout') }}" class="d-none">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
         </div>
     </aside>
 
@@ -579,7 +583,11 @@
         <a href="{{ url_for('patient_settings') }}"
            class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline">{{ t('Settings') }}</a>
         <a href="{{ url_for('logout') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline">{{ t('Logout') }}</a>
+           class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline"
+           onclick="event.preventDefault(); this.nextElementSibling.submit();">{{ t('Logout') }}</a>
+        <form method="post" action="{{ url_for('logout') }}" class="d-none">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
     </div>
 </nav>
 <main id="main-content" tabindex="-1" class="pt-20 px-4 pb-10 max-w-4xl mx-auto app-shell">

@@ -2,6 +2,7 @@
 {% from 'patient_form_macros.html' import patient_identity_fields, patient_contact_fields, patient_birth_and_id_fields, patient_type_fields, treatment_track_field, treatment_method_field with context %}
 
 {% block content %}
+{{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': url_for('crm_dashboard'), 'label': t('Patients')}, {'url': url_for('patient_detail', patient_id=patient['id']), 'label': patient['name']}, {'url': '', 'label': t('Edit Patient')}]) }}
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
         <div class="d-flex align-items-center mb-4">
@@ -26,7 +27,8 @@
                     name=patient['name'],
                     status=patient['status'] or 'ongoing',
                     candidate_selected=(patient['status'] in ['candidate', 'waiting', 'waiting for scheduling']),
-                    status_label='Status'
+                    status_label='Status',
+                    autofocus=True
                 ) }}
 
                 {{ patient_contact_fields(

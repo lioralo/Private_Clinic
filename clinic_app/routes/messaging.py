@@ -4,7 +4,7 @@ from datetime import datetime
 
 from flask import (
     Blueprint, current_app, flash, jsonify, redirect,
-    render_template, request, Response, url_for,
+    render_template, request, Response, session, url_for,
 )
 from flask_login import current_user, login_required
 
@@ -336,6 +336,12 @@ def contact_inquiry():
         redirect_target = url_for('about_page')
 
     if errors:
+        session['contact_form_data'] = {
+            'inquiry_name': name,
+            'inquiry_email': email or '',
+            'inquiry_phone': phone or '',
+            'inquiry_message': message,
+        }
         for err in errors:
             flash(err, 'error')
         return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))

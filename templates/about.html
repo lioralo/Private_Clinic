@@ -126,22 +126,25 @@
                     <div class="col-md-6">
                         <label for="inquiry_name" class="form-label text-uppercase smallest fw-bold">{{ t('Your Name') }} <span class="text-danger">*</span></label>
                         <input type="text" class="form-control rounded-3" id="inquiry_name" name="inquiry_name"
-                               placeholder="{{ t('Full Name') }}" maxlength="120" required>
+                               placeholder="{{ t('Full Name') }}" maxlength="120" required
+                               value="{{ form_data.get('inquiry_name', '') }}">
                     </div>
                     <div class="col-md-6">
                         <label for="inquiry_email" class="form-label text-uppercase smallest fw-bold">{{ t('Email Address') }}</label>
                         <input type="email" class="form-control rounded-3" id="inquiry_email" name="inquiry_email"
-                               placeholder="{{ t('your@email.com') }}" maxlength="254">
+                               placeholder="{{ t('your@email.com') }}" maxlength="254"
+                               value="{{ form_data.get('inquiry_email', '') }}">
                     </div>
                     <div class="col-md-6">
                         <label for="inquiry_phone" class="form-label text-uppercase smallest fw-bold">{{ t('Phone Number') }}</label>
                         <input type="tel" class="form-control rounded-3" id="inquiry_phone" name="inquiry_phone"
-                               placeholder="{{ t('e.g. +972 50 000 0000') }}" maxlength="30">
+                               placeholder="{{ t('e.g. +972 50 000 0000') }}" maxlength="30"
+                               value="{{ form_data.get('inquiry_phone', '') }}">
                     </div>
                     <div class="col-12">
                         <label for="inquiry_message" class="form-label text-uppercase smallest fw-bold">{{ t('Message') }} <span class="text-danger">*</span></label>
                         <textarea class="form-control rounded-3" id="inquiry_message" name="inquiry_message"
-                                  rows="4" placeholder="{{ t('How can we help you?') }}" maxlength="2000" required></textarea>
+                                  rows="4" placeholder="{{ t('How can we help you?') }}" maxlength="2000" required>{{ form_data.get('inquiry_message', '') }}</textarea>
                     </div>
                     <div class="col-12">
                         <small class="text-muted">{{ t('At least one contact method (email or phone) is required so we can reply.') }}</small>

@@ -2758,12 +2758,14 @@ def about_page():
     if settings.get('about_enabled') != '1' and not is_admin_preview:
         return 'Page not found', 404
     map_urls = _build_about_map_urls(settings.get('about_map_url'))
+    form_data = session.pop('contact_form_data', {})
     return render_template(
         'about.html',
         site_settings=settings,
         is_admin_preview=is_admin_preview,
         about_map_open_url=map_urls['open_url'],
         about_map_embed_url=map_urls['embed_url'],
+        form_data=form_data,
     )
 
 
