@@ -1327,6 +1327,13 @@ def _complete_manual_sync_job(job_id, status, result=None, error_message=None):
         job['percent'] = 100
         if result is not None:
             job['result'] = result
+            job['run_status'] = result.get('run_status', status)
+            job['result_message'] = result.get('message', job.get('message', ''))
+            job['patients'] = int(result.get('patients', 0) or 0)
+            job['groups'] = int(result.get('groups', 0) or 0)
+            job['pushed_groups'] = int(result.get('pushed_groups', 0) or 0)
+            job['warnings'] = result.get('warnings', [])
+            job['errors'] = result.get('errors', [])
             if result.get('targets_total') is not None:
                 job['targets_total'] = int(result.get('targets_total') or 0)
             if result.get('targets_processed') is not None:

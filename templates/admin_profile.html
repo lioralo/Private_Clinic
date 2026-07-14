@@ -747,7 +747,7 @@
                         throw new Error('{{ t('Sync job entered an unknown state.') }}');
                     }
 
-                    await new Promise((resolve) => window.setTimeout(resolve, 900));
+                    await new Promise((resolve) => window.setTimeout(resolve, 1500));
                 }
 
                 throw new Error('{{ t('Sync timed out before completion.') }}');
