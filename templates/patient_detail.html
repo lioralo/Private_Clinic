@@ -294,7 +294,7 @@
                                 <div>
                                     <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
                                     <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                    <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                                    <div class="small text-dark mt-1 note-content-preview">{{ note['content'] }}</div>
                                 </div>
                                 <i class="bi bi-chevron-down text-muted stable-toggle-icon mt-1"></i>
                             </div>
@@ -380,7 +380,7 @@
                                     <div>
                                         <div class="fw-bold text-primary">{{ t('Session') }} {{ note['session_number'] or '—' }}</div>
                                         <div class="small text-muted">{{ note['note_date'] or note['created_at'] }}</div>
-                                        <div class="small text-dark mt-1" style="white-space: pre-wrap;">{{ (note['content'] or '')[:220] }}{% if (note['content'] or '')|length > 220 %}...{% endif %}</div>
+                                        <div class="small text-dark mt-1 note-content-preview">{{ note['content'] }}</div>
                                     </div>
                                     <i class="bi bi-chevron-down text-muted stable-toggle-icon mt-1"></i>
                                 </div>
@@ -1524,6 +1524,23 @@ document.addEventListener('DOMContentLoaded', function () {
                 siblingButtons.forEach(function (node) {
                     node.disabled = false;
                 });
+            }
+        });
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+
+    document.querySelectorAll('.note-edit-form').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            var modal = form.closest('.modal');
+            if (modal) {
+                var bsModal = bootstrap.Modal.getInstance(modal);
+                if (bsModal) bsModal.hide();
             }
         });
     });

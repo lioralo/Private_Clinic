@@ -1160,6 +1160,14 @@ body.admin-user * {
     margin-bottom: 1rem;
 }
 
+.note-content-preview {
+    white-space: pre-wrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
 :dir(rtl) .me-1, [dir="rtl"] .me-1 { margin-inline-end: 0.25rem !important; margin-right: 0 !important; }
 :dir(rtl) .me-2, [dir="rtl"] .me-2 { margin-inline-end: 0.5rem !important; margin-right: 0 !important; }
 :dir(rtl) .me-3, [dir="rtl"] .me-3 { margin-inline-end: 1rem !important; margin-right: 0 !important; }
