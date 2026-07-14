@@ -4,7 +4,7 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    padding: 2rem 1rem;
+    padding: 1.5rem;
     background: linear-gradient(135deg, #f8f9fa 0%, #f0f4f8 50%, #eff2f5 100%);
     position: relative;
     overflow: hidden;
@@ -23,7 +23,7 @@
     position: relative;
     z-index: 10;
     width: 100%;
-    max-width: 500px;
+    max-width: 440px;
 }
 
 .login-card {
@@ -51,6 +51,7 @@
 .clinic-logo-large {
     height: 200px;
     width: auto;
+    aspect-ratio: auto;
     display: block;
     margin: 0 auto;
     object-fit: contain;

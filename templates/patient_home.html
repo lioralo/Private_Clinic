@@ -4,7 +4,7 @@
 <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
     <div class="d-flex align-items-center gap-3 flex-wrap">
         {% if patient['profile_image'] %}
-        <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover" style="width:72px;height:72px;">
+        <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" loading="lazy" class="rounded-circle border shadow-sm object-fit-cover" style="width:72px;height:72px;">
         {% else %}
         <div class="rounded-circle bg-light border shadow-sm d-inline-flex align-items-center justify-content-center text-primary" style="width:72px;height:72px;">
             <i class="bi bi-person-fill" style="font-size:1.8rem;"></i>

@@ -229,7 +229,22 @@ p {
     display: inline-block;
 }
 
-/*  ── Admin sidebar shell ─────────────────────────────────── */
+/* Prevent layout shift from images */
+img {
+    aspect-ratio: attr(width) / attr(height);
+}
+img[width]:not([height]),
+img[height]:not([width]) {
+    aspect-ratio: auto;
+}
+
+/* Content visibility — skip rendering of offscreen sections */
+.cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px;
+}
+
+/* ── Admin sidebar shell ─────────────────────────────────── */
 /* The sidebar is handled by Tailwind. These are Bootstrap overrides
    that keep Bootstrap components (cards, forms, tabs) on-brand. */
 
@@ -272,6 +287,7 @@ p {
     box-shadow: var(--shadow-card);
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    will-change: transform;
 }
 
 .card:hover {
@@ -289,7 +305,7 @@ p {
 }
 
 h1, h2, h3, h4, h5 {
-    font-family: 'Poppins', 'Assistant', sans-serif;
+    font-family: 'Poppins', sans-serif;
     font-weight: 700;
     color: #3B82F6;
 }
@@ -301,6 +317,7 @@ h1, h2, h3, h4, h5 {
     padding: 0.6rem 1.5rem;
     font-weight: 700;
     transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    will-change: transform;
 }
 
 .btn-primary:hover {
@@ -532,9 +549,10 @@ input.form-control[type="password"] {
 .stat-card .value {
     display: block;
     margin-top: 0.35rem;
-    font-size: 1.7rem;
+    font-size: 1.5rem;
     font-weight: 800;
     color: #0f172a;
+    line-height: 1.2;
 }
 
 .pill-nav {
@@ -577,7 +595,9 @@ input.form-control[type="password"] {
 
 .patient-card {
     min-height: 100%;
+    contain: layout style;
     transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+    will-change: transform;
 }
 
 .patient-card-clickable {
@@ -802,6 +822,7 @@ input.form-control[type="password"] {
     background: rgba(255, 255, 255, 0.72);
     box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    will-change: transform;
 }
 
 .crm-patient-row:hover {
@@ -981,6 +1002,7 @@ body.admin-user * {
     padding: 0.85rem 1rem;
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    will-change: transform;
 }
 .crm-patient-card:hover {
     transform: translateY(-2px);
@@ -1025,6 +1047,7 @@ body.admin-user * {
     border: 1px solid rgba(226, 232, 240, 0.9);
     box-shadow: 0 6px 16px rgba(15,23,42,0.05);
     transition: transform 0.15s, box-shadow 0.15s;
+    will-change: transform;
 }
 .dash-stat-card:hover {
     transform: translateY(-2px);
@@ -1187,6 +1210,7 @@ footer {
     border: none;
     box-shadow: 0 8px 18px rgba(15,23,42,0.16);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    will-change: transform;
 }
 
 .fc-event:hover {
@@ -1431,9 +1455,9 @@ a:focus-visible {
     border-color: rgba(191, 219, 254, 0.5);
 }
 
-/* Smooth transitions on all interactive elements */
+/* Smooth transitions on all interactive elements — avoid `all` to prevent jitter */
 a, button, .btn, .card, .form-control, .form-select, .badge {
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 /* Better focus ring on form elements using blue primary */

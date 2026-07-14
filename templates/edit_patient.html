@@ -8,14 +8,14 @@
             <a href="{{ url_for('patient_detail', patient_id=patient['id']) }}" class="btn btn-outline-secondary btn-sm rounded-circle p-2 me-3 lh-1">
                 <i class="bi bi-chevron-left"></i>
             </a>
-            <h2 class="mb-0 fw-bold text-primary">Edit Patient</h2>
+            <h2 class="mb-0 fw-bold text-primary">{{ t('Edit Patient') }}</h2>
         </div>
 
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
     <div class="p-5">
         <div class="text-center mb-4 pb-2 border-bottom">
             <h5 class="font-bold mb-1">{{ patient['name'] }}</h5>
-            <p class="text-muted small">Update patient information</p>
+            <p class="text-muted small">{{ t('Update patient information') }}</p>
         </div>
         
         <form method="post" class="needs-validation" novalidate>
@@ -52,7 +52,7 @@
 
                 <div class="col-md-12">
                     <div class="form-check form-switch mt-1">
-                        <input class="form-check-input" type="checkbox" role="switch" name="reminder_email_enabled" id="reminder_email_enabled" value="1" {% if patient['reminder_email_enabled'] == 1 %}checked{% endif %}>
+                        <input class="form-check-input" type="checkbox" role="switch" name="reminder_email_enabled" id="reminder_email_enabled" value="1" {% if patient['reminder_email_enabled'] == 1 or patient['reminder_email_enabled'] is none %}checked{% endif %}>
                         <label class="form-check-label" for="reminder_email_enabled">
                             <i class="bi bi-envelope me-1"></i>Send email reminders
                         </label>
@@ -76,7 +76,7 @@
 
                 <div class="col-12 mt-4">
                     <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
-                        <i class="bi bi-save me-2"></i> Save Patient Record
+                        <i class="bi bi-save me-2"></i>{{ t('Save Patient Record') }}
                     </button>
                 </div>
             </div>
@@ -92,7 +92,7 @@
                 </h5>
                 <p class="text-muted small mb-3">{{ 'Permanently mark this patient as deleted. They will be hidden from normal views and archived from the patient count.' if lang == 'en' else 'סמן מטופל זה כמחוק בעד. הוא יהיה מוסתר מהתצוגות הרגילות יצא מספר המטופלים.' }}</p>
                 
-                <form method="post" action="{{ url_for('delete_patient', patient_id=patient['id']) }}" data-confirm-modal data-confirm-reason data-confirm-message="Permanently delete this patient?">
+                <form method="post" action="{{ url_for('delete_patient', patient_id=patient['id']) }}" data-confirm-modal data-confirm-reason data-confirm-message="{{ t('Permanently delete this patient?') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
                         <i class="bi bi-trash-fill me-2"></i>{{ t('Mark as Deleted') }}

@@ -217,10 +217,14 @@ def api_send_message():
                 ORDER BY CASE WHEN p.status = 'archived' THEN 1 ELSE 0 END ASC,
                          p.name ASC
             ''').fetchall()
-            for recipient in recipients:
-                db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
-                           (current_user.id, recipient['id'], content))
-            db.commit()
+            try:
+                for recipient in recipients:
+                    db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
+                               (current_user.id, recipient['id'], content))
+                db.commit()
+            except Exception:
+                db.rollback()
+                return jsonify({'status': 'error', 'message': 'Database error while sending messages.'}), 500
             return jsonify({'status': 'success'})
         try:
             recipient_id = int(recipient_id_raw)
@@ -251,9 +255,9 @@ def send_message(patient_id):
                 (current_user.id, user['id'], content)
             )
             db.commit()
-            flash('Message sent.')
+            flash('Message sent.', 'success')
         else:
-            flash('Patient does not have an active user account to receive messages.')
+            flash('Patient does not have an active user account to receive messages.', 'error')
 
     return redirect_to_patient_tab(patient_id, 'messages')
 
@@ -264,7 +268,7 @@ def admin_reply_message(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    content = request.form['content']
+    content = (request.form.get('content') or '').strip()
     if content:
         db = get_db()
         user = db.execute('SELECT id FROM users WHERE patient_id = ?', (patient_id,)).fetchone()
@@ -272,9 +276,9 @@ def admin_reply_message(patient_id):
             db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
                        (current_user.id, user['id'], content))
             db.commit()
-            flash('Message sent.')
+            flash('Message sent.', 'success')
         else:
-            flash('Patient does not have an active user account to receive messages.')
+            flash('Patient does not have an active user account to receive messages.', 'error')
 
     return redirect_to_patient_tab(patient_id, 'messages')
 
@@ -290,11 +294,11 @@ def contact_admin():
     bucket_key = f"contact-admin-{current_user.id}"
     retry_after = _check_db_rate_limit(db, bucket_key, 'contact', 10, 60) # 10 messages per minute
     if retry_after:
-        flash(f'Too many messages. Please wait {retry_after} seconds.')
+        flash(f'Too many messages. Please wait {retry_after} seconds.', 'warning')
         return redirect(url_for('patient_home'))
     _record_db_rate_limit(db, bucket_key, 'contact')
 
-    content = request.form['content']
+    content = (request.form.get('content') or '').strip()
     if content:
         admin = db.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1").fetchone()
         recipient_id = admin['id'] if admin else None
@@ -302,7 +306,7 @@ def contact_admin():
         db.execute('INSERT INTO messages (sender_id, recipient_id, content) VALUES (?, ?, ?)',
                    (current_user.id, recipient_id, content))
         db.commit()
-        flash('Message sent to your therapist.')
+        flash('Message sent to your therapist.', 'success')
 
     return redirect(url_for('patient_home'))
 
@@ -333,7 +337,7 @@ def contact_inquiry():
 
     if errors:
         for err in errors:
-            flash(err)
+            flash(err, 'error')
         return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
 
     db = get_db()
@@ -342,8 +346,11 @@ def contact_inquiry():
         (name, email, phone, message),
     )
     db.commit()
-    flash('Your message has been sent. We will get back to you soon.')
+    flash('Your message has been sent. We will get back to you soon.', 'success')
     return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
+
+
+contact_inquiry.is_csrf_exempt = True  # public endpoint
 
 
 @messaging_bp.route('/admin/contact-inquiries')

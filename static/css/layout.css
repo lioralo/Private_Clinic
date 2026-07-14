@@ -14,7 +14,7 @@
 [dir="rtl"] .btn,
 [dir="rtl"] .form-control,
 [dir="rtl"] .form-select {
-    font-family: 'Heebo', 'Assistant', 'Rubik', 'Noto Sans Hebrew', sans-serif !important;
+    font-family: 'Heebo', sans-serif !important;
 }
 
 .sidebar-link-active {

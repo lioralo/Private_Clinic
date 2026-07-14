@@ -31,7 +31,7 @@
     --color-background: #F8FAFC;
     --color-on-background: #111827;
 
-    --font-family-headline: "Poppins", "Heebo", "Assistant", sans-serif;
-    --font-family-body: "Roboto", "Heebo", "Assistant", sans-serif;
-    --font-family-mono: "Inconsolata", "JetBrains Mono", monospace;
+    --font-family-headline: "Poppins", "Heebo", sans-serif;
+    --font-family-body: "Roboto", "Heebo", sans-serif;
+    --font-family-mono: "JetBrains Mono", ui-monospace, monospace;
 }

@@ -11,7 +11,7 @@
     <div class="d-flex align-items-start gap-3 flex-wrap">
         <div>
             {% if patient['profile_image'] %}
-            <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover" style="width:76px;height:76px;">
+            <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" loading="lazy" class="rounded-circle border shadow-sm object-fit-cover" style="width:76px;height:76px;">
             {% else %}
             <div class="rounded-circle bg-light border shadow-sm d-flex align-items-center justify-content-center text-primary" style="width:76px;height:76px;">
                 <i class="bi bi-person-fill" style="font-size:2rem;"></i>
@@ -460,7 +460,7 @@
 
                 {% if notes|length > 5 %}
                 <div class="d-flex justify-content-center pt-2">
-                    <button id="loadPreviousMeetingsBtn" class="btn btn-outline-primary rounded-pill" type="button" data-batch-size="5">View More</button>
+                    <button id="loadPreviousMeetingsBtn" class="btn btn-outline-primary rounded-pill" type="button" data-batch-size="5">{{ t('View More') }}</button>
                 </div>
                 {% endif %}
 
@@ -1035,7 +1035,7 @@
             </div>
             <div class="card-body text-center d-none" id="patientProfilePictureBody">
                 {% if patient['profile_image'] %}
-                <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" class="rounded-circle border shadow-sm object-fit-cover mb-3" style="width:112px;height:112px;">
+                <img src="{{ url_for('download_file', name=patient['profile_image']) }}" alt="{{ patient['name'] }}" loading="lazy" class="rounded-circle border shadow-sm object-fit-cover mb-3" style="width:112px;height:112px;">
                 {% else %}
                 <div class="rounded-circle bg-light border shadow-sm d-inline-flex align-items-center justify-content-center text-primary mb-3" style="width:112px;height:112px;">
                     <i class="bi bi-person-fill" style="font-size:2.4rem;"></i>
@@ -1191,8 +1191,8 @@
                         </div>
                         <select name="meeting_type" class="form-select form-select-sm">
                             <option value="in-person">{{ t('In-person') }}</option>
-                            <option value="zoom">Zoom</option>
-                            <option value="google-meet">Google Meet</option>
+                            <option value="zoom">{{ t('Zoom') }}</option>
+                            <option value="google-meet">{{ t('Google Meet') }}</option>
                         </select>
                         <select name="recurrence_mode" class="form-select form-select-sm">
                             <option value="auto">{{ t('Auto') }}</option>
@@ -1448,10 +1448,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     body: formData,
                     headers: { 'X-CSRFToken': formData.get('csrf_token') || '' }
                 });
-                const payload = await response.json().catch(function () { return { error: 'Request failed' }; });
+                const payload = await response.json().catch(function () { return { error: '{{ t("Request failed") }}' }; });
                 if (!response.ok || payload.error) {
                     if (typeof window.showAppToast === 'function') {
-                        window.showAppToast(payload.error || 'Request failed', {
+                        window.showAppToast(payload.error || '{{ t("Request failed") }}', {
                             variant: 'danger',
                             title: '{{ t('Error') }}'
                         });

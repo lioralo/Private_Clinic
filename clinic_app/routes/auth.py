@@ -504,7 +504,7 @@ def register_auth_routes(
                 flash(f'Too many registration attempts. Please try again in {retry_after // 60 + 1} minute(s).')
                 return render_template('register.html'), 429
 
-            name = request.form['name']
+            name = (request.form.get('name') or '').strip()
             email = request.form.get('email')
             phone = request.form.get('phone')
 

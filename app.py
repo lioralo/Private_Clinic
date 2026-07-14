@@ -3574,14 +3574,15 @@ def _get_patients_select_clause(admin_user_id):
         WHERE COALESCE(p.is_deleted, 0) = 0
     '''
 
-def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method):
+def _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived=False):
     where_query = ""
     params = []
 
     if status in LEGACY_WAITING_STATUSES:
         where_query += " AND p.status IN ('candidate', 'waiting for scheduling', 'waiting')"
     elif status == 'all':
-        where_query += " AND COALESCE(p.status, 'candidate') != 'archived'"
+        if not show_archived:
+            where_query += " AND COALESCE(p.status, 'candidate') != 'archived'"
     else:
         where_query += ' AND p.status = ?'
         params.append(status)
@@ -3632,9 +3633,9 @@ def _normalize_patient_status(status):
     return 'candidate'
 
 
-def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all'):
+def fetch_patients_by_status(db, status, patient_type='all', search_query='', sort_by='status_priority', admin_user_id=None, include_group=True, treatment_method='all', show_archived=False):
     select_clause = _get_patients_select_clause(admin_user_id)
-    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method)
+    where_clause, params = _get_patients_where_clause(status, patient_type, search_query, include_group, treatment_method, show_archived)
     order_clause = _get_patients_order_clause(sort_by)
 
     final_query = f"{select_clause}{where_clause}{order_clause}"
@@ -3658,6 +3659,8 @@ def crm_dashboard():
     treatment_method = request.args.get('treatment_method', saved_filters.get('treatment_method', 'all')).strip()
     show_deleted_raw = request.args.get('show_deleted', saved_filters.get('show_deleted', 'false'))
     show_deleted = show_deleted_raw == 'true'
+    show_archived_raw = request.args.get('show_archived', saved_filters.get('show_archived', 'false'))
+    show_archived = show_archived_raw == 'true'
 
     status = _normalize_patient_status(status) if status != 'all' else 'all'
     if status not in {'all', 'ongoing', 'candidate', 'archived'}:
@@ -3674,7 +3677,8 @@ def crm_dashboard():
         'sort': sort_by,
         'include_group': 'true' if include_group else 'false',
         'treatment_method': treatment_method,
-        'show_deleted': 'true' if show_deleted else 'false'
+        'show_deleted': 'true' if show_deleted else 'false',
+        'show_archived': 'true' if show_archived else 'false'
     }
     
     patient_type = clinic_type
@@ -3734,7 +3738,7 @@ def crm_dashboard():
         final_query = f"{select_clause}{where_clause}{order_clause}"
         patients = db.execute(final_query, tuple(params)).fetchall()
     else:
-        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method)
+        patients = fetch_patients_by_status(db, status, patient_type=patient_type, search_query=search_query, sort_by=sort_by, admin_user_id=current_user.id, include_group=include_group, treatment_method=treatment_method, show_archived=show_archived)
     
     count_where = ['COALESCE(is_deleted, 0) = 0']
     count_params = []
@@ -3884,7 +3888,8 @@ def crm_dashboard():
                            treatment_method_options=treatment_method_labels,
                            today_appointments=today_appointments,
                            avg_wait_time=avg_wait_time,
-                           show_deleted=show_deleted)
+                           show_deleted=show_deleted,
+                           show_archived=show_archived)
 
 
 
@@ -7401,6 +7406,7 @@ def add_note(patient_id):
         for file in files:
             if file and file.filename != '':
                 filename = secure_filename(file.filename)
+                filename = f"{secrets.token_hex(6)}_{filename}"
 
                 patient_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'treatments', str(patient_id))
                 if not os.path.exists(patient_dir):
@@ -7590,8 +7596,9 @@ def add_file(patient_id):
     if file:
         filename = secure_filename(file.filename)
         if not _allowed_upload(filename, ALLOWED_UPLOAD_EXTENSIONS):
-            flash('File type not allowed. Accepted: docx, pdf, txt, png, jpg, gif, xlsx, csv.')
+            flash('File type not allowed. Accepted: docx, pdf, txt, png, jpg, gif, xlsx, csv, webp.')
             return redirect_to_patient_tab(patient_id, 'notes')
+        filename = f"{secrets.token_hex(6)}_{filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         db = get_db()

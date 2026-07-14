@@ -483,13 +483,21 @@ def _api_calendar_book_special(db, current_user, anchor, booking_time, duration,
         if conflict:
             return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
     for d in dates_to_block:
-        db.execute('''
-            INSERT INTO blocked_slots
-            (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
-              VALUES (?, ?, ?, ?, 1, 'blocked', ?)
-        ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
-              special_title or 'Special Occasion', current_user.id))
-    db.commit()
+        conflict = has_time_conflict(db, d, start_dt, end_dt)
+        if conflict:
+            return jsonify({'status': 'error', 'message': f'Special slot overlaps existing time on {date_iso}.'}), 409
+    try:
+        for d in dates_to_block:
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                  VALUES (?, ?, ?, ?, 1, 'blocked', ?)
+            ''', (d.isoformat(), parsed_booking_time.strftime('%H:%M'), duration,
+                  special_title or 'Special Occasion', current_user.id))
+        db.commit()
+    except Exception:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': 'Database error while booking special slots.'}), 500
     return jsonify({'status': 'success'})
 
 
@@ -1349,46 +1357,53 @@ def api_public_calendar_book(token):
     if conflict:
         return jsonify({'status': 'error', 'message': 'Selected slot is no longer available.'}), 409
 
-    patient_cur = db.execute('''
-        INSERT INTO patients (name, status, email, phone, birth_date, patient_type)
-        VALUES (?, 'waiting', ?, ?, ?, 'private')
-    ''', (name, email or None, phone or None, birth_date.isoformat() if birth_date else None))
-    patient_id = patient_cur.lastrowid
+    try:
+        patient_cur = db.execute('''
+            INSERT INTO patients (name, status, email, phone, birth_date, patient_type)
+            VALUES (?, 'waiting', ?, ?, ?, 'private')
+        ''', (name, email or None, phone or None, birth_date.isoformat() if birth_date else None))
+        patient_id = patient_cur.lastrowid
 
-    db.execute('''
-        INSERT INTO appointments (
-            patient_id, appointment_date, appointment_time, duration_minutes,
-            meeting_type, meeting_title, status, is_recurring
-        ) VALUES (?, ?, ?, ?, 'in-person', 'Self-booked via public link', 'scheduled', 0)
-    ''', (patient_id, booking_date.isoformat(), booking_time.strftime('%H:%M'), duration))
+        db.execute('''
+            INSERT INTO appointments (
+                patient_id, appointment_date, appointment_time, duration_minutes,
+                meeting_type, meeting_title, status, is_recurring
+            ) VALUES (?, ?, ?, ?, 'in-person', 'Self-booked via public link', 'scheduled', 0)
+        ''', (patient_id, booking_date.isoformat(), booking_time.strftime('%H:%M'), duration))
 
-    db.execute('''
-        UPDATE availability
-        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
-        WHERE slot_date = ? AND slot_time = ? AND status = 'available'
-    ''', (
-        name,
-        phone or email,
-        booking_notes or None,
-        datetime.now().isoformat(),
-        booking_date.isoformat(),
-        booking_time.strftime('%H:%M')
-    ))
+        db.execute('''
+            UPDATE availability
+            SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
+            WHERE slot_date = ? AND slot_time = ? AND status = 'available'
+        ''', (
+            name,
+            phone or email,
+            booking_notes or None,
+            datetime.now().isoformat(),
+            booking_date.isoformat(),
+            booking_time.strftime('%H:%M')
+        ))
 
-    contact_text = phone or email
-    notes_suffix = f' Notes: {booking_notes}.' if booking_notes else ''
-    message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.{notes_suffix}'
-    db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
-    db.execute(
-        'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
-        (patient_id, 'public-self-book', message)
-    )
-    db.commit()
+        contact_text = phone or email
+        notes_suffix = f' Notes: {booking_notes}.' if booking_notes else ''
+        message = f'New pending patient: {name} booked {booking_date.isoformat()} at {booking_time.strftime("%H:%M")}. Contact: {contact_text}.{notes_suffix}'
+        db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
+        db.execute(
+            'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+            (patient_id, 'public-self-book', message)
+        )
+        db.commit()
 
-    return jsonify({
-        'status': 'success',
-        'message': 'Booking received. We created a pending patient record and reserved the slot.'
-    })
+        return jsonify({
+            'status': 'success',
+            'message': 'Booking received. We created a pending patient record and reserved the slot.'
+        })
+    except Exception:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': 'Booking failed due to a server error. Please try again.'}), 500
+
+
+api_public_calendar_book.is_csrf_exempt = True  # public endpoint
 
 
 @calendar_bp.route('/groups', methods=['GET', 'POST'])

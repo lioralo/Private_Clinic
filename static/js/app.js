@@ -659,6 +659,14 @@ document.addEventListener('click', function(e) {
         if (trigger.tagName === 'A') {
             window.location.href = action;
         } else if (trigger.tagName === 'FORM') {
+            if (hasReason) {
+                var reasonVal = document.getElementById('confirmModalReason').value.trim();
+                var reasonInput = document.createElement('input');
+                reasonInput.type = 'hidden';
+                reasonInput.name = 'deletion_reason';
+                reasonInput.value = reasonVal;
+                trigger.appendChild(reasonInput);
+            }
             trigger.submit();
         } else {
             var form = document.createElement('form');

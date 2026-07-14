@@ -412,10 +412,10 @@
                                         </div>
                                         <div class="text-muted">Since {{ member['joined_at'][:10] if member['joined_at'] else 'Unknown' }}</div>
                                         <div class="mt-1 d-flex gap-1 flex-wrap">
-                                        <span class="badge bg-light text-dark border">Arrived {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
-                                        {% if member['status'] == 'ongoing' %}<span class="badge bg-success">{{ txt('Ongoing', 'בטיפול') }}</span>{% endif %}
-                                        {% if member['has_recurring'] > 0 %}<span class="badge bg-primary">{{ txt('Recurring', 'חוזר') }}</span>{% endif %}
-                                    </div>
+                                            <span class="badge bg-light text-dark border">{{ txt('Arrived', 'הגיע') }} {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
+                                            {% if member['status'] == 'ongoing' %}<span class="badge bg-success-subtle text-success border">{{ txt('Ongoing', 'בטיפול') }}</span>{% endif %}
+                                            {% if member.get('has_recurring') %}<span class="badge bg-info-subtle text-info border">{{ txt('Recurring', 'חוזר') }}</span>{% endif %}
+                                        </div>
                                     </div>
                                     <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="toggleMemberPanel({{ member['patient_id'] }})">{{ txt('Remove', 'הסרה') }}</button>
                                 </div>
@@ -657,64 +657,20 @@
 <script>
 const csrfToken = document.getElementById('groups_csrf_token').value;
 
-// Group management horizontal tabs — persist tab in URL
+// Group management horizontal tabs
 (function() {
     var tabs = document.querySelectorAll('.group-mgmt-tab');
     var canvas = document.getElementById('groupMgmtCanvas');
     var panes = document.querySelectorAll('.group-mgmt-pane');
-
-    function switchToPane(paneId) {
-        tabs.forEach(function(b) { b.classList.remove('active'); });
-        panes.forEach(function(p) { p.classList.add('d-none'); });
-        var target = document.getElementById(paneId);
-        if (target) { target.classList.remove('d-none'); }
-        canvas.style.display = '';
-        // Update active tab button
-        tabs.forEach(function(b) {
-            if (b.getAttribute('data-pane') === paneId) {
-                b.classList.add('active');
-            }
-        });
-        // Update URL
-        var tabName = paneId.replace('groupMgmtPane', '').toLowerCase();
-        var params = new URLSearchParams(window.location.search);
-        params.set('tab', tabName);
-        var newUrl = window.location.pathname + '?' + params.toString();
-        window.history.replaceState({tab: tabName}, '', newUrl);
-    }
-
     tabs.forEach(function(btn) {
         btn.addEventListener('click', function() {
-            switchToPane(this.getAttribute('data-pane'));
-        });
-    });
-
-    // On page load, read ?tab= from URL and switch to that pane
-    var params = new URLSearchParams(window.location.search);
-    var tabParam = params.get('tab');
-    if (tabParam) {
-        var mappedId = 'groupMgmtPane' + tabParam.charAt(0).toUpperCase() + tabParam.slice(1);
-        var targetPane = document.getElementById(mappedId);
-        if (targetPane) {
-            switchToPane(mappedId);
-        }
-    }
-
-    // Inject active_tab into all group forms on submit
-    var allGroupForms = document.querySelectorAll('#groupMgmtCanvas form, form[id^="record-edit-form-"]');
-    allGroupForms.forEach(function(form) {
-        form.addEventListener('submit', function() {
-            var input = form.querySelector('input[name="active_tab"]');
-            if (!input) {
-                input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'active_tab';
-                form.appendChild(input);
-            }
-            var activeTabBtn = document.querySelector('.group-mgmt-tab.active');
-            if (activeTabBtn) {
-                input.value = activeTabBtn.getAttribute('data-pane').replace('groupMgmtPane', '').toLowerCase();
-            }
+            var targetId = this.getAttribute('data-pane');
+            tabs.forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            panes.forEach(function(p) { p.classList.add('d-none'); });
+            var target = document.getElementById(targetId);
+            if (target) { target.classList.remove('d-none'); }
+            canvas.style.display = '';
         });
     });
 })();

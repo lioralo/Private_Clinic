@@ -73,7 +73,7 @@ const Sidebar = ({ activeScreen, setScreen }: { activeScreen: Screen, setScreen:
             key={item.id}
             onClick={() => setScreen(item.id as Screen)}
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors transition-transform duration-200 text-sm font-medium",
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm font-medium",
               activeScreen === item.id 
                 ? "bg-primary/10 text-primary" 
                 : "text-slate-600 hover:bg-slate-200"
@@ -99,14 +99,14 @@ const Sidebar = ({ activeScreen, setScreen }: { activeScreen: Screen, setScreen:
         <button 
           onClick={() => setScreen('settings')}
           className={cn(
-            "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors transition-transform duration-200 text-sm font-medium",
+            "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm font-medium",
             activeScreen === 'settings' ? "bg-primary/10 text-primary" : "text-slate-600 hover:bg-slate-200"
           )}
         >
           <Settings size={18} />
           <span>Settings</span>
         </button>
-        <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors transition-transform duration-200 text-sm font-medium">
+        <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors duration-200 text-sm font-medium">
           <LogOut size={18} />
           <span>Logout</span>
         </button>
@@ -197,6 +197,7 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
+            layout
             className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 max-w-sm"
           >
             <span className="text-secondary font-semibold text-sm uppercase tracking-wider">{stat.label}</span>
@@ -214,7 +215,7 @@ const Dashboard = () => {
         <div className="relative w-full md:w-96 group">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" />
           <input 
-            className="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-white transition-colors transition-shadow placeholder:text-slate-400" 
+            className="w-full pl-12 pr-4 py-3 bg-slate-100 border-none rounded-lg focus:ring-2 focus:ring-primary/20 focus:bg-white transition-colors placeholder:text-slate-400" 
             placeholder="Search patients..." 
             type="text" 
           />
@@ -232,7 +233,7 @@ const Dashboard = () => {
       </div>
 
       <div className="space-y-4">
-        <section className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <section className="cv-auto bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <button onClick={() => toggleSection('caseload')} className="w-full px-5 py-4 flex items-center justify-between text-left">
             <div>
               <h2 className="text-lg font-bold text-primary">Caseload Snapshot</h2>
@@ -248,6 +249,7 @@ const Dashboard = () => {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.35 + i * 0.08 }}
+                  layout
                   className={cn(
                     'bg-slate-50 rounded-xl overflow-hidden transition-shadow group cursor-pointer border border-slate-100',
                     patient.status === 'Archived' && 'opacity-70'
@@ -284,7 +286,7 @@ const Dashboard = () => {
           )}
         </section>
 
-        <section className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <section className="cv-auto bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <button onClick={() => toggleSection('candidates')} className="w-full px-5 py-4 flex items-center justify-between text-left">
             <div>
               <h2 className="text-lg font-bold text-primary">Candidate Queue</h2>
@@ -307,7 +309,7 @@ const Dashboard = () => {
           )}
         </section>
 
-        <section className="bg-primary text-white rounded-xl relative overflow-hidden shadow-lg">
+        <section className="cv-auto bg-primary text-white rounded-xl relative overflow-hidden shadow-lg">
           <button onClick={() => toggleSection('insights')} className="w-full px-6 py-5 flex items-center justify-between text-left relative z-10">
             <div>
               <h2 className="text-2xl font-bold">Clinical Insights</h2>
@@ -430,8 +432,8 @@ const AccountSettings = () => {
                     item.checked ? "bg-primary" : "bg-slate-200"
                   )}>
                     <div className={cn(
-                      "absolute top-1 w-3 h-3 bg-white rounded-full transition-[left]",
-                      item.checked ? "right-1" : "left-1"
+                      "absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform",
+                      item.checked ? "translate-x-5" : ""
                     )}></div>
                   </div>
                 </div>
@@ -884,7 +886,7 @@ const Help = () => {
           { title: 'Email Support', desc: 'For billing, technical issues, or records requests. Our admin team is here to help.', icon: Mail, action: 'support@ethosmed.com', color: 'bg-slate-50 text-slate-600' },
           { title: 'Call Clinic', desc: 'Available Mon-Fri, 8am-6pm for urgent matters or appointment changes.', icon: Phone, action: '+1 (555) 012-3456', color: 'bg-amber-50 text-amber-600' },
         ].map((item, i) => (
-          <div key={i} className="bg-white p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition-shadow group cursor-pointer">
+          <div key={i} className="bg-white p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition-shadow will-change-[box-shadow] group cursor-pointer">
             <div className={cn("w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform", item.color)}>
               <item.icon size={28} />
             </div>
@@ -988,7 +990,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="min-h-screen flex"
+    >
       <Sidebar activeScreen={screen} setScreen={setScreen} />
       
       <div className="flex-1 ml-64 flex flex-col">
@@ -1001,7 +1008,8 @@ export default function App() {
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              layout
               className="h-full"
             >
               {screen === 'dashboard' && <Dashboard />}
@@ -1027,6 +1035,6 @@ export default function App() {
           Emergency Protocol
         </span>
       </button>
-    </div>
+    </motion.div>
   );
 }

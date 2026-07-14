@@ -14,7 +14,7 @@ Usage:
 import os
 import json
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ---------------------------------------------------------------------------
 # Soft-import Google libs so the app still starts without them
@@ -126,6 +126,16 @@ def load_credentials(db: sqlite3.Connection):
         return None
     try:
         token_data = json.loads(row['token_json'])
+        expiry = None
+        raw_expiry = token_data.get('expiry')
+        if raw_expiry:
+            try:
+                parsed = datetime.fromisoformat(raw_expiry)
+                if parsed.tzinfo is not None:
+                    parsed = parsed.replace(tzinfo=None)
+                expiry = parsed
+            except (ValueError, TypeError):
+                expiry = None
         creds = Credentials(
             token=token_data.get('token'),
             refresh_token=token_data.get('refresh_token'),
@@ -133,6 +143,7 @@ def load_credentials(db: sqlite3.Connection):
             client_id=os.environ.get('GOOGLE_CLIENT_ID', token_data.get('client_id', '')),
             client_secret=os.environ.get('GOOGLE_CLIENT_SECRET', token_data.get('client_secret', '')),
             scopes=token_data.get('scopes', SCOPES),
+            expiry=expiry,
         )
         return creds
     except Exception:
@@ -149,6 +160,7 @@ def save_credentials(db: sqlite3.Connection, creds, calendar_id: str = 'primary'
         'client_id': os.environ.get('GOOGLE_CLIENT_ID', creds.client_id),
         'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET', creds.client_secret),
         'scopes': list(creds.scopes) if creds.scopes else SCOPES,
+        'expiry': creds.expiry.replace(tzinfo=None).isoformat() if creds.expiry else None,
     }
     token_json = json.dumps(token_data)
     existing = db.execute(
@@ -258,7 +270,8 @@ def _build_service(creds):
 
 def _refresh_and_save(db, creds):
     """Refresh the token if expired and persist the updated credentials."""
-    if not creds.valid and creds.refresh_token:
+    expiry_missing = creds.expiry is None and creds.refresh_token
+    if (not creds.valid or expiry_missing) and creds.refresh_token:
         from google.auth.transport.requests import Request
         from google.auth.exceptions import RefreshError
         try:

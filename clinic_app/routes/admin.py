@@ -171,13 +171,6 @@ def _get_dashboard_missing_recurring(db):
                 AND a.is_recurring = 1
                 AND COALESCE(a.status, 'scheduled') = 'scheduled'
           )
-          AND NOT EXISTS (
-              SELECT 1 FROM group_members gm
-              JOIN group_session_series gss ON gss.group_id = gm.group_id
-              WHERE gm.patient_id = patients.id
-                AND gm.left_at IS NULL
-                AND COALESCE(gss.is_active, 1) = 1
-          )
         ORDER BY name ASC
         LIMIT 6
     ''').fetchall()
@@ -1238,16 +1231,9 @@ def admin_smtp_test():
         return jsonify({'error': 'Unauthorized'}), 403
     recipient = (request.form.get('test_email') or '').strip()
     if not recipient:
-        flash('Test email address is required.', 'error')
-        return redirect(url_for('.admin_profile'))
+        return jsonify({'ok': False, 'message': 'Test email address is required.'})
     success, msg = _send_smtp_email(recipient, 'SMTP Test from Private Clinic', 'This is a test email from your clinic management system.')
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': success, 'message': msg})
-    if success:
-        flash(f'SMTP test email sent to {recipient}.', 'success')
-    else:
-        flash(f'SMTP test failed: {msg}', 'error')
-    return redirect(url_for('.admin_profile'))
+    return jsonify({'ok': success, 'message': msg})
 
 
 @admin_bp.route('/admin/setup_authenticator', methods=['POST'])
@@ -1419,7 +1405,10 @@ def manage_resources():
     db = get_db()
 
     if request.method == 'POST':
-        title = request.form['title']
+        title = (request.form.get('title') or '').strip()
+        if not title:
+            flash('Title is required.', 'error')
+            return redirect(url_for('manage_resources'))
         description = request.form.get('description', '')
         url = request.form.get('url', '')
         is_public = 1 if request.form.get('is_public') else 0
@@ -1493,7 +1482,10 @@ def assign_resource(patient_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
 
-    resource_id = request.form['resource_id']
+    resource_id = (request.form.get('resource_id') or '').strip()
+    if not resource_id:
+        flash('No resource selected.', 'error')
+        return redirect(request.referrer or url_for('crm_dashboard'))
     if resource_id:
         db = get_db()
         try:

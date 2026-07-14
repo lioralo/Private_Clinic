@@ -40,7 +40,7 @@ DATABASE = os.environ.get('DATABASE', 'clinic.db')
 BACKUP_DIR = os.environ.get('BACKUP_DIR', 'secure_backups')
 KEY_DIR = os.environ.get('KEY_DIR', '.clinic_keys')
 BACKUP_INTERVAL_HOURS = 12
-ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
+ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv', '.webp'}
 ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 

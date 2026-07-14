@@ -101,46 +101,5 @@ sudo cp -a /path/to/old/data/. /var/lib/docker/volumes/clinic_clinic_app_data/_d
 docker compose up -d
 ```
 
-## Email / SMTP
-
-### Email sending stack
-- Emails are sent via **SendGrid v3 API** (not raw SMTP) when `SMTP_HOST=smtp.sendgrid.net`
-- Falls back to standard SMTP for non-SendGrid providers
-- Implementation in `clinic_app/utils.py:_send_smtp_email()`
-
-### SendGrid domain authentication
-Domain `clinic.lior-clinic.org` is authenticated in SendGrid via 3 CNAME records in IONOS DNS:
-- `em6121` → `u110289522.wl023.sendgrid.net`
-- `s1._domainkey` → `s1.domainkey.u110289522.wl023.sendgrid.net`
-- `s2._domainkey` → `s2.domainkey.u110289522.wl023.sendgrid.net`
-
-### SMTP config (in server `.env`)
-| Variable | Value |
-|----------|-------|
-| `SMTP_HOST` | `smtp.sendgrid.net` |
-| `SMTP_PORT` | `587` |
-| `SMTP_USERNAME` | `apikey` |
-| `SMTP_PASSWORD` | `SG.*` (SendGrid API key) |
-| `SMTP_FROM_EMAIL` | `noreply@clinic.lior-clinic.org` |
-| `SMTP_FROM_NAME` | `Private Clinic` |
-
-**To test:** Admin Dashboard → Email Settings → Send Test Email
-
-### Known limitation
-The free SendGrid tier is capped at 100 emails/day. Reset occurs at midnight UTC.
-
-## Design System
-See [DESIGN.md](DESIGN.md) for complete style foundations (Clean design, Poppins/Roboto, blue primary #3B82F6).
-
-### Key design decisions
-- **RTL-first layout** for Hebrew, with Bootstrap RTL loaded before LTR
-- **Animations:** `slideDown` on login form (0.6s), `skeleton-shimmer` for loading states, `pulse` for meeting badges, `transition-colors` on all interactive elements
-- **Bootstrap 5 via vendored files** in `static/vendor/bootstrap/` (not npm/CDN):
-  - `bootstrap.bundle.min.js` (with Popper)
-  - `bootstrap.min.css` + `bootstrap.rtl.min.css`
-  - `bootstrap-icons` vendored in `static/vendor/bootstrap-icons/`
-- **Notifications:** Floating bell icon `.float-noti-btn` with absolute positioning, not `lg:inline-flex`
-- **Sidebar:** Admin subnav with collapsed states, hamburger toggle on mobile
-
 ## Full Reference
 See [docs/FULL_REFERENCE.md](docs/FULL_REFERENCE.md) for complete documentation on setup, deployment, security, design system, and more.
