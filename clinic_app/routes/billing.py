@@ -408,7 +408,7 @@ def push_receipt_to_morning(patient_id):
             client_email=patient['email'] or None,
             client_phone=patient['phone'] or None,
             notes=receipt['description'] or '',
-            doc_type=305,
+            doc_type=300,
             signed=True,
         )
         morning_id = result.get('id', '')

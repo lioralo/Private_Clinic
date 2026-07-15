@@ -89,10 +89,10 @@ class MorningAPIClient:
         return resp.json()
 
     def create_document(self, client_name, items, client=None, client_email=None, client_phone=None,
-                        phone=None, doc_type=305, notes=None, vat_type=0, currency='ILS', lang='he',
+                        phone=None,                         doc_type=300, notes=None, vat_type=0, currency='ILS', lang='he',
                         date=None, due_date=None, remarks=None, footer=None,
                         signed=True, attachment=False, email_content=None, rounding=True):
-        """Create an invoice/receipt in Morning. doc_type: 305=invoice/receipt, 320=receipt."""
+        """Create an invoice/receipt in Morning. doc_type: 300=invoice, 305=invoice+receipt, 320=receipt."""
         payload = {
             'type': doc_type,
             'lang': lang,
@@ -133,7 +133,7 @@ class MorningAPIClient:
         return resp.json()
 
     def create_document_with_client(self, client_name, items, client_email=None, client_phone=None,
-                                     doc_type=305, notes=None, date=None, signed=True, rounding=True):
+                                     doc_type=300, notes=None, date=None, signed=True, rounding=True):
         """Create a document, auto-creating the client in Morning if needed.
 
         Returns (document_dict, morning_client_id)."""
