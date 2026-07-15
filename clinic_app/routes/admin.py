@@ -1800,8 +1800,8 @@ def morning_settings():
             try:
                 from clinic_app.morning_api import MorningAPIClient
                 client = MorningAPIClient(
-                    api_key=request.form.get('morning_api_key', ''),
-                    api_secret=request.form.get('morning_api_secret', ''),
+                    client_id=request.form.get('morning_api_key', ''),
+                    client_secret=request.form.get('morning_api_secret', ''),
                     base_url=request.form.get('morning_api_url', ''),
                 )
                 ok, msg = client.test_connection()
@@ -1831,12 +1831,12 @@ def morning_test_connection():
     try:
         from clinic_app.morning_api import MorningAPIClient
         client = MorningAPIClient(
-            api_key=settings.get('morning_api_key', ''),
-            api_secret=settings.get('morning_api_secret', ''),
+            client_id=settings.get('morning_api_key', ''),
+            client_secret=settings.get('morning_api_secret', ''),
             base_url=settings.get('morning_api_url', ''),
         )
-        ok = client.test_connection()
-        return jsonify({'status': 'connected' if ok else 'failed'})
+        ok, msg = client.test_connection()
+        return jsonify({'status': 'connected' if ok else 'failed', 'message': msg})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
