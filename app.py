@@ -4902,7 +4902,17 @@ def patient_detail(patient_id):
 
     service_types = db.execute('SELECT * FROM service_types WHERE is_active = 1 ORDER BY name ASC').fetchall()
 
-    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, followup_status=followup_status, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url, service_types=service_types)
+    recent_assessments = db.execute('''
+        SELECT a.total_score, a.severity_level, a.taken_at, at.name AS assessment_name,
+               at.display_name
+        FROM assessments a
+        JOIN assessment_types at ON at.id = a.assessment_type_id
+        WHERE a.patient_id = ? AND at.is_active = 1
+        ORDER BY a.taken_at DESC, a.id DESC
+        LIMIT 6
+    ''', (patient_id,)).fetchall()
+
+    return render_template('patient_detail.html', patient=patient, notes=notes, patient_logs=patient_logs, files=files, receipts=receipts, user=user, appointments=appointments, next_appointment=next_appointment, followup_status=followup_status, messages=messages, all_resources=all_resources, assigned_resources=assigned_resources, active_tab=active_tab, behavior_options=behavior_options, latest_behavior=latest_behavior, latest_note=latest_note, suggested_session_number=suggested_session_number, suggested_note_date=suggested_note_date, intake_form_data=intake_form_data, unread_messages_count=unread_messages_count, group_attendance_rows=group_attendance_rows, group_membership_rows=group_membership_rows, group_arrived_count=group_arrived_count, supervisions=supervisions, diagnosis_documents=diagnosis_documents, goals=goals, chart_data=chart_data, questionnaire_enabled=questionnaire_enabled, selected_questionnaire_titles=selected_questionnaire_titles, available_questionnaire_titles=available_questionnaire_titles, questionnaire_tabs_error=questionnaire_tabs_error, source_questionnaire_titles=source_questionnaire_titles, source_questionnaire_error=source_questionnaire_error, source_questionnaire_activation_url=source_questionnaire_activation_url, questionnaire_tabs_activation_url=questionnaire_tabs_activation_url, source_questionnaire_sheet_url=source_questionnaire_sheet_url, service_types=service_types, recent_assessments=recent_assessments)
 
 
 @app.route('/patient/<int:patient_id>/encounter-log', methods=['POST'])

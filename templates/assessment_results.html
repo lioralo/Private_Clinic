@@ -56,24 +56,74 @@
           <tr>
             <td class="text-nowrap">{{ a['administered_date'] }}</td>
             <td>
+              {% if a['total_score'] is not none %}
               <span class="fw-semibold">{{ a['total_score'] }}</span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
             </td>
             <td>
+              {% if a['severity'] %}
               <span class="badge {% if a['severity'] in ('minimal','none') %}bg-success{% elif a['severity'] in ('mild','situational') %}bg-info{% elif a['severity'] == 'moderate' %}bg-warning text-dark{% elif a['severity'] in ('moderately severe','moderate_to_severe') %}bg-orange text-dark{% else %}bg-danger{% endif %} rounded-pill">
                 {{ t(a['severity']|title) if a['severity'] else t('N/A') }}
               </span>
+              {% else %}
+              <span class="badge bg-light text-dark rounded-pill">{{ t('Intake') }}</span>
+              {% endif %}
             </td>
             <td class="text-truncate" style="max-width:200px;">{{ a['notes'] or '-' }}</td>
             <td>
+              {% if a['answers'] %}
+              <button class="btn btn-sm btn-outline-info rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#intake_{{ a['id'] }}" aria-expanded="false">
+                <i class="bi bi-file-text"></i>
+              </button>
+              {% endif %}
+              {% if a['response_data'] %}
               <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" data-bs-toggle="collapse" data-bs-target="#details_{{ a['id'] }}" aria-expanded="false">
                 <i class="bi bi-eye"></i>
               </button>
+              {% endif %}
               <form method="post" action="{{ url_for('assessments.delete_assessment', assessment_id=a['id']) }}" data-confirm-modal data-confirm-message="{{ t('Delete this assessment?') }}" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill"><i class="bi bi-trash"></i></button>
               </form>
             </td>
           </tr>
+          {% if a['answers'] %}
+          <tr class="collapse" id="intake_{{ a['id'] }}">
+            <td colspan="5" class="bg-light-subtle p-3">
+              <div class="row g-3">
+                {% set fields = [
+                  ('current_problem', 'Current Problem'),
+                  ('problem_duration', 'Duration'),
+                  ('previous_treatment', 'Previous Treatment'),
+                  ('psychiatric_diagnosis', 'Prior Diagnosis'),
+                  ('medical_conditions', 'Medical Conditions'),
+                  ('current_medications', 'Medications'),
+                  ('allergies', 'Allergies'),
+                  ('family_history', 'Family History'),
+                  ('substance_use', 'Substance Use'),
+                  ('sleep', 'Sleep Patterns'),
+                  ('appetite', 'Appetite'),
+                  ('suicidal_ideation', 'Suicidal Risk'),
+                  ('support_system', 'Support System'),
+                  ('functional_impairment', 'Functional Impairment'),
+                  ('trauma_history', 'Trauma History'),
+                  ('additional_notes', 'Additional Notes'),
+                ] %}
+                {% for key, label in fields %}
+                {% set val = a['answers'].get(key, '') %}
+                {% if val %}
+                <div class="col-md-4">
+                  <div class="small text-muted">{{ t(label) }}</div>
+                  <div class="fw-semibold">{{ val }}</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
           <tr class="collapse" id="details_{{ a['id'] }}">
             <td colspan="5" class="bg-light-subtle p-3">
               <strong>{{ t('Raw Scores') }}:</strong>

@@ -118,6 +118,36 @@
 
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
     <div class="p-5 border-b border-slate-100">
+        <h5 class="font-bold mb-0"><i class="bi bi-clipboard-data me-2 text-primary"></i>{{ t('Recent Assessments') }}</h5>
+    </div>
+    <div class="p-4">
+        {% if recent_assessments %}
+        <div class="row g-3">
+            {% for a in recent_assessments %}
+            <div class="col-md-6">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">{{ a['display_name'] or a['assessment_name'] }}</span>
+                    {% if a['total_score'] is not none %}
+                    <span class="badge {% if a['severity_level'] in ('minimal','none') %}bg-success{% elif a['severity_level'] in ('mild','situational') %}bg-info{% elif a['severity_level'] == 'moderate' %}bg-warning text-dark{% else %}bg-danger{% endif %} rounded-pill">{{ a['total_score'] }}</span>
+                    {% else %}
+                    <span class="badge bg-light text-dark rounded-pill">{{ t('Done') }}</span>
+                    {% endif %}
+                    <span class="small text-muted ms-auto">{{ a['taken_at'] }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">{{ t('No assessments recorded yet.') }}</p>
+        {% endif %}
+        <a href="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill mt-3">
+            <i class="bi bi-plus-circle me-1"></i>{{ t('New Assessment') }}
+        </a>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
         <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoalsBody" aria-expanded="false" aria-controls="patientGoalsBody" onclick="toggleStablePanel(this)">
             <span class="font-bold mb-0"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</span>
             <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
