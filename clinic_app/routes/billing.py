@@ -227,3 +227,248 @@ def api_set_appointment_status(appointment_id):
         'new_status': status,
         'patient_id': appt['patient_id']
     })
+
+
+@billing_bp.route('/morning/pull', methods=['POST'])
+@login_required
+def pull_morning_documents():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    from clinic_app.morning_api import get_morning_client
+    client = get_morning_client(db)
+    if not client:
+        flash('Morning API is not configured.', 'error')
+        return redirect(url_for('admin.morning_settings'))
+
+    try:
+        docs, total = client.search_documents(page_size=100)
+    except Exception as e:
+        flash(f'Failed to pull from Morning: {str(e)[:100]}', 'error')
+        return redirect(request.referrer or url_for('admin.morning_settings'))
+
+    imported = 0
+    skipped = 0
+    for doc in docs:
+        doc_id = doc.get('id', '')
+        existing = db.execute(
+            'SELECT id FROM receipts WHERE morning_doc_id = ?', (doc_id,)
+        ).fetchone()
+        if existing:
+            skipped += 1
+            continue
+
+        client_name = doc.get('clientName', 'Unknown')
+        patient = db.execute(
+            "SELECT id FROM patients WHERE LOWER(name) = LOWER(?) LIMIT 1",
+            (client_name.strip(),)
+        ).fetchone()
+        if not patient:
+            patient = db.execute(
+                'INSERT INTO patients (name, status, patient_type) VALUES (?, ?, ?)',
+                (client_name.strip(), 'candidate', 'private')
+            )
+            patient_id = patient.lastrowid
+        else:
+            patient_id = patient['id']
+
+        amount = float(doc.get('total', 0) or 0)
+        description = doc.get('description', '') or f'Morning doc #{doc.get("number", doc_id[:8])}'
+        receipt_number = doc.get('number', doc_id[:8])
+
+        cur = db.execute(
+            '''INSERT INTO receipts (patient_id, amount, description, receipt_number, status,
+                morning_doc_id, morning_sync_status, morning_synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            (patient_id, amount, description, receipt_number, 'paid',
+             doc_id, 'synced', datetime.now().isoformat())
+        )
+        receipt_id = cur.lastrowid
+
+        income_items = doc.get('incomeItems', []) or doc.get('items', []) or []
+        for item in income_items:
+            item_desc = item.get('description', '')
+            item_price = float(item.get('price', 0) or 0)
+            item_qty = int(item.get('quantity', 1) or 1)
+            db.execute(
+                '''INSERT INTO receipt_items (receipt_id, quantity, unit_price, line_total, description)
+                   VALUES (?, ?, ?, ?, ?)''',
+                (receipt_id, item_qty, item_price, round(item_qty * item_price, 2), item_desc)
+            )
+        imported += 1
+
+    db.commit()
+    flash(f'Imported {imported} receipts from Morning ({skipped} already synced).', 'success')
+    return redirect(request.referrer or url_for('admin.morning_settings'))
+
+
+@billing_bp.route('/patient/<int:patient_id>/morning/push', methods=['POST'])
+@login_required
+def push_receipt_to_morning(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    from clinic_app.morning_api import get_morning_client
+    client = get_morning_client(db)
+    if not client:
+        flash('Morning API is not configured.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    receipt_id = request.form.get('receipt_id')
+    if not receipt_id:
+        flash('No receipt selected.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    receipt = db.execute('SELECT * FROM receipts WHERE id = ?', (receipt_id,)).fetchone()
+    if not receipt:
+        flash('Receipt not found.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    items = db.execute('SELECT * FROM receipt_items WHERE receipt_id = ?', (receipt_id,)).fetchall()
+    income_items = []
+    for item in items:
+        income_items.append({
+            'description': item['description'] or 'Service',
+            'price': float(item['unit_price'] or 0),
+            'quantity': int(item['quantity'] or 1),
+        })
+
+    try:
+        result = client.create_document(
+            client_name=patient['name'],
+            items=income_items,
+            client_email=patient.get('email') or None,
+            client_phone=patient.get('phone') or None,
+            notes=receipt['description'] or '',
+            doc_type=305,
+        )
+        morning_id = result.get('id', '')
+        db.execute(
+            '''UPDATE receipts SET morning_doc_id = ?, morning_sync_status = 'synced',
+               morning_synced_at = ? WHERE id = ?''',
+            (morning_id, datetime.now().isoformat(), receipt_id)
+        )
+        db.commit()
+        flash(f'Receipt pushed to Morning (doc #{result.get("number", morning_id[:8])}).', 'success')
+    except Exception as e:
+        flash(f'Failed to push to Morning: {str(e)[:100]}', 'error')
+
+    return redirect_to_patient_tab(patient_id, 'billing')
+
+
+@billing_bp.route('/patient/<int:patient_id>/morning/payment-request', methods=['POST'])
+@login_required
+def send_payment_request(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    from clinic_app.morning_api import get_morning_client
+    client = get_morning_client(db)
+    if not client:
+        flash('Morning API is not configured.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    amount = (request.form.get('amount') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    if not amount or not description:
+        flash('Amount and description are required.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+
+    try:
+        result = client.create_payment_request(
+            client_name=patient['name'],
+            amount=float(amount),
+            description=description,
+            client_email=patient.get('email') or None,
+        )
+        flash(f'Payment request sent to {patient["name"]}.', 'success')
+    except Exception as e:
+        flash(f'Failed to send payment request: {str(e)[:100]}', 'error')
+
+    return redirect_to_patient_tab(patient_id, 'billing')
+
+
+@billing_bp.route('/admin/morning/pull-all', methods=['POST'])
+@login_required
+def pull_all_morning_pages():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    from clinic_app.morning_api import get_morning_client
+    client = get_morning_client(db)
+    if not client:
+        flash('Morning API is not configured.', 'error')
+        return redirect(url_for('admin.morning_settings'))
+
+    total_imported = 0
+    total_skipped = 0
+    page = 1
+    while True:
+        try:
+            docs, total = client.search_documents(page=page, page_size=50)
+        except Exception as e:
+            flash(f'Pull failed at page {page}: {str(e)[:100]}', 'error')
+            break
+        if not docs:
+            break
+
+        for doc in docs:
+            doc_id = doc.get('id', '')
+            existing = db.execute(
+                'SELECT id FROM receipts WHERE morning_doc_id = ?', (doc_id,)
+            ).fetchone()
+            if existing:
+                total_skipped += 1
+                continue
+
+            client_name = doc.get('clientName', 'Unknown')
+            patient = db.execute(
+                "SELECT id FROM patients WHERE LOWER(name) = LOWER(?) LIMIT 1",
+                (client_name.strip(),)
+            ).fetchone()
+            if not patient:
+                patient = db.execute(
+                    'INSERT INTO patients (name, status, patient_type) VALUES (?, ?, ?)',
+                    (client_name.strip(), 'candidate', 'private')
+                )
+                patient_id = patient.lastrowid
+            else:
+                patient_id = patient['id']
+
+            amount = float(doc.get('total', 0) or 0)
+            description = doc.get('description', '') or f'Morning #{doc.get("number", doc_id[:8])}'
+            receipt_number = doc.get('number', doc_id[:8])
+
+            cur = db.execute(
+                '''INSERT INTO receipts (patient_id, amount, description, receipt_number, status,
+                    morning_doc_id, morning_sync_status, morning_synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (patient_id, amount, description, receipt_number, 'paid',
+                 doc_id, 'synced', datetime.now().isoformat())
+            )
+            receipt_id = cur.lastrowid
+
+            income_items = doc.get('incomeItems', []) or doc.get('items', []) or []
+            for item in income_items:
+                item_desc = item.get('description', '')
+                item_price = float(item.get('price', 0) or 0)
+                item_qty = int(item.get('quantity', 1) or 1)
+                db.execute(
+                    '''INSERT INTO receipt_items (receipt_id, quantity, unit_price, line_total, description)
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (receipt_id, item_qty, item_price, round(item_qty * item_price, 2), item_desc)
+                )
+            total_imported += 1
+
+        if page >= (total // 50) + 1:
+            break
+        page += 1
+
+    db.commit()
+    flash(f'Pull complete — imported {total_imported}, skipped {total_skipped} already synced.', 'success')
+    return redirect(url_for('admin.morning_settings'))

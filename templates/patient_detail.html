@@ -591,6 +591,11 @@
                         <div class="fw-semibold">{{ receipt['receipt_number'] or t('Receipt') }}</div>
                         <div class="small text-muted">{{ receipt['created_at'] }}</div>
                         <div class="small text-muted">{{ receipt['description'] }}</div>
+                        {% if receipt['morning_sync_status'] == 'synced' %}
+                        <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>{{ t('Synced') }}</div>
+                        {% elif receipt['morning_doc_id'] %}
+                        <div class="small text-warning mt-1"><i class="bi bi-hourglass-split me-1"></i>{{ t('Pending sync') }}</div>
+                        {% endif %}
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge {% if receipt['status'] == 'paid' %}bg-success-subtle text-success{% elif receipt['status'] == 'pending' %}bg-warning-subtle text-warning{% else %}bg-light text-muted{% endif %} border rounded-pill px-3 py-2">{{ receipt['status'] or 'paid' }}</span>
@@ -598,6 +603,15 @@
                         <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
                             <i class="bi bi-download"></i>
                         </a>
+                        {% if not receipt['morning_doc_id'] %}
+                        <form method="post" action="{{ url_for('billing.push_receipt_to_morning', patient_id=patient['id']) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="receipt_id" value="{{ receipt['id'] }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success rounded-pill">
+                                <i class="bi bi-cloud-upload me-1"></i>{{ t('Morning') }}
+                            </button>
+                        </form>
+                        {% endif %}
                     </div>
                 </div>
                 {% else %}
@@ -605,6 +619,32 @@
                 {% endfor %}
             </div>
         </div>
+
+        {% if receipts %}
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-header">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-credit-card me-2 text-primary"></i>{{ t('Send Payment Request') }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('billing.send_payment_request', patient_id=patient['id']) }}" class="row g-2 align-items-end">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-md-4">
+                        <label class="form-label small">{{ t('Amount') }}</label>
+                        <input type="number" step="0.01" name="amount" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small">{{ t('Description') }}</label>
+                        <input type="text" name="description" class="form-control form-control-sm" placeholder="{{ t('e.g. Therapy session') }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-success rounded-pill w-100">
+                            <i class="bi bi-send me-1"></i>{{ t('Send via Morning') }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
 
         {% elif active_tab == 'messages' %}
         <div class="card border-0 shadow-sm">

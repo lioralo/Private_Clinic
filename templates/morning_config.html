@@ -122,31 +122,41 @@
 
 <div class="card border-0 shadow-sm mt-4">
     <div class="card-header bg-white border-0 pt-3 px-3">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2 text-primary"></i>{{ t('How It Works') }}</h5>
+        <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-repeat me-2 text-primary"></i>{{ t('Sync Actions') }}</h5>
     </div>
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-md-4">
-                <div class="border rounded-3 p-3 text-center">
-                    <i class="bi bi-cloud-download text-primary" style="font-size:2rem"></i>
-                    <h6 class="mt-2 fw-bold">{{ t('Pull Receipts') }}</h6>
-                    <p class="small text-muted mb-0">{{ t('Import invoices and receipts from your Morning account into the clinic billing history.') }}</p>
+            <div class="col-md-6">
+                <div class="border rounded-3 p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-cloud-download me-2 text-primary"></i>{{ t('Pull from Morning') }}</h6>
+                    </div>
+                    <p class="small text-muted mb-3">{{ t('Import up to 100 recent documents from your Morning account as clinic receipts. Patients are matched by name or created as candidates.') }}</p>
+                    <form method="post" action="{{ url_for('billing.pull_morning_documents') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">
+                            <i class="bi bi-cloud-download me-1"></i>{{ t('Pull Recent (100)') }}
+                        </button>
+                    </form>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="border rounded-3 p-3 text-center">
-                    <i class="bi bi-cloud-upload text-primary" style="font-size:2rem"></i>
-                    <h6 class="mt-2 fw-bold">{{ t('Send Invoices') }}</h6>
-                    <p class="small text-muted mb-0">{{ t('Create tax invoices (חשבוניות מס) in Morning directly from patient billing records.') }}</p>
+            <div class="col-md-6">
+                <div class="border rounded-3 p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-database-down me-2 text-success"></i>{{ t('Pull All') }}</h6>
+                    </div>
+                    <p class="small text-muted mb-3">{{ t('Pull ALL documents from your Morning account (paginated). New patients are created automatically.') }}</p>
+                    <form method="post" action="{{ url_for('billing.pull_all_morning_pages') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-success rounded-pill px-4">
+                            <i class="bi bi-database-down me-1"></i>{{ t('Pull All Documents') }}
+                        </button>
+                    </form>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="border rounded-3 p-3 text-center">
-                    <i class="bi bi-credit-card text-primary" style="font-size:2rem"></i>
-                    <h6 class="mt-2 fw-bold">{{ t('Payment Requests') }}</h6>
-                    <p class="small text-muted mb-0">{{ t('Send payment links to patients via Morning so they can pay directly.') }}</p>
-                </div>
-            </div>
+        </div>
+    </div>
+</div>
         </div>
     </div>
 </div>
