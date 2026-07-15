@@ -47,6 +47,7 @@ admin_bp = Blueprint('admin', __name__)
 # ---------------------------------------------------------------------------
 
 def _get_dashboard_today_appointments(db, today):
+    tomorrow = today + timedelta(days=1)
     return db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
                a.meeting_type, a.meeting_link, a.is_recurring,
@@ -56,9 +57,9 @@ def _get_dashboard_today_appointments(db, today):
         JOIN patients p ON p.id = a.patient_id
         WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(p.is_deleted, 0) = 0
-          AND a.appointment_date = ?
+          AND a.appointment_date IN (?, ?)
         ORDER BY a.appointment_time ASC
-    ''', (today.isoformat(),)).fetchall()
+    ''', (today.isoformat(), tomorrow.isoformat())).fetchall()
 
 
 def _get_dashboard_week_appointments(db, today, week_end):

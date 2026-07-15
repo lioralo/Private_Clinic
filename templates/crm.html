@@ -86,9 +86,6 @@
         <a href="{{ url_for('crm_dashboard', status='archived', clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='false', show_archived='true' if show_archived else 'false') }}" class="btn btn-sm btn-outline-primary stable-filter-btn {% if status == 'archived' %}is-selected{% endif %} rounded-pill">
             <i class="bi bi-archive me-1"></i>{{ t('Archived') }} ({{ counts['archived'] }})
         </a>
-        <a href="{{ url_for('crm_dashboard', status=status, clinic_type=clinic_type, q=search_query, sort=sort_by, include_group='true' if include_group else 'false', treatment_method=treatment_method, show_deleted='true', show_archived='true' if show_archived else 'false') }}" class="btn btn-sm btn-outline-danger stable-filter-btn {% if show_deleted %}is-selected{% endif %} rounded-pill">
-            <i class="bi bi-trash me-1"></i>{{ t('Deleted') }} ({{ counts.get('deleted', 0) }})
-        </a>
     </div>
     
     {# view toggle #}

@@ -3800,15 +3800,16 @@ def crm_dashboard():
         'deleted': deleted_count_row['deleted_count'] or 0
     }
     
-    # Get today's appointments
+    # Get today's appointments (include tomorrow for UTC timezone offset)
     today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
     today_appointments = db.execute('''
         SELECT a.id FROM appointments a
         JOIN patients p ON p.id = a.patient_id
         WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(p.is_deleted, 0) = 0
-          AND a.appointment_date = ?
-    ''', (today.isoformat(),)).fetchall()
+          AND a.appointment_date IN (?, ?)
+    ''', (today.isoformat(), tomorrow.isoformat())).fetchall()
     
     # Get new admissions this week
     week_ago = today - timedelta(days=7)
@@ -3827,7 +3828,7 @@ def crm_dashboard():
     if not show_deleted:
         recurrence_range_end = today + timedelta(days=365)
         patients_needing_check = [p for p in patients
-                                   if p['has_recurring'] and (not p['next_appointment_date'] or not p['next_appointment_time'])]
+                                   if dict(p).get('has_recurring') and (not dict(p).get('next_appointment_date') or not dict(p).get('next_appointment_time'))]
         if patients_needing_check:
             pid_list = [p['id'] for p in patients_needing_check]
             placeholders = ','.join('?' * len(pid_list))
@@ -3858,7 +3859,7 @@ def crm_dashboard():
         # For patients who still have no next_appointment after checking recurring,
         # check if they have upcoming group sessions.
         patients_missing_next = [p for p in patients
-                                  if (not p.get('next_appointment_date') or not p.get('next_appointment_time'))]
+                                  if (not dict(p).get('next_appointment_date') or not dict(p).get('next_appointment_time'))]
         if patients_missing_next:
             pid_list = [p['id'] for p in patients_missing_next]
             placeholders = ','.join('?' * len(pid_list))
