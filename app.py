@@ -7457,11 +7457,21 @@ def add_note(patient_id):
 
     return redirect_to_patient_tab(patient_id, 'notes')
 
-@app.route('/note/<int:note_id>/edit', methods=('POST',))
+@app.route('/note/<int:note_id>/edit', methods=('GET', 'POST'))
 @login_required
 def edit_note(note_id):
     if current_user.role != 'admin':
         return "Unauthorized", 403
+
+    db = get_db()
+    note = db.execute('SELECT * FROM notes WHERE id = ?', (note_id,)).fetchone()
+    if not note:
+        flash('Note not found.', 'error')
+        return redirect(url_for('crm_dashboard'))
+
+    if request.method == 'GET':
+        patient = db.execute('SELECT * FROM patients WHERE id = ?', (note['patient_id'],)).fetchone()
+        return render_template('note_edit.html', note=note, patient=patient)
 
     content = request.form.get('content', '').strip()
     session_number = request.form.get('session_number', '').strip()

@@ -301,7 +301,7 @@
                             </div>
                         </button>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                            <a href="{{ url_for('edit_note', note_id=note['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Edit') }}</a>
                             <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" data-confirm-modal data-confirm-message="{{ t('Delete meeting log?') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
@@ -327,48 +327,6 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
-                            </div>
-                            <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
-                                <div class="modal-body">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="row g-3">
-                                        <div class="col-md-3">
-                                            <label class="form-label">{{ t('Session Number') }}</label>
-                                            <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label">{{ t('Date') }}</label>
-                                            <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">{{ t('Appearance') }}</label>
-                                            <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label">{{ t('Meeting Log') }}</label>
-                                            <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label">{{ t('Document / Website Link') }}</label>
-                                            <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
-                                    <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
                 {% endfor %}
 
                 {% if notes|length > 5 %}
@@ -387,7 +345,7 @@
                                 </div>
                             </button>
                             <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" data-bs-toggle="modal" data-bs-target="#editNoteModal{{ note['id'] }}">{{ t('Edit') }}</button>
+                                <a href="{{ url_for('edit_note', note_id=note['id']) }}" class="btn btn-sm btn-outline-secondary rounded-pill">{{ t('Edit') }}</a>
                                 <form method="post" action="{{ url_for('delete_note', note_id=note['id']) }}" data-confirm-modal data-confirm-message="{{ t('Delete meeting log?') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger rounded-pill">{{ t('Delete') }}</button>
@@ -410,48 +368,6 @@
                                 </div>
                                 {% endif %}
                                 <div class="text-dark" style="white-space: pre-wrap;">{{ note['content'] }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal fade" id="editNoteModal{{ note['id'] }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">{{ t('Edit Meeting Log') }}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ t('Close') }}"></button>
-                                </div>
-                                <form method="post" action="{{ url_for('edit_note', note_id=note['id']) }}" class="note-edit-form">
-                                    <div class="modal-body">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <div class="row g-3">
-                                            <div class="col-md-3">
-                                                <label class="form-label">{{ t('Session Number') }}</label>
-                                                <input type="number" name="session_number" class="form-control" value="{{ note['session_number'] or '' }}">
-                                            </div>
-                                            <div class="col-md-3">
-                                                <label class="form-label">{{ t('Date') }}</label>
-                                                <input type="date" name="note_date" class="form-control" value="{{ note['note_date'] or '' }}">
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label">{{ t('Appearance') }}</label>
-                                                <input type="text" name="patient_appearance" class="form-control" value="{{ note['patient_appearance'] or '' }}">
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label">{{ t('Meeting Log') }}</label>
-                                                <textarea name="content" class="form-control" rows="8" required>{{ note['content'] }}</textarea>
-                                            </div>
-                                            <div class="col-12">
-                                                <label class="form-label">{{ t('Document / Website Link') }}</label>
-                                                <input type="url" name="link_url" class="form-control" value="{{ note['link_url'] or '' }}" placeholder="https://...">
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-outline-secondary rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button>
-                                        <button type="submit" class="btn btn-primary rounded-pill">{{ t('Save') }}</button>
-                                    </div>
-                                </form>
                             </div>
                         </div>
                     </div>
@@ -1526,33 +1442,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     node.disabled = false;
                 });
             }
-        });
-    });
-});
-
-document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
-    document.body.classList.remove('modal-open');
-    document.body.style.overflow = '';
-    document.body.style.paddingRight = '';
-
-    document.querySelectorAll('.note-edit-form').forEach(function (form) {
-        form.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var modal = form.closest('.modal');
-            if (modal && typeof bootstrap !== 'undefined') {
-                modal.addEventListener('hidden.bs.modal', function handler() {
-                    modal.removeEventListener('hidden.bs.modal', handler);
-                    form.submit();
-                }, {once: true});
-                var bsModal = bootstrap.Modal.getInstance(modal);
-                if (bsModal) { bsModal.hide(); return; }
-            }
-            document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
-            form.submit();
         });
     });
 });
