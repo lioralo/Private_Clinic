@@ -1067,5 +1067,17 @@
       });
     }
     </script>
+    <button id="scrollTopBtn" class="btn btn-primary rounded-circle shadow" style="position:fixed;bottom:24px;right:24px;width:44px;height:44px;display:none;z-index:50;align-items:center;justify-content:center;" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="{{ t('Back to top') }}">
+        <i class="bi bi-arrow-up"></i>
+    </button>
+    <script>
+    var scrollBtn = document.getElementById('scrollTopBtn');
+    window.addEventListener('scroll', function() {
+        scrollBtn.style.display = window.scrollY > 400 ? 'flex' : 'none';
+    });
+    scrollBtn.addEventListener('click', function() {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    });
+    </script>
 </body>
 </html>

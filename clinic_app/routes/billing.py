@@ -41,27 +41,35 @@ def download_receipt(receipt_id):
     ''', (receipt_id,)).fetchall()
 
     from fpdf import FPDF
+    import os as _os
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_font('Arial', '', r'C:\Windows\Fonts\arial.ttf', uni=True)
-    pdf.add_font('Arial', 'B', r'C:\Windows\Fonts\arialbd.ttf', uni=True)
-    pdf.set_font('Arial', 'B', 16)
+
+    font_path = _os.path.join(_os.path.dirname(__file__), '..', '..', 'static', 'fonts', 'DejaVuSans.ttf')
+    font_path = _os.path.abspath(font_path)
+    if not _os.path.exists(font_path):
+        font_path = '/app/static/fonts/DejaVuSans.ttf'
+    pdf.add_font('Sans', '', font_path, uni=True)
+    pdf.add_font('Sans', 'B', font_path, uni=True)
+
+    pdf.set_font('Sans', 'B', 16)
     pdf.cell(0, 10, 'PRIVATE CLINIC SERVICE RECEIPT', new_x='LMARGIN', new_y='NEXT', align='C')
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Sans', '', 9)
     pdf.cell(0, 6, f'Receipt #: {receipt["receipt_number"] or receipt["id"]}', new_x='LMARGIN', new_y='NEXT')
     pdf.cell(0, 6, f'Patient:   {patient_name}', new_x='LMARGIN', new_y='NEXT')
     pdf.cell(0, 6, f'Date:      {receipt["created_at"] or ""}', new_x='LMARGIN', new_y='NEXT')
     pdf.cell(0, 6, f'Status:    {receipt["status"] or "paid"}', new_x='LMARGIN', new_y='NEXT')
     pdf.ln(4)
     col_w = [70, 15, 30, 30]
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Sans', 'B', 9)
     pdf.set_fill_color(230, 230, 230)
     headers = ['Item', 'Qty', 'Price', 'Total']
     for i, h in enumerate(headers):
         pdf.cell(col_w[i], 7, h, border=1, align='C', fill=True)
     pdf.ln()
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Sans', '', 9)
     for it in items:
         name = (it['service_name'] or it['description'] or f'Item #{it["id"]}')[:40]
         pdf.cell(col_w[0], 6, name, border=1)
@@ -69,11 +77,11 @@ def download_receipt(receipt_id):
         pdf.cell(col_w[2], 6, f'${it["unit_price"]:.2f}', border=1, align='R')
         pdf.cell(col_w[3], 6, f'${it["line_total"]:.2f}', border=1, align='R')
         pdf.ln()
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font('Sans', 'B', 10)
     pdf.cell(col_w[0] + col_w[1] + col_w[2], 7, 'TOTAL', border=1, align='R')
     pdf.cell(col_w[3], 7, f'${receipt["amount"]:.2f}', border=1, align='R')
     pdf.ln(10)
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Sans', '', 9)
     pdf.cell(0, 6, 'Thank you for choosing our clinic.', new_x='LMARGIN', new_y='NEXT', align='C')
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
