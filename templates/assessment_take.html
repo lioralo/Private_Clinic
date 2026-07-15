@@ -17,8 +17,8 @@
       <select name="assessment_type_id" id="assessmentTypeSelect" class="form-select" required>
         <option value="">{{ t('Select assessment type...') }}</option>
         {% for at in assessment_types %}
-        <option value="{{ at['id'] }}" data-questions="{{ at['num_questions'] }}" data-name="{{ at['name'] }}">
-          {{ at['display_name'] }} ({{ at['num_questions'] }} {{ t('questions') }})
+        <option value="{{ at['id'] }}" {% if selected_type_id == at['id']|string %}selected{% endif %}>
+          {{ at['display_name'] }}
         </option>
         {% endfor %}
       </select>
@@ -26,23 +26,18 @@
 
     <div id="questionsContainer" class="d-none">
       <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="font-bold mb-0"><i class="bi bi-question-circle me-2 text-primary"></i><span id="assessmentTitle">{{ t('Questions') }}</span></h5>
-          <span class="badge bg-light text-dark rounded-pill" id="questionCounter">{{ t('Over the last 2 weeks') }}</span>
-        </div>
-        <p class="text-muted small mb-3">{{ t('Over the last 2 weeks, how often have you been bothered by the following problems?') }}</p>
-
+        <h5 class="font-bold mb-3" id="assessmentTitle">{{ t('Questions') }}</h5>
         <div id="questionsList"></div>
       </div>
 
       <div class="mb-4">
-        <label class="form-label">{{ t('Notes') }}</label>
-        <textarea name="notes" class="form-control" rows="2" placeholder="{{ t('Optional notes about this assessment...') }}"></textarea>
+        <label class="form-label fw-bold">{{ t('Notes') }}</label>
+        <textarea name="notes" class="form-control" rows="3" placeholder="{{ t('Optional notes about this assessment...') }}"></textarea>
       </div>
 
       <div class="d-flex justify-content-end gap-2">
         <a href="{{ url_for('assessments.view_patient_assessments', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">{{ t('Cancel') }}</a>
-        <button type="submit" class="btn btn-primary rounded-pill px-5">{{ t('Score Assessment') }}</button>
+        <button type="submit" class="btn btn-primary rounded-pill px-5" id="submitBtn">{{ t('Save Assessment') }}</button>
       </div>
     </div>
   </form>
@@ -52,80 +47,111 @@
 {% block scripts %}
 <script>
 (function() {
-  const QUESTIONS = {
-    'PHQ-9': [
-      '{{ t("Little interest or pleasure in doing things") }}',
-      '{{ t("Feeling down, depressed, or hopeless") }}',
-      '{{ t("Trouble falling/staying asleep, or sleeping too much") }}',
-      '{{ t("Feeling tired or having little energy") }}',
-      '{{ t("Poor appetite or overeating") }}',
-      '{{ t("Feeling bad about yourself — or that you are a failure") }}',
-      '{{ t("Trouble concentrating on things, such as reading the newspaper") }}',
-      '{{ t("Moving/speaking so slowly that others noticed? Or the opposite — fidgety/restless") }}',
-      '{{ t("Thoughts that you would be better off dead or of hurting yourself") }}',
-    ],
-    'GAD-7': [
-      '{{ t("Feeling nervous, anxious, or on edge") }}',
-      '{{ t("Not being able to stop or control worrying") }}',
-      '{{ t("Worrying too much about different things") }}',
-      '{{ t("Trouble relaxing") }}',
-      '{{ t("Being so restless that it is hard to sit still") }}',
-      '{{ t("Becoming easily annoyed or irritable") }}',
-      '{{ t("Feeling afraid as if something awful might happen") }}',
-    ]
+  const LEGACY_QUESTIONS = {
+    'PHQ-9': {{ ASSESSMENT_QUESTIONS.get('PHQ-9', [])|tojson }},
+    'GAD-7': {{ ASSESSMENT_QUESTIONS.get('GAD-7', [])|tojson }},
   };
-
-  const OPTIONS = [
-    { value: '0', label: '{{ t("Not at all") }}' },
-    { value: '1', label: '{{ t("Several days") }}' },
-    { value: '2', label: '{{ t("More than half the days") }}' },
-    { value: '3', label: '{{ t("Nearly every day") }}' },
-  ];
+  const LEGACY_OPTIONS = {{ ASSESSMENT_OPTIONS|tojson }};
 
   const select = document.getElementById('assessmentTypeSelect');
   const container = document.getElementById('questionsContainer');
   const questionsList = document.getElementById('questionsList');
   const assessmentTitle = document.getElementById('assessmentTitle');
-  const questionCounter = document.getElementById('questionCounter');
+  const submitBtn = document.getElementById('submitBtn');
 
-  select.addEventListener('change', function() {
-    const selected = select.options[select.selectedIndex];
-    if (!selected || !selected.value) {
+  select.addEventListener('change', async function() {
+    const typeId = select.value;
+    if (!typeId) { container.classList.add('d-none'); return; }
+
+    const opt = select.options[select.selectedIndex];
+    assessmentTitle.textContent = opt.text.split(' (')[0];
+
+    // Try loading dynamic questions from API
+    try {
+      const resp = await fetch('/assessments/api/questions/' + typeId);
+      if (resp.ok) {
+        const questions = await resp.json();
+        if (questions.length > 0) {
+          questionsList.innerHTML = questions.map(function(q, i) {
+            return renderQuestion(q, i);
+          }).join('');
+          bindEvents();
+          container.classList.remove('d-none');
+          return;
+        }
+      }
+    } catch(e) {}
+
+    // Fallback to legacy hardcoded questions
+    const typeName = opt.dataset.name || opt.text.split(' (')[0];
+    const legacy = LEGACY_QUESTIONS[typeName];
+    if (!legacy || legacy.length === 0) {
       container.classList.add('d-none');
       return;
     }
-    const name = selected.dataset.name;
-    const questions = QUESTIONS[name] || [];
-    if (questions.length === 0) {
-      container.classList.add('d-none');
-      return;
-    }
-
-    assessmentTitle.textContent = selected.text.split(' (')[0];
-    questionCounter.textContent = questions.length + ' {{ t("questions") }}';
-    container.classList.remove('d-none');
-
-    questionsList.innerHTML = questions.map(function(q, i) {
-      return `
-        <div class="border rounded-3 p-3 mb-2">
-          <div class="fw-semibold mb-2">${i + 1}. ${q}</div>
-          <div class="d-flex flex-wrap gap-2">
-            ${OPTIONS.map(function(opt) {
-              return `
-                <label class="btn btn-outline-secondary btn-sm rounded-pill assessment-option">
-                  <input type="radio" name="q_${i}" value="${opt.value}" required class="d-none">
-                  ${opt.label}
-                </label>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      `;
+    questionsList.innerHTML = legacy.map(function(q, i) {
+      return renderLegacyQuestion(q, i);
     }).join('');
+    bindRadioEvents();
+    container.classList.remove('d-none');
+  });
 
-    document.querySelectorAll('.assessment-option input[type="radio"]').forEach(function(radio) {
+  function renderQuestion(q, i) {
+    var qtype = q.question_type;
+    var key = q.question_key;
+    var text = '{{ lang }}' === 'he' ? (q.question_text_he || q.question_text_en) : q.question_text_en;
+    var req = q.required ? ' <span class=\"text-danger\">*</span>' : '';
+    var html = '<div class=\"border rounded-3 p-3 mb-2\"><div class=\"fw-semibold mb-2\">' + (i+1) + '. ' + text + req + '</div>';
+
+    if (qtype === 'radio' || qtype === 'select') {
+      try { var opts = JSON.parse(q.options_json || '[]'); } catch(e) { var opts = []; }
+      html += '<div class=\"d-flex flex-wrap gap-2\">';
+      var inputType = qtype === 'radio' ? 'radio' : 'checkbox';
+      var name = key + (qtype === 'select' ? '[]' : '');
+      opts.forEach(function(o) {
+        var label = '{{ lang }}' === 'he' ? (o.he || o.label || o.v) : (o.en || o.label || o.v);
+        html += '<label class=\"btn btn-outline-secondary btn-sm rounded-pill assessment-option\">';
+        html += '<input type=\"' + inputType + '\" name=\"' + key + '\" value=\"' + o.v + '\"' + (req ? ' required' : '') + ' class=\"d-none assessment-input\">';
+        html += label + '</label>';
+      });
+      html += '</div>';
+    } else if (qtype === 'textarea') {
+      html += '<textarea name=\"' + key + '\" class=\"form-control\" rows=\"4\"' + (req ? ' required' : '') + '></textarea>';
+    } else {
+      html += '<input type=\"' + qtype + '\" name=\"' + key + '\" class=\"form-control\"' + (req ? ' required' : '') + '>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderLegacyQuestion(q, i) {
+    return '<div class=\"border rounded-3 p-3 mb-2\"><div class=\"fw-semibold mb-2\">' + (i+1) + '. ' + q + '</div><div class=\"d-flex flex-wrap gap-2\">' +
+      LEGACY_OPTIONS.map(function(o) {
+        return '<label class=\"btn btn-outline-secondary btn-sm rounded-pill assessment-option\"><input type=\"radio\" name=\"q_' + i + '\" value=\"' + o.value + '\" required class=\"d-none\">' + o.label + '</label>';
+      }).join('') + '</div></div>';
+  }
+
+  function bindEvents() {
+    document.querySelectorAll('.assessment-input').forEach(function(input) {
+      input.addEventListener('change', function() {
+        var row = input.closest('.border');
+        row.querySelectorAll('.assessment-input').forEach(function(r) {
+          r.closest('.assessment-option').classList.remove('btn-primary', 'text-white');
+        });
+        var checked = row.querySelectorAll('.assessment-input:checked');
+        checked.forEach(function(c) {
+          if (c.closest('.assessment-option')) {
+            c.closest('.assessment-option').classList.add('btn-primary', 'text-white');
+          }
+        });
+      });
+    });
+  }
+
+  function bindRadioEvents() {
+    document.querySelectorAll('.assessment-option input[type=\"radio\"]').forEach(function(radio) {
       radio.addEventListener('change', function() {
-        document.querySelectorAll(`input[name="${radio.name}"]`).forEach(function(r) {
+        document.querySelectorAll('input[name=\"' + radio.name + '\"]').forEach(function(r) {
           r.closest('.assessment-option').classList.remove('btn-primary', 'text-white');
         });
         if (radio.checked) {
@@ -133,7 +159,11 @@
         }
       });
     });
-  });
+  }
+
+  {% if selected_type_id %}
+  select.dispatchEvent(new Event('change'));
+  {% endif %}
 })();
 </script>
 {% endblock %}

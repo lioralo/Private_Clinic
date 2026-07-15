@@ -2564,6 +2564,24 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute("ALTER TABLE assessments ADD COLUMN answers_json TEXT DEFAULT '{}'")
+    except sqlite3.OperationalError:
+        pass
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS assessment_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assessment_type_id INTEGER NOT NULL REFERENCES assessment_types(id),
+            question_order INTEGER NOT NULL,
+            question_key TEXT NOT NULL,
+            question_text_en TEXT NOT NULL,
+            question_text_he TEXT NOT NULL,
+            question_type TEXT NOT NULL DEFAULT 'radio',
+            options_json TEXT DEFAULT '[]',
+            required INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    try:
         db.execute("ALTER TABLE patients ADD COLUMN street TEXT")
     except sqlite3.OperationalError:
         pass

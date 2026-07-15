@@ -8,9 +8,10 @@ assessments_bp = Blueprint('assessments', __name__, url_prefix='/assessments')
 
 
 def _get_assessment_types(db, only_active=True):
+    query = 'SELECT * FROM assessment_types'
     if only_active:
-        return db.execute('SELECT * FROM assessment_types WHERE is_active = 1 ORDER BY name ASC').fetchall()
-    return db.execute('SELECT * FROM assessment_types ORDER BY name ASC').fetchall()
+        query += ' WHERE is_active = 1'
+    return db.execute(query + ' ORDER BY name ASC').fetchall()
 
 
 def _score_assessment(assessment_type, raw_scores):
@@ -74,21 +75,22 @@ def view_patient_assessments(patient_id):
         d['administered_date'] = d['taken_at']
         d['severity'] = d['severity_level']
         d['response_data'] = d.pop('raw_scores_json', '[]')
+        try:
+            d['answers'] = json.loads(d.get('answers_json', '{}') or '{}')
+        except (json.JSONDecodeError, TypeError):
+            d['answers'] = {}
         atype_name = d['assessment_name']
         assessments.append(d)
         if atype_name not in chart_data:
             chart_data[atype_name] = []
-        chart_data[atype_name].append({
-            'date': d['taken_at'],
-            'score': d['total_score'],
-            'severity': d['severity_level'] or '',
-        })
+        if d['total_score'] is not None:
+            chart_data[atype_name].append({
+                'date': d['taken_at'],
+                'score': d['total_score'],
+                'severity': d['severity_level'] or '',
+            })
 
-    assessment_types = [
-        dict(at) for at in db.execute(
-            "SELECT * FROM assessment_types WHERE is_active = 1 AND name IN ('PHQ-9', 'GAD-7') ORDER BY name"
-        ).fetchall()
-    ]
+    assessment_types = [dict(at) for at in _get_assessment_types(db)]
 
     return render_template('assessment_results.html',
                            patient=patient,
@@ -120,29 +122,84 @@ def take_assessment(patient_id):
             flash('Assessment type not found.')
             return redirect(url_for('assessments.take_assessment', patient_id=patient_id))
 
-        num_questions = int(atype['num_questions'])
-        raw_scores = []
-        for i in range(num_questions):
-            val = request.form.get(f'q_{i}', '0')
-            raw_scores.append(val)
+        # Load questions for this type
+        questions = db.execute(
+            'SELECT * FROM assessment_questions WHERE assessment_type_id = ? ORDER BY question_order',
+            (assessment_type_id,)
+        ).fetchall()
 
-        total, severity, label = _score_assessment(dict(atype), raw_scores)
+        notes = (request.form.get('notes') or '').strip()
 
-        db.execute('''
-            INSERT INTO assessments
-                (patient_id, assessment_type_id, admin_user_id, raw_scores_json,
-                 total_score, severity_level, interpretation, taken_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, DATE('now'))
-        ''', (patient_id, assessment_type_id, current_user.id,
-              json.dumps(raw_scores), total, severity, label))
-        db.commit()
-        flash(f'{atype["display_name"]} completed. Score: {total} ({label or "N/A"})')
+        if questions:
+            # Dynamic form: collect answers from question keys
+            answers = {}
+            raw_scores = []
+            for q in questions:
+                key = q['question_key']
+                qtype = q['question_type']
+                val = request.form.get(key, '')
+                if isinstance(val, list):
+                    val = ','.join(v for v in val if v)
+                elif val is None:
+                    val = ''
+                answers[key] = val
+                # For scored types, try numeric extraction
+                if qtype in ('radio', 'select'):
+                    raw_scores.append(val)
+                elif qtype == 'text':
+                    raw_scores.append('0')
+                else:
+                    raw_scores.append('0')
+
+            total, severity, label = _score_assessment(dict(atype), raw_scores)
+            answers_json = json.dumps(answers, ensure_ascii=False)
+
+            db.execute('''
+                INSERT INTO assessments
+                    (patient_id, assessment_type_id, admin_user_id, raw_scores_json,
+                     total_score, severity_level, interpretation, notes, answers_json, taken_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now'))
+            ''', (patient_id, assessment_type_id, current_user.id,
+                  json.dumps(raw_scores), total, severity, label,
+                  notes or None, answers_json))
+            db.commit()
+
+            if atype['name'] == 'clinical_intake':
+                flash(f'{atype["display_name"]} saved successfully.')
+            else:
+                flash(f'{atype["display_name"]} completed. Score: {total} ({label or "N/A"})')
+        else:
+            # Legacy: PHQ-9/GAD-7 without questions table entries
+            num_questions = int(atype['num_questions'])
+            raw_scores = []
+            for i in range(num_questions):
+                raw_scores.append(request.form.get(f'q_{i}', '0'))
+
+            total, severity, label = _score_assessment(dict(atype), raw_scores)
+
+            db.execute('''
+                INSERT INTO assessments
+                    (patient_id, assessment_type_id, admin_user_id, raw_scores_json,
+                     total_score, severity_level, interpretation, notes, taken_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE('now'))
+            ''', (patient_id, assessment_type_id, current_user.id,
+                  json.dumps(raw_scores), total, severity, label,
+                  notes or None))
+            db.commit()
+            flash(f'{atype["display_name"]} completed. Score: {total} ({label or "N/A"})')
+
         return redirect(url_for('assessments.view_patient_assessments', patient_id=patient_id))
 
     assessment_types = [dict(at) for at in _get_assessment_types(db)]
+    selected_type_id = request.args.get('type_id', '')
+
+    from clinic_app.utils import ASSESSMENT_QUESTIONS, ASSESSMENT_OPTIONS
     return render_template('assessment_take.html',
                            patient=patient,
-                           assessment_types=assessment_types)
+                           assessment_types=assessment_types,
+                           selected_type_id=selected_type_id,
+                           ASSESSMENT_QUESTIONS=ASSESSMENT_QUESTIONS,
+                           ASSESSMENT_OPTIONS=ASSESSMENT_OPTIONS)
 
 
 @assessments_bp.route('/api/patient/<int:patient_id>/progress')
@@ -183,6 +240,19 @@ def delete_assessment(assessment_id):
     db.commit()
     flash('Assessment deleted.')
     return redirect(url_for('assessments.view_patient_assessments', patient_id=assessment['patient_id']))
+
+
+@assessments_bp.route('/api/questions/<int:type_id>')
+@login_required
+def api_get_questions(type_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    questions = db.execute(
+        'SELECT * FROM assessment_questions WHERE assessment_type_id = ? ORDER BY question_order',
+        (type_id,)
+    ).fetchall()
+    return jsonify([dict(q) for q in questions])
 
 
 def register_assessment_routes(app):
