@@ -322,36 +322,58 @@ def read_doc_text(creds, doc_id):
 
 def stamp_note_id_in_doc(creds, doc_id, new_id, session_header=None):
     """
-    Stamp a single note's '[note:new]' marker with '[note:id=N]'.
-    If session_header is provided, only that specific session header is stamped
-    (prevents all markers from being stamped with the same ID).
+    Stamp ONE '[note:new]' marker with '[note:id=N]' using position-based
+    replacement from the document's structural content tree.
+    Guarantees only one occurrence is stamped per call.
     """
     new_tag = f'[note:id={new_id}]'
     svc = _docs_service(creds)
 
-    if session_header:
-        old_line = session_header
-        new_line = session_header.rstrip() + ' ' if not session_header.rstrip().endswith(']') else session_header
-        # Replace the session header line that contains [note:new]
-        # by searching for the full header text context
-        search = session_header
-        replace = session_header.replace('[note:new]', new_tag)
-        if '[note:new]' not in session_header:
-            # Header had a different tag or none; target just the tag
-            pass
-        svc.documents().batchUpdate(documentId=doc_id, body={
-            'requests': [{'replaceAllText': {
-                'containsText': {'text': search, 'matchCase': True},
-                'replaceText': replace,
-            }}]
-        }).execute()
-    else:
-        svc.documents().batchUpdate(documentId=doc_id, body={
-            'requests': [{'replaceAllText': {
-                'containsText': {'text': '[note:new]', 'matchCase': True},
-                'replaceText': new_tag,
-            }}]
-        }).execute()
+    doc = svc.documents().get(documentId=doc_id).execute()
+    body = doc.get('body', {})
+    content = body.get('content', [])
+    tag_pos = _find_tag_in_content(content, '[note:new]')
+
+    if tag_pos is None:
+        return
+
+    svc.documents().batchUpdate(documentId=doc_id, body={
+        'requests': [
+            {'deleteContentRange': {
+                'range': {
+                    'startIndex': tag_pos,
+                    'endIndex': tag_pos + len('[note:new]')
+                }
+            }},
+            {'insertText': {
+                'location': {'index': tag_pos},
+                'text': new_tag,
+            }}
+        ]
+    }).execute()
+
+
+def _find_tag_in_content(content_elements, tag):
+    """Walk the doc structural tree and return the character start-index
+    of the first occurrence of 'tag', or None if not found."""
+    for element in content_elements:
+        if 'paragraph' in element:
+            para = element['paragraph']
+            for pe in para.get('elements', []):
+                tr = pe.get('textRun')
+                if not tr:
+                    continue
+                text = tr.get('content', '')
+                pos = text.find(tag)
+                if pos >= 0:
+                    return pe['startIndex'] + pos
+        if 'table' in element:
+            for row in element['table'].get('tableRows', []):
+                for cell in row.get('tableCells', []):
+                    pos = _find_tag_in_content(cell.get('content', []), tag)
+                    if pos is not None:
+                        return pos
+    return None
 
 
 def register_drive_watch(creds, doc_id, webhook_url):
