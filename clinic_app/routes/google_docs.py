@@ -393,7 +393,7 @@ def _pull_gdoc_notes(db, patient):
                 (patient['id'], session_number, note_date, content)
             ).fetchone()
             if duplicate:
-                gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], duplicate['id'])
+                gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], duplicate['id'], session_header=item.get('raw_header'))
                 synced += 1
                 continue
             cursor = db.execute(
@@ -413,7 +413,7 @@ def _pull_gdoc_notes(db, patient):
                 )
             )
             new_note_id = cursor.lastrowid
-            gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], new_note_id)
+            gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], new_note_id, session_header=item.get('raw_header'))
             synced += 1
         db.commit()
     except Exception as exc:

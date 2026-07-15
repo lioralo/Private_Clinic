@@ -267,6 +267,7 @@ def parse_doc_into_notes(text):
             'missing_entries': missing_entries,
             'meeting_title':  meeting_title,
             'note_tag':       note_tag,
+            'raw_header':     m.group(0).strip(),
         })
     return results
 
@@ -319,19 +320,38 @@ def read_doc_text(creds, doc_id):
     return ''.join(parts)
 
 
-def stamp_note_id_in_doc(creds, doc_id, new_id):
+def stamp_note_id_in_doc(creds, doc_id, new_id, session_header=None):
     """
-    Replace the first occurrence of '[note:new]' in the doc with '[note:id=N]'.
-    Called immediately after inserting a new note row into the DB.
+    Stamp a single note's '[note:new]' marker with '[note:id=N]'.
+    If session_header is provided, only that specific session header is stamped
+    (prevents all markers from being stamped with the same ID).
     """
     new_tag = f'[note:id={new_id}]'
     svc = _docs_service(creds)
-    svc.documents().batchUpdate(documentId=doc_id, body={
-        'requests': [{'replaceAllText': {
-            'containsText': {'text': '[note:new]', 'matchCase': True},
-            'replaceText': new_tag,
-        }}]
-    }).execute()
+
+    if session_header:
+        old_line = session_header
+        new_line = session_header.rstrip() + ' ' if not session_header.rstrip().endswith(']') else session_header
+        # Replace the session header line that contains [note:new]
+        # by searching for the full header text context
+        search = session_header
+        replace = session_header.replace('[note:new]', new_tag)
+        if '[note:new]' not in session_header:
+            # Header had a different tag or none; target just the tag
+            pass
+        svc.documents().batchUpdate(documentId=doc_id, body={
+            'requests': [{'replaceAllText': {
+                'containsText': {'text': search, 'matchCase': True},
+                'replaceText': replace,
+            }}]
+        }).execute()
+    else:
+        svc.documents().batchUpdate(documentId=doc_id, body={
+            'requests': [{'replaceAllText': {
+                'containsText': {'text': '[note:new]', 'matchCase': True},
+                'replaceText': new_tag,
+            }}]
+        }).execute()
 
 
 def register_drive_watch(creds, doc_id, webhook_url):

@@ -7480,7 +7480,8 @@ def edit_note(note_id):
         )
         db.commit()
         return redirect_to_patient_tab(note['patient_id'], 'notes')
-    return "Note not found", 404
+    flash('Note not found.', 'error')
+    return redirect(url_for('crm_dashboard'))
 
 
 @app.route('/note/<int:note_id>/delete', methods=('POST',))
@@ -7492,7 +7493,8 @@ def delete_note(note_id):
     db = get_db()
     note = db.execute('SELECT id, patient_id FROM notes WHERE id = ?', (note_id,)).fetchone()
     if note is None:
-        return "Note not found", 404
+        flash('Note not found.', 'error')
+        return redirect(request.referrer or url_for('crm_dashboard'))
 
     db.execute('DELETE FROM notes WHERE id = ?', (note_id,))
     db.commit()

@@ -1538,11 +1538,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelectorAll('.note-edit-form').forEach(function (form) {
         form.addEventListener('submit', function () {
-            var modal = form.closest('.modal');
-            if (modal) {
-                var bsModal = bootstrap.Modal.getInstance(modal);
-                if (bsModal) bsModal.hide();
-            }
+            document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
         });
     });
 });
