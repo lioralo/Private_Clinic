@@ -142,6 +142,13 @@ def take_assessment(patient_id):
                     val = ','.join(v for v in val if v)
                 elif val is None:
                     val = ''
+                # If "other" was selected and there's a free-text field, use that
+                other_val = request.form.get(f'{key}_other', '')
+                if other_val and other_val.strip():
+                    if val:
+                        val = f'{val}: {other_val.strip()}'
+                    else:
+                        val = other_val.strip()
                 answers[key] = val
                 # For scored types, try numeric extraction
                 if qtype in ('radio', 'select'):

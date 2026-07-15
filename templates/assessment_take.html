@@ -107,13 +107,16 @@
       try { var opts = JSON.parse(q.options_json || '[]'); } catch(e) { var opts = []; }
       html += '<div class=\"d-flex flex-wrap gap-2\">';
       var inputType = qtype === 'radio' ? 'radio' : 'checkbox';
-      var name = key + (qtype === 'select' ? '[]' : '');
       opts.forEach(function(o) {
         var label = '{{ lang }}' === 'he' ? (o.he || o.label || o.v) : (o.en || o.label || o.v);
         html += '<label class=\"btn btn-outline-secondary btn-sm rounded-pill assessment-option\">';
-        html += '<input type=\"' + inputType + '\" name=\"' + key + '\" value=\"' + o.v + '\"' + (req ? ' required' : '') + ' class=\"d-none assessment-input\">';
+        html += '<input type=\"' + inputType + '\" name=\"' + key + '\" value=\"' + o.v + '\"' + (req ? ' required' : '') + ' class=\"d-none assessment-input\" data-other=\"' + (o.v === 'other' ? 'true' : 'false') + '\">';
         html += label + '</label>';
       });
+      html += '</div>';
+      // "other" free-text input
+      html += '<div class=\"mt-2 d-none assessment-other-wrap\">';
+      html += '<input type=\"text\" name=\"' + key + '_other\" class=\"form-control form-control-sm\" placeholder=\"{{ t(\"Please specify...\") }}\">';
       html += '</div>';
     } else if (qtype === 'textarea') {
       html += '<textarea name=\"' + key + '\" class=\"form-control\" rows=\"4\"' + (req ? ' required' : '') + '></textarea>';
@@ -144,6 +147,12 @@
             c.closest('.assessment-option').classList.add('btn-primary', 'text-white');
           }
         });
+        // Show/hide "other" text input
+        var otherWrap = row.querySelector('.assessment-other-wrap');
+        if (otherWrap) {
+          var hasOther = row.querySelector('.assessment-input:checked[data-other=\"true\"]');
+          otherWrap.classList.toggle('d-none', !hasOther);
+        }
       });
     });
   }
