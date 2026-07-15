@@ -2540,6 +2540,30 @@ def _run_db_migrations(db):
     except sqlite3.OperationalError:
         pass
     try:
+        db.execute("ALTER TABLE receipts ADD COLUMN vat_rate REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN vat_amount REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN net_amount REAL")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN payment_method TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN document_type TEXT DEFAULT 'receipt'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN client_email TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
         db.execute("ALTER TABLE patients ADD COLUMN street TEXT")
     except sqlite3.OperationalError:
         pass

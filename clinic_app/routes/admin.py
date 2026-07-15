@@ -1787,6 +1787,7 @@ def morning_settings():
             'morning_api_key', 'morning_api_secret', 'morning_api_url',
             'clinic_business_name', 'clinic_business_id',
             'clinic_address', 'clinic_phone', 'clinic_email',
+            'clinic_vat_type', 'clinic_vat_rate',
         ]
         for field in fields:
             val = (request.form.get(field) or '').strip()

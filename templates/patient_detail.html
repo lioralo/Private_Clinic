@@ -535,7 +535,17 @@
                         </button>
                     </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
-                        <span class="fw-bold">{{ t('Total') }}: <span id="receiptTotal">$0.00</span></span>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="fw-bold">{{ t('Total') }}: <span id="receiptTotal">$0.00</span></span>
+                            <select name="payment_method" class="form-select form-select-sm" style="width:auto">
+                                <option value="transfer">{{ t('Bank Transfer') }}</option>
+                                <option value="cash">{{ t('Cash') }}</option>
+                                <option value="credit">{{ t('Credit Card') }}</option>
+                                <option value="bit">{{ t('Bit') }}</option>
+                                <option value="paypal">{{ t('PayPal') }}</option>
+                                <option value="other">{{ t('Other') }}</option>
+                            </select>
+                        </div>
                         <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Create Receipt') }}</button>
                     </div>
                 </form>

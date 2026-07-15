@@ -97,17 +97,58 @@ class MorningAPIClient:
             'currency': currency,
             'vatType': vat_type,
             'clientName': client_name,
-            'incomeItems': items,
+            'income': items,
         }
+
+        if client and isinstance(client, dict) and client.get('id'):
+            payload['client'] = client
+
         if client_email:
             payload['clientEmail'] = client_email
-        if client_phone:
-            payload['clientPhone'] = client_phone
+        if phone:
+            payload['clientPhone'] = phone
         if notes:
             payload['description'] = notes
+        if date:
+            payload['date'] = date
+        if due_date:
+            payload['dueDate'] = due_date
+        if remarks:
+            payload['remarks'] = remarks
+        if footer:
+            payload['footer'] = footer
+        if signed:
+            payload['signed'] = True
+        if attachment:
+            payload['attachment'] = True
+        if email_content:
+            payload['emailContent'] = email_content
+        if rounding:
+            payload['rounding'] = True
+
         resp = self._request('POST', '/documents', json=payload)
         resp.raise_for_status()
         return resp.json()
+
+    def create_document_with_client(self, client_name, items, client_email=None, client_phone=None,
+                                     doc_type=305, notes=None, date=None, signed=True, rounding=True):
+        """Create a document, auto-creating the client in Morning if needed.
+
+        Returns (document_dict, morning_client_id)."""
+        client = self.get_or_create_client(client_name, client_email, client_phone)
+        result = self.create_document(
+            client_name=client_name,
+            items=items,
+            client=client,
+            client_email=client_email,
+            client_phone=client_phone,
+            doc_type=doc_type,
+            notes=notes,
+            date=date,
+            signed=signed,
+            rounding=rounding,
+        )
+        return result, client.get('id') if isinstance(client, dict) else None
 
     # ── Clients ───────────────────────────────────────────────
 
@@ -131,32 +172,60 @@ class MorningAPIClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ── Payment Requests (via document with payment link) ─────
+    def find_client(self, name=None, email=None, page_size=10):
+        """Search for a client in Morning by name or email. Returns matched dict or None."""
+        body = {'pageSize': min(page_size, 100), 'page': 1}
+        if name:
+            body['clientName'] = name
+        resp = self._request('POST', '/clients/search', json=body)
+        resp.raise_for_status()
+        items = resp.json().get('items', [])
+        if not items:
+            return None
+        if name:
+            for item in items:
+                if item.get('name', '').strip().lower() == name.strip().lower():
+                    return item
+        return items[0] if items else None
+
+    def get_or_create_client(self, name, email=None, phone=None):
+        """Find existing client by name, or create a new one. Returns client dict."""
+        existing = self.find_client(name=name, email=email)
+        if existing:
+            return existing
+        return self.create_client(name, email, phone, address=None)
+
+    # ── Payment Form (real Morning endpoint) ──────────────────
+
+    def create_payment_form(self, amount, description, client_name=None, client_email=None,
+                            currency='ILS', items=None, doc_type=320, redirect_url=None):
+        """Create a payment form URL via POST /payments/form.
+        Returns a URL to present as an iframe or redirect for customer payment."""
+        payload = {
+            'amount': float(amount),
+            'currency': currency,
+            'description': description,
+            'type': doc_type,
+        }
+        if client_name:
+            payload['clientName'] = client_name
+        if client_email:
+            payload['clientEmail'] = client_email
+        if items:
+            payload['income'] = items
+        else:
+            payload['income'] = [{'description': description, 'price': float(amount), 'quantity': 1}]
+        if redirect_url:
+            payload['redirectUrl'] = redirect_url
+
+        resp = self._request('POST', '/payments/form', json=payload)
+        resp.raise_for_status()
+        return resp.json()
 
     def create_payment_request(self, client_name, amount, description,
                                client_email=None, currency='ILS'):
-        """Create a payment request by issuing a receipt with a payment link."""
-        payload = {
-            'type': 320,
-            'lang': 'he',
-            'currency': currency,
-            'clientName': client_name,
-            'description': description,
-            'incomeItems': [{
-                'description': description,
-                'price': float(amount),
-                'quantity': 1,
-            }],
-            'payment': [{
-                'paymentType': 2,
-                'amount': float(amount),
-            }],
-        }
-        if client_email:
-            payload['clientEmail'] = client_email
-        resp = self._request('POST', '/documents', json=payload)
-        resp.raise_for_status()
-        return resp.json()
+        """Legacy wrapper — creates a payment form (preferred)."""
+        return self.create_payment_form(amount, description, client_name, client_email, currency=currency)
 
     # ── Health / Test ─────────────────────────────────────────
 

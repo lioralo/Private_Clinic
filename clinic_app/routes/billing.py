@@ -43,6 +43,18 @@ def download_receipt(receipt_id):
     from fpdf import FPDF
     import os as _os
 
+    from clinic_app.utils import get_site_settings
+    settings = get_site_settings(db)
+    clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
+    clinic_id = settings.get('clinic_business_id', '') or ''
+    clinic_addr = settings.get('clinic_address', '') or ''
+    clinic_phone = settings.get('clinic_phone', '') or ''
+    clinic_email = settings.get('clinic_email', '') or ''
+    vat_rate = float(receipt.get('vat_rate') or settings.get('clinic_vat_rate', 0) or 0)
+    vat_amount = float(receipt.get('vat_amount') or 0)
+    net_amount = float(receipt.get('net_amount') or receipt['amount'])
+    payment_method = receipt.get('payment_method') or ''
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -54,35 +66,68 @@ def download_receipt(receipt_id):
     pdf.add_font('Sans', '', font_path, uni=True)
     pdf.add_font('Sans', 'B', font_path, uni=True)
 
-    pdf.set_font('Sans', 'B', 16)
-    pdf.cell(0, 10, 'PRIVATE CLINIC SERVICE RECEIPT', new_x='LMARGIN', new_y='NEXT', align='C')
-    pdf.set_font('Sans', '', 9)
-    pdf.cell(0, 6, f'Receipt #: {receipt["receipt_number"] or receipt["id"]}', new_x='LMARGIN', new_y='NEXT')
-    pdf.cell(0, 6, f'Patient:   {patient_name}', new_x='LMARGIN', new_y='NEXT')
-    pdf.cell(0, 6, f'Date:      {receipt["created_at"] or ""}', new_x='LMARGIN', new_y='NEXT')
-    pdf.cell(0, 6, f'Status:    {receipt["status"] or "paid"}', new_x='LMARGIN', new_y='NEXT')
+    pdf.set_font('Sans', 'B', 14)
+    pdf.cell(0, 8, clinic_name, new_x='LMARGIN', new_y='NEXT', align='R' if any('\u0590' <= c <= '\u05EA' for c in clinic_name) else 'L')
+    pdf.set_font('Sans', '', 8)
+    if clinic_id:
+        pdf.cell(0, 5, f'{"ח.פ" if vat_rate > 0 else "עוסק פטור"}: {clinic_id}', new_x='LMARGIN', new_y='NEXT', align='R')
+    if clinic_addr:
+        pdf.cell(0, 5, clinic_addr, new_x='LMARGIN', new_y='NEXT', align='R')
+    if clinic_phone or clinic_email:
+        pdf.cell(0, 5, f'{clinic_phone}  |  {clinic_email}'.strip(' |'), new_x='LMARGIN', new_y='NEXT', align='R')
     pdf.ln(4)
-    col_w = [70, 15, 30, 30]
+
+    pdf.set_font('Sans', 'B', 18)
+    title = 'קבלה / חשבונית מס' if vat_rate > 0 else 'קבלה'
+    pdf.cell(0, 10, title, new_x='LMARGIN', new_y='NEXT', align='C')
+    pdf.ln(2)
+
+    pdf.set_font('Sans', '', 9)
+    pdf.cell(45, 6, 'מספר קבלה:', border=0)
+    pdf.cell(0, 6, f'{receipt["receipt_number"] or receipt["id"]}', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(45, 6, f'{"לקוח" if any(c > "\u0590" for c in patient_name) else "Patient"}:', border=0)
+    pdf.cell(0, 6, patient_name, new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(45, 6, 'תאריך:', border=0)
+    pdf.cell(0, 6, f'{receipt["created_at"] or ""}', new_x='LMARGIN', new_y='NEXT')
+    if payment_method:
+        methods_he = {'cash': 'מזומן', 'credit': 'כרטיס אשראי', 'transfer': 'העברה בנקאית', 'bit': 'ביט', 'paypal': 'פייפאל', 'other': 'אחר'}
+        pdf.cell(45, 6, 'אמצעי תשלום:', border=0)
+        pdf.cell(0, 6, methods_he.get(payment_method, payment_method), new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(4)
+
+    col_w = [75, 15, 30, 30]
     pdf.set_font('Sans', 'B', 9)
     pdf.set_fill_color(230, 230, 230)
-    headers = ['Item', 'Qty', 'Price', 'Total']
+    headers = ['תיאור', 'כמות', 'מחיר', 'סה"כ']
     for i, h in enumerate(headers):
-        pdf.cell(col_w[i], 7, h, border=1, align='C', fill=True)
+        pdf.cell(col_w[i], 7, h, border=1, align='C' if i > 0 else 'R', fill=True)
     pdf.ln()
     pdf.set_font('Sans', '', 9)
     for it in items:
-        name = (it['service_name'] or it['description'] or f'Item #{it["id"]}')[:40]
-        pdf.cell(col_w[0], 6, name, border=1)
+        name = (it['service_name'] or it['description'] or f'פריט #{it["id"]}')[:45]
+        pdf.cell(col_w[0], 6, name, border=1, align='R')
         pdf.cell(col_w[1], 6, str(it['quantity']), border=1, align='C')
-        pdf.cell(col_w[2], 6, f'${it["unit_price"]:.2f}', border=1, align='R')
-        pdf.cell(col_w[3], 6, f'${it["line_total"]:.2f}', border=1, align='R')
+        pdf.cell(col_w[2], 6, f'NIS {it["unit_price"]:.2f}', border=1, align='R')
+        pdf.cell(col_w[3], 6, f'NIS {it["line_total"]:.2f}', border=1, align='R')
         pdf.ln()
     pdf.set_font('Sans', 'B', 10)
-    pdf.cell(col_w[0] + col_w[1] + col_w[2], 7, 'TOTAL', border=1, align='R')
-    pdf.cell(col_w[3], 7, f'${receipt["amount"]:.2f}', border=1, align='R')
-    pdf.ln(10)
-    pdf.set_font('Sans', '', 9)
-    pdf.cell(0, 6, 'Thank you for choosing our clinic.', new_x='LMARGIN', new_y='NEXT', align='C')
+
+    if vat_rate > 0:
+        label_w = col_w[0] + col_w[1] + col_w[2]
+        pdf.cell(label_w, 7, 'סכום לפני מע"מ', border=1, align='R')
+        pdf.cell(col_w[3], 7, f'NIS {net_amount:.2f}', border=1, align='R')
+        pdf.ln()
+        pdf.cell(label_w, 7, f'מע"מ ({int(vat_rate*100)}%)', border=1, align='R')
+        pdf.cell(col_w[3], 7, f'NIS {vat_amount:.2f}', border=1, align='R')
+        pdf.ln()
+
+    pdf.cell(col_w[0] + col_w[1] + col_w[2], 7, 'סה"כ לתשלום', border=1, align='R')
+    pdf.cell(col_w[3], 7, f'NIS {receipt["amount"]:.2f}', border=1, align='R')
+    pdf.ln(8)
+
+    pdf.set_font('Sans', '', 8)
+    pdf.cell(0, 5, 'תודה שבחרתם בקליניקה שלנו.', new_x='LMARGIN', new_y='NEXT', align='C')
+    pdf.cell(0, 5, 'מסמך זה הופק באמצעות מערכת מורנינג (Green Invoice)', new_x='LMARGIN', new_y='NEXT', align='C')
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
     pdf.output(tmp.name)
@@ -145,6 +190,7 @@ def add_receipt(patient_id):
     quantities = request.form.getlist('quantity[]')
     unit_prices = request.form.getlist('unit_price[]')
     descriptions = request.form.getlist('item_description[]')
+    payment_method = (request.form.get('payment_method') or '').strip() or 'transfer'
 
     items = []
     total = 0.0
@@ -165,13 +211,24 @@ def add_receipt(patient_id):
 
     total = round(total, 2)
 
+    from clinic_app.utils import get_site_settings
+    settings = get_site_settings(db)
+    vat_rate = float(settings.get('clinic_vat_rate', 0) or 0)
+    vat_amount = round(total * vat_rate, 2)
+    net_amount = round(total - vat_amount, 2)
+
     count = db.execute('SELECT COUNT(*) as c FROM receipts').fetchone()['c']
-    receipt_number = f'RCPT-{count + 1:06d}'
+    import datetime
+    year = datetime.datetime.now().year
+    receipt_number = f'{year}-{count + 1:05d}'
 
     try:
         cur = db.execute(
-            'INSERT INTO receipts (patient_id, amount, description, receipt_number, status) VALUES (?, ?, ?, ?, ?)',
-            (patient_id, total, f'{len(items)} item(s)', receipt_number, 'paid')
+            '''INSERT INTO receipts (patient_id, amount, description, receipt_number, status,
+                payment_method, net_amount, vat_rate, vat_amount)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (patient_id, total, f'{len(items)} item(s)', receipt_number, 'paid',
+             payment_method, net_amount, vat_rate, vat_amount)
         )
         receipt_id = cur.lastrowid
 
@@ -344,13 +401,14 @@ def push_receipt_to_morning(patient_id):
         })
 
     try:
-        result = client.create_document(
+        result, client_id = client.create_document_with_client(
             client_name=patient['name'],
             items=income_items,
-            client_email=patient.get('email') or None,
-            client_phone=patient.get('phone') or None,
+            client_email=patient['email'] or None,
+            client_phone=patient['phone'] or None,
             notes=receipt['description'] or '',
             doc_type=305,
+            signed=True,
         )
         morning_id = result.get('id', '')
         db.execute(
@@ -358,6 +416,9 @@ def push_receipt_to_morning(patient_id):
                morning_synced_at = ? WHERE id = ?''',
             (morning_id, datetime.now().isoformat(), receipt_id)
         )
+        if client_id:
+            db.execute('INSERT OR REPLACE INTO site_settings (setting_key, setting_value) VALUES (?, ?)',
+                       (f'patient_{patient_id}_morning_client_id', client_id))
         db.commit()
         flash(f'Receipt pushed to Morning (doc #{result.get("number", morning_id[:8])}).', 'success')
     except Exception as e:
@@ -452,16 +513,20 @@ def pull_all_morning_pages():
             amount = float(doc.get('total', 0) or 0)
             description = doc.get('description', '') or f'Morning #{doc.get("number", doc_id[:8])}'
             receipt_number = doc.get('number', doc_id[:8])
+            vat_amount = float(doc.get('vatAmount', 0) or 0)
+            net_amount = float(doc.get('subTotal', amount - vat_amount) or amount)
 
             cur = db.execute(
                 '''INSERT INTO receipts (patient_id, amount, description, receipt_number, status,
-                    morning_doc_id, morning_sync_status, morning_synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                    morning_doc_id, morning_sync_status, morning_synced_at,
+                    net_amount, vat_amount, vat_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (patient_id, amount, description, receipt_number, 'paid',
-                 doc_id, 'synced', datetime.now().isoformat())
+                 doc_id, 'synced', datetime.now().isoformat(),
+                 net_amount, vat_amount, float(doc.get('vatRate', 0) or 0))
             )
             receipt_id = cur.lastrowid
 
-            income_items = doc.get('incomeItems', []) or doc.get('items', []) or []
+            income_items = doc.get('incomeItems', []) or doc.get('income', []) or []
             for item in income_items:
                 item_desc = item.get('description', '')
                 item_price = float(item.get('price', 0) or 0)
@@ -480,3 +545,35 @@ def pull_all_morning_pages():
     db.commit()
     flash(f'Pull complete — imported {total_imported}, skipped {total_skipped} already synced.', 'success')
     return redirect(url_for('admin.morning_settings'))
+
+
+@billing_bp.route('/webhooks/morning', methods=['POST'])
+def morning_webhook():
+    """Receive payment notifications and document events from Morning webhooks."""
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'status': 'ignored'}), 200
+
+    topic = request.headers.get('x-webhook-topic', '')
+    doc_id = data.get('id') or data.get('documentId') or ''
+    event = data.get('event') or data.get('type') or topic
+
+    if not doc_id:
+        return jsonify({'status': 'no_doc_id'}), 200
+
+    db = get_db()
+    receipt = db.execute(
+        'SELECT id FROM receipts WHERE morning_doc_id = ?', (str(doc_id),)
+    ).fetchone()
+
+    if receipt:
+        if 'payment/received' in topic or 'paid' in str(event).lower():
+            db.execute(
+                "UPDATE receipts SET status='paid', morning_synced_at=? WHERE id=?",
+                (datetime.now().isoformat(), receipt['id'])
+            )
+            db.commit()
+
+    return jsonify({'status': 'ok'}), 200
+
+morning_webhook.is_csrf_exempt = True

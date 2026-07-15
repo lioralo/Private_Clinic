@@ -127,6 +127,8 @@ DEFAULT_SITE_SETTINGS = {
     'clinic_address': '',
     'clinic_phone': '',
     'clinic_email': '',
+    'clinic_vat_type': '0',
+    'clinic_vat_rate': '0',
 }
 
 HEBREW_TRANSLATIONS = {}
