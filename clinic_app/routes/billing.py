@@ -324,7 +324,8 @@ def pull_morning_documents():
             skipped += 1
             continue
 
-        client_name = doc.get('clientName', 'Unknown')
+        client_data = doc.get('client', {}) or {}
+        client_name = client_data.get('name') or doc.get('clientName', 'Unknown')
         patient = db.execute(
             "SELECT id FROM patients WHERE LOWER(name) = LOWER(?) LIMIT 1",
             (client_name.strip(),)
@@ -338,7 +339,7 @@ def pull_morning_documents():
         else:
             patient_id = patient['id']
 
-        amount = float(doc.get('total', 0) or 0)
+        amount = float(doc.get('amount', 0) or 0)
         description = doc.get('description', '') or f'Morning doc #{doc.get("number", doc_id[:8])}'
         receipt_number = doc.get('number', doc_id[:8])
 
@@ -350,7 +351,7 @@ def pull_morning_documents():
         )
         receipt_id = cur.lastrowid
 
-        income_items = doc.get('incomeItems', []) or doc.get('items', []) or []
+        income_items = doc.get('income', []) or doc.get('incomeItems', []) or []
         for item in income_items:
             item_desc = item.get('description', '')
             item_price = float(item.get('price', 0) or 0)
@@ -496,7 +497,8 @@ def pull_all_morning_pages():
                 total_skipped += 1
                 continue
 
-            client_name = doc.get('clientName', 'Unknown')
+            client_data = doc.get('client', {}) or {}
+            client_name = client_data.get('name') or doc.get('clientName', 'Unknown')
             patient = db.execute(
                 "SELECT id FROM patients WHERE LOWER(name) = LOWER(?) LIMIT 1",
                 (client_name.strip(),)
@@ -510,7 +512,7 @@ def pull_all_morning_pages():
             else:
                 patient_id = patient['id']
 
-            amount = float(doc.get('total', 0) or 0)
+            amount = float(doc.get('amount', 0) or 0)
             description = doc.get('description', '') or f'Morning #{doc.get("number", doc_id[:8])}'
             receipt_number = doc.get('number', doc_id[:8])
             vat_amount = float(doc.get('vatAmount', 0) or 0)

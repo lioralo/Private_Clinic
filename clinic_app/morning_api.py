@@ -88,8 +88,10 @@ class MorningAPIClient:
         resp.raise_for_status()
         return resp.json()
 
-    def create_document(self, client_name, items, client_email=None, client_phone=None,
-                        doc_type=305, notes=None, vat_type=0, currency='ILS', lang='he'):
+    def create_document(self, client_name, items, client=None, client_email=None, client_phone=None,
+                        phone=None, doc_type=305, notes=None, vat_type=0, currency='ILS', lang='he',
+                        date=None, due_date=None, remarks=None, footer=None,
+                        signed=True, attachment=False, email_content=None, rounding=True):
         """Create an invoice/receipt in Morning. doc_type: 305=invoice/receipt, 320=receipt."""
         payload = {
             'type': doc_type,
