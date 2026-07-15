@@ -425,6 +425,11 @@
                             <i class="bi bi-translate" style="font-size:14px;width:16px;text-align:center"></i>
                             <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
                         </a>
+                        <a href="{{ url_for('admin.morning_settings') }}"
+                           class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'admin.morning_settings' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
+                            <i class="bi bi-receipt" style="font-size:14px;width:16px;text-align:center"></i>
+                            <span>{{ t('Morning') }}</span>
+                        </a>
                         <a href="{{ url_for('list_cancel_requests') }}"
                            class="flex items-center gap-3 rounded-lg px-4 py-1.5 font-bold text-xs transition-colors duration-200 {% if endpoint_name == 'list_cancel_requests' %}bg-teal-100 text-teal-800{% else %}text-black hover:bg-gray-100{% endif %} no-underline">
                             <i class="bi bi-x-circle" style="font-size:14px;width:16px;text-align:center"></i>

@@ -2527,6 +2527,30 @@ def _run_db_migrations(db):
         db.execute("ALTER TABLE receipts ADD COLUMN status TEXT DEFAULT 'paid'")
     except sqlite3.OperationalError:
         pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN morning_doc_id TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN morning_sync_status TEXT DEFAULT 'pending'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE receipts ADD COLUMN morning_synced_at TIMESTAMP")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN street TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN city TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        db.execute("ALTER TABLE patients ADD COLUMN zip_code TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     db.execute('''
         CREATE TABLE IF NOT EXISTS service_types (

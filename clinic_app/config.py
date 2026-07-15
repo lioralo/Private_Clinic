@@ -119,6 +119,14 @@ DEFAULT_SITE_SETTINGS = {
     'security_scan_last_status': '',
     'security_scan_last_results_json': '{}',
     'vacancies_auto_seeded': '0',
+    'morning_api_key': '',
+    'morning_api_secret': '',
+    'morning_api_url': 'https://api.morning.co.il/v1',
+    'clinic_business_name': '',
+    'clinic_business_id': '',
+    'clinic_address': '',
+    'clinic_phone': '',
+    'clinic_email': '',
 }
 
 HEBREW_TRANSLATIONS = {}

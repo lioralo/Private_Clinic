@@ -513,6 +513,9 @@
   .ms-2 {
     margin-inline-start: calc(var(--spacing) * 2);
   }
+  .ms-3 {
+    margin-inline-start: calc(var(--spacing) * 3);
+  }
   .ms-4 {
     margin-inline-start: calc(var(--spacing) * 4);
   }

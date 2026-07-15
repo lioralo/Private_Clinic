@@ -1765,6 +1765,79 @@ def admin_users():
     return render_template('admin_users.html', users=users)
 
 
+@admin_bp.route('/admin/morning-settings', methods=['GET', 'POST'])
+@login_required
+def morning_settings():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    db = get_db()
+    settings = {}
+    try:
+        from app import get_site_settings
+        settings = get_site_settings(db)
+    except Exception:
+        pass
+
+    test_result = session.pop('morning_test_result', None)
+
+    if request.method == 'POST':
+        fields = [
+            'morning_api_key', 'morning_api_secret', 'morning_api_url',
+            'clinic_business_name', 'clinic_business_id',
+            'clinic_address', 'clinic_phone', 'clinic_email',
+        ]
+        for field in fields:
+            val = (request.form.get(field) or '').strip()
+            db.execute(
+                'INSERT OR REPLACE INTO site_settings (setting_key, setting_value) VALUES (?, ?)',
+                (field, val)
+            )
+        db.commit()
+
+        if request.form.get('test_connection'):
+            try:
+                from clinic_app.morning_api import MorningAPIClient
+                client = MorningAPIClient(
+                    api_key=request.form.get('morning_api_key', ''),
+                    api_secret=request.form.get('morning_api_secret', ''),
+                    base_url=request.form.get('morning_api_url', ''),
+                )
+                ok = client.test_connection()
+                session['morning_test_result'] = 'connected' if ok else 'failed'
+            except Exception:
+                session['morning_test_result'] = 'failed'
+
+        flash('Morning settings saved.', 'success')
+        return redirect(url_for('.morning_settings'))
+
+    return render_template('morning_config.html',
+                         settings=settings, test_result=test_result)
+
+
+@admin_bp.route('/admin/morning-test', methods=['POST'])
+@login_required
+def morning_test_connection():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db = get_db()
+    from clinic_app.utils import get_site_settings
+    settings = get_site_settings(db)
+
+    try:
+        from clinic_app.morning_api import MorningAPIClient
+        client = MorningAPIClient(
+            api_key=settings.get('morning_api_key', ''),
+            api_secret=settings.get('morning_api_secret', ''),
+            base_url=settings.get('morning_api_url', ''),
+        )
+        ok = client.test_connection()
+        return jsonify({'status': 'connected' if ok else 'failed'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 def _smtp_health_check():
     from clinic_app.utils import _smtp_health_check as _check
     return _check()

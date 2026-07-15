@@ -1537,11 +1537,22 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.style.paddingRight = '';
 
     document.querySelectorAll('.note-edit-form').forEach(function (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var modal = form.closest('.modal');
+            if (modal && typeof bootstrap !== 'undefined') {
+                modal.addEventListener('hidden.bs.modal', function handler() {
+                    modal.removeEventListener('hidden.bs.modal', handler);
+                    form.submit();
+                }, {once: true});
+                var bsModal = bootstrap.Modal.getInstance(modal);
+                if (bsModal) { bsModal.hide(); return; }
+            }
             document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
             document.body.classList.remove('modal-open');
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+            form.submit();
         });
     });
 });
