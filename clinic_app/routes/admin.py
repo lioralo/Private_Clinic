@@ -1780,6 +1780,7 @@ def morning_settings():
         pass
 
     test_result = session.pop('morning_test_result', None)
+    test_message = session.pop('morning_test_message', None)
 
     if request.method == 'POST':
         fields = [
@@ -1803,16 +1804,18 @@ def morning_settings():
                     api_secret=request.form.get('morning_api_secret', ''),
                     base_url=request.form.get('morning_api_url', ''),
                 )
-                ok = client.test_connection()
+                ok, msg = client.test_connection()
                 session['morning_test_result'] = 'connected' if ok else 'failed'
+                session['morning_test_message'] = msg
             except Exception:
                 session['morning_test_result'] = 'failed'
+                session['morning_test_message'] = 'Client initialization error'
 
         flash('Morning settings saved.', 'success')
         return redirect(url_for('.morning_settings'))
 
     return render_template('morning_config.html',
-                         settings=settings, test_result=test_result)
+                         settings=settings, test_result=test_result, test_message=test_message)
 
 
 @admin_bp.route('/admin/morning-test', methods=['POST'])

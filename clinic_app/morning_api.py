@@ -4,11 +4,11 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-MORNING_DEFAULT_BASE_URL = 'https://api.morning.co.il/v1'
+MORNING_DEFAULT_BASE_URL = 'https://api.greeninvoice.co.il/api/v1'
 
 
 class MorningAPIClient:
-    """Client for the Morning (מרנינג) digital invoicing API."""
+    """Client for the Green Invoice (Morning / מרנינג) digital invoicing API."""
 
     def __init__(self, api_key=None, api_secret=None, base_url=None):
         self.api_key = api_key
@@ -17,8 +17,8 @@ class MorningAPIClient:
         self.session = requests.Session()
         self.session.headers.update({
             'Accept': 'application/json',
-            'X-API-Key': api_key or '',
-            'X-API-Secret': api_secret or '',
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key or ""}',
         })
 
     # ── Documents (Invoices / Receipts) ────────────────────────
@@ -139,13 +139,25 @@ class MorningAPIClient:
     # ── Health / Test ─────────────────────────────────────────
 
     def test_connection(self):
-        """Test API connectivity. Returns True if successful."""
+        """Test API connectivity. Returns (success: bool, message: str)."""
         try:
-            self.session.get(f'{self.base_url}/documents', params={'limit': 1}, timeout=15)
-            return True
+            r = self.session.post(
+                f'{self.base_url}/documents',
+                json={'type': 'receipt'},
+                timeout=15,
+            )
+            if r.status_code == 401:
+                return False, 'Authentication failed — check that your API token is valid. Generate it from the Green Invoice developer dashboard.'
+            if r.status_code == 200 or r.status_code == 201:
+                return True, 'Connected successfully'
+            if r.status_code == 405:
+                return True, f'Connected (endpoint reached, status {r.status_code})'
+            return False, f'Unexpected response: {r.status_code}'
+        except requests.ConnectionError:
+            return False, 'Cannot reach Green Invoice API — check network/DNS'
         except Exception as e:
             logger.warning('Morning API test connection failed: %s', e)
-            return False
+            return False, f'Connection error: {str(e)[:80]}'
 
 
 def get_morning_client(db):
