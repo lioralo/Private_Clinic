@@ -1,0 +1,305 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Manage Assessments') }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-clipboard-check me-2"></i>{{ t('Assessment Builder') }}</h2>
+        <p class="text-slate-500 text-sm mb-0">{{ t('Create and manage custom questionnaires') }}</p>
+    </div>
+    <button class="btn btn-primary rounded-pill" id="createTypeBtn">
+        <i class="bi bi-plus-circle me-1"></i>{{ t('New Questionnaire') }}
+    </button>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold">{{ t('Questionnaire Types') }}</h5></div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="typesList">
+                    {% for t in assessment_types %}
+                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center type-item {% if loop.first %}active{% endif %}" data-type-id="{{ t['id'] }}">
+                        <div>
+                            <div class="fw-semibold">{{ t['display_name'] }}</div>
+                            <div class="small text-muted">{{ t['num_questions'] }} {{ t('questions') }} · {{ t['scoring_method'] }}</div>
+                        </div>
+                        <span class="badge {% if t['is_active'] %}bg-success{% else %}bg-secondary{% endif %}">{% if t['is_active'] %}{{ t('Active') }}{% else %}{{ t('Inactive') }}{% endif %}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div id="questionsPanel" class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold" id="questionsTitle">{{ t('Questions') }}</h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm rounded-pill" id="editTypeBtn"><i class="bi bi-pencil me-1"></i>{{ t('Edit') }}</button>
+                    <button class="btn btn-outline-primary btn-sm rounded-pill" id="addQuestionBtn"><i class="bi bi-plus me-1"></i>{{ t('Add Question') }}</button>
+                </div>
+            </div>
+            <div class="card-body p-3" id="questionsBody">
+                <p class="text-muted text-center py-4" id="selectTypeHint">{{ t('Select a questionnaire type to manage its questions.') }}</p>
+                <div id="questionsList" class="d-grid gap-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Type edit modal #}
+<div class="modal fade" id="typeModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content border-0 shadow">
+        <div class="modal-header"><h5 class="modal-title" id="typeModalTitle">{{ t('Create Questionnaire') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="typeEditId">
+            <div class="mb-2"><label class="form-label small">{{ t('Internal Name') }}</label><input class="form-control form-control-sm" id="typeName" placeholder="phq_9"></div>
+            <div class="mb-2"><label class="form-label small">{{ t('Display Name') }}</label><input class="form-control form-control-sm" id="typeDisplay" placeholder="PHQ-9"></div>
+            <div class="mb-2"><label class="form-label small">{{ t('Description') }}</label><textarea class="form-control form-control-sm" id="typeDesc" rows="2"></textarea></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small">{{ t('Category') }}</label>
+                    <select class="form-select form-select-sm" id="typeCat">
+                        <option value="mental_health">Mental Health</option><option value="depression">Depression</option><option value="anxiety">Anxiety</option><option value="ptsd">PTSD</option><option value="ocd">OCD</option><option value="clinical">Clinical</option><option value="group">Group</option><option value="other">Other</option>
+                    </select></div>
+                <div class="col-6"><label class="form-label small">{{ t('Scoring') }}</label>
+                    <select class="form-select form-select-sm" id="typeScoring"><option value="sum">Sum</option><option value="average">Average</option><option value="custom">Custom</option></select></div>
+            </div>
+            <div class="mb-2"><label class="form-label small">{{ t('Interpretation JSON') }}</label><textarea class="form-control form-control-sm" id="typeInterpretation" rows="3" placeholder='[{"range":[0,4],"label":"None","severity":"none"}]'></textarea></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" id="typeActive" checked><label class="form-check-label small">{{ t('Active') }}</label></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button><button class="btn btn-primary btn-sm rounded-pill" id="saveTypeBtn">{{ t('Save') }}</button></div>
+    </div></div>
+</div>
+
+{# Question edit modal #}
+<div class="modal fade" id="questionModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content border-0 shadow">
+        <div class="modal-header"><h5 class="modal-title">{{ t('Edit Question') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <input type="hidden" id="qEditId">
+            <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small">{{ t('Order') }}</label><input type="number" class="form-control form-control-sm" id="qOrder" value="0"></div>
+                <div class="col-6"><label class="form-label small">{{ t('Key') }}</label><input class="form-control form-control-sm" id="qKey" placeholder="q_0"></div>
+            </div>
+            <div class="mb-2"><label class="form-label small">{{ t('Question (EN)') }}</label><input class="form-control form-control-sm" id="qEn"></div>
+            <div class="mb-2"><label class="form-label small">{{ t('Question (HE)') }}</label><input class="form-control form-control-sm" id="qHe"></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small">{{ t('Type') }}</label>
+                    <select class="form-select form-select-sm" id="qType"><option value="radio">Radio</option><option value="select">Select</option><option value="textarea">Textarea</option><option value="text">Text</option><option value="number">Number</option></select></div>
+                <div class="col-6 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="qRequired" checked><label class="form-check-label small">{{ t('Required') }}</label></div></div>
+            </div>
+            <div class="mb-2"><label class="form-label small">{{ t('Options') }} <span class="text-muted">({{ t('one per line: value | EN | HE') }})</span></label>
+                <textarea class="form-control form-control-sm" id="qOptions" rows="5" placeholder="0 | Not at all | בכלל לא
+1 | Several days | מספר ימים
+2 | More than half | יותר מחצי
+3 | Nearly every day | כמעט כל יום"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-dismiss="modal">{{ t('Cancel') }}</button><button class="btn btn-primary btn-sm rounded-pill" id="saveQBtn">{{ t('Save') }}</button></div>
+    </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var selectedTypeId = null;
+    var allTypes = [];
+    var allQuestions = [];
+
+    var tModal = new bootstrap.Modal(document.getElementById('typeModal'));
+    var qModal = new bootstrap.Modal(document.getElementById('questionModal'));
+
+    function loadTypes() {
+        fetch('/assessments/api/types')
+            .then(r => r.json())
+            .then(types => {
+                allTypes = types;
+                var list = document.getElementById('typesList');
+                list.innerHTML = types.map(function(t) {
+                    return '<button class="list-group-item list-group-item-action d-flex justify-content-between type-item' + (t.id == selectedTypeId ? ' active' : '') + '" data-type-id="' + t.id + '">' +
+                        '<div><div class="fw-semibold">' + t.display_name + '</div><div class="small text-muted">' + t.num_questions + ' questions · ' + t.scoring_method + '</div></div>' +
+                        '<span class="badge ' + (t.is_active ? 'bg-success' : 'bg-secondary') + '">' + (t.is_active ? 'Active' : 'Inactive') + '</span></button>';
+                }).join('');
+                bindTypeClicks();
+                if (selectedTypeId) selectType(selectedTypeId);
+                else if (types.length > 0) selectType(types[0].id);
+            });
+    }
+
+    function bindTypeClicks() {
+        document.querySelectorAll('.type-item').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                selectType(parseInt(this.dataset.typeId));
+            });
+        });
+    }
+
+    function selectType(id) {
+        selectedTypeId = id;
+        document.querySelectorAll('.type-item').forEach(function(b) {
+            b.classList.toggle('active', parseInt(b.dataset.typeId) === id);
+        });
+        loadQuestions(id);
+    }
+
+    function loadQuestions(typeId) {
+        if (!typeId) return;
+        fetch('/assessments/api/types/' + typeId + '/questions')
+            .then(r => r.json())
+            .then(qs => {
+                allQuestions = qs;
+                var list = document.getElementById('questionsList');
+                var hint = document.getElementById('selectTypeHint');
+                hint.style.display = 'none';
+                var t = allTypes.find(function(x) { return x.id == typeId; });
+                document.getElementById('questionsTitle').textContent = (t ? t.display_name : '') + ' — Questions';
+                if (qs.length === 0) {
+                    list.innerHTML = '<p class="text-muted text-center py-3">No questions yet. Click Add Question.</p>';
+                } else {
+                    list.innerHTML = qs.map(function(q, i) {
+                        var opts = [];
+                        try { opts = JSON.parse(q.options_json || '[]'); } catch(e) {}
+                        var optPreview = opts.length ? opts.map(function(o) { return typeof o === 'object' ? (o.en || o.he || o.v) : o; }).join(', ') : '—';
+                        return '<div class="border rounded-3 p-2 d-flex gap-2 align-items-start">' +
+                            '<div class="text-muted small fw-bold" style="min-width:24px">' + (i+1) + '</div>' +
+                            '<div class="flex-grow-1"><div class="fw-semibold small">' + (q.question_text_he || q.question_text_en) + '</div>' +
+                            '<div class="small text-muted">' + q.question_type + ' · ' + (q.required ? 'Required' : 'Optional') + ' · ' + optPreview.substring(0, 60) + '</div></div>' +
+                            '<div class="d-flex gap-1"><button class="btn btn-sm btn-outline-secondary py-0 px-2 edit-q-btn" data-qid="' + q.id + '"><i class="bi bi-pencil"></i></button>' +
+                            '<button class="btn btn-sm btn-outline-danger py-0 px-2 del-q-btn" data-qid="' + q.id + '"><i class="bi bi-trash"></i></button></div></div>';
+                    }).join('');
+                    bindQuestionButtons();
+                }
+            });
+    }
+
+    function bindQuestionButtons() {
+        document.querySelectorAll('.edit-q-btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+                var q = allQuestions.find(function(x) { return x.id == parseInt(b.dataset.qid); });
+                if (!q) return;
+                document.getElementById('qEditId').value = q.id;
+                document.getElementById('qOrder').value = q.question_order;
+                document.getElementById('qKey').value = q.question_key;
+                document.getElementById('qEn').value = q.question_text_en;
+                document.getElementById('qHe').value = q.question_text_he;
+                document.getElementById('qType').value = q.question_type;
+                document.getElementById('qRequired').checked = q.required == 1;
+                var opts = [];
+                try { opts = JSON.parse(q.options_json || '[]'); } catch(e) {}
+                document.getElementById('qOptions').value = opts.map(function(o) {
+                    if (typeof o === 'object') return (o.v || '') + ' | ' + (o.en || '') + ' | ' + (o.he || '');
+                    return o;
+                }).join('\n');
+                qModal.show();
+            });
+        });
+        document.querySelectorAll('.del-q-btn').forEach(function(b) {
+            b.addEventListener('click', function() {
+                if (!confirm('Delete this question?')) return;
+                fetch('/assessments/api/types/' + selectedTypeId + '/questions/' + b.dataset.qid, {method: 'DELETE'})
+                    .then(function() { loadQuestions(selectedTypeId); loadTypes(); });
+            });
+        });
+    }
+
+    document.getElementById('createTypeBtn').addEventListener('click', function() {
+        document.getElementById('typeEditId').value = '';
+        document.getElementById('typeName').value = '';
+        document.getElementById('typeDisplay').value = '';
+        document.getElementById('typeDesc').value = '';
+        document.getElementById('typeCat').value = 'mental_health';
+        document.getElementById('typeScoring').value = 'sum';
+        document.getElementById('typeInterpretation').value = '';
+        document.getElementById('typeActive').checked = true;
+        document.getElementById('typeModalTitle').textContent = '{{ t("Create Questionnaire") }}';
+        tModal.show();
+    });
+
+    document.getElementById('editTypeBtn').addEventListener('click', function() {
+        if (!selectedTypeId) return;
+        var t = allTypes.find(function(x) { return x.id == selectedTypeId; });
+        if (!t) return;
+        document.getElementById('typeEditId').value = t.id;
+        document.getElementById('typeName').value = t.name;
+        document.getElementById('typeName').disabled = true;
+        document.getElementById('typeDisplay').value = t.display_name;
+        document.getElementById('typeDesc').value = t.description || '';
+        document.getElementById('typeCat').value = t.category || 'mental_health';
+        document.getElementById('typeScoring').value = t.scoring_method || 'sum';
+        document.getElementById('typeInterpretation').value = t.interpretation_json || '';
+        document.getElementById('typeActive').checked = t.is_active == 1;
+        document.getElementById('typeModalTitle').textContent = '{{ t("Edit Questionnaire") }}';
+        tModal.show();
+    });
+
+    document.getElementById('saveTypeBtn').addEventListener('click', function() {
+        var id = document.getElementById('typeEditId').value;
+        var payload = {
+            name: document.getElementById('typeName').value,
+            display_name: document.getElementById('typeDisplay').value,
+            description: document.getElementById('typeDesc').value,
+            category: document.getElementById('typeCat').value,
+            scoring_method: document.getElementById('typeScoring').value,
+            interpretation_json: document.getElementById('typeInterpretation').value || '[]',
+            is_active: document.getElementById('typeActive').checked ? 1 : 0,
+        };
+        var method = id ? 'PUT' : 'POST';
+        var url = id ? '/assessments/api/types/' + id : '/assessments/api/types';
+        fetch(url, {method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)})
+            .then(r => r.json())
+            .then(function() {
+                tModal.hide();
+                loadTypes();
+            });
+    });
+
+    document.getElementById('addQuestionBtn').addEventListener('click', function() {
+        if (!selectedTypeId) return;
+        document.getElementById('qEditId').value = '';
+        document.getElementById('qOrder').value = (allQuestions.length);
+        document.getElementById('qKey').value = 'q_' + allQuestions.length;
+        document.getElementById('qEn').value = '';
+        document.getElementById('qHe').value = '';
+        document.getElementById('qType').value = 'radio';
+        document.getElementById('qRequired').checked = true;
+        document.getElementById('qOptions').value = '';
+        qModal.show();
+    });
+
+    document.getElementById('saveQBtn').addEventListener('click', function() {
+        var qid = document.getElementById('qEditId').value;
+        var optsText = document.getElementById('qOptions').value;
+        var opts = [];
+        if (optsText.trim()) {
+            opts = optsText.split('\n').filter(l => l.trim()).map(function(line) {
+                var parts = line.split('|');
+                return {v: (parts[0]||'').trim(), en: (parts[1]||'').trim(), he: (parts[2]||'').trim()};
+            });
+        }
+        var payload = {
+            question_order: parseInt(document.getElementById('qOrder').value) || 0,
+            question_key: document.getElementById('qKey').value,
+            question_text_en: document.getElementById('qEn').value,
+            question_text_he: document.getElementById('qHe').value,
+            question_type: document.getElementById('qType').value,
+            options_json: JSON.stringify(opts),
+            required: document.getElementById('qRequired').checked ? 1 : 0,
+        };
+
+        if (qid) {
+            payload.id = parseInt(qid);
+            fetch('/assessments/api/types/' + selectedTypeId + '/questions', {
+                method: 'PUT', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({items: [payload]})
+            }).then(function() { qModal.hide(); loadQuestions(selectedTypeId); loadTypes(); });
+        } else {
+            fetch('/assessments/api/types/' + selectedTypeId + '/questions', {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+            }).then(function() { qModal.hide(); loadQuestions(selectedTypeId); loadTypes(); });
+        }
+    });
+
+    loadTypes();
+})();
+</script>
+{% endblock %}

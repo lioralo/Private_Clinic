@@ -124,6 +124,7 @@ DEFAULT_SITE_SETTINGS = {
     'morning_api_url': 'https://api.morning.co.il/v1',
     'clinic_business_name': '',
     'clinic_business_id': '',
+    'clinic_logo': '',
     'clinic_address': '',
     'clinic_phone': '',
     'clinic_email': '',

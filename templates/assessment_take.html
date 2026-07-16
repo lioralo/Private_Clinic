@@ -7,7 +7,21 @@
       <i class="bi bi-arrow-left me-1"></i>{{ t('Back to Assessments') }}
     </a>
   </div>
-  <h1 class="text-2xl font-bold text-primary mb-4">{{ t('Take Assessment') }} — {{ patient['name'] }}</h1>
+
+  <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+        {% if clinic_logo %}
+        <img src="{{ clinic_logo }}" alt="Logo" style="width:50px;height:50px;object-fit:contain;border-radius:12px;">
+        {% endif %}
+        <div>
+          <div class="fw-bold text-primary">{{ clinic_name }}</div>
+          <div class="small text-muted">{{ patient['name'] }} · {{ today }}</div>
+        </div>
+      </div>
+      <h1 class="h4 fw-bold mb-0">{{ t('Take Assessment') }}</h1>
+    </div>
+  </div>
 
   <form method="post" action="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

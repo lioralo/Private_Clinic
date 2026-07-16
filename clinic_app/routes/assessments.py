@@ -59,6 +59,11 @@ def view_patient_assessments(patient_id):
         flash('Patient not found.')
         return redirect(url_for('patients'))
 
+    from app import get_site_settings
+    settings = get_site_settings(db)
+    clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
+    clinic_logo = settings.get('clinic_logo', '') or url_for('static', filename='Logo.png')
+
     rows = db.execute('''
         SELECT a.*, at.name AS assessment_name, at.display_name AS assessment_display_name
         FROM assessments a
@@ -96,7 +101,9 @@ def view_patient_assessments(patient_id):
                            patient=patient,
                            assessments=assessments,
                            chart_data=chart_data,
-                           assessment_types=assessment_types)
+                           assessment_types=assessment_types,
+                           clinic_name=clinic_name,
+                           clinic_logo=clinic_logo)
 
 
 @assessments_bp.route('/patient/<int:patient_id>/take', methods=['GET', 'POST'])
@@ -200,13 +207,20 @@ def take_assessment(patient_id):
     assessment_types = [dict(at) for at in _get_assessment_types(db)]
     selected_type_id = request.args.get('type_id', '')
 
+    from app import get_site_settings
+    settings = get_site_settings(db)
+    clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
+    clinic_logo = settings.get('clinic_logo', '') or url_for('static', filename='Logo.png')
+
     from clinic_app.utils import ASSESSMENT_QUESTIONS, ASSESSMENT_OPTIONS
     return render_template('assessment_take.html',
                            patient=patient,
                            assessment_types=assessment_types,
                            selected_type_id=selected_type_id,
                            ASSESSMENT_QUESTIONS=ASSESSMENT_QUESTIONS,
-                           ASSESSMENT_OPTIONS=ASSESSMENT_OPTIONS)
+                           ASSESSMENT_OPTIONS=ASSESSMENT_OPTIONS,
+                           clinic_name=clinic_name,
+                           clinic_logo=clinic_logo)
 
 
 @assessments_bp.route('/api/patient/<int:patient_id>/progress')
@@ -294,6 +308,135 @@ def assessment_trends_api(patient_id):
             } for r in rows]
 
     return jsonify({'types': list(result.keys()), 'data': result})
+
+
+# ---------- Assessment type management (custom questionnaire builder) ----------
+
+@assessments_bp.route('/manage')
+@login_required
+def manage_assessment_types():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    types = [dict(r) for r in db.execute('SELECT * FROM assessment_types ORDER BY name ASC').fetchall()]
+    return render_template('admin_assessments.html', assessment_types=types)
+
+
+@assessments_bp.route('/api/types', methods=['GET', 'POST'])
+@login_required
+def api_types():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+
+    if request.method == 'POST':
+        data = request.get_json(force=True)
+        name = (data.get('name') or '').strip()
+        display = (data.get('display_name') or '').strip()
+        if not name or not display:
+            return jsonify({'error': 'Name and display name required.'}), 400
+        db.execute('''
+            INSERT INTO assessment_types (name, display_name, description, category, num_questions,
+                scoring_method, scoring_rules_json, interpretation_json, min_score, max_score)
+            VALUES (?, ?, ?, ?, 0, ?, ?, ?, 0, 0)
+        ''', (name, display, data.get('description', ''), data.get('category', 'mental_health'),
+              data.get('scoring_method', 'sum'), data.get('scoring_rules_json', '{}'),
+              data.get('interpretation_json', '[]')))
+        db.commit()
+        atype = db.execute('SELECT * FROM assessment_types WHERE name = ?', (name,)).fetchone()
+        return jsonify(dict(atype))
+
+    types = [dict(r) for r in db.execute('SELECT * FROM assessment_types ORDER BY name ASC').fetchall()]
+    return jsonify(types)
+
+
+@assessments_bp.route('/api/types/<int:type_id>', methods=['PUT', 'DELETE'])
+@login_required
+def api_type_item(type_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+
+    if request.method == 'DELETE':
+        db.execute('DELETE FROM assessment_questions WHERE assessment_type_id = ?', (type_id,))
+        db.execute('DELETE FROM assessment_types WHERE id = ?', (type_id,))
+        db.commit()
+        return jsonify({'status': 'deleted'})
+
+    data = request.get_json(force=True)
+    db.execute('''
+        UPDATE assessment_types SET display_name=?, description=?, category=?,
+            scoring_method=?, interpretation_json=?, is_active=?
+        WHERE id=?
+    ''', (data.get('display_name', '') or '', data.get('description', '') or '',
+          data.get('category', 'mental_health'), data.get('scoring_method', 'sum'),
+          data.get('interpretation_json', '[]'), int(data.get('is_active', 1)), type_id))
+    db.commit()
+    atype = db.execute('SELECT * FROM assessment_types WHERE id = ?', (type_id,)).fetchone()
+    return jsonify(dict(atype))
+
+
+@assessments_bp.route('/api/types/<int:type_id>/questions', methods=['GET', 'POST', 'PUT'])
+@login_required
+def api_questions(type_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+
+    if request.method == 'POST':
+        data = request.get_json(force=True)
+        idx = db.execute('SELECT COALESCE(MAX(question_order), -1) + 1 FROM assessment_questions WHERE assessment_type_id = ?',
+                         (type_id,)).fetchone()[0]
+        db.execute('''
+            INSERT INTO assessment_questions (assessment_type_id, question_order, question_key,
+                question_text_en, question_text_he, question_type, options_json, required)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (type_id, idx, data.get('question_key', f'q_{idx}'),
+              data.get('question_text_en', ''), data.get('question_text_he', ''),
+              data.get('question_type', 'radio'), data.get('options_json', '[]'),
+              int(data.get('required', 1))))
+        db.commit()
+        db.execute('UPDATE assessment_types SET num_questions = (SELECT COUNT(*) FROM assessment_questions WHERE assessment_type_id = ?) WHERE id = ?',
+                   (type_id, type_id))
+        db.commit()
+        qid = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+        return jsonify(dict(db.execute('SELECT * FROM assessment_questions WHERE id = ?', (qid,)).fetchone()))
+
+    if request.method == 'PUT':
+        data = request.get_json(force=True)
+        items = data.get('items', [])
+        for item in items:
+            qid = int(item['id'])
+            db.execute('''
+                UPDATE assessment_questions SET question_order=?, question_key=?,
+                    question_text_en=?, question_text_he=?, question_type=?, options_json=?, required=?
+                WHERE id=?
+            ''', (item.get('question_order', 0), item.get('question_key', ''),
+                  item.get('question_text_en', ''), item.get('question_text_he', ''),
+                  item.get('question_type', 'radio'), item.get('options_json', '[]'),
+                  int(item.get('required', 1)), qid))
+        db.commit()
+        db.execute('UPDATE assessment_types SET num_questions = (SELECT COUNT(*) FROM assessment_questions WHERE assessment_type_id = ?) WHERE id = ?',
+                   (type_id, type_id))
+        db.commit()
+        return jsonify({'status': 'saved', 'count': len(items)})
+
+    questions = [dict(r) for r in db.execute(
+        'SELECT * FROM assessment_questions WHERE assessment_type_id = ? ORDER BY question_order', (type_id,)).fetchall()]
+    return jsonify(questions)
+
+
+@assessments_bp.route('/api/types/<int:type_id>/questions/<int:qid>', methods=['DELETE'])
+@login_required
+def api_question_item(type_id, qid):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    db.execute('DELETE FROM assessment_questions WHERE id = ? AND assessment_type_id = ?', (qid, type_id))
+    db.execute('UPDATE assessment_types SET num_questions = (SELECT COUNT(*) FROM assessment_questions WHERE assessment_type_id = ?) WHERE id = ?',
+               (type_id, type_id))
+    db.commit()
+    return jsonify({'status': 'deleted'})
 
 
 def register_assessment_routes(app):
