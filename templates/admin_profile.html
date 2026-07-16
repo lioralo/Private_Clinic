@@ -78,9 +78,7 @@
                         </div>
                         <div class="col-12 d-flex flex-wrap gap-2">
                             <button class="btn btn-primary rounded-pill px-4" type="submit">{{ t('Save About Settings') }}</button>
-                            {% if site_settings.get('about_enabled') == '1' %}
-                            <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary rounded-pill" target="_blank">{{ t('Preview About Page') }}</a>
-                            {% endif %}
+                            <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary rounded-pill">{{ t('Preview About Page') }}</a>
                         </div>
                     </form>
                 </div>

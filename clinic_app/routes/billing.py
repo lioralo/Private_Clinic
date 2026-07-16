@@ -239,7 +239,7 @@ def add_receipt(patient_id):
             )
 
         db.commit()
-        flash(f'Receipt {receipt_number} created for ${total:.2f}.', 'success')
+        flash(f'Receipt {receipt_number} created for NIS {total:.2f}.', 'success')
     except Exception:
         db.rollback()
         flash('Error creating receipt. Please try again.', 'error')

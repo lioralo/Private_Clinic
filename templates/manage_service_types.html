@@ -53,7 +53,7 @@
                     <tr>
                         <td class="fw-semibold">{{ st['name'] }}</td>
                         <td class="text-muted small">{{ st['description'] or '' }}</td>
-                        <td>${{ '%.2f'|format(st['default_price']) }}</td>
+                        <td>NIS {{ '%.2f'|format(st['default_price']) }}</td>
                         <td>
                             {% if st['is_active'] %}
                             <span class="badge bg-success-subtle text-success rounded-pill">{{ t('Active') }}</span>

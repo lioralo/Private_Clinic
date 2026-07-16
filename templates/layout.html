@@ -571,7 +571,7 @@
         <a href="{{ url_for('public_resources') }}" class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('Resources') }}
         </a>
-        {% if site_settings.get('about_enabled') == '1' %}
+        {% if site_settings.get('about_enabled') == '1' or current_user.is_authenticated and current_user.role == 'admin' %}
         <a href="{{ url_for('about_page') }}" class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('About') }}
         </a>
@@ -609,7 +609,7 @@
            class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('Resources') }}
         </a>
-        {% if site_settings.get('about_enabled') == '1' %}
+        {% if site_settings.get('about_enabled') == '1' or current_user.is_authenticated and current_user.role == 'admin' %}
         <a href="{{ url_for('about_page') }}"
            class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('About') }}

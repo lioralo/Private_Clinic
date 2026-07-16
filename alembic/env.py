@@ -13,6 +13,9 @@ script_location = config.get_main_option('script_location')
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def get_database_url():
+    url_from_cfg = config.get_main_option('sqlalchemy.url')
+    if url_from_cfg and url_from_cfg != 'driver://user:pass@localhost/dbname':
+        return url_from_cfg
     db_path = os.environ.get('DATABASE') or os.environ.get('TEST_DATABASE') or 'clinic.db'
     return f'sqlite:///{os.path.abspath(db_path)}'
 

@@ -105,12 +105,21 @@
 
     if (qtype === 'radio' || qtype === 'select') {
       try { var opts = JSON.parse(q.options_json || '[]'); } catch(e) { var opts = []; }
+      if (!Array.isArray(opts)) opts = [];
       html += '<div class=\"d-flex flex-wrap gap-2\">';
       var inputType = qtype === 'radio' ? 'radio' : 'checkbox';
-      opts.forEach(function(o) {
-        var label = '{{ lang }}' === 'he' ? (o.he || o.label || o.v) : (o.en || o.label || o.v);
+      opts.forEach(function(o, idx) {
+        var val, label;
+        if (typeof o === 'object') {
+          val = o.v || o.value || String(idx);
+          label = '{{ lang }}' === 'he' ? (o.he || o.label || o.v || String(idx)) : (o.en || o.label || o.v || String(idx));
+        } else {
+          val = String(idx);
+          label = String(o);
+        }
+        var isOther = (String(val).toLowerCase() === 'other' || String(label).toLowerCase() === 'other');
         html += '<label class=\"btn btn-outline-secondary btn-sm rounded-pill assessment-option\">';
-        html += '<input type=\"' + inputType + '\" name=\"' + key + '\" value=\"' + o.v + '\"' + (req ? ' required' : '') + ' class=\"d-none assessment-input\" data-other=\"' + (o.v === 'other' ? 'true' : 'false') + '\">';
+        html += '<input type=\"' + inputType + '\" name=\"' + key + '\" value=\"' + val + '\"' + (req ? ' required' : '') + ' class=\"d-none assessment-input\" data-other=\"' + (isOther ? 'true' : 'false') + '\">';
         html += label + '</label>';
       });
       html += '</div>';

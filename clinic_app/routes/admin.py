@@ -172,6 +172,13 @@ def _get_dashboard_missing_recurring(db):
                 AND a.is_recurring = 1
                 AND COALESCE(a.status, 'scheduled') = 'scheduled'
           )
+          AND NOT EXISTS (
+              SELECT 1 FROM group_member_history h
+              JOIN groups g ON g.id = h.group_id
+              WHERE h.patient_id = patients.id
+                AND h.end_date IS NULL
+                AND COALESCE(g.is_archived, 0) = 0
+          )
         ORDER BY name ASC
         LIMIT 6
     ''').fetchall()
@@ -222,11 +229,13 @@ def admin_dashboard():
     if current_user.role != 'admin':
         return redirect(url_for('patient_home'))
     db = get_db()
+    from clinic_app.utils import ensure_ongoing_recurrence_from_previous_week
+    ensure_ongoing_recurrence_from_previous_week(db)
     today = datetime.now().date()
     week_end = today + timedelta(days=6)
     gdocs_auto_sync_health = {}
     try:
-        from clinic_app.utils import _get_gdocs_auto_sync_health
+        from app import _get_gdocs_auto_sync_health
         gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
     except Exception:
         pass

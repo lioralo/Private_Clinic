@@ -494,7 +494,7 @@
                         <div class="fw-semibold">{{ appt['appointment_date'] }} {{ appt['appointment_time'] }}</div>
                         <div class="small text-muted d-flex gap-2 flex-wrap align-items-center mt-1">
                             {{ appt['meeting_type'] or t('In-person') }}
-                            {% if appt['cost'] %}<span>•</span><span>${{ '%.2f'|format(appt['cost']) }}</span>{% endif %}
+                            {% if appt['cost'] %}<span>•</span><span>NIS {{ '%.2f'|format(appt['cost']) }}</span>{% endif %}
                             <span class="badge {% if appointment_status == 'completed' %}bg-success-subtle text-success{% elif appointment_status == 'cancelled' %}bg-danger-subtle text-danger{% elif appointment_status == 'no_show' %}bg-warning-subtle text-warning-emphasis{% else %}bg-primary-subtle text-primary{% endif %} border">
                                 {% if appointment_status == 'no_show' %}{{ t('No Show') }}{% else %}{{ t(appointment_status|replace('_', ' ')|title) }}{% endif %}
                             </span>
@@ -566,7 +566,7 @@
                     </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center gap-3">
-                            <span class="fw-bold">{{ t('Total') }}: <span id="receiptTotal">$0.00</span></span>
+                            <span class="fw-bold">{{ t('Total') }}: <span id="receiptTotal">NIS 0.00</span></span>
                             <select name="payment_method" class="form-select form-select-sm" style="width:auto">
                                 <option value="transfer">{{ t('Bank Transfer') }}</option>
                                 <option value="cash">{{ t('Cash') }}</option>
@@ -609,7 +609,7 @@
                 var price = parseFloat(row.querySelector('.unit-price').value) || 0;
                 total += qty * price;
             });
-            document.getElementById('receiptTotal').textContent = '$' + total.toFixed(2);
+            document.getElementById('receiptTotal').textContent = 'NIS ' + total.toFixed(2);
         }
         document.getElementById('lineItemsContainer').addEventListener('change', function(e) {
             if (e.target.closest('.line-item-row')) updateTotal();
@@ -639,7 +639,7 @@
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge {% if receipt['status'] == 'paid' %}bg-success-subtle text-success{% elif receipt['status'] == 'pending' %}bg-warning-subtle text-warning{% else %}bg-light text-muted{% endif %} border rounded-pill px-3 py-2">{{ receipt['status'] or 'paid' }}</span>
-                        <span class="badge bg-white text-primary border rounded-pill px-3 py-2">${{ receipt['amount'] }}</span>
+                        <span class="badge bg-white text-primary border rounded-pill px-3 py-2">NIS {{ receipt['amount'] }}</span>
                         <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
                             <i class="bi bi-download"></i>
                         </a>

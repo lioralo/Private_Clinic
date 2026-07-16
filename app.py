@@ -2768,21 +2768,36 @@ def init_db():
             db.execute("PRAGMA busy_timeout=5000")
             # Check if DB already has schema (e.g. alembic_version exists)
             already_initialized = False
+            alembic_managed = False
             try:
                 row = db.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
                 ).fetchone()
                 if row:
                     already_initialized = True
+                    alembic_managed = True
             except Exception:
                 pass
+
+            if alembic_managed:
+                # Auto-apply pending Alembic migrations
+                try:
+                    from alembic.config import Config
+                    from alembic import command
+                    alembic_cfg = Config(app.config.get('ALEMBIC_INI', 'alembic.ini'))
+                    alembic_cfg.set_main_option('sqlalchemy.url', f'sqlite:///{database}')
+                    command.upgrade(alembic_cfg, 'head')
+                    print('Applied pending Alembic migrations.')
+                except Exception as exc:
+                    print(f'Alembic upgrade skipped: {exc}')
 
             if not already_initialized:
                 with app.open_resource('clinic_app/schema.sql', mode='r') as f:
                     db.cursor().executescript(f.read())
                 db.commit()
 
-            _run_db_migrations(db)
+            if not alembic_managed:
+                _run_db_migrations(db)
             _seed_admin_user(db)
 
             if not already_initialized:

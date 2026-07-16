@@ -864,8 +864,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 });
                 Cal.applyCalendarFilter();
-                Cal.renderWeekendList(Cal.fridaySpecials, data.weekend_specials ? data.weekend_specials.friday : []);
-                Cal.renderWeekendList(Cal.saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
+                if (Cal.fridaySpecials) Cal.renderWeekendList(Cal.fridaySpecials, data.weekend_specials ? data.weekend_specials.friday : []);
+                if (Cal.saturdaySpecials) Cal.renderWeekendList(Cal.saturdaySpecials, data.weekend_specials ? data.weekend_specials.saturday : []);
                 Cal.renderFollowUps(data.follow_up_alerts || []);
                 Cal.renderAvailableSlots(data.available_slots || []);
                 Cal.renderOngoingList(data.events || []);

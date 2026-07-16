@@ -473,7 +473,7 @@ def _pull_group_gdoc_notes(db, group):
         content_body = (parsed_item.get('content') or '').strip()
         return content_body
 
-    def _upsert_patient_group_note(patient_id, session_id, note_date, session_time, note_content, is_missed, missed_reason, group_name, session_title):
+    def _upsert_patient_group_note(patient_id, session_id, note_date, session_time, note_content, is_missed, missed_reason, group_name, session_title, session_summary=None):
         marker = f'[Group Session #{session_id}]'
         session_date_label = note_date or ''
         session_time_label = session_time or ''
@@ -498,6 +498,10 @@ def _pull_group_gdoc_notes(db, group):
             lines.append('סטטוס: נוכח')
             if note_content:
                 lines.append(f'הערה: {note_content}')
+        if session_summary and session_summary.strip():
+            lines.append('')
+            lines.append('תקציר הפגישה:')
+            lines.append(session_summary.strip())
         body = '\n'.join(line for line in lines if line).strip()
         existing = db.execute(
             '''SELECT id FROM notes
@@ -522,7 +526,7 @@ def _pull_group_gdoc_notes(db, group):
 
     group_name = group['name'] if 'name' in group.keys() else ''
 
-    def _apply_attendance_from_doc(session_id, participants, missing_entries, session_date=None, session_time=None, session_title=None):
+    def _apply_attendance_from_doc(session_id, participants, missing_entries, session_date=None, session_time=None, session_title=None, session_summary=None):
         if not session_id:
             return
         rows = db.execute('''
@@ -568,7 +572,8 @@ def _pull_group_gdoc_notes(db, group):
             ''', (session_id, matched['patient_id'], inline_note or None))
             _upsert_patient_group_note(
                 matched['patient_id'], session_id, session_date, session_time, inline_note,
-                is_missed=False, missed_reason=None, group_name=group_name, session_title=session_title
+                is_missed=False, missed_reason=None, group_name=group_name, session_title=session_title,
+                session_summary=session_summary
             )
 
         for entry in missing_entries:
@@ -589,7 +594,8 @@ def _pull_group_gdoc_notes(db, group):
             ''', (session_id, matched['patient_id'], reason or None))
             _upsert_patient_group_note(
                 matched['patient_id'], session_id, session_date, session_time, absence_note or reason,
-                is_missed=True, missed_reason=reason or None, group_name=group_name, session_title=session_title
+                is_missed=True, missed_reason=reason or None, group_name=group_name, session_title=session_title,
+                session_summary=session_summary
             )
 
     synced = 0
@@ -679,6 +685,7 @@ def _pull_group_gdoc_notes(db, group):
                     session_date=target_date,
                     session_time=target_time,
                     session_title=meeting_title or (target['title'] if 'title' in target.keys() else None),
+                    session_summary=structured_summary,
                 )
                 continue
 
@@ -696,6 +703,7 @@ def _pull_group_gdoc_notes(db, group):
                 session_date=note_date,
                 session_time='00:00',
                 session_title=title,
+                session_summary=structured_summary or content,
             )
             synced += 1
 

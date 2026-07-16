@@ -49,27 +49,30 @@ except ImportError:
 #
 # Matches all known formats:
 #   SESSION #3 | 2026-04-01 [note:new]       (English, ISO date, pipe)
+#   SESSION 10: 2026-04-01                    (English, colon, large number)
 #   פגישה #3 | 2026-04-01 [note:id=7]        (Hebrew, ISO date, pipe)
 #   פגישה 1- 05/08/25                         (Hebrew, DD/MM/YY, dash)
-#   פגישה 1- 05/08/2025                       (Hebrew, DD/MM/YYYY, dash)
-#   פגישה #1- 05/06/25                        (Hebrew, optional #, dash)
-#   ~פגישה 6- 23/02/26                         (Hebrew, leading tilde marker)
+#   פגישה 10- 05/08/2025                      (Hebrew, DD/MM/YYYY, dash, large number)
+#   פגישה #10- 05/06/25                       (Hebrew, optional #, dash, large number)
+#   ~פגישה 20- 23/02/26                       (Hebrew, leading tilde, large number)
 #   מפגש 3 | 2026-04-01 [note:new]            (Hebrew alternative label)
-#   מפגש 1- 05/08/25                           (Hebrew alternative, dash)
+#   מפגש 10- 05/08/25                          (Hebrew alternative, dash, large number)
+#   מפגש 20 | 05/08/25                         (Hebrew, pipe with slash date)
 #   SESSION 1: 2026-04-01                      (English, colon separator)
-#   פגישה 1: 05/08/25                          (Hebrew, colon separator)
+#   פגישה 10: 05/08/25                         (Hebrew, colon separator)
+#   מפגש 1 05/08/25                             (Hebrew, space separator)
+#   SESSION #1 - 2026-04-01                    (English, hash + dash)
 # ---------------------------------------------------------------------------
 _SESSION_RE = re.compile(
-    r'^\s*[~•*\-–—]?\s*(?P<label>SESSION|פגישה|מפגש)\s*(?:#\s*)?'
+    r'^\s*[~•*\-–—]?\s*(?P<label>SESSION|פגישה|מפגש|ישיבה)\s*(?:#\s*)?'
+    r'(?P<number>\d+)\s*'
     r'(?:'
-        r'(?P<number>\d+)\s*(?:'
-            r'[:|]\s*(?P<iso>\d{4}-\d{2}-\d{2})'
-            r'|'
-            r'[\-־–—:]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
-        r')'
+        r'[:|\-־–—]\s*(?P<iso>\d{4}-\d{2}-\d{2})'
         r'|'
-        r'(?P<title_date>\d{1,2}/\d{1,2}/\d{2,4})'
-    r')'
+        r'[:|\-־–—]\s*(?P<slash>\d{1,2}/\d{1,2}/\d{2,4})'
+        r'|'
+        r'\s+(?P<space_date>\d{1,2}/\d{1,2}/\d{2,4})'
+        r')?'
     r'(?:\s*(?P<tag>\[note:[^\]]+\]))?\s*$',
     re.MULTILINE | re.IGNORECASE,
 )
@@ -78,11 +81,13 @@ _NOTE_ID_RE = re.compile(r'\[note:id=(\d+)\]')
 
 
 def _extract_name_and_note(text):
-    """Split 'Name - inline note' into (name, note). Requires space around the separator."""
-    m = re.match(r'^(.*?)\s+[-–—:]+\s+(.+)$', text.strip(), re.DOTALL)
+    """Split 'Name - inline note' into (name, note).
+    Handles separators with or without leading space (real-world doc format)."""
+    t = (text or '').strip()
+    m = re.match(r'^(.*?)\s*[-–—:]\s+(.+)$', t, re.DOTALL)
     if m:
         return m.group(1).strip(), m.group(2).strip()
-    return text.strip(), ''
+    return t, ''
 
 
 def _split_named_entries(text):
@@ -118,8 +123,7 @@ def _split_hebrew_group_sections(block_text):
     def _normalized_section_header(raw_line):
         normalized = (raw_line or '').strip()
         normalized = re.sub(r'^[|#>*\-–—\s]+', '', normalized)
-        normalized = normalized.rstrip(':').strip().lower()
-        normalized = normalized.strip('*_`')
+        normalized = normalized.rstrip(':.-–—*_`').strip().lower()
         return normalized
 
     current_section = None
@@ -142,7 +146,7 @@ def _split_hebrew_group_sections(block_text):
         if current_section == 'participants':
             line_no_bullet = line.lstrip('-•*').strip()
             for raw_entry in _split_named_entries(line_no_bullet):
-                if re.search(r'\s+[-–—:]\s+', raw_entry):
+                if re.search(r'\s*[-–—:]\s+', raw_entry):
                     name, note = _extract_name_and_note(raw_entry)
                     if name:
                         participants.append(name)
@@ -208,6 +212,8 @@ def _parse_date(iso_group, slash_group):
     """Return a YYYY-MM-DD string from whichever capture group matched."""
     if iso_group:
         return iso_group  # already ISO
+    if not slash_group:
+        return None
     # slash_group: DD/MM/YY or DD/MM/YYYY
     parts = slash_group.split('/')
     if len(parts) != 3:
@@ -239,7 +245,7 @@ def parse_doc_into_notes(text):
     for i, m in enumerate(matches):
         number_group = (m.group('number') or '').strip()
         session_num = int(number_group) if number_group.isdigit() else None
-        note_date = _parse_date(m.group('iso'), m.group('slash') or m.group('title_date'))
+        note_date = _parse_date(m.group('iso'), m.group('slash') or m.group('space_date'))
         raw_tag = (m.group('tag') or '').strip()
 
         raw_header = (text[m.start():m.end()] or '').strip()

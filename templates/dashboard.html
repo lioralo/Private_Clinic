@@ -15,11 +15,11 @@
                     </div>
                     <div>
                          {% if balance > 0 %}
-                            <span class="fs-4 text-danger fw-bold">${{ "%.2f"|format(balance) }}</span>
+                             <span class="fs-4 text-danger fw-bold">NIS {{ "%.2f"|format(balance) }}</span>
                          {% elif balance < 0 %}
-                            <span class="fs-4 text-success fw-bold">-${{ "%.2f"|format(balance|abs) }}</span>
+                             <span class="fs-4 text-success fw-bold">-NIS {{ "%.2f"|format(balance|abs) }}</span>
                          {% else %}
-                            <span class="fs-4 text-success fw-bold">$0.00</span>
+                             <span class="fs-4 text-success fw-bold">NIS 0.00</span>
                          {% endif %}
                     </div>
                 </div>
@@ -51,7 +51,7 @@
                                 <span class="text-muted smallest">Scheduled at {{ appt['appointment_time'] }}</span>
                             </div>
                             <div class="text-end">
-                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">${{ "%.2f"|format(appt['cost']) }}</span>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border-primary border-opacity-25 border mb-1 d-block fw-bold">NIS {{ "%.2f"|format(appt['cost']) }}</span>
                                 <span class="smallest text-muted text-uppercase tracking-wider">{{ appt['status'] }}</span>
                             </div>
                         </div>
@@ -74,7 +74,7 @@
                             {% for receipt in receipts %}
                                 <div class="list-group-item py-3">
                                     <div class="d-flex justify-content-between mb-1">
-                                        <span class="fw-bold text-success">${{ "%.2f"|format(receipt['amount']) }}</span>
+                                        <span class="fw-bold text-success">NIS {{ "%.2f"|format(receipt['amount']) }}</span>
                                         <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
                                     </div>
                                     <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
