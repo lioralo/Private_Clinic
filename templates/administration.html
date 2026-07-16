@@ -1,9 +1,17 @@
 {% extends 'layout.html' %}
 {% block page_title %}{{ t('Administration') }}{% endblock %}
 {% block content %}
-<div class="mb-4">
-    <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-gear-fill me-2"></i>{{ t('Administration') }}</h2>
-    <p class="text-slate-500 text-sm mb-0">{{ t('Manage all clinic settings and tools from one place.') }}</p>
+<div class="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-gear-fill me-2"></i>{{ t('Administration') }}</h2>
+        <p class="text-slate-500 text-sm mb-0">{{ t('Manage all clinic settings and tools from one place.') }}</p>
+    </div>
+    <form method="post" action="{{ url_for('admin.export_dashboard') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-primary rounded-pill">
+            <i class="bi bi-download me-1"></i>{{ t('Export All Data') }}
+        </button>
+    </form>
 </div>
 
 <div class="row g-3">

@@ -585,4 +585,80 @@ def morning_webhook():
 
     return jsonify({'status': 'ok'}), 200
 
+
+@billing_bp.route('/patient/<int:patient_id>/export-receipts', methods=['POST'])
+@login_required
+def export_receipts_batch(patient_id):
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    ids = request.form.getlist('receipt_ids')
+    if not ids:
+        flash('No receipts selected.', 'error')
+        return redirect_to_patient_tab(patient_id, 'billing')
+
+    from fpdf import FPDF
+    import os as _os
+
+    pdf = FPDF()
+    font_path = _os.path.join(_os.path.dirname(__file__), '..', '..', 'static', 'fonts', 'DejaVuSans.ttf')
+    font_path = _os.path.abspath(font_path)
+    if not _os.path.exists(font_path):
+        font_path = '/app/static/fonts/DejaVuSans.ttf'
+    pdf.add_font('Sans', '', font_path, uni=True)
+    pdf.add_font('Sans', 'B', font_path, uni=True)
+
+    from app import get_site_settings
+    settings = get_site_settings(db)
+    clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
+
+    patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+
+    for idx, rid in enumerate(ids):
+        receipt = db.execute('SELECT * FROM receipts WHERE id = ? AND patient_id = ?', (rid, patient_id)).fetchone()
+        if not receipt:
+            continue
+        items = db.execute('''
+            SELECT ri.*, st.name as service_name FROM receipt_items ri
+            LEFT JOIN service_types st ON ri.service_type_id = st.id WHERE ri.receipt_id = ? ORDER BY ri.id
+        ''', (rid,)).fetchall()
+
+        if idx > 0:
+            pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.set_font('Sans', 'B', 14)
+        pdf.cell(0, 8, clinic_name, new_x='LMARGIN', new_y='NEXT', align='R')
+        pdf.set_font('Sans', '', 9)
+        pdf.cell(0, 5, f'Receipt #{receipt["receipt_number"] or receipt["id"]}  |  {receipt["created_at"]}', new_x='LMARGIN', new_y='NEXT', align='R')
+        pdf.cell(0, 5, f'Patient: {patient["name"] if patient else "Unknown"}', new_x='LMARGIN', new_y='NEXT', align='R')
+        pdf.ln(4)
+        pdf.set_font('Sans', 'B', 10)
+        pdf.cell(60, 6, 'Description', border=1, align='R')
+        pdf.cell(20, 6, 'Qty', border=1, align='C')
+        pdf.cell(35, 6, 'Price', border=1, align='R')
+        pdf.cell(35, 6, 'Total', border=1, align='R')
+        pdf.ln()
+        pdf.set_font('Sans', '', 9)
+        for it in items:
+            name = (it['service_name'] or it['description'] or 'Item')[:40]
+            pdf.cell(60, 6, name, border=1, align='R')
+            pdf.cell(20, 6, str(it['quantity']), border=1, align='C')
+            pdf.cell(35, 6, f'NIS {it["unit_price"]:.2f}', border=1, align='R')
+            pdf.cell(35, 6, f'NIS {it["line_total"]:.2f}', border=1, align='R')
+            pdf.ln()
+        pdf.set_font('Sans', 'B', 11)
+        pdf.cell(115, 6, 'Total:', border=1, align='R')
+        pdf.cell(35, 6, f'NIS {receipt["amount"]:.2f}', border=1, align='R')
+        pdf.ln(6)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    pdf.output(tmp.name)
+    tmp.close()
+    with open(tmp.name, 'rb') as f:
+        pdf_bytes = f.read()
+    os.unlink(tmp.name)
+    filename = f'receipts_batch_{patient_id}.pdf'
+    return Response(pdf_bytes, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
 morning_webhook.is_csrf_exempt = True

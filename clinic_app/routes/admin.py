@@ -234,6 +234,29 @@ def administration():
     ).fetchone()['c']
     return render_template('administration.html', unread_inquiries=unread_inquiries)
 
+
+@admin_bp.route('/admin/export-dashboard', methods=['POST'])
+@login_required
+def export_dashboard():
+    if current_user.role != 'admin':
+        return 'Unauthorized', 403
+    db = get_db()
+    import json, zipfile, io
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        tables = ['patients', 'appointments', 'notes', 'receipts', 'receipt_items', 'assessments', 'messages',
+                  'groups', 'group_sessions', 'files', 'goals', 'treatment_plans', 'site_settings', 'users']
+        for table in tables:
+            try:
+                rows = [dict(r) for r in db.execute(f'SELECT * FROM {table}').fetchall()]
+                z.writestr(f'{table}.json', json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+            except:
+                pass
+    buf.seek(0)
+    from datetime import date
+    return Response(buf.getvalue(), mimetype='application/zip',
+                    headers={'Content-Disposition': f'attachment; filename=clinic_export_{date.today().isoformat()}.zip'})
+
 # ---------------------------------------------------------------------------
 
 @admin_bp.route('/admin/dashboard')

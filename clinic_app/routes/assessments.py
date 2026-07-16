@@ -50,7 +50,9 @@ def _score_assessment(assessment_type, raw_scores):
 @assessments_bp.route('/patient/<int:patient_id>')
 @login_required
 def view_patient_assessments(patient_id):
-    if current_user.role != 'admin':
+    if current_user.role == 'patient' and int(current_user.patient_id or 0) != int(patient_id):
+        return 'Unauthorized', 403
+    if current_user.role not in ('admin', 'patient'):
         return 'Unauthorized', 403
     db = get_db()
     patient = db.execute('SELECT id, name FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0',
@@ -109,7 +111,9 @@ def view_patient_assessments(patient_id):
 @assessments_bp.route('/patient/<int:patient_id>/take', methods=['GET', 'POST'])
 @login_required
 def take_assessment(patient_id):
-    if current_user.role != 'admin':
+    if current_user.role == 'patient' and int(current_user.patient_id or 0) != int(patient_id):
+        return 'Unauthorized', 403
+    if current_user.role not in ('admin', 'patient'):
         return 'Unauthorized', 403
     db = get_db()
     patient = db.execute('SELECT id, name FROM patients WHERE id = ? AND COALESCE(is_deleted, 0) = 0',

@@ -328,7 +328,32 @@ document.addEventListener('DOMContentLoaded', function() {
                         'contact_inquiry': 'bg-warning text-dark',
                         'admin_broadcast': 'bg-secondary',
                         'system': 'bg-light text-dark',
-                    };
+};
+
+// Dark mode toggle
+(function() {
+    var toggle = document.getElementById('themeToggle');
+    var icon = document.getElementById('themeToggleIcon');
+    var label = document.getElementById('themeToggleLabel');
+    if (!toggle || !icon || !label) return;
+
+    function applyDark(enabled) {
+        document.documentElement.classList.toggle('dark', enabled);
+        icon.className = enabled ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+        var lang = document.documentElement.dir === 'rtl' ? 'he' : 'en';
+        label.textContent = enabled ? (lang === 'he' ? 'מצב בהיר' : 'Light Mode') : (lang === 'he' ? 'מצב כהה' : 'Dark Mode');
+        try { localStorage.setItem('clinic_dark_mode', enabled ? '1' : '0'); } catch(e) {}
+    }
+
+    toggle.addEventListener('click', function() {
+        var current = document.documentElement.classList.contains('dark');
+        applyDark(!current);
+    });
+
+    var saved = null;
+    try { saved = localStorage.getItem('clinic_dark_mode'); } catch(e) {}
+    if (saved === '1') applyDark(true);
+})();
                     var badgeClass = categoryColors[category] || 'bg-light text-dark';
                     var categoryLabel = {
                         'billing': App.translations.billing || 'Billing',

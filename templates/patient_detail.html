@@ -295,7 +295,12 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label">{{ t('Meeting Log') }}</label>
-                        <textarea name="content" class="form-control" rows="8" required></textarea>
+                        <div class="d-flex gap-1 mb-1 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill note-template-btn" data-template="soap">{{ t('SOAP') }}</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill note-template-btn" data-template="dap">{{ t('DAP') }}</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill note-template-btn" data-template="intake">{{ t('Intake') }}</button>
+                        </div>
+                        <textarea name="content" class="form-control" rows="8" required id="noteContent"></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label">{{ t('Document / Website Link') }}</label>
@@ -628,15 +633,36 @@
             if (e.target.closest('.line-item-row')) updateTotal();
         });
         updateTotal();
+
+        // Batch export checkbox handler
+        var batchChecks = document.querySelectorAll('.batch-receipt');
+        var batchBtn = document.getElementById('batchExportBtn');
+        var countSpan = document.getElementById('selectedCount');
+        function updateBatch() {
+            var c = document.querySelectorAll('.batch-receipt:checked').length;
+            if (countSpan) countSpan.textContent = c;
+            if (batchBtn) batchBtn.disabled = c === 0;
+        }
+        batchChecks.forEach(function(cb) { cb.addEventListener('change', updateBatch); });
+        updateBatch();
         </script>
 
         <div class="card border-0 shadow-sm">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-cash-coin me-2 text-primary"></i>{{ t('Billing History') }}</h5>
+                {% if receipts %}
+                <form method="post" action="{{ url_for('billing.export_receipts_batch', patient_id=patient['id']) }}" id="batchExportForm" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill" id="batchExportBtn" disabled>
+                        <i class="bi bi-download me-1"></i>{{ t('Export Selected') }} (<span id="selectedCount">0</span>)
+                    </button>
+                </form>
+                {% endif %}
             </div>
             <div class="card-body d-grid gap-2">
                 {% for receipt in receipts %}
                 <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-center gap-3 flex-wrap">
+                    <div><input type="checkbox" class="form-check-input batch-receipt me-2" form="batchExportForm" name="receipt_ids" value="{{ receipt['id'] }}"></div>
                     <div>
                         <div class="fw-semibold">{{ receipt['receipt_number'] or t('Receipt') }}</div>
                         <div class="small text-muted">{{ receipt['created_at'] }}</div>
@@ -1535,6 +1561,29 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var templates = {
+        soap: ["Subjective:", "- Patient reports: ", "", "Objective:", "- Appearance: ", "- Behavior: ", "- Mood/Affect: ", "", "Assessment:", "- Clinical impression: ", "- Progress toward goals: ", "", "Plan:", "- Continue current treatment approach", "- Next session focus: ", "- Homework/assignments: "].join("\n"),
+        dap: ["Data:", "- What the patient said/did: ", "- Observations: ", "", "Assessment:", "- Therapist's clinical analysis: ", "- Themes/patterns identified: ", "", "Plan:", "- Interventions for next session: ", "- Topics to explore: "].join("\n"),
+        intake: ["Presenting Problem:", "- Reason for referral: ", "- Duration of symptoms: ", "", "History:", "- Previous treatment: ", "- Medical history: ", "- Family psychiatric history: ", "", "Mental Status:", "- Appearance: ", "- Speech: ", "- Mood: ", "- Affect: ", "- Thought process: ", "- Cognition: ", "", "Risk Assessment:", "- Suicidal ideation: ", "- Self-harm: ", "- Substance use: ", "", "Diagnostic Impression:", "", "Treatment Recommendations:"].join("\n")
+    };
+
+    document.querySelectorAll('.note-template-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var template = this.dataset.template;
+            var ta = document.getElementById('noteContent');
+            if (!ta || !templates[template]) return;
+            if (ta.value.trim() && !confirm('Replace current content with template?')) return;
+            ta.value = templates[template];
+            ta.focus();
+        });
+    });
+})();
 </script>
 {% endblock %}
 

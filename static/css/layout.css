@@ -158,3 +158,22 @@
 [dir="rtl"] .bi-caret-right-fill {
     transform: scaleX(-1);
 }
+
+/* Dark mode */
+:root.dark { --bg: #1a1a2e; --surface: #16213e; --text: #e2e8f0; --border: #334155; --muted: #94a3b8; }
+html.dark body { background-color: #1a1a2e; color: #e2e8f0; }
+html.dark .bg-white { background-color: #16213e !important; }
+html.dark .card, html.dark .bg-white.rounded-2xl { background-color: #16213e; border-color: #334155; }
+html.dark .border-slate-100, html.dark .border-slate-200 { border-color: #334155 !important; }
+html.dark .text-slate-500, html.dark .text-slate-700, html.dark .text-muted { color: #94a3b8 !important; }
+html.dark .text-teal-900, html.dark .text-primary, html.dark .text-dark, html.dark .fw-semibold.text-dark { color: #e2e8f0 !important; }
+html.dark .bg-light, html.dark .bg-light-subtle { background-color: #1e293b !important; }
+html.dark .border-b { border-color: #334155 !important; }
+html.dark .navbar, html.dark nav.fixed { background-color: rgba(26, 26, 46, 0.9) !important; }
+html.dark .offcanvas { background-color: #16213e; color: #e2e8f0; }
+html.dark .offcanvas-header-brand { background-color: #0f172a; }
+html.dark .btn-outline-secondary { border-color: #475569; color: #cbd5e1; }
+html.dark .btn-outline-secondary:hover { background-color: #334155; color: #f1f5f9; }
+html.dark input.form-control, html.dark select.form-select, html.dark textarea.form-control { background-color: #1e293b; border-color: #475569; color: #e2e8f0; }
+html.dark .table { color: #e2e8f0; }
+html.dark .list-group-item { background-color: #16213e; color: #e2e8f0; border-color: #334155; }
