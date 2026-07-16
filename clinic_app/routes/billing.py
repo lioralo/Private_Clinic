@@ -201,6 +201,10 @@ def add_receipt(patient_id):
         desc = (descriptions[i] or '').strip()
         if not sid or price <= 0:
             continue
+        if sid == 'custom' or not sid.isdigit():
+            sid = None
+        else:
+            sid = int(sid)
         line_total = round(qty * price, 2)
         total += line_total
         items.append((sid, qty, price, line_total, desc))
@@ -240,6 +244,9 @@ def add_receipt(patient_id):
 
         db.commit()
         flash(f'Receipt {receipt_number} created for NIS {total:.2f}.', 'success')
+        from clinic_app.routes.messaging import notify_billing_receipt
+        patient = db.execute('SELECT name FROM patients WHERE id = ?', (patient_id,)).fetchone()
+        notify_billing_receipt(db, patient['name'] if patient else 'Unknown', total, receipt_number)
     except Exception:
         db.rollback()
         flash('Error creating receipt. Please try again.', 'error')

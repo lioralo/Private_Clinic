@@ -352,6 +352,7 @@ def contact_inquiry():
         (name, email, phone, message),
     )
     db.commit()
+    notify_contact_inquiry(db, name, message)
     flash('Your message has been sent. We will get back to you soon.', 'success')
     return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
 
@@ -487,9 +488,9 @@ def send_admin_notification():
     title_value = title or 'Clinic Update'
     for recipient in recipients:
         db.execute('''
-            INSERT INTO notifications (title, message, recipient_user_id, sender_id, audience, is_read)
-            VALUES (?, ?, ?, ?, ?, 0)
-        ''', (title_value, message, recipient['user_id'], current_user.id, audience))
+            INSERT INTO notifications (title, message, recipient_user_id, sender_id, audience, category, is_read)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+        ''', (title_value, message, recipient['user_id'], current_user.id, audience, 'admin_broadcast'))
 
     db.commit()
     flash(f'Notification sent to {len(recipients)} patient(s).', 'success')
@@ -621,12 +622,38 @@ def mark_notifications_read():
             return jsonify({'status': 'error', 'message': 'No notification selected.'}), 400
 
         placeholders = ','.join(['?'] * len(notification_ids))
-        db.execute(f'''
-            UPDATE notifications
-            SET is_read = 1
-            WHERE id IN ({placeholders})
-              AND recipient_user_id = ?
-        ''', [*notification_ids, current_user.id])
-
     db.commit()
     return jsonify({'status': 'success'})
+
+
+def create_system_notification(db, title, message, category='system', audience='admin'):
+    db.execute('''
+        INSERT INTO notifications (title, message, category, audience, is_read)
+        VALUES (?, ?, ?, ?, 0)
+    ''', (title, message, category, audience))
+    db.commit()
+
+
+def notify_billing_receipt(db, patient_name, amount, receipt_number):
+    create_system_notification(db,
+        'Receipt Created',
+        f'Receipt {receipt_number} created for {patient_name} — NIS {amount:.2f}',
+        category='billing')
+
+
+def notify_appointment(db, title, message):
+    create_system_notification(db, title, message, category='appointment')
+
+
+def notify_file_upload(db, filename, patient_name=None):
+    msg = f'File uploaded: {filename}'
+    if patient_name:
+        msg = f'{patient_name}: {msg}'
+    create_system_notification(db, 'File Uploaded', msg, category='file_upload')
+
+
+def notify_contact_inquiry(db, name, message_preview):
+    create_system_notification(db,
+        f'New Inquiry from {name}',
+        message_preview[:200],
+        category='contact_inquiry')

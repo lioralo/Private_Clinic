@@ -320,7 +320,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 notificationHistoryList.innerHTML = items.map(function(item) {
-                    var badgeLabel = escapeHtml(item.audience ? String(item.audience).replace(/-/g, ' ') : App.translations.update);
+                    var category = item.category || 'system';
+                    var categoryColors = {
+                        'billing': 'bg-success',
+                        'appointment': 'bg-primary',
+                        'file_upload': 'bg-info text-dark',
+                        'contact_inquiry': 'bg-warning text-dark',
+                        'admin_broadcast': 'bg-secondary',
+                        'system': 'bg-light text-dark',
+                    };
+                    var badgeClass = categoryColors[category] || 'bg-light text-dark';
+                    var categoryLabel = {
+                        'billing': App.translations.billing || 'Billing',
+                        'appointment': App.translations.appointment || 'Appointment',
+                        'file_upload': App.translations.fileUpload || 'File',
+                        'contact_inquiry': App.translations.inquiry || 'Inquiry',
+                        'admin_broadcast': App.translations.broadcast || 'Broadcast',
+                        'system': App.translations.system || 'System',
+                    }[category] || category;
                     var title = escapeHtml(item.title || App.translations.clinicUpdate);
                     var message = linkifyText(item.message || '');
                     var createdAt = escapeHtml(item.created_at || '');
@@ -333,7 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         '<div class="notification-history-item border rounded-3 p-2 ' + (isUnread ? 'border-primary-subtle bg-light-subtle' : '') + '">',
                             '<div class="d-flex justify-content-between align-items-start gap-2 mb-1">',
                                 '<div class="fw-semibold text-dark">' + title + '</div>',
-                                '<span class="badge bg-light text-dark border text-uppercase">' + badgeLabel + '</span>',
+                                '<span class="badge ' + badgeClass + ' border rounded-pill text-uppercase small">' + categoryLabel + '</span>',
                             '</div>',
                             '<div class="text-muted mb-2" style="white-space:pre-wrap;">' + message + '</div>',
                             '<div class="d-flex justify-content-between align-items-center gap-2">',
