@@ -39,7 +39,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
 
     <!-- Tailwind CSS (built) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}?v={{ app_version }}">
 
     <!-- Fonts: Poppins (headlines), Roboto (body), Heebo (Hebrew) — display=optional avoids layout shift -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,7 +48,7 @@
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}?v={{ app_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}" media="print">
 
     <!-- Tailwind Configuration (Clean design system) -->
@@ -905,7 +905,7 @@
             });
         }
     </script>
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v={{ app_version }}"></script>
 
     <!-- Reusable confirmation modal -->
     <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">

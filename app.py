@@ -1485,7 +1485,8 @@ def inject_global_vars():
         unread_messages=unread_messages,
         notification_unread_count=notification_unread_count,
         pending_cancel_count=pending_cancel_count,
-        site_settings=get_site_settings(db)
+        site_settings=get_site_settings(db),
+        app_version='20260716_2',
     )
 
 @app.route('/set_lang/<lang>')
