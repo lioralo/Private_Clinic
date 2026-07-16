@@ -43,7 +43,7 @@ def download_receipt(receipt_id):
     from fpdf import FPDF
     import os as _os
 
-    from clinic_app.utils import get_site_settings
+    from app import get_site_settings
     settings = get_site_settings(db)
     clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
     clinic_id = settings.get('clinic_business_id', '') or ''
@@ -215,7 +215,7 @@ def add_receipt(patient_id):
 
     total = round(total, 2)
 
-    from clinic_app.utils import get_site_settings
+    from app import get_site_settings
     settings = get_site_settings(db)
     vat_rate = float(settings.get('clinic_vat_rate', 0) or 0)
     vat_amount = round(total * vat_rate, 2)

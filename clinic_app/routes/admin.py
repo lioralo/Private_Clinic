@@ -1847,7 +1847,7 @@ def morning_test_connection():
         return jsonify({'error': 'Unauthorized'}), 403
 
     db = get_db()
-    from clinic_app.utils import get_site_settings
+    from app import get_site_settings
     settings = get_site_settings(db)
 
     try:

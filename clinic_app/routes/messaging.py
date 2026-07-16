@@ -511,6 +511,7 @@ def get_notifications():
                        COALESCE(title, 'Clinic Update') AS title,
                        message,
                        COALESCE(audience, 'admin') AS audience,
+                       COALESCE(category, 'system') AS category,
                        recipient_user_id,
                        sender_id,
                        COALESCE(is_read, 0) AS is_read,
@@ -528,6 +529,7 @@ def get_notifications():
                        COALESCE(title, 'Clinic Update') AS title,
                        message,
                        COALESCE(audience, 'admin') AS audience,
+                       COALESCE(category, 'system') AS category,
                        recipient_user_id,
                        sender_id,
                        COALESCE(is_read, 0) AS is_read,
@@ -544,6 +546,7 @@ def get_notifications():
                        COALESCE(title, 'Clinic Update') AS title,
                        message,
                        COALESCE(audience, 'patient') AS audience,
+                       COALESCE(category, 'system') AS category,
                        recipient_user_id,
                        sender_id,
                        COALESCE(is_read, 0) AS is_read,
@@ -559,6 +562,7 @@ def get_notifications():
                        COALESCE(title, 'Clinic Update') AS title,
                        message,
                        COALESCE(audience, 'patient') AS audience,
+                       COALESCE(category, 'system') AS category,
                        recipient_user_id,
                        sender_id,
                        COALESCE(is_read, 0) AS is_read,
@@ -575,7 +579,24 @@ def get_notifications():
         db.execute(f'UPDATE notifications SET is_read = 1 WHERE id IN ({placeholders})', notification_ids)
         db.commit()
 
-    return jsonify([dict(n) for n in notifications])
+    result = [dict(n) for n in notifications]
+
+    # Merge contact inquiries into notification feed for admins
+    if current_user.role == 'admin':
+        inquiries = db.execute('''
+            SELECT 0 AS id, 'New Inquiry' AS title,
+                   (name || ': ' || SUBSTR(message, 1, 200)) AS message,
+                   'contact_inquiry' AS audience,
+                   NULL AS recipient_user_id, NULL AS sender_id,
+                   COALESCE(is_read, 0) AS is_read, created_at,
+                   'contact_inquiry' AS category
+            FROM contact_inquiries
+            ORDER BY datetime(created_at) DESC, id DESC LIMIT 20
+        ''').fetchall()
+        result.extend([dict(r) for r in inquiries])
+        result.sort(key=lambda x: x['created_at'] or '', reverse=True)
+
+    return jsonify(result)
 
 
 @messaging_bp.route('/api/notifications/mark_read', methods=['POST'])
