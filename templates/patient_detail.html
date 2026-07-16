@@ -650,7 +650,7 @@
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge {% if receipt['status'] == 'paid' %}bg-success-subtle text-success{% elif receipt['status'] == 'pending' %}bg-warning-subtle text-warning{% else %}bg-light text-muted{% endif %} border rounded-pill px-3 py-2">{{ receipt['status'] or 'paid' }}</span>
                         <span class="badge bg-white text-primary border rounded-pill px-3 py-2">NIS {{ receipt['amount'] }}</span>
-                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill" download>
                             <i class="bi bi-download"></i>
                         </a>
                         {% if not receipt['morning_doc_id'] %}

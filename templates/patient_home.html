@@ -396,7 +396,7 @@
                             <div class="fw-semibold small">{{ receipt['description'] or t('Service Receipt') }}</div>
                             <div class="text-muted" style="font-size:.8rem;">{{ receipt['created_at'][:10] if receipt['created_at'] else '' }} · {{ receipt['amount'] }}</div>
                         </div>
-                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill">
+                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill" download>
                             <i class="bi bi-download me-1"></i>{{ t('Download') }}
                         </a>
                     </div>

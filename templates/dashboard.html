@@ -75,7 +75,7 @@
                                 <div class="list-group-item py-3">
                                     <div class="d-flex justify-content-between mb-1">
                                         <span class="fw-bold text-success">NIS {{ "%.2f"|format(receipt['amount']) }}</span>
-                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 smallest" onclick="window.print()">Print</button>
+                                        <a href="{{ url_for('billing.download_receipt', receipt_id=receipt['id']) }}" class="btn btn-sm btn-outline-primary py-0 px-2 smallest">{{ t('Download') }}</a>
                                     </div>
                                     <p class="text-muted smaller mb-0">{{ receipt['description'] or 'Service Receipt' }}</p>
                                     <span class="text-muted smallest opacity-75">{{ receipt['created_at'].split(' ')[0] }}</span>
