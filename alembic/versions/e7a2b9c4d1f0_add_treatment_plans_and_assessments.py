@@ -133,7 +133,10 @@ def upgrade() -> None:
     # ---------------------------------------------------------------
     # 4. Add SMS preference to patients
     # ---------------------------------------------------------------
-    op.execute('ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 0')
+    try:
+        op.execute('ALTER TABLE patients ADD COLUMN reminder_sms_enabled BOOLEAN DEFAULT 0')
+    except Exception:
+        pass
 
     # ---------------------------------------------------------------
     # 5. SMS log
