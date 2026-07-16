@@ -7,6 +7,16 @@ from clinic_app.models import get_db
 reports_bp = Blueprint('reports', __name__, url_prefix='/admin')
 
 
+def _to_dicts(rows):
+    if rows is None:
+        return None
+    if hasattr(rows, 'fetchall'):
+        rows = rows.fetchall()
+    if isinstance(rows, list):
+        return [dict(r) for r in rows]
+    return dict(rows) if rows else {}
+
+
 @reports_bp.route('/reports')
 @login_required
 def financial_reports():
@@ -66,12 +76,12 @@ def financial_reports():
 
     return render_template('reports_financial.html',
         month_start=month_start,
-        monthly_revenue=monthly_revenue,
-        outstanding=outstanding,
-        by_payment=by_payment,
-        by_service=by_service,
-        top_patients=top_patients,
-        revenue_history=list(reversed(revenue_history)),
+        monthly_revenue=dict(monthly_revenue),
+        outstanding=dict(outstanding),
+        by_payment=_to_dicts(by_payment),
+        by_service=_to_dicts(by_service),
+        top_patients=_to_dicts(top_patients),
+        revenue_history=_to_dicts(list(reversed(revenue_history))),
     )
 
 
@@ -192,12 +202,12 @@ def clinic_analytics():
         no_show_rate=no_show_rate,
         total_appts=total_appts,
         no_shows=no_shows,
-        status_dist=status_dist,
-        sessions_history=list(reversed(sessions_history)),
+        status_dist=_to_dicts(status_dist),
+        sessions_history=_to_dicts(list(reversed(sessions_history))),
         avg_sessions=avg_sessions,
-        assessment_improvement=assessment_improvement,
-        meeting_types=meeting_types,
-        patient_additions=list(reversed(patient_additions)),
+        assessment_improvement=_to_dicts(assessment_improvement),
+        meeting_types=_to_dicts(meeting_types),
+        patient_additions=_to_dicts(list(reversed(patient_additions))),
     )
 
 

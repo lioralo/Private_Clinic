@@ -249,7 +249,7 @@ def export_dashboard():
         for table in tables:
             try:
                 rows = [dict(r) for r in db.execute(f'SELECT * FROM {table}').fetchall()]
-                z.writestr(f'{table}.json', json.dumps(rows, ensure_ascii=False, indent=2, default=str))
+                z.writestr(f'{table}.json', json.dumps(rows, ensure_ascii=False, indent=2))
             except:
                 pass
     buf.seek(0)
