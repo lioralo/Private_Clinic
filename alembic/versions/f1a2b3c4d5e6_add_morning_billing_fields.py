@@ -18,12 +18,25 @@ depends_on = None
 
 
 def upgrade():
-    op.execute("ALTER TABLE receipts ADD COLUMN morning_doc_id TEXT")
-    op.execute("ALTER TABLE receipts ADD COLUMN morning_sync_status TEXT DEFAULT 'pending'")
-    op.execute("ALTER TABLE receipts ADD COLUMN morning_synced_at TIMESTAMP")
-    op.execute("ALTER TABLE patients ADD COLUMN street TEXT")
-    op.execute("ALTER TABLE patients ADD COLUMN city TEXT")
-    op.execute("ALTER TABLE patients ADD COLUMN zip_code TEXT")
+    for col in [
+        "morning_doc_id TEXT",
+        "morning_sync_status TEXT DEFAULT 'pending'",
+        "morning_synced_at TIMESTAMP",
+    ]:
+        try:
+            op.execute(f"ALTER TABLE receipts ADD COLUMN {col}")
+        except Exception:
+            pass
+
+    for col in [
+        "street TEXT",
+        "city TEXT",
+        "zip_code TEXT",
+    ]:
+        try:
+            op.execute(f"ALTER TABLE patients ADD COLUMN {col}")
+        except Exception:
+            pass
 
 
 def downgrade():
