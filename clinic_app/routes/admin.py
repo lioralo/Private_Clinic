@@ -176,7 +176,7 @@ def _get_dashboard_missing_recurring(db):
               SELECT 1 FROM group_member_history h
               JOIN groups g ON g.id = h.group_id
               WHERE h.patient_id = patients.id
-                AND h.end_date IS NULL
+                AND h.left_at IS NULL
                 AND COALESCE(g.is_archived, 0) = 0
           )
         ORDER BY name ASC
@@ -1007,7 +1007,15 @@ def admin_profile():
         if selected_interval not in GDOC_AUTO_SYNC_INTERVAL_SECONDS:
             selected_interval = 'daily'
 
-        if any(key in request.form for key in DEFAULT_SITE_SETTINGS.keys()) or 'gdoc_sync_targets' in request.form:
+        if request.form.get('about_enabled') is not None or any(
+            key in request.form for key in (
+                'about_enabled', 'about_phone', 'about_email', 'about_text', 'about_map_url',
+                'questionnaires_source_sheet_url', 'morning_api_key', 'morning_api_secret',
+                'morning_api_url', 'clinic_business_name', 'clinic_business_id',
+                'clinic_address', 'clinic_phone', 'clinic_email', 'clinic_vat_rate',
+                'gdocs_auto_sync_enabled',
+            )
+        ):
             save_site_settings(db, {
                 'about_enabled': '1' if request.form.get('about_enabled') else '0',
                 'about_phone': (request.form.get('about_phone') or '').strip(),
@@ -1015,6 +1023,10 @@ def admin_profile():
                 'about_text': (request.form.get('about_text') or '').strip(),
                 'about_map_url': (request.form.get('about_map_url') or '').strip(),
                 'questionnaires_source_sheet_url': (request.form.get('questionnaires_source_sheet_url') or '').strip(),
+            })
+
+        if any(key in request.form for key in ('gdocs_auto_sync_enabled', 'gdocs_auto_sync_interval', 'gdoc_sync_targets')):
+            save_site_settings(db, {
                 'gdocs_auto_sync_enabled': '1' if request.form.get('gdocs_auto_sync_enabled') else '0',
                 'gdocs_auto_sync_interval': selected_interval,
                 'gdocs_auto_sync_targets_json': json.dumps(selected_sync_targets),

@@ -2786,7 +2786,7 @@ def init_db():
                     from alembic import command
                     alembic_cfg = Config(app.config.get('ALEMBIC_INI', 'alembic.ini'))
                     alembic_cfg.set_main_option('sqlalchemy.url', f'sqlite:///{database}')
-                    command.upgrade(alembic_cfg, 'head')
+                    command.upgrade(alembic_cfg, 'heads')
                     print('Applied pending Alembic migrations.')
                 except Exception as exc:
                     print(f'Alembic upgrade skipped: {exc}')

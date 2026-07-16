@@ -86,27 +86,18 @@
         <span class="eyebrow">{{ t('Booking mode') }}</span>
         <span class="big" id="selectedSlotText">{{ t('Click a slot, then confirm in the panel') }}</span>
     </div>
-</div>
-
-<div class="calendar-layout mb-4">
-    <div>
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
-            <div class="p-5">
-                <div id="weeklyCalendar"></div>
-            </div>
+    <div class="calendar-mini-card">
+        <span class="eyebrow">{{ t('Follow-Up') }}</span>
+        <div id="followUpAlerts" class="mt-2" style="max-height:120px;overflow-y:auto;">
+            {{ empty_state(icon='bi-bell', message=t('None')) }}
         </div>
     </div>
-    <div class="calendar-side-stack">
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
-            <button class="p-5 border-b border-slate-100 text-start d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#followUpAlertsWrap" aria-expanded="true" aria-controls="followUpAlertsWrap">
-                <h5 class="font-bold mb-0 text-primary">{{ t('Follow-Up Indicators') }}</h5>
-                <i class="bi bi-chevron-down text-muted"></i>
-            </button>
-            <div class="collapse show" id="followUpAlertsWrap">
-                <div class="p-5" id="followUpAlerts">
-                    {{ empty_state(icon='bi-bell', message=t('No pending follow-up indicators.')) }}
-                </div>
-            </div>
+</div>
+
+<div class="calendar-full-width mb-4">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100">
+        <div class="p-5">
+            <div id="weeklyCalendar"></div>
         </div>
     </div>
 </div>
