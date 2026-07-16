@@ -1,0 +1,146 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Clinic Analytics') }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-bar-chart-fill me-2"></i>{{ t('Clinic Analytics') }}</h2>
+        <p class="text-slate-500 text-sm mb-0">{{ month_start.strftime('%B %Y') }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('reports.financial_reports') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-graph-up me-1"></i>{{ t('Financial Reports') }}
+        </a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-speedometer2 me-1"></i>{{ t('Dashboard') }}
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body p-3 text-center">
+            <div class="text-muted small text-uppercase">{{ t('Sessions') }}</div>
+            <div class="fs-2 fw-bold text-primary">{{ sessions_this_month }}</div>
+            <div class="small {% if sessions_this_month >= sessions_last_month %}text-success{% else %}text-danger{% endif %}">
+                {% set delta = sessions_this_month - sessions_last_month %}
+                {% if delta >= 0 %}+{% endif %}{{ delta }} vs {{ t('last month') }}
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body p-3 text-center">
+            <div class="text-muted small text-uppercase">{{ t('New Patients') }}</div>
+            <div class="fs-2 fw-bold text-success">{{ new_patients }}</div>
+            <div class="small text-muted">{{ total_patients }} {{ t('total') }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body p-3 text-center">
+            <div class="text-muted small text-uppercase">{{ t('Active Patients') }}</div>
+            <div class="fs-2 fw-bold text-info">{{ active_patients }}</div>
+            <div class="small text-muted">{{ t('this month') }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body p-3 text-center">
+            <div class="text-muted small text-uppercase">{{ t('No-Show Rate') }}</div>
+            <div class="fs-2 fw-bold {% if no_show_rate > 15 %}text-danger{% elif no_show_rate > 5 %}text-warning{% else %}text-success{% endif %}">{{ no_show_rate }}%</div>
+            <div class="small text-muted">{{ no_shows }}/{{ total_appts }} {{ t('appointments') }}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body p-3 text-center">
+            <div class="text-muted small text-uppercase">{{ t('Avg Sessions') }}</div>
+            <div class="fs-2 fw-bold text-primary">{{ avg_sessions }}</div>
+            <div class="small text-muted">{{ t('per patient') }}</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>{{ t('Sessions per Month') }}</h5></div>
+            <div class="card-body p-4"><canvas id="sessionsChart" height="200"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-person-plus me-2 text-primary"></i>{{ t('New Patients per Month') }}</h5></div>
+            <div class="card-body p-4"><canvas id="patientsChart" height="200"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-diagram-3 me-2 text-primary"></i>{{ t('Patient Status') }}</h5></div>
+            <div class="card-body p-4"><canvas id="statusChart" height="200"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-camera-video me-2 text-primary"></i>{{ t('Meeting Types') }}</h5></div>
+            <div class="card-body p-0"><table class="table table-sm table-borderless mb-0"><tbody>
+                {% for row in meeting_types %}
+                <tr><td class="ps-4">{{ row['type']|capitalize }}</td><td class="text-end fw-semibold pe-4">{{ row['count'] }}</td></tr>
+                {% else %}<tr><td class="ps-4 text-muted">{{ t('No data') }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-data me-2 text-primary"></i>{{ t('Assessment Improvement') }}</h5></div>
+            <div class="card-body p-0"><table class="table table-sm table-borderless mb-0"><tbody>
+                {% for row in assessment_improvement %}
+                <tr>
+                    <td class="ps-4">{{ row['name'] }}</td>
+                    <td class="text-end pe-4">
+                        <span class="fw-semibold {% if row['improvement'] > 0 %}text-success{% elif row['improvement'] < 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {% if row['improvement'] > 0 %}-{% endif %}{{ row['improvement']|abs }} {{ t('pts') }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}<tr><td class="ps-4 text-muted">{{ t('No data') }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var colors = ['#2563eb','#dc2626','#16a34a','#ca8a04','#9333ea','#0891b2'];
+
+    var sc = document.getElementById('sessionsChart');
+    if (sc) {
+        var sh = {{ sessions_history|tojson }};
+        new Chart(sc, { type: 'line', data: {
+            labels: sh.map(function(h) { return h.month; }),
+            datasets: [{ label: '{{ t("Sessions") }}', data: sh.map(function(h) { return h.count; }), borderColor: '#2563eb', backgroundColor: '#2563eb20', fill: true, tension: 0.3, pointRadius: 4 }]
+        }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+    }
+
+    var pc = document.getElementById('patientsChart');
+    if (pc) {
+        var pa = {{ patient_additions|tojson }};
+        new Chart(pc, { type: 'bar', data: {
+            labels: pa.map(function(h) { return h.month; }),
+            datasets: [{ label: '{{ t("New Patients") }}', data: pa.map(function(h) { return h.count; }), backgroundColor: '#16a34a', borderRadius: 6 }]
+        }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+    }
+
+    var stc = document.getElementById('statusChart');
+    if (stc) {
+        var sd = {{ status_dist|tojson }};
+        new Chart(stc, { type: 'doughnut', data: {
+            labels: sd.map(function(h) { return h.status; }),
+            datasets: [{ data: sd.map(function(h) { return h.count; }), backgroundColor: colors.slice(0, sd.length) }]
+        }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+    }
+})();
+</script>
+{% endblock %}

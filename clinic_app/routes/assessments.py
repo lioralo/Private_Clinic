@@ -262,5 +262,39 @@ def api_get_questions(type_id):
     return jsonify([dict(q) for q in questions])
 
 
+@assessments_bp.route('/api/patient/<int:patient_id>/trends')
+@login_required
+def assessment_trends_api(patient_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    types = db.execute('''
+        SELECT at.name, at.display_name
+        FROM assessments a
+        JOIN assessment_types at ON at.id = a.assessment_type_id
+        WHERE a.patient_id = ? AND at.is_active = 1
+        GROUP BY at.name
+        ORDER BY at.name
+    ''', (patient_id,)).fetchall()
+
+    result = {}
+    for t in types:
+        rows = db.execute('''
+            SELECT a.taken_at, a.total_score, a.severity_level
+            FROM assessments a
+            JOIN assessment_types at ON at.id = a.assessment_type_id
+            WHERE a.patient_id = ? AND at.name = ?
+            ORDER BY a.taken_at ASC
+        ''', (patient_id, t['name'])).fetchall()
+        if rows:
+            result[t['name']] = [{
+                'date': r['taken_at'],
+                'score': float(r['total_score']) if r['total_score'] is not None else None,
+                'severity': r['severity_level'] or '',
+            } for r in rows]
+
+    return jsonify({'types': list(result.keys()), 'data': result})
+
+
 def register_assessment_routes(app):
     app.register_blueprint(assessments_bp)

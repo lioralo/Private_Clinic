@@ -1,0 +1,127 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Financial Reports') }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-graph-up me-2"></i>{{ t('Financial Reports') }}</h2>
+        <p class="text-slate-500 text-sm mb-0">{{ month_start.strftime('%B %Y') }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('reports.clinic_analytics') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-bar-chart me-1"></i>{{ t('Analytics') }}
+        </a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill">
+            <i class="bi bi-speedometer2 me-1"></i>{{ t('Dashboard') }}
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="text-muted small text-uppercase">{{ t('Revenue This Month') }}</div>
+                <div class="fs-2 fw-bold text-success mt-1">NIS {{ '%.2f'|format(monthly_revenue['total']) }}</div>
+                <div class="small text-muted">{{ monthly_revenue['count'] }} {{ t('receipts') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="text-muted small text-uppercase">{{ t('Outstanding') }}</div>
+                <div class="fs-2 fw-bold text-danger mt-1">NIS {{ '%.2f'|format(outstanding['total']) }}</div>
+                <div class="small text-muted">{{ outstanding['count'] }} {{ t('unpaid') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="text-muted small text-uppercase">{{ t('Avg Receipt') }}</div>
+                {% set avg = (monthly_revenue['total'] / monthly_revenue['count'])|round(2) if monthly_revenue['count'] > 0 else 0 %}
+                <div class="fs-2 fw-bold text-primary mt-1">NIS {{ '%.2f'|format(avg) }}</div>
+                <div class="small text-muted">{{ t('per transaction') }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body p-4 text-center">
+                <div class="text-muted small text-uppercase">{{ t('Services Used') }}</div>
+                <div class="fs-2 fw-bold text-info mt-1">{{ by_service|length }}</div>
+                <div class="small text-muted">{{ t('types') }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>{{ t('Revenue History') }}</h5></div>
+            <div class="card-body p-4"><canvas id="revenueHistoryChart" height="250"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-credit-card me-2 text-primary"></i>{{ t('By Payment Method') }}</h5></div>
+            <div class="card-body p-0"><table class="table table-sm table-borderless mb-0"><tbody>
+                {% for row in by_payment %}
+                <tr><td class="ps-4">{{ row['method']|capitalize }}</td><td class="text-end fw-semibold">NIS {{ '%.2f'|format(row['total']) }}</td><td class="text-muted small pe-4">{{ row['count'] }}</td></tr>
+                {% else %}<tr><td class="ps-4 text-muted">{{ t('No data') }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-tags me-2 text-primary"></i>{{ t('Revenue by Service') }}</h5></div>
+            <div class="card-body p-0"><table class="table table-sm table-borderless mb-0"><tbody>
+                {% for row in by_service %}
+                <tr><td class="ps-4">{{ row['name'] }}</td><td class="text-end fw-semibold">NIS {{ '%.2f'|format(row['total']) }}</td><td class="text-muted small pe-4">x{{ row['count'] }}</td></tr>
+                {% else %}<tr><td class="ps-4 text-muted">{{ t('No data') }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-people me-2 text-primary"></i>{{ t('Top Patients') }}</h5></div>
+            <div class="card-body p-0"><table class="table table-sm table-borderless mb-0"><tbody>
+                {% for row in top_patients %}
+                <tr><td class="ps-4">{{ row['name'] }}</td><td class="text-end fw-semibold">NIS {{ '%.2f'|format(row['total']) }}</td><td class="text-muted small pe-4">x{{ row['receipt_count'] }}</td></tr>
+                {% else %}<tr><td class="ps-4 text-muted">{{ t('No data') }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var ctx = document.getElementById('revenueHistoryChart');
+    if (!ctx) return;
+    var history = {{ revenue_history|tojson }};
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: history.map(function(h) { return h.month; }),
+            datasets: [{
+                label: 'NIS',
+                data: history.map(function(h) { return h.total; }),
+                backgroundColor: '#2563eb',
+                borderRadius: 6,
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: { legend: { display: false } }
+        }
+    });
+})();
+</script>
+{% endblock %}

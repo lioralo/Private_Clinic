@@ -45,6 +45,7 @@ from clinic_app.routes.admin import admin_bp
 from clinic_app.routes.google_docs import google_docs_bp
 from clinic_app.routes.treatment_plans import treatment_plans_bp
 from clinic_app.routes.assessments import assessments_bp
+from clinic_app.routes.reports import reports_bp
 from clinic_app.utils import (
     parse_recurrence_days,
     recurring_occurrences_between,
@@ -99,7 +100,9 @@ app.register_blueprint(google_calendar_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(google_docs_bp)
 app.register_blueprint(treatment_plans_bp)
+from clinic_app.routes.reports import reports_bp
 app.register_blueprint(assessments_bp)
+app.register_blueprint(reports_bp)
 
 # Keep pre-refactor endpoint names stable for tests and backward compatibility.
 # Map: old_endpoint_name -> (blueprint_endpoint_name, url_rule, methods)

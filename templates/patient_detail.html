@@ -148,6 +148,16 @@
 
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
     <div class="p-5 border-b border-slate-100">
+        <h5 class="font-bold mb-0"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>{{ t('Assessment Trends') }}</h5>
+    </div>
+    <div class="p-4">
+        <canvas id="assessmentTrendsChart" height="250"></canvas>
+        <p class="text-muted small mb-0 mt-2 text-center" id="trendsEmpty" style="display:none">{{ t('No assessments recorded yet.') }}</p>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
+    <div class="p-5 border-b border-slate-100">
         <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoalsBody" aria-expanded="false" aria-controls="patientGoalsBody" onclick="toggleStablePanel(this)">
             <span class="font-bold mb-0"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</span>
             <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
@@ -1525,5 +1535,62 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var patientId = {{ patient['id'] }};
+    var canvas = document.getElementById('assessmentTrendsChart');
+    var emptyMsg = document.getElementById('trendsEmpty');
+    if (!canvas || !patientId) return;
+
+    var colors = ['#2563eb','#dc2626','#16a34a','#ca8a04','#9333ea','#0891b2','#ea580c','#4f46e5','#db2777'];
+    var chart = null;
+
+    fetch('/assessments/api/patient/' + patientId + '/trends')
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
+            var types = result.types || [];
+            var data = result.data || {};
+            if (types.length === 0) {
+                if (emptyMsg) emptyMsg.style.display = 'block';
+                return;
+            }
+            var datasets = [];
+            types.forEach(function(typeName, i) {
+                var points = data[typeName] || [];
+                datasets.push({
+                    label: typeName,
+                    data: points.map(function(p) { return {x: p.date, y: p.score}; }),
+                    borderColor: colors[i % colors.length],
+                    backgroundColor: colors[i % colors.length] + '20',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                });
+            });
+            chart = new Chart(canvas, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        x: { type: 'time', time: { unit: 'day' }, title: { display: false } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Score' } }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        })
+        .catch(function() { if (emptyMsg) emptyMsg.style.display = 'block'; });
+})();
 </script>
 {% endblock %}
