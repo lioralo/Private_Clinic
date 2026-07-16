@@ -100,14 +100,21 @@ def upgrade():
          'תוכן — פירוט תוכן הפגישה, התרחשויות, התערבויות חשובות', 'textarea', '[]', 1),
     ]
     for q_order, q_key, q_en, q_he, q_type, q_opts, q_req in questions:
-        op.execute(
-            'INSERT OR IGNORE INTO assessment_questions '
-            '(assessment_type_id, question_order, question_key, '
-            'question_text_en, question_text_he, question_type, options_json, required) '
-            "VALUES ((SELECT id FROM assessment_types WHERE name = 'group_meeting_template'), "
-            '?, ?, ?, ?, ?, ?, ?)',
-            (q_order, q_key, q_en, q_he, q_type, q_opts, q_req)
-        )
+        op.execute(f"""
+            INSERT OR IGNORE INTO assessment_questions
+                (assessment_type_id, question_order, question_key,
+                 question_text_en, question_text_he, question_type, options_json, required)
+            VALUES (
+                (SELECT id FROM assessment_types WHERE name = 'group_meeting_template'),
+                {q_order},
+                '{q_key}',
+                '{q_en.replace("'", "''")}',
+                '{q_he.replace("'", "''")}',
+                '{q_type}',
+                '{q_opts}',
+                {q_req}
+            )
+        """)
 
 
 def downgrade():
