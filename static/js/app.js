@@ -446,9 +446,34 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    function loadContactInquiries() {
+        var list = document.getElementById('contactInquiriesList');
+        if (!list) return;
+        fetch('/api/contact_inquiries?limit=5')
+            .then(function(r) { return r.json(); })
+            .then(function(items) {
+                if (!items || items.length === 0) {
+                    list.innerHTML = '<div class="text-muted small">' + App.translations.noNotifications + '</div>';
+                    return;
+                }
+                list.innerHTML = items.map(function(item) {
+                    return '<div class="border rounded p-2 ' + (Number(item.is_read) ? '' : 'bg-warning-subtle') + '">' +
+                        '<div class="fw-semibold small">' + escapeHtml(item.name || '') + '</div>' +
+                        '<div class="small">' + escapeHtml((item.message || '').substring(0, 80)) + '</div>' +
+                        '<div class="d-flex justify-content-between align-items-center">' +
+                            '<span class="smallest text-muted">' + escapeHtml(item.created_at || '') + '</span>' +
+                            (item.email ? '<span class="smallest text-muted">' + escapeHtml(item.email) + '</span>' : '') +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+            })
+            .catch(function() { list.innerHTML = '<div class="text-danger small">Error</div>'; });
+    }
+
     if (offcanvas) {
         offcanvas.addEventListener('show.bs.offcanvas', function () {
             loadMessages();
+            loadContactInquiries();
         });
         if (conversationSelect) {
             conversationSelect.addEventListener('change', function () {

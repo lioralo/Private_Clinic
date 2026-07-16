@@ -638,18 +638,6 @@
         </main>
     </div>{# /main content column #}
 </div>{# /flex wrapper #}
-
-{# Floating notification bell (desktop) #}
- <button type="button" id="floatingNotificationBtn"
-    class="hidden float-noti-btn items-center justify-center w-12 h-12 rounded-full shadow-lg bg-white border border-slate-200 text-black hover:bg-gray-100 transition-colors fixed z-50 no-underline"
-    style="top:5rem;inset-inline-end:1.5rem"
-   data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
-   aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
-    <i class="bi bi-bell-fill" style="font-size:20px"></i>
-    {% if notification_unread_count is defined and notification_unread_count > 0 %}
-    <span class="absolute top-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" style="inset-inline-end:0.25rem;"></span>
-    {% endif %}
-</button>
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 </main>
 {% else %}
@@ -736,6 +724,18 @@
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
             </div>
         </form>
+
+        {% if current_user.role == 'admin' %}
+        <div class="mt-3 border-top pt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0 fw-bold text-primary small"><i class="bi bi-envelope me-1"></i>{{ t('Contact Inquiries') }}</h6>
+                <a href="{{ url_for('admin_contact_inquiries') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0 small">{{ t('View All') }}</a>
+            </div>
+            <div id="contactInquiriesList" class="d-flex flex-column gap-1 small text-muted">
+                <div class="text-muted small">{{ t('Loading...') }}</div>
+            </div>
+        </div>
+        {% endif %}
       </div>
     </div>
 

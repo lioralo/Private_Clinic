@@ -360,6 +360,20 @@ def contact_inquiry():
 contact_inquiry.is_csrf_exempt = True  # public endpoint
 
 
+@messaging_bp.route('/api/contact_inquiries')
+@login_required
+def api_contact_inquiries():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    db = get_db()
+    limit = int(request.args.get('limit', 10))
+    rows = db.execute(
+        'SELECT id, name, email, phone, message, is_read, created_at FROM contact_inquiries ORDER BY created_at DESC LIMIT ?',
+        (limit,)
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
 @messaging_bp.route('/admin/contact-inquiries')
 @login_required
 def admin_contact_inquiries():
