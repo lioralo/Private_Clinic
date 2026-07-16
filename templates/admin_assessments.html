@@ -17,13 +17,13 @@
             <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold">{{ t('Questionnaire Types') }}</h5></div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush" id="typesList">
-                    {% for t in assessment_types %}
-                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center type-item {% if loop.first %}active{% endif %}" data-type-id="{{ t['id'] }}">
+                    {% for tp in assessment_types %}
+                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center type-item {% if loop.first %}active{% endif %}" data-type-id="{{ tp['id'] }}">
                         <div>
-                            <div class="fw-semibold">{{ t['display_name'] }}</div>
-                            <div class="small text-muted">{{ t['num_questions'] }} {{ t('questions') }} · {{ t['scoring_method'] }}</div>
+                            <div class="fw-semibold">{{ tp['display_name'] }}</div>
+                            <div class="small text-muted">{{ tp['num_questions'] }} {{ t('questions') }} · {{ tp['scoring_method'] }}</div>
                         </div>
-                        <span class="badge {% if t['is_active'] %}bg-success{% else %}bg-secondary{% endif %}">{% if t['is_active'] %}{{ t('Active') }}{% else %}{{ t('Inactive') }}{% endif %}</span>
+                        <span class="badge {% if tp['is_active'] %}bg-success{% else %}bg-secondary{% endif %}">{% if tp['is_active'] %}{{ t('Active') }}{% else %}{{ t('Inactive') }}{% endif %}</span>
                     </button>
                     {% endfor %}
                 </div>

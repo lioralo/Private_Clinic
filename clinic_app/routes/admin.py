@@ -223,6 +223,19 @@ def _get_dashboard_security_metrics(db):
 # Admin routes
 # ---------------------------------------------------------------------------
 
+@admin_bp.route('/admin/administration')
+@login_required
+def administration():
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+    db = get_db()
+    unread_inquiries = db.execute(
+        "SELECT COUNT(*) AS c FROM contact_inquiries WHERE COALESCE(is_read,0)=0"
+    ).fetchone()['c']
+    return render_template('administration.html', unread_inquiries=unread_inquiries)
+
+# ---------------------------------------------------------------------------
+
 @admin_bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
