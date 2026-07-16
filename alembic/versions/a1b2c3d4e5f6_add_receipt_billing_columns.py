@@ -4,12 +4,10 @@ Revision ID: a1b2c3d4e5f6
 Revises: f1a2b3c4d5e6
 Create Date: 2026-07-16
 
-Add missing billing columns to receipts table, create
-assessment_questions / service_types / receipt_items tables,
-and seed group meeting documentation assessment type.
+Add missing billing columns to receipts table and create
+assessment_questions / service_types / receipt_items tables.
 """
 from alembic import op
-import json
 
 
 revision = 'a1b2c3d4e5f6'
@@ -73,49 +71,6 @@ def upgrade():
 
     op.execute('CREATE INDEX IF NOT EXISTS idx_ri_receipt ON receipt_items(receipt_id)')
 
-    # Seed group meeting documentation assessment type
-    op.execute('''
-        INSERT OR IGNORE INTO assessment_types
-            (name, display_name, description, category, num_questions,
-             scoring_method, scoring_rules_json, interpretation_json,
-             min_score, max_score)
-        VALUES (
-            'group_meeting_template',
-            'תבנית תיעוד מפגש קבוצתי',
-            'Group meeting documentation — participants, missing, and content sections per the clinic template.',
-            'group', 3, 'custom',
-            '{}',
-            '[]',
-            0, 0
-        )
-    ''')
-
-    # Seed assessment questions for the group meeting template
-    questions = [
-        (0, 'participants', 'Participants and their notes',
-         'משתתפים — רשום כל משתתף והערות אישיות (שם - תיעוד)', 'textarea', '[]', 1),
-        (1, 'missing', 'Missing participants and reasons',
-         'חסרים — רשום מי חסר וסיבת ההיעדרות (שם - סיבה)', 'textarea', '[]', 1),
-        (2, 'content', 'Meeting content and interventions',
-         'תוכן — פירוט תוכן הפגישה, התרחשויות, התערבויות חשובות', 'textarea', '[]', 1),
-    ]
-    for q_order, q_key, q_en, q_he, q_type, q_opts, q_req in questions:
-        op.execute(f"""
-            INSERT OR IGNORE INTO assessment_questions
-                (assessment_type_id, question_order, question_key,
-                 question_text_en, question_text_he, question_type, options_json, required)
-            VALUES (
-                (SELECT id FROM assessment_types WHERE name = 'group_meeting_template'),
-                {q_order},
-                '{q_key}',
-                '{q_en.replace("'", "''")}',
-                '{q_he.replace("'", "''")}',
-                '{q_type}',
-                '{q_opts}',
-                {q_req}
-            )
-        """)
-
 
 def downgrade():
     for col in ["vat_rate", "vat_amount", "net_amount", "payment_method", "document_type", "client_email"]:
@@ -123,8 +78,6 @@ def downgrade():
             op.execute(f"ALTER TABLE receipts DROP COLUMN {col}")
         except Exception:
             pass
-    op.execute("DELETE FROM assessment_questions WHERE assessment_type_id IN (SELECT id FROM assessment_types WHERE name = 'group_meeting_template')")
-    op.execute("DELETE FROM assessment_types WHERE name = 'group_meeting_template'")
     op.execute('DROP TABLE IF EXISTS assessment_questions')
     op.execute('DROP TABLE IF EXISTS service_types')
     op.execute('DROP TABLE IF EXISTS receipt_items')

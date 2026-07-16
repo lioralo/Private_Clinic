@@ -143,10 +143,66 @@
                         {{ t('Secure client portal') }}
                     </p>
                 </div>
+
+                {# AJAX error message area #}
+                <div id="loginAjaxError" class="alert alert-danger rounded-3 mt-3 d-none" role="alert"></div>
             </div>
         </div>
     </div>
 </div>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
-{% endblock %}
+
+<script>
+(function() {
+    var form = document.querySelector('.login-form');
+    var errorBox = document.getElementById('loginAjaxError');
+    if (!form || !errorBox) return;
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        errorBox.classList.add('d-none');
+        var submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>{{ t("Signing in...") }}'; }
+
+        var formData = new FormData(form);
+        fetch(form.action || window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+        .then(function(resp) {
+            if (resp.redirected) {
+                window.location.href = resp.url;
+                return;
+            }
+            return resp.text();
+        })
+        .then(function(html) {
+            if (!html) return;
+            // Extract error messages from flash messages in the response
+            var tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            var alerts = tmp.querySelectorAll('.alert-danger, .alert-warning');
+            var flashContainer = tmp.querySelector('.flash-messages');
+            var firstFlash = flashContainer ? flashContainer.textContent.trim() : '';
+            var errors = [];
+            if (alerts.length > 0) {
+                alerts.forEach(function(a) { var t = a.textContent.trim(); if (t) errors.push(t); });
+            } else if (firstFlash) {
+                errors.push(firstFlash);
+            } else {
+                errors.push('{{ t("Invalid username or password.") }}');
+            }
+            errorBox.innerHTML = errors.join('<br>');
+            errorBox.classList.remove('d-none');
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '{{ t("Sign In") }} <i class="bi bi-arrow-right ms-2"></i>'; }
+        })
+        .catch(function() {
+            errorBox.innerHTML = '{{ t("Connection error. Please try again.") }}';
+            errorBox.classList.remove('d-none');
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '{{ t("Sign In") }} <i class="bi bi-arrow-right ms-2"></i>'; }
+        });
+    });
+})();
+</script>{% endblock %}

@@ -177,7 +177,7 @@ def _get_dashboard_missing_recurring(db):
               JOIN groups g ON g.id = h.group_id
               WHERE h.patient_id = patients.id
                 AND h.left_at IS NULL
-                AND COALESCE(g.is_archived, 0) = 0
+                AND COALESCE(g.is_active, 1) = 1
           )
         ORDER BY name ASC
         LIMIT 6
