@@ -1017,6 +1017,8 @@ def api_calendar_book():
 @login_required
 def api_upcoming_appointments():
     """API endpoint for upcoming appointments with meeting info"""
+    if current_user.patient_id is None:
+        return jsonify([])
     db = get_db()
     
     today = datetime.now().date()

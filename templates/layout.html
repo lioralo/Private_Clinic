@@ -987,6 +987,18 @@
 
     {% block scripts %}{% endblock %}
 
+    {# Session timeout warning modal #}
+    <div class="modal fade" id="sessionTimeoutModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content border-0 shadow">
+            <div class="modal-body text-center p-4">
+                <i class="bi bi-clock-history text-warning" style="font-size:2rem"></i>
+                <h6 class="mt-2 mb-1">{{ t('Session Expiring') }}</h6>
+                <p class="text-muted small mb-3" id="timeoutCountdown"></p>
+                <button class="btn btn-primary btn-sm rounded-pill px-4" id="stayLoggedInBtn">{{ t('Stay Logged In') }}</button>
+            </div>
+        </div></div>
+    </div>
+
     <script>
     window.pwaInstall = function() {
       if (window.deferredPrompt) {
@@ -1033,5 +1045,50 @@
         window.scrollTo({top: 0, behavior: 'smooth'});
     });
     </script>
+
+    {% if current_user.is_authenticated %}
+    <script>
+    (function() {
+        var CHECK_INTERVAL = 30000;
+        var WARN_BEFORE = 120;
+        var modalEl = document.getElementById('sessionTimeoutModal');
+        var countdownEl = document.getElementById('timeoutCountdown');
+        var stayBtn = document.getElementById('stayLoggedInBtn');
+        if (!modalEl || !stayBtn) return;
+        var modal = new bootstrap.Modal(modalEl, {backdrop: 'static', keyboard: false});
+        var warned = false;
+        var timer = null;
+
+        function check() {
+            fetch('/api/session/heartbeat')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var remaining = data.remaining_seconds || 0;
+                    if (remaining <= WARN_BEFORE && remaining > 0 && !warned) {
+                        warned = true;
+                        modal.show();
+                        var count = Math.ceil(remaining);
+                        countdownEl.textContent = 'Session expires in ' + count + ' seconds.';
+                        timer = setInterval(function() {
+                            count--;
+                            countdownEl.textContent = 'Session expires in ' + count + ' seconds.';
+                            if (count <= 0) { clearInterval(timer); modal.hide(); }
+                        }, 1000);
+                    }
+                });
+        }
+
+        stayBtn.addEventListener('click', function() {
+            fetch('/api/session/heartbeat').then(function() {
+                warned = false;
+                if (timer) clearInterval(timer);
+                modal.hide();
+            });
+        });
+
+        setInterval(check, CHECK_INTERVAL);
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

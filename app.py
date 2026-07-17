@@ -1533,6 +1533,18 @@ def enforce_inactivity_timeout():
     session['last_activity_at'] = now_ts
 
 
+@app.route('/api/session/heartbeat')
+@login_required
+def session_heartbeat():
+    timeout_minutes = int(app.config.get('INACTIVITY_TIMEOUT_MINUTES', 5) or 5)
+    timeout_seconds = timeout_minutes * 60
+    last_activity = session.get('last_activity_at', 0)
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    remaining = max(0, timeout_seconds - (now_ts - int(last_activity or 0)))
+    session['last_activity_at'] = now_ts
+    return jsonify({'remaining_seconds': remaining, 'timeout_minutes': timeout_minutes})
+
+
 @app.before_request
 def enforce_session_version_match():
     if request.path.startswith('/static/'):
@@ -4291,6 +4303,8 @@ def patient_dashboard():
 @login_required
 def api_engagement_stats():
     """Get engagement statistics for the patient"""
+    if current_user.role != 'patient' or current_user.patient_id is None:
+        return jsonify({'error': 'Unauthorized'}), 403
     db = get_db()
     
     total_appts = db.execute(
@@ -7833,6 +7847,75 @@ def import_patient_history(patient_id):
 
     if current_user.role != 'admin':
         return "Unauthorized", 403
+
+
+@app.route('/patient/<int:patient_id>/export-docx')
+@login_required
+def export_patient_docx(patient_id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    db = get_db()
+    patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
+    if not patient:
+        return "Patient not found", 404
+
+    settings = get_site_settings(db)
+    clinic_name = settings.get('clinic_business_name', '') or 'Private Clinic'
+
+    from docx import Document
+    doc = Document()
+    doc.styles['Normal'].font.name = 'Arial'
+    doc.add_heading(clinic_name, 0)
+    doc.add_paragraph(f'Patient: {patient["name"]}')
+    if patient.get('phone'): doc.add_paragraph(f'Phone: {patient["phone"]}')
+    if patient.get('email'): doc.add_paragraph(f'Email: {patient["email"]}')
+    doc.add_paragraph(f'Export date: {date.today().isoformat()}')
+
+    doc.add_heading('Appointments', level=1)
+    appts = db.execute('SELECT * FROM appointments WHERE patient_id=? ORDER BY appointment_date DESC', (patient_id,)).fetchall()
+    if appts:
+        table = doc.add_table(rows=1, cols=4)
+        for i, h in enumerate(['Date', 'Time', 'Type', 'Status']):
+            table.rows[0].cells[i].text = h
+        for a in appts:
+            row = table.add_row().cells
+            row[0].text = str(a['appointment_date'] or '')
+            row[1].text = str(a['appointment_time'] or '')
+            row[2].text = str(a['meeting_type'] or 'in-person')
+            row[3].text = str(a['status'] or 'scheduled')
+    else:
+        doc.add_paragraph('No appointments.')
+
+    doc.add_heading('Notes', level=1)
+    notes = db.execute('SELECT * FROM notes WHERE patient_id=? ORDER BY created_at DESC', (patient_id,)).fetchall()
+    if notes:
+        for n in notes:
+            doc.add_heading(f'Session {n["session_number"] or ""} — {n["note_date"] or n["created_at"]}', level=2)
+            doc.add_paragraph(n['content'] or '')
+    else:
+        doc.add_paragraph('No notes.')
+
+    doc.add_heading('Assessments', level=1)
+    assessments = db.execute('''
+        SELECT a.*, at.display_name FROM assessments a
+        JOIN assessment_types at ON at.id=a.assessment_type_id WHERE a.patient_id=? ORDER BY a.taken_at DESC
+    ''', (patient_id,)).fetchall()
+    if assessments:
+        for a in assessments:
+            doc.add_paragraph(f'{a["display_name"]}: {a["total_score"]} ({a["severity_level"] or "N/A"}) — {a["taken_at"]}')
+    else:
+        doc.add_paragraph('No assessments.')
+
+    import tempfile, os
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
+    doc.save(tmp.name)
+    tmp.close()
+    with open(tmp.name, 'rb') as f:
+        data = f.read()
+    os.unlink(tmp.name)
+    safe_name = patient['name'].replace(' ', '_')
+    return Response(data, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    headers={'Content-Disposition': f'attachment; filename={safe_name}_record.docx'})
 
     if 'file' not in request.files:
         flash('No file part')
