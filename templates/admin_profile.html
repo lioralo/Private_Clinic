@@ -1,13 +1,14 @@
 {% extends 'layout.html' %}
-
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-xl-8 col-lg-9">
+    <div class="col-xl-7 col-lg-8">
+        {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': url_for('admin.administration'), 'label': t('Administration')}, {'url': '', 'label': t('Admin Profile')}]) }}
+
+        {# Personal Info #}
         <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-header bg-white border-0 py-3">
-                <h2 class="h4 mb-0 text-primary fw-bold"><i class="bi bi-person-gear me-2"></i>{{ t('Admin Profile') }}</h2>
+                <h2 class="h5 mb-0 text-primary fw-bold"><i class="bi bi-person-gear me-2"></i>{{ t('Personal Info') }}</h2>
             </div>
-            {{ breadcrumb([{'url': url_for('admin_dashboard'), 'label': t('Dashboard')}, {'url': '', 'label': t('Admin Profile')}]) }}
             <div class="card-body p-4">
                 <form method="post" class="row g-3">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -35,800 +36,97 @@
                         <label class="form-label fw-bold small">{{ t('Date of Birth') }}</label>
                         <input type="date" class="form-control" name="birth_date" value="{{ admin['birth_date'] or '' }}">
                     </div>
-                    <div class="col-12 pt-2 d-flex flex-wrap gap-2">
+                    <div class="col-12">
                         <button class="btn btn-primary rounded-pill px-4" type="submit">
-                            <i class="bi bi-save me-1"></i>{{ t('Save Profile') }}
-                        </button>
-                        <button class="btn btn-outline-secondary rounded-pill px-4" type="submit" formaction="{{ url_for('backup_now') }}" formmethod="post">
-                            <i class="bi bi-shield-lock me-1"></i>{{ t('Create Encrypted Backup') }}
+                            <i class="bi bi-save me-1"></i>{{ t('Save') }}
                         </button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#aboutSettingsCollapse" aria-expanded="false" aria-controls="aboutSettingsCollapse">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2 text-primary"></i>{{ t('About Page Settings') }}</h5>
-                <i class="bi bi-chevron-down text-muted"></i>
-            </button>
-            <div class="collapse" id="aboutSettingsCollapse">
-                <div class="card-body p-4">
-                    <form method="post" class="row g-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="col-12 form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="about_enabled" id="aboutEnabledSwitch" {% if site_settings.get('about_enabled') == '1' %}checked{% endif %}>
-                            <label class="form-check-label fw-semibold" for="aboutEnabledSwitch">{{ t('Show public About page') }}</label>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold">{{ t('Contact Phone') }}</label>
-                            <input class="form-control" name="about_phone" value="{{ site_settings.get('about_phone', '') }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label small fw-bold">{{ t('Contact Email') }}</label>
-                            <input type="email" class="form-control" name="about_email" value="{{ site_settings.get('about_email', '') }}">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-bold">{{ t('Short About Text') }}</label>
-                            <textarea class="form-control" name="about_text" rows="4">{{ site_settings.get('about_text', '') }}</textarea>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label small fw-bold">{{ t('Map URL') }}</label>
-                            <input class="form-control" name="about_map_url" value="{{ site_settings.get('about_map_url', '') }}" placeholder="https://maps.google.com/...">
-                        </div>
-                        <div class="col-12 d-flex flex-wrap gap-2">
-                            <button class="btn btn-primary rounded-pill px-4" type="submit">{{ t('Save About Settings') }}</button>
-                            <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary rounded-pill">{{ t('Preview About Page') }}</a>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#securityCollapse" aria-expanded="{% if recovery_codes or pending_totp_secret %}true{% else %}false{% endif %}" aria-controls="securityCollapse">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-primary"></i>{{ t('Authenticator Security') }}</h5>
+        {# 2FA & Password #}
+        <div class="card border-0 shadow-sm rounded-4">
+            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#securityCollapse" aria-expanded="{% if recovery_codes or pending_totp_secret %}true{% else %}false{% endif %}">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-primary"></i>{{ t('Security & Password') }}</h5>
                 <i class="bi bi-chevron-down text-muted"></i>
             </button>
             <div class="collapse {% if recovery_codes or pending_totp_secret %}show{% endif %}" id="securityCollapse">
                 <div class="card-body p-4">
                     {% if recovery_codes %}
-                    <div class="alert alert-warning border border-warning-subtle rounded-4 p-3 mb-4">
-                        <h6 class="fw-bold text-dark mb-2">
-                            <i class="bi bi-key-fill text-warning me-2"></i>{{ t('Two-Factor Authentication Recovery Codes') }}
-                        </h6>
-                        <p class="small text-muted mb-3">
-                            {{ t('Save these codes in a safe place. Each code can be used ONLY ONCE to log in if you lose access to your authenticator device.') }}
-                        </p>
-                        <div class="row g-2 mb-3">
+                    <div class="alert alert-warning border rounded-4 p-3 mb-4">
+                        <h6 class="fw-bold mb-2"><i class="bi bi-key-fill text-warning me-2"></i>{{ t('Recovery Codes') }}</h6>
+                        <p class="small text-muted mb-2">{{ t('Save these codes. Each can be used once if you lose your authenticator.') }}</p>
+                        <div class="row g-2 mb-2">
                             {% for code in recovery_codes %}
-                            <div class="col-6 col-sm-4">
-                                <code class="d-block text-center bg-white border rounded py-2 fw-bold font-monospace" style="font-size: 1.1rem; letter-spacing: 1px;">{{ code }}</code>
-                            </div>
+                            <div class="col-6 col-sm-4"><code class="d-block text-center bg-white border rounded py-2 fw-bold" style="font-size:1.1rem;letter-spacing:1px">{{ code }}</code></div>
                             {% endfor %}
                         </div>
-                        <div class="text-end">
-                            <button class="btn btn-sm btn-dark rounded-pill px-3" onclick="window.print()">
-                                <i class="bi bi-printer me-1"></i>{{ t('Print Codes') }}
-                            </button>
-                        </div>
+                        <button class="btn btn-sm btn-dark rounded-pill" onclick="window.print()"><i class="bi bi-printer me-1"></i>{{ t('Print') }}</button>
                     </div>
                     {% endif %}
 
-                    <p class="small text-muted mb-3">{{ t('Use Google Authenticator for two-step admin login and password changes.') }}</p>
-
                     {% if admin['totp_enabled'] %}
-                    <div class="alert alert-success py-2 small">
-                        <i class="bi bi-check-circle me-1"></i>{{ t('Authenticator is enabled for this admin account.') }}
-                    </div>
+                    <div class="alert alert-success py-2 small mb-3"><i class="bi bi-check-circle me-1"></i>{{ t('2FA is enabled.') }}</div>
                     <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-4">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action" value="disable">
-                        <button class="btn btn-outline-danger rounded-pill" type="submit">
-                            <i class="bi bi-shield-x me-1"></i>{{ t('Disable Authenticator') }}
-                        </button>
+                        <button class="btn btn-outline-danger rounded-pill" type="submit"><i class="bi bi-shield-x me-1"></i>{{ t('Disable 2FA') }}</button>
                     </form>
                     {% elif pending_totp_secret %}
-                    <div class="alert alert-info py-2 small">
-                        <i class="bi bi-info-circle me-1"></i>{{ t('Scan the QR code below and enter the 6-digit code to activate.') }}
-                    </div>
-                    {% else %}
-                    <div class="alert alert-secondary py-2 small border">
-                        <i class="bi bi-shield-plus me-1"></i>{{ t('Two-factor authentication is not configured.') }}
-                        <span class="text-muted">{{ t('Add an extra layer of security — requires a code from your authenticator app at login.') }}</span>
-                    </div>
-                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="action" value="generate">
-                        <button class="btn btn-primary rounded-pill" type="submit">
-                            <i class="bi bi-qr-code-scan me-1"></i>{{ t('Set Up Authenticator') }}
-                        </button>
-                    </form>
-                    {% endif %}
-
-                    {% if pending_totp_secret %}
                     <div class="border rounded-4 p-3 mb-4 bg-light">
                         <div class="row g-3 align-items-center">
-                            <div class="col-md-4 text-center">
-                                {% if totp_qr_url %}
-                                <img src="{{ totp_qr_url }}" alt="Authenticator QR" loading="lazy" class="img-fluid rounded border bg-white p-2" style="max-width:220px;">
-                                {% endif %}
+                            <div class="col-md-5 text-center">
+                                {% if totp_qr_url %}<img src="{{ totp_qr_url }}" alt="QR" loading="lazy" class="img-fluid rounded border bg-white p-2" style="max-width:200px">{% endif %}
                             </div>
-                            <div class="col-md-8">
-                                <p class="small mb-2">{{ t('Scan the QR with Google Authenticator or enter this setup key manually:') }}</p>
+                            <div class="col-md-7">
+                                <p class="small mb-2">{{ t('Scan with Google Authenticator or enter this key:') }}</p>
                                 <code class="d-block small mb-3 p-2 bg-white border rounded">{{ pending_totp_secret }}</code>
-                                <div class="form-text">{{ t('You can paste a regular Google Maps link; the system will auto-embed it when possible.') }}</div>
                                 <form method="post" action="{{ url_for('setup_authenticator') }}" class="row g-2">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action" value="verify">
-                                    <div class="col-sm-7">
-                                        <input type="text" name="otp_code" class="form-control" inputmode="numeric" placeholder="{{ t('Enter 6-digit code') }}" required>
-                                    </div>
-                                    <div class="col-sm-5 d-grid">
-                                        <button class="btn btn-success rounded-pill" type="submit">
-                                            <i class="bi bi-check2-circle me-1"></i>{{ t('Verify Authenticator') }}
-                                        </button>
-                                    </div>
+                                    <div class="col-sm-7"><input type="text" name="otp_code" class="form-control" inputmode="numeric" placeholder="{{ t('6-digit code') }}" required></div>
+                                    <div class="col-sm-5 d-grid"><button class="btn btn-success rounded-pill" type="submit">{{ t('Verify') }}</button></div>
                                 </form>
                             </div>
                         </div>
                     </div>
+                    {% else %}
+                    <div class="alert alert-secondary py-2 small border mb-3">{{ t('2FA is not configured.') }}</div>
+                    <form method="post" action="{{ url_for('setup_authenticator') }}" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="generate">
+                        <button class="btn btn-primary rounded-pill" type="submit"><i class="bi bi-qr-code-scan me-1"></i>{{ t('Set Up 2FA') }}</button>
+                    </form>
                     {% endif %}
 
-                    <h6 class="fw-bold text-primary mb-2"><i class="bi bi-key me-1"></i>{{ t('Change Admin Password') }}</h6>
-                    <p class="small text-muted mb-3">{{ t('Set a new password. An authenticator code is required only if two-factor authentication is enabled.') }}</p>
+                    <h6 class="fw-bold text-primary mb-2"><i class="bi bi-key me-1"></i>{{ t('Change Password') }}</h6>
                     <form method="post" action="{{ url_for('admin_change_password') }}" class="row g-2">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="col-md-6">
-                            <input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('Authenticator Code (leave blank if TOTP not set up)') }}">
-                        </div>
-                        <div class="col-md-6">
-                            <input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <input type="password" class="form-control" id="adminConfirmPasswordInput" name="confirm_password" placeholder="{{ t('Confirm New Password') }}" required>
-                        </div>
+                        <div class="col-md-6"><input type="password" class="form-control" name="current_password" placeholder="{{ t('Current Password') }}" required></div>
+                        <div class="col-md-6"><input type="text" class="form-control" name="otp_code" inputmode="numeric" placeholder="{{ t('2FA Code (if enabled)') }}"></div>
+                        <div class="col-md-6"><input type="password" class="form-control" id="adminNewPasswordInput" name="new_password" placeholder="{{ t('New Password') }}" required></div>
+                        <div class="col-md-6"><input type="password" class="form-control" id="adminConfirmPasswordInput" name="confirm_password" placeholder="{{ t('Confirm Password') }}" required></div>
                         <div class="col-12">
                             <div class="d-flex flex-wrap gap-1 mt-1">
                                 <span class="badge rounded-pill border admin-pw-check" id="apwc-len">10+ chars</span>
                                 <span class="badge rounded-pill border admin-pw-check" id="apwc-upper">Uppercase</span>
                                 <span class="badge rounded-pill border admin-pw-check" id="apwc-lower">Lowercase</span>
                                 <span class="badge rounded-pill border admin-pw-check" id="apwc-digit">Number</span>
-                                <span class="badge rounded-pill border admin-pw-check" id="apwc-special">Special char</span>
-                                <span class="ms-2 small" id="adminPwMatchMsg" style="min-height:1.2em"></span>
+                                <span class="badge rounded-pill border admin-pw-check" id="apwc-special">Special</span>
+                                <span class="ms-2 small" id="adminPwMatchMsg"></span>
                             </div>
                         </div>
-                        <div class="col-12">
-                            <button class="btn btn-primary rounded-pill px-4" type="submit">
-                                <i class="bi bi-shield-check me-1"></i>{{ t('Update Password') }}
-                            </button>
-                        </div>
+                        <div class="col-12"><button class="btn btn-primary rounded-pill px-4" type="submit"><i class="bi bi-shield-check me-1"></i>{{ t('Update Password') }}</button></div>
                     </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#smtpSecurityCollapse" aria-expanded="false" aria-controls="smtpSecurityCollapse">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-envelope-check me-2 text-primary"></i>SMTP & Security Diagnostics</h5>
-                <i class="bi bi-chevron-down text-muted"></i>
-            </button>
-            <div class="collapse" id="smtpSecurityCollapse">
-                <div class="card-body p-4">
-                    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-                        <span class="small fw-semibold">SMTP status:</span>
-                        {% if smtp_health and smtp_health.ok %}
-                        <span class="badge bg-success">Connected</span>
-                        {% elif smtp_health and smtp_health.configured %}
-                        <span class="badge bg-warning text-dark">Configured but unreachable</span>
-                        {% else %}
-                        <span class="badge bg-secondary">Not configured</span>
-                        {% endif %}
-                        <span class="small text-muted">{{ smtp_health.message if smtp_health else 'SMTP status unavailable.' }}</span>
-                    </div>
-
-                    <form method="post" action="{{ url_for('admin_smtp_send_test') }}" class="row g-2 align-items-end mb-4">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="col-md-8">
-                            <label class="form-label small fw-bold">Test destination email</label>
-                            <input type="email" class="form-control" name="test_email" value="{{ admin['email'] or '' }}" placeholder="admin@example.com">
-                        </div>
-                        <div class="col-md-4 d-grid">
-                            <button class="btn btn-outline-primary rounded-pill" type="submit">
-                                <i class="bi bi-send me-1"></i>Send SMTP Test Email
-                            </button>
-                        </div>
-                    </form>
-
-                    <h6 class="fw-bold mb-2">{{ t('Email Reminder System') }}</h6>
-                    <p class="small text-muted mb-2">{{ t('Manage automatic reminder emails for appointments and group sessions.') }}</p>
-                    <a href="{{ url_for('admin.admin_email_settings') }}" class="btn btn-outline-primary btn-sm rounded-pill">
-                        <i class="bi bi-envelope-paper me-1"></i>{{ t('Manage Email Reminders') }}
-                    </a>
-                    <hr>
-                    <h6 class="fw-bold mb-2">Recent Auth Security Events</h6>
-                    {% if recent_auth_events %}
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Action</th>
-                                    <th>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in recent_auth_events %}
-                                <tr>
-                                    <td class="small text-nowrap">{{ item.created_at }}</td>
-                                    <td class="small"><code>{{ item.action }}</code></td>
-                                    <td class="small text-muted">{{ item.details or '-' }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    {{ empty_state(icon='bi-shield-lock', message='No auth events recorded yet.') }}
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm rounded-4 mb-3">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#backupCollapse" aria-expanded="false" aria-controls="backupCollapse">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-counterclockwise me-2 text-danger"></i>{{ t('Restore From Encrypted Backup') }}</h5>
-                <i class="bi bi-chevron-down text-muted"></i>
-            </button>
-            <div class="collapse" id="backupCollapse">
-                <div class="card-body p-4">
-                    <p class="small text-muted mb-3">{{ t('Restoring will replace the current database with the selected backup. A safety copy of the current DB is created automatically before restore.') }}</p>
-                    <form method="post" action="{{ url_for('restore_backup_now') }}" data-confirm-modal data-confirm-message="{{ t('Restore selected backup? This will replace current live data.') }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="row g-2 align-items-end">
-                            <div class="col-md-9">
-                                <label class="form-label fw-bold small">{{ t('Backup File') }}</label>
-                                <select class="form-select" name="backup_file" {% if not backup_files %}disabled{% endif %}>
-                                    {% for backup_file in backup_files %}
-                                        <option value="{{ backup_file['name'] }}">{{ backup_file['name'] }} - {{ (backup_file['size'] / 1024)|round(1) }} KB</option>
-                                    {% else %}
-                                    <option value="">{{ t('No encrypted backups found') }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-3 d-grid">
-                                <button class="btn btn-danger rounded-pill" type="submit" {% if not backup_files %}disabled{% endif %}>
-                                    <i class="bi bi-arrow-repeat me-1"></i>{{ t('Restore Backup') }}
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm rounded-4">
-            <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start" type="button" data-bs-toggle="collapse" data-bs-target="#gcalCollapse" aria-expanded="true" aria-controls="gcalCollapse">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-calendar2-check me-2 text-success"></i>{{ t('Google Calendar Integration') }}</h5>
-                <i class="bi bi-chevron-down text-muted"></i>
-            </button>
-            <div class="collapse show" id="gcalCollapse">
-                <div class="card-body p-4">
-                    <div id="gcalStatus" class="mb-3">
-                        {% if not google_calendar_ui.google_libs %}
-                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>
-                        {% elif not google_calendar_ui.client_configured %}
-                        <span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>
-                        {% elif google_calendar_ui.connected %}
-                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>{% if google_calendar_ui.calendar_id %} <span class="text-muted small ms-1">{{ t('Calendar') }}: {{ google_calendar_ui.calendar_id }}</span>{% endif %}
-                        {% elif google_calendar_ui.error %}
-                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Status check error') }}: {{ google_calendar_ui.error }}</span>
-                        {% else %}
-                        <span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>
-                        {% endif %}
-                    </div>
-                    {# Single-click connect button #}
-                    <div id="gcalConnectWrap" class="mb-3{% if google_calendar_ui.connected or not google_calendar_ui.client_configured %} d-none{% endif %}">
-                        <p class="small text-muted mb-2">{{ t('Connect once to enable Calendar sync, Docs templates, and Sheets exports.') }}</p>
-                        <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill" id="gcalConnectBtn">
-                            <i class="bi bi-google me-1"></i>{{ t('Connect with Google') }}
-                        </a>
-                        <a href="{{ url_for('admin.google_setup') }}" class="btn btn-outline-primary btn-sm rounded-pill">
-                            <i class="bi bi-gear me-1"></i>{{ t('Setup Guide') }}
-                        </a>
-                    </div>
-                    <div id="gcalActiveIntegrations" class="mb-2{% if not (google_calendar_ui.connected and google_calendar_ui.enabled_integrations) %} d-none{% endif %}">
-                        {% if google_calendar_ui.connected and google_calendar_ui.enabled_integrations %}
-                        <span class="small text-muted">{{ t('Active integrations:') }} </span>
-                        {% for integration_key in google_calendar_ui.enabled_integrations %}
-                        <span class="badge bg-light text-dark border me-1">{{ t('Calendar') if integration_key == 'calendar' else (t('Docs') if integration_key == 'docs' else t('Sheets')) }}</span>
-                        {% endfor %}
-                        {% endif %}
-                    </div>
-                    <div id="gcalActions" class="d-flex flex-wrap gap-2">
-                        <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="{% if not google_calendar_ui.connected %}d-none{% endif %}" id="gcalDisconnectForm">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
-                                <i class="bi bi-x-circle me-1"></i>{{ t('Disconnect Google') }}
-                            </button>
-                        </form>
-                    </div>
-                    <div class="mt-3{% if not (google_calendar_ui.connected and google_calendar_ui.calendars) %} d-none{% endif %}" id="gcalCalendarSelector">
-                        <label class="form-label small fw-semibold">{{ t('Choose calendar to sync to') }}</label>
-                        <div class="d-flex gap-2">
-                            <select id="gcalCalendarSelect" class="form-select form-select-sm">
-                                {% for calendar_item in google_calendar_ui.calendars %}
-                                <option value="{{ calendar_item.id }}" {% if calendar_item.id == google_calendar_ui.calendar_id %}selected{% endif %}>{{ calendar_item.summary }}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="button" class="btn btn-primary btn-sm rounded-pill" id="gcalSaveCalendarBtn">{{ t('Save') }}</button>
-                        </div>
-                    </div>
-                    <form method="post" class="mt-4">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <label class="form-label small fw-semibold">{{ t('Specify questionnaires Google Sheets file link') }}</label>
-                        <div class="d-flex flex-column flex-md-row gap-2">
-                            <input type="text" class="form-control form-control-sm" name="questionnaires_source_sheet_url" value="{{ site_settings.get('questionnaires_source_sheet_url', '') }}" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
-                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3">{{ t('Save') }}</button>
-                        </div>
-                        <div class="small text-muted mt-2">{{ t('This source file is used to sync questionnaire tabs for diagnosee creation.') }}</div>
-
-                        <hr class="my-4">
-
-                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-                            <label class="form-label small fw-semibold mb-0">{{ t('Google Docs Auto Sync') }}</label>
-                            <div class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox" name="gdocs_auto_sync_enabled" id="gdocsAutoSyncEnabled" {% if gdocs_auto_sync_state.enabled %}checked{% endif %}>
-                                <label class="form-check-label small" for="gdocsAutoSyncEnabled">{{ t('Enable recurring sync') }}</label>
-                            </div>
-                        </div>
-
-                        <div class="row g-2 align-items-end">
-                            <div class="col-12 col-md-6">
-                                <label for="gdocsAutoSyncInterval" class="form-label small">{{ t('Sync interval') }}</label>
-                                <select class="form-select form-select-sm" id="gdocsAutoSyncInterval" name="gdocs_auto_sync_interval">
-                                    <option value="twice_daily" {% if gdocs_auto_sync_state.interval_key == 'twice_daily' %}selected{% endif %}>{{ t('Twice a day') }}</option>
-                                    <option value="daily" {% if gdocs_auto_sync_state.interval_key == 'daily' %}selected{% endif %}>{{ t('Once a day') }}</option>
-                                    <option value="twice_weekly" {% if gdocs_auto_sync_state.interval_key == 'twice_weekly' %}selected{% endif %}>{{ t('Twice a week') }}</option>
-                                    <option value="weekly" {% if gdocs_auto_sync_state.interval_key == 'weekly' %}selected{% endif %}>{{ t('Once a week') }}</option>
-                                    <option value="biweekly" {% if gdocs_auto_sync_state.interval_key == 'biweekly' %}selected{% endif %}>{{ t('Once every two weeks') }}</option>
-                                    <option value="monthly" {% if gdocs_auto_sync_state.interval_key == 'monthly' %}selected{% endif %}>{{ t('Once a month') }}</option>
-                                </select>
-                            </div>
-                            <div class="col-12 col-md-6 d-flex flex-column flex-md-row gap-2">
-                                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 w-100 w-md-auto">{{ t('Save Auto Sync Settings') }}</button>
-                                <button type="button" id="runGdocsAutoSyncNowBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3 w-100 w-md-auto">{{ t('Sync Now') }}</button>
-                            </div>
-                        </div>
-
-                        <div class="small text-muted mt-3">
-                            {% if gdocs_auto_sync_state.last_run_at %}
-                            {{ t('Last auto-sync run:') }} {{ gdocs_auto_sync_state.last_run_at|strftime('%Y-%m-%d %H:%M') }}
-                            {% else %}
-                            {{ t('Last auto-sync run: never') }}
-                            {% endif %}
-                            {% if gdocs_auto_sync_health.next_run_at %}
-                            &middot; {{ t('Next run:') }} {{ gdocs_auto_sync_health.next_run_at|strftime('%Y-%m-%d %H:%M') }}
-                            {% endif %}
-                        </div>
-
-                        <div id="gdocsAutoSyncStatus" class="small text-muted mt-2" aria-live="polite"></div>
-                        <div id="gdocsAutoSyncProgressWrap" class="d-none mt-2" aria-live="polite">
-                            <div class="progress" role="progressbar" aria-label="{{ t('Google Docs sync progress') }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                                <div id="gdocsAutoSyncProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
-                            </div>
-                            <div id="gdocsAutoSyncProgressLabel" class="small text-muted mt-1"></div>
-                        </div>
-
-                        <div class="mt-3">
-                            <label class="form-label small fw-semibold">{{ t('Connected Google Docs') }}</label>
-                            {% if connected_google_docs %}
-                            <div class="border rounded-3 p-2" style="max-height: 220px; overflow:auto;">
-                                {% for doc in connected_google_docs %}
-                                {% set selected_mode = 'pull' %}
-                                {% for selected in gdocs_auto_sync_state.selected_targets %}
-                                    {% if selected.target_key == doc.target_key %}
-                                        {% set selected_mode = selected.mode %}
-                                    {% endif %}
-                                {% endfor %}
-                                <div class="form-check py-1">
-                                    <input class="form-check-input" type="checkbox" name="gdoc_sync_targets" value="{{ doc.target_key }}" id="docSyncTarget_{{ loop.index }}" {% if doc.target_key in gdocs_auto_sync_state.selected_target_keys %}checked{% endif %}>
-                                    <label class="form-check-label small" for="docSyncTarget_{{ loop.index }}">
-                                        <span class="fw-semibold">{{ doc.label }}</span>
-                                        <span class="text-muted">({{ 'Group' if doc.target_type == 'group' else 'Patient' }})</span>
-                                    </label>
-                                    {% if doc.target_type == 'group' %}
-                                    <div class="mt-1 ms-4" style="max-width: 320px;">
-                                        <select class="form-select form-select-sm" name="gdoc_sync_mode::{{ doc.target_key }}">
-                                            <option value="pull" {% if selected_mode == 'pull' %}selected{% endif %}>{{ t('Pull doc to site only') }}</option>
-                                            <option value="both" {% if selected_mode == 'both' %}selected{% endif %}>{{ t('Pull and push (two-way)') }}</option>
-                                        </select>
-                                    </div>
-                                    {% endif %}
-                                </div>
-                                {% endfor %}
-                            </div>
-                            <div class="small text-muted mt-2">{{ t('Choose the Google Docs sources to sync into the site automatically.') }}</div>
-                            {% else %}
-                            {{ empty_state(icon='bi-google', message=t('No Google Docs are connected yet. Link a patient or group doc first.')) }}
-                            {% endif %}
-                        </div>
-
-                        <div class="mt-4">
-                            <label class="form-label small fw-semibold mb-2">{{ t('Recent Google Docs Sync Runs') }}</label>
-                            {% if gdocs_sync_history %}
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>{{ t('Run time') }}</th>
-                                            <th>{{ t('Trigger') }}</th>
-                                            <th>{{ t('Status') }}</th>
-                                            <th>{{ t('Processed') }}</th>
-                                            <th>{{ t('Synced') }}</th>
-                                            <th>{{ t('Errors') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for item in gdocs_sync_history %}
-                                        <tr>
-                                            <td class="small text-nowrap">{{ item.run_at }}</td>
-                                            <td class="small">{{ item.trigger_source }}</td>
-                                            <td class="small">
-                                                {% if item.status == 'success' %}
-                                                <span class="badge bg-success">{{ item.status }}</span>
-                                                {% elif item.status == 'partial' %}
-                                                <span class="badge bg-warning text-dark">{{ item.status }}</span>
-                                                {% else %}
-                                                <span class="badge bg-danger">{{ item.status }}</span>
-                                                {% endif %}
-                                            </td>
-                                            <td class="small">{{ item.targets_processed }}/{{ item.targets_total }}</td>
-                                            <td class="small">{{ item.synced_total }}</td>
-                                            <td class="small">{{ item.errors|length }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {% else %}
-                            {{ empty_state(icon='bi-arrow-repeat', message=t('No sync history yet.')) }}
-                            {% endif %}
-                        </div>
-                    </form>
-                    <p class="text-muted small mt-3 mb-0">{{ t('When connected, appointments (with "Save to Google Calendar" enabled) will automatically sync with your chosen Google Calendar. Vacant slots are never synced.') }}</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
-<script>
-(function() {
-    function toggleGoogleUiForConnectionState(data) {
-        const statusDiv = document.getElementById('gcalStatus');
-        const disconnectForm = document.getElementById('gcalDisconnectForm');
-        const connectWrap = document.getElementById('gcalConnectWrap');
-        const activeIntDiv = document.getElementById('gcalActiveIntegrations');
-        const calSelector = document.getElementById('gcalCalendarSelector');
-        const calSelect = document.getElementById('gcalCalendarSelect');
-
-        if (!statusDiv) {
-            return;
-        }
-
-        if (disconnectForm) {
-            disconnectForm.classList.add('d-none');
-            disconnectForm.style.display = 'none';
-        }
-        if (connectWrap) {
-            connectWrap.classList.remove('d-none');
-            connectWrap.style.display = '';
-        }
-        if (activeIntDiv) {
-            activeIntDiv.classList.add('d-none');
-            activeIntDiv.innerHTML = '';
-        }
-        if (calSelector) {
-            calSelector.classList.add('d-none');
-        }
-        if (calSelect) {
-            calSelect.innerHTML = '';
-        }
-
-        if (!data.google_libs) {
-            statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Google libraries not installed') }}</span>';
-            return;
-        }
-        if (!data.client_configured) {
-            statusDiv.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to enable OAuth') }}</span>';
-            if (connectWrap) {
-                connectWrap.classList.add('d-none');
-                connectWrap.style.display = 'none';
-            }
-            return;
-        }
-
-        if (data.connected) {
-            statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>{{ t('Connected') }}</span>' +
-                (data.calendar_id ? ' <span class="text-muted small ms-1">{{ t('Calendar') }}: ' + data.calendar_id + '</span>' : '');
-
-            if (disconnectForm) {
-                disconnectForm.classList.remove('d-none');
-                disconnectForm.style.display = '';
-            }
-            if (connectWrap) {
-                connectWrap.classList.add('d-none');
-                connectWrap.style.display = 'none';
-            }
-
-            if (activeIntDiv && data.enabled_integrations && data.enabled_integrations.length) {
-                const labels = {'calendar': '{{ t('Calendar') }}', 'docs': '{{ t('Docs') }}', 'sheets': '{{ t('Sheets') }}'};
-                const badges = data.enabled_integrations.map(function(k) {
-                    return '<span class="badge bg-light text-dark border me-1">' + (labels[k] || k) + '</span>';
-                }).join('');
-                activeIntDiv.innerHTML = '<span class="small text-muted">{{ t('Active integrations:') }} </span>' + badges;
-                activeIntDiv.classList.remove('d-none');
-            }
-            if (calSelector && data.calendars && data.calendars.length) {
-                calSelector.classList.remove('d-none');
-                data.calendars.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.id;
-                    opt.textContent = c.summary;
-                    if (c.id === data.calendar_id) opt.selected = true;
-                    calSelect.appendChild(opt);
-                });
-            }
-            return;
-        }
-
-        statusDiv.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-x-circle me-1"></i>{{ t('Not connected') }}</span>';
-    }
-
-    fetch('/admin/google-calendar/status?_=' + Date.now())
-        .then(r => r.json())
-        .then(data => {
-            // Pre-fill integration checkboxes from server setting
-            if (data.enabled_integrations && Array.isArray(data.enabled_integrations)) {
-                ['calendar','docs','sheets'].forEach(function(key) {
-                    const cb = document.getElementById('gcalInt' + key.charAt(0).toUpperCase() + key.slice(1));
-                    if (cb) cb.checked = data.enabled_integrations.indexOf(key) !== -1;
-                });
-            }
-            toggleGoogleUiForConnectionState(data);
-        })
-        .catch(() => {
-            // Keep server-rendered state as fallback when dynamic refresh fails.
-        });
-
-    const saveBtn = document.getElementById('gcalSaveCalendarBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', function() {
-            const calId = document.getElementById('gcalCalendarSelect').value;
-            const csrfToken = document.querySelector('[name=csrf_token]') ? document.querySelector('[name=csrf_token]').value : '';
-            fetch('/admin/google-calendar/set-calendar', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: 'calendar_id=' + encodeURIComponent(calId) + '&csrf_token=' + encodeURIComponent(csrfToken)
-            }).then(r => r.json()).then(d => {
-                if (d.status === 'success') {
-                    alert('{{ t('Calendar updated successfully.') }}');
-                }
-            });
-        });
-    }
-
-    const runAutoSyncBtn = document.getElementById('runGdocsAutoSyncNowBtn');
-    const autoSyncStatusNode = document.getElementById('gdocsAutoSyncStatus');
-    const autoSyncProgressWrap = document.getElementById('gdocsAutoSyncProgressWrap');
-    const autoSyncProgressBar = document.getElementById('gdocsAutoSyncProgressBar');
-    const autoSyncProgressLabel = document.getElementById('gdocsAutoSyncProgressLabel');
-
-    function setAutoSyncProgress(stepIndex, totalSteps, labelText, options) {
-        if (!autoSyncProgressWrap || !autoSyncProgressBar) {
-            return;
-        }
-        const opts = options || {};
-        const safeTotal = Math.max(1, Number(totalSteps) || 1);
-        const safeIndex = Math.min(Math.max(Number(stepIndex) || 0, 0), safeTotal);
-        const percent = Math.min(100, Math.max(0, Math.round((safeIndex / safeTotal) * 100)));
-
-        autoSyncProgressWrap.classList.remove('d-none');
-        autoSyncProgressBar.style.width = percent + '%';
-        autoSyncProgressBar.textContent = percent + '%';
-        autoSyncProgressBar.classList.remove('bg-success', 'bg-danger', 'bg-warning');
-
-        if (opts.variant === 'success') {
-            autoSyncProgressBar.classList.add('bg-success');
-            autoSyncProgressBar.classList.remove('progress-bar-striped', 'progress-bar-animated');
-        } else if (opts.variant === 'error') {
-            autoSyncProgressBar.classList.add('bg-danger');
-            autoSyncProgressBar.classList.remove('progress-bar-animated');
-        } else if (opts.variant === 'warning') {
-            autoSyncProgressBar.classList.add('bg-warning');
-            autoSyncProgressBar.classList.remove('progress-bar-animated');
-            autoSyncProgressBar.classList.add('text-dark');
-        } else {
-            autoSyncProgressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
-            autoSyncProgressBar.classList.remove('text-dark');
-        }
-
-        const progressRoot = autoSyncProgressBar.parentElement;
-        if (progressRoot) {
-            progressRoot.setAttribute('aria-valuenow', String(percent));
-        }
-        if (autoSyncProgressLabel) {
-            autoSyncProgressLabel.textContent = labelText || '';
-        }
-    }
-
-    const adminPasswordInput = document.getElementById('adminNewPasswordInput');
-    const adminPasswordHint = document.getElementById('adminPasswordStrengthHint');
-    if (adminPasswordInput && adminPasswordHint) {
-        adminPasswordInput.addEventListener('input', function () {
-            const value = String(adminPasswordInput.value || '');
-            const checks = [
-                value.length >= 10,
-                /[A-Z]/.test(value),
-                /[a-z]/.test(value),
-                /\d/.test(value),
-                /[^A-Za-z0-9]/.test(value)
-            ];
-            const score = checks.filter(Boolean).length;
-            if (!value) {
-                adminPasswordHint.className = 'text-muted';
-                adminPasswordHint.textContent = 'Use at least 10 characters with uppercase, lowercase, number, and special symbol.';
-            } else if (score < 3) {
-                adminPasswordHint.className = 'text-danger';
-                adminPasswordHint.textContent = 'Weak password: add more character variety.';
-            } else if (score < 5) {
-                adminPasswordHint.className = 'text-warning';
-                adminPasswordHint.textContent = 'Moderate password: add remaining requirements for stronger security.';
-            } else {
-                adminPasswordHint.className = 'text-success';
-                adminPasswordHint.textContent = 'Strong password format.';
-            }
-        });
-    }
-
-    if (runAutoSyncBtn) {
-        runAutoSyncBtn.addEventListener('click', async function () {
-            const csrfTokenNode = document.querySelector('[name=csrf_token]');
-            const csrfToken = csrfTokenNode ? csrfTokenNode.value : '';
-            const defaultLabel = runAutoSyncBtn.dataset.defaultLabel || runAutoSyncBtn.innerHTML;
-            runAutoSyncBtn.dataset.defaultLabel = defaultLabel;
-            runAutoSyncBtn.disabled = true;
-            runAutoSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ t('Syncing...') }}';
-            if (autoSyncStatusNode) {
-                autoSyncStatusNode.className = 'small text-muted mt-2';
-                autoSyncStatusNode.textContent = '{{ t('Starting Google Docs sync...') }}';
-            }
-            setAutoSyncProgress(0, 100, '{{ t('Preparing sync request...') }}');
-
-            const runningStatuses = new Set(['running', 'accepted']);
-            const finishedStatuses = new Set(['success', 'partial', 'failed', 'error', 'skipped']);
-
-            async function pollSyncJob(jobId) {
-                for (let attempt = 0; attempt < 300; attempt += 1) {
-                    let response;
-                    let data;
-                    try {
-                        response = await fetch('/admin/google-docs/auto-sync-status/' + encodeURIComponent(jobId));
-                        data = await response.json();
-                    } catch (_pollErr) {
-                        throw new Error('{{ t('Could not read sync progress.') }}');
-                    }
-
-                    if (!response.ok || data.error) {
-                        throw new Error(data.error || '{{ t('Could not read sync progress.') }}');
-                    }
-
-                    const percent = Math.max(0, Math.min(100, Number(data.percent || 0)));
-                    const totalTargets = Number(data.targets_total || 0);
-                    const processedTargets = Number(data.targets_processed || 0);
-                    const currentTarget = data.current_target ? String(data.current_target) : '';
-                    const phaseMessage = data.message || '{{ t('Syncing selected documents...') }}';
-                    const progressLabel = totalTargets > 0
-                        ? (phaseMessage + ' (' + processedTargets + '/' + totalTargets + ')')
-                        : phaseMessage;
-                    setAutoSyncProgress(percent, 100, currentTarget ? (progressLabel + ' - ' + currentTarget) : progressLabel);
-
-                    const status = String(data.status || '').toLowerCase();
-                    if (finishedStatuses.has(status)) {
-                        return data;
-                    }
-                    if (!runningStatuses.has(status)) {
-                        throw new Error('{{ t('Sync job entered an unknown state.') }}');
-                    }
-
-                    await new Promise((resolve) => window.setTimeout(resolve, 1500));
-                }
-
-                throw new Error('{{ t('Sync timed out before completion.') }}');
-            }
-
-            try {
-                const startResponse = await fetch('/admin/google-docs/auto-sync-now', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: 'csrf_token=' + encodeURIComponent(csrfToken)
-                });
-                const startData = await startResponse.json();
-
-                if ((!startResponse.ok && startResponse.status !== 409) || startData.error) {
-                    if (autoSyncStatusNode) {
-                        autoSyncStatusNode.className = 'small text-danger mt-2';
-                        autoSyncStatusNode.textContent = startData.error || '{{ t('Could not run Google Docs sync.') }}';
-                    }
-                    setAutoSyncProgress(100, 100, '{{ t('Sync failed to start.') }}', {variant: 'error'});
-                    return;
-                }
-
-                const jobId = startData.job_id;
-                if (!jobId) {
-                    throw new Error('{{ t('No sync job id was returned.') }}');
-                }
-
-                if (autoSyncStatusNode) {
-                    autoSyncStatusNode.className = 'small text-info mt-2';
-                    autoSyncStatusNode.textContent = startResponse.status === 409
-                        ? '{{ t('A sync is already running. Tracking existing job...') }}'
-                        : '{{ t('Google Docs sync is running...') }}';
-                }
-
-                const data = await pollSyncJob(jobId);
-
-                if (autoSyncStatusNode) {
-                    const runStatus = String(data.run_status || data.status || 'success').toLowerCase();
-                    autoSyncStatusNode.className = runStatus === 'failed'
-                        ? 'small text-danger mt-2'
-                        : (runStatus === 'partial' || runStatus === 'skipped' ? 'small text-warning mt-2' : 'small text-success mt-2');
-                    const warningCount = Array.isArray(data.warnings) ? data.warnings.length : 0;
-                    const errorCount = Array.isArray(data.errors) ? data.errors.length : 0;
-                    const baseMsg = data.result_message || data.message || '{{ t('Google Docs sync completed.') }}';
-                    const totals = '{{ t('Patients') }}: ' + Number(data.patients || 0) + ', ' +
-                        '{{ t('Groups pulled') }}: ' + Number(data.groups || 0) + ', ' +
-                        '{{ t('Groups pushed') }}: ' + Number(data.pushed_groups || 0);
-                    let resultMessage = baseMsg + ' (' + totals + ')';
-                    if (warningCount > 0) {
-                        resultMessage += ' ' + warningCount + ' {{ t('warning(s)') }}.';
-                    }
-                    if (errorCount > 0) {
-                        resultMessage += ' ' + errorCount + ' {{ t('error(s)') }}.';
-                    }
-                    autoSyncStatusNode.textContent = resultMessage;
-
-                    if (runStatus === 'failed') {
-                        setAutoSyncProgress(100, 100, '{{ t('Sync finished with errors.') }}', {variant: 'error'});
-                    } else if (runStatus === 'partial' || runStatus === 'skipped') {
-                        setAutoSyncProgress(100, 100, '{{ t('Sync finished with warnings.') }}', {variant: 'warning'});
-                    } else {
-                        setAutoSyncProgress(100, 100, '{{ t('Sync completed successfully.') }}', {variant: 'success'});
-                    }
-                }
-
-                window.setTimeout(() => {
-                    window.location.reload();
-                }, 1200);
-            } catch (err) {
-                if (autoSyncStatusNode) {
-                    autoSyncStatusNode.className = 'small text-danger mt-2';
-                    autoSyncStatusNode.textContent = (err && err.message) ? err.message : '{{ t('Could not run Google Docs sync.') }}';
-                }
-                setAutoSyncProgress(100, 100, '{{ t('Sync failed.') }}', {variant: 'error'});
-            } finally {
-                runAutoSyncBtn.disabled = false;
-                runAutoSyncBtn.innerHTML = runAutoSyncBtn.dataset.defaultLabel || '{{ t('Sync Now') }}';
-            }
-        });
-    }
-})();
-</script>
-
+{% block scripts %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/tweaks.css') }}">
 <script>
 (function () {
@@ -849,6 +147,20 @@
     }
     if (np) np.addEventListener('input', upd);
     if (cp) cp.addEventListener('input', upd);
+    // Admin password strength JS (reduced from profile)
+    var adminPw = document.getElementById('adminNewPasswordInput');
+    var adminHint = document.getElementById('adminPasswordStrengthHint');
+    if (adminPw && adminHint) {
+        adminPw.addEventListener('input', function() {
+            var v = String(adminPw.value || '');
+            var checks = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(v) && v.length >= 10;
+            var strong = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/.test(v);
+            if (!v) { adminHint.className = 'text-muted'; adminHint.textContent = 'Use 10+ chars with uppercase, lowercase, number, and special symbol.'; }
+            else if (strong) { adminHint.className = 'text-success'; adminHint.textContent = 'Strong password.'; }
+            else if (checks) { adminHint.className = 'text-warning'; adminHint.textContent = 'Moderate — add more length.'; }
+            else { adminHint.className = 'text-danger'; adminHint.textContent = 'Weak — add uppercase, lowercase, number, and special char.'; }
+        });
+    }
 })();
 </script>
 {% endblock %}

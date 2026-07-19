@@ -6,118 +6,327 @@
         <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-gear-fill me-2"></i>{{ t('Administration') }}</h2>
         <p class="text-slate-500 text-sm mb-0">{{ t('Manage all clinic settings and tools from one place.') }}</p>
     </div>
-    <form method="post" action="{{ url_for('admin.export_dashboard') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-primary rounded-pill">
-            <i class="bi bi-download me-1"></i>{{ t('Export All Data') }}
-        </button>
-    </form>
+    <div class="d-flex gap-2">
+        <form method="post" action="{{ url_for('backup_now') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="bi bi-shield-lock me-1"></i>{{ t('Create Backup') }}
+            </button>
+        </form>
+        <form method="post" action="{{ url_for('admin.export_dashboard') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-primary rounded-pill">
+                <i class="bi bi-download me-1"></i>{{ t('Export All') }}
+            </button>
+        </form>
+    </div>
 </div>
 
-<div class="row g-3">
-    <div class="col-md-6 col-xl-4">
+{# ── Settings Cards Grid ────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('assessments.manage_assessment_types') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-clipboard-check text-primary mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Assessment Builder') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Create and manage custom questionnaires') }}</p>
+            <div class="card-body p-4"><i class="bi bi-clipboard-check text-primary mb-2" style="font-size:1.5rem"></i>
+                <h5 class="fw-bold text-dark">{{ t('Assessments') }}</h5>
+                <p class="small text-muted mb-0">{{ t('Custom questionnaires') }}</p>
             </div>
         </a>
     </div>
-
-    <div class="col-md-6 col-xl-4">
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('admin.morning_settings') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-receipt text-success mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Morning Billing') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Configure Green Invoice / Morning API') }}</p>
+            <div class="card-body p-4"><i class="bi bi-receipt text-success mb-2" style="font-size:1.5rem"></i>
+                <h5 class="fw-bold text-dark">{{ t('Billing') }}</h5>
+                <p class="small text-muted mb-0">{{ t('Green Invoice / Morning API') }}</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ url_for('billing.manage_service_types') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
+            <div class="card-body p-4"><i class="bi bi-tags mb-2" style="font-size:1.5rem;color:#9333ea"></i>
+                <h5 class="fw-bold text-dark">{{ t('Service Types') }}</h5>
+                <p class="small text-muted mb-0">{{ t('Prices & categories') }}</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ url_for('admin.email_settings') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
+            <div class="card-body p-4"><i class="bi bi-at text-primary mb-2" style="font-size:1.5rem"></i>
+                <h5 class="fw-bold text-dark">{{ t('Email') }}</h5>
+                <p class="small text-muted mb-0">{{ t('SMTP & reminders') }}</p>
             </div>
         </a>
     </div>
 
-    <div class="col-md-6 col-xl-4">
+    <div class="col-md-6 col-xl-3">
+        <a href="{{ url_for('manage_resources') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
+            <div class="card-body p-4"><i class="bi bi-journal-bookmark text-success mb-2" style="font-size:1.5rem"></i>
+                <h5 class="fw-bold text-dark">{{ t('Resources') }}</h5>
+                <p class="small text-muted mb-0">{{ t('Shared patient library') }}</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('admin_contact_inquiries') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-start">
                     <i class="bi bi-envelope text-warning mb-2" style="font-size:1.5rem"></i>
-                    {% if unread_inquiries > 0 %}
-                    <span class="badge bg-warning text-dark rounded-pill">{{ unread_inquiries }} {{ t('new') }}</span>
-                    {% endif %}
+                    {% if unread_inquiries > 0 %}<span class="badge bg-warning text-dark rounded-pill">{{ unread_inquiries }} {{ t('new') }}</span>{% endif %}
                 </div>
                 <h5 class="fw-bold text-dark">{{ t('Contact Inquiries') }}</h5>
-                <p class="small text-muted mb-0">{{ t('View public contact form submissions') }}</p>
+                <p class="small text-muted mb-0">{{ t('Public form submissions') }}</p>
             </div>
         </a>
     </div>
-
-    <div class="col-md-6 col-xl-4">
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('admin_users') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-people text-info mb-2" style="font-size:1.5rem"></i>
+            <div class="card-body p-4"><i class="bi bi-people text-info mb-2" style="font-size:1.5rem"></i>
                 <h5 class="fw-bold text-dark">{{ t('Users') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Manage admin and patient portal accounts') }}</p>
+                <p class="small text-muted mb-0">{{ t('Admin & patient accounts') }}</p>
             </div>
         </a>
     </div>
-
-    <div class="col-md-6 col-xl-4">
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('admin_security_log') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-shield-check text-danger mb-2" style="font-size:1.5rem"></i>
+            <div class="card-body p-4"><i class="bi bi-shield-check text-danger mb-2" style="font-size:1.5rem"></i>
                 <h5 class="fw-bold text-dark">{{ t('Security Log') }}</h5>
-                <p class="small text-muted mb-0">{{ t('View login attempts and security events') }}</p>
-            </div>
-        </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-        <a href="{{ url_for('admin.admin_email_settings') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-at text-primary mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Email Settings') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Configure SMTP and reminder templates') }}</p>
-            </div>
-        </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-        <a href="{{ url_for('manage_resources') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-journal-bookmark text-success mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Resources') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Manage shared patient resources') }}</p>
-            </div>
-        </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-        <a href="{{ url_for('billing.manage_service_types') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-tags text-purple mb-2" style="font-size:1.5rem;color:#9333ea"></i>
-                <h5 class="fw-bold text-dark">{{ t('Service Types') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Manage billing service types and prices') }}</p>
-            </div>
-        </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-        <a href="{{ url_for('admin.google_setup') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-google text-primary mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Google Setup') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Connect Google Calendar, Docs, and Sheets') }}</p>
-            </div>
-        </a>
-    </div>
-
-    <div class="col-md-6 col-xl-4">
-        <a href="{{ url_for('admin_profile') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
-            <div class="card-body p-4">
-                <i class="bi bi-person-gear text-secondary mb-2" style="font-size:1.5rem"></i>
-                <h5 class="fw-bold text-dark">{{ t('Profile & Site Settings') }}</h5>
-                <p class="small text-muted mb-0">{{ t('Update admin profile, about page, and branding') }}</p>
+                <p class="small text-muted mb-0">{{ t('Login attempts & events') }}</p>
             </div>
         </a>
     </div>
 </div>
+
+{# ── Inline Settings Panels ─────────────────────────────────── #}
+
+{# About Page Settings #}
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#aboutCollapse" aria-expanded="false">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2 text-primary"></i>{{ t('About Page & Branding') }}</h5>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </button>
+    <div class="collapse" id="aboutCollapse">
+        <div class="card-body p-4">
+            <form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-12 form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="about_enabled" id="aboutEnabledSwitch" {% if site_settings.get('about_enabled') == '1' %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="aboutEnabledSwitch">{{ t('Show public About page') }}</label>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">{{ t('Contact Phone') }}</label>
+                    <input class="form-control" name="about_phone" value="{{ site_settings.get('about_phone', '') }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">{{ t('Contact Email') }}</label>
+                    <input type="email" class="form-control" name="about_email" value="{{ site_settings.get('about_email', '') }}">
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-bold">{{ t('Short About Text') }}</label>
+                    <textarea class="form-control" name="about_text" rows="4">{{ site_settings.get('about_text', '') }}</textarea>
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary rounded-pill px-4" type="submit">{{ t('Save Settings') }}</button>
+                    <a href="{{ url_for('about_page') }}" class="btn btn-outline-secondary rounded-pill" target="_blank">{{ t('Preview') }}</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# SMTP & Diagnostics #}
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#smtpCollapse" aria-expanded="false">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-envelope-check me-2 text-primary"></i>{{ t('SMTP & Diagnostics') }}</h5>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </button>
+    <div class="collapse" id="smtpCollapse">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                <span class="small fw-semibold">SMTP:</span>
+                {% if smtp_health and smtp_health.ok %}
+                <span class="badge bg-success">Connected</span>
+                {% elif smtp_health and smtp_health.configured %}
+                <span class="badge bg-warning text-dark">Configured, unreachable</span>
+                {% else %}
+                <span class="badge bg-secondary">Not configured</span>
+                {% endif %}
+                <span class="small text-muted">{{ smtp_health.message if smtp_health else 'Status unavailable.' }}</span>
+            </div>
+            <form method="post" action="{{ url_for('admin_smtp_send_test') }}" class="row g-2 align-items-end mb-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Test email</label>
+                    <input type="email" class="form-control" name="test_email" value="{{ admin['email'] or '' }}" placeholder="admin@example.com">
+                </div>
+                <div class="col-md-6 d-flex gap-2">
+                    <button class="btn btn-outline-primary rounded-pill" type="submit"><i class="bi bi-send me-1"></i>{{ t('Send Test') }}</button>
+                    <a href="{{ url_for('admin.email_settings') }}" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-envelope-paper me-1"></i>{{ t('Reminders') }}</a>
+                </div>
+            </form>
+            <h6 class="fw-bold mb-2">{{ t('Recent Auth Events') }}</h6>
+            {% if recent_auth_events %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Time</th><th>Action</th><th>Details</th></tr></thead>
+                    <tbody>
+                        {% for item in recent_auth_events %}
+                        <tr><td class="small text-nowrap">{{ item.created_at }}</td><td class="small"><code>{{ item.action }}</code></td><td class="small text-muted">{{ item.details or '-' }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}{{ empty_state(icon='bi-shield-lock', message='No auth events recorded yet.') }}{% endif %}
+        </div>
+    </div>
+</div>
+
+{# Restore from Backup #}
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#backupCollapse" aria-expanded="false">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-counterclockwise me-2 text-danger"></i>{{ t('Backup & Restore') }}</h5>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </button>
+    <div class="collapse" id="backupCollapse">
+        <div class="card-body p-4">
+            <p class="small text-muted mb-3">{{ t('Restoring will replace the current database. A safety copy is created automatically.') }}</p>
+            <form method="post" action="{{ url_for('restore_backup_now') }}" data-confirm-modal data-confirm-message="{{ t('Restore selected backup? This will replace current live data.') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-9">
+                        <select class="form-select" name="backup_file" {% if not backup_files %}disabled{% endif %}>
+                            {% for backup_file in backup_files %}
+                            <option value="{{ backup_file['name'] }}">{{ backup_file['name'] }} — {{ (backup_file['size'] / 1024)|round(1) }} KB</option>
+                            {% else %}
+                            <option>{{ t('No encrypted backups found') }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-grid">
+                        <button class="btn btn-danger rounded-pill" type="submit" {% if not backup_files %}disabled{% endif %}>{{ t('Restore') }}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# Google Integration #}
+<div class="card border-0 shadow-sm rounded-4 mb-3">
+    <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#googleCollapse" aria-expanded="false">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-google me-2 text-primary"></i>{{ t('Google Integration') }}</h5>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </button>
+    <div class="collapse" id="googleCollapse">
+        <div class="card-body p-4">
+            <div id="gcalStatus" class="mb-3">
+                {% if not google_calendar_ui.google_libs %}
+                <span class="badge bg-warning text-dark">{{ t('Google libraries not installed') }}</span>
+                {% elif not google_calendar_ui.client_configured %}
+                <span class="badge bg-warning text-dark">{{ t('Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET') }}</span>
+                {% elif google_calendar_ui.connected %}
+                <span class="badge bg-success">{{ t('Connected') }}</span>{% if google_calendar_ui.calendar_id %} <span class="small ms-1">{{ t('Calendar') }}: {{ google_calendar_ui.calendar_id }}</span>{% endif %}
+                {% elif google_calendar_ui.error %}
+                <span class="badge bg-warning text-dark">{{ t('Error') }}: {{ google_calendar_ui.error }}</span>
+                {% else %}
+                <span class="badge bg-secondary">{{ t('Not connected') }}</span>
+                {% endif %}
+            </div>
+            <div id="gcalConnectWrap" class="mb-3{% if google_calendar_ui.connected or not google_calendar_ui.client_configured %} d-none{% endif %}">
+                <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill"><i class="bi bi-google me-1"></i>{{ t('Connect Google') }}</a>
+                <a href="{{ url_for('admin.google_setup') }}" class="btn btn-outline-primary btn-sm rounded-pill"><i class="bi bi-gear me-1"></i>{{ t('Setup Guide') }}</a>
+            </div>
+            <div id="gcalActions" class="d-flex flex-wrap gap-2 mb-3">
+                <form method="post" action="{{ url_for('google_calendar_disconnect') }}" class="{% if not google_calendar_ui.connected %}d-none{% endif %}" id="gcalDisconnectForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">{{ t('Disconnect') }}</button>
+                </form>
+            </div>
+            {# Google Docs Sync Settings #}
+            <hr class="my-3">
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                    <label class="form-label small fw-semibold mb-0">{{ t('Google Docs Auto Sync') }}</label>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" name="gdocs_auto_sync_enabled" id="gdocsAutoSyncEnabled" {% if gdocs_auto_sync_state.enabled %}checked{% endif %}>
+                        <label class="form-check-label small" for="gdocsAutoSyncEnabled">{{ t('Enable') }}</label>
+                    </div>
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-5">
+                        <select class="form-select form-select-sm" name="gdocs_auto_sync_interval">
+                            {% for key, label in [('twice_daily','Twice daily'),('daily','Daily'),('twice_weekly','Twice weekly'),('weekly','Weekly'),('biweekly','Biweekly'),('monthly','Monthly')] %}
+                            <option value="{{ key }}" {% if gdocs_auto_sync_state.interval_key == key %}selected{% endif %}>{{ t(label) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-7 d-flex gap-2">
+                        <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ t('Save Auto Sync') }}</button>
+                        <button type="button" id="runGdocsAutoSyncNowBtn" class="btn btn-outline-secondary btn-sm rounded-pill">{{ t('Sync Now') }}</button>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">
+                    {% if gdocs_auto_sync_state.last_run_at %}{{ t('Last sync:') }} {{ gdocs_auto_sync_state.last_run_at|strftime('%Y-%m-%d %H:%M') }}{% else %}{{ t('Never synced') }}{% endif %}
+                </div>
+                <div id="gdocsAutoSyncStatus" class="small text-muted mt-2"></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='css/tweaks.css') }}"></script>
+<script>
+(function() {
+    // Google Calendar status refresh
+    function toggleGoogleUi(data) {
+        var statusDiv = document.getElementById('gcalStatus');
+        var disForm = document.getElementById('gcalDisconnectForm');
+        var connWrap = document.getElementById('gcalConnectWrap');
+        if (!statusDiv) return;
+        if (disForm) { disForm.classList.add('d-none'); }
+        if (connWrap) { connWrap.classList.remove('d-none'); }
+
+        if (!data.google_libs) { statusDiv.innerHTML = '<span class="badge bg-warning text-dark">{{ t('Google libraries not installed') }}</span>'; return; }
+        if (!data.client_configured) { statusDiv.innerHTML = '<span class="badge bg-warning text-dark">{{ t('Google OAuth not configured') }}</span>'; if (connWrap) connWrap.classList.add('d-none'); return; }
+        if (data.connected) {
+            statusDiv.innerHTML = '<span class="badge bg-success">{{ t('Connected') }}</span>' + (data.calendar_id ? ' <span class="small ms-1">Calendar: ' + data.calendar_id + '</span>' : '');
+            if (disForm) disForm.classList.remove('d-none');
+            if (connWrap) connWrap.classList.add('d-none');
+            return;
+        }
+        statusDiv.innerHTML = '<span class="badge bg-secondary">{{ t('Not connected') }}</span>';
+    }
+
+    fetch('/admin/google-calendar/status?_=' + Date.now()).then(r => r.json()).then(toggleGoogleUi).catch(function(){});
+
+    // Google Docs sync button
+    var syncBtn = document.getElementById('runGdocsAutoSyncNowBtn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+            var csrf = document.querySelector('[name=csrf_token]') ? document.querySelector('[name=csrf_token]').value : '';
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>{{ t('Syncing...') }}';
+            fetch('/admin/google-docs/auto-sync-now', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'csrf_token=' + encodeURIComponent(csrf)
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                  if (d.job_id) {
+                      if (typeof showToast === 'function') showToast('{{ t('Sync started') }}', 'success');
+                      setTimeout(function() { location.reload(); }, 3000);
+                  } else {
+                      if (typeof showToast === 'function') showToast(d.error || '{{ t('Sync failed') }}', 'danger');
+                  }
+              }).catch(function() {
+                  if (typeof showToast === 'function') showToast('{{ t('Sync failed') }}', 'danger');
+              }).finally(function() {
+                  syncBtn.disabled = false;
+                  syncBtn.innerHTML = '{{ t('Sync Now') }}';
+              });
+        });
+    }
+})();
+</script>
 {% endblock %}

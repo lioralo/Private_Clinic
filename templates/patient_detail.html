@@ -75,6 +75,8 @@
         {{ t('Messages') }}{% if unread_messages_count %} <span class="badge bg-danger ms-1">{{ unread_messages_count }}</span>{% endif %}
     </a>
     <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='supervision') }}" class="btn rounded-pill {% if active_tab == 'supervision' %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ t('Supervision') }}</a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='goals') }}" class="btn rounded-pill {% if active_tab == 'goals' %}btn-primary{% else %}btn-outline-secondary{% endif %}"><i class="bi bi-bullseye me-1"></i>{{ t('Goals') }}</a>
+    <a href="{{ url_for('patient_detail', patient_id=patient['id'], tab='gdocs') }}" class="btn rounded-pill {% if active_tab == 'gdocs' %}btn-primary{% else %}btn-outline-secondary{% endif %}"><i class="bi bi-google me-1"></i>{{ t('Google Docs') }}</a>
     <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn rounded-pill btn-outline-secondary"><i class="bi bi-clipboard2-pulse me-1"></i>{{ t('Treatment Plans') }}</a>
     <a href="{{ url_for('assessments.view_patient_assessments', patient_id=patient['id']) }}" class="btn rounded-pill btn-outline-secondary"><i class="bi bi-clipboard-data me-1"></i>{{ t('Assessments') }}</a>
     {% if intake_enabled %}
@@ -119,54 +121,12 @@
     </div>
 </div>
 
+        {% elif active_tab == 'goals' %}
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
     <div class="p-5 border-b border-slate-100">
-        <h5 class="font-bold mb-0"><i class="bi bi-clipboard-data me-2 text-primary"></i>{{ t('Recent Assessments') }}</h5>
+        <h5 class="font-bold mb-0"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</h5>
     </div>
-    <div class="p-4">
-        {% if recent_assessments %}
-        <div class="row g-3">
-            {% for a in recent_assessments %}
-            <div class="col-md-6">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="small text-muted">{{ a['display_name'] or a['assessment_name'] }}</span>
-                    {% if a['total_score'] is not none %}
-                    <span class="badge {% if a['severity_level'] in ('minimal','none') %}bg-success{% elif a['severity_level'] in ('mild','situational') %}bg-info{% elif a['severity_level'] == 'moderate' %}bg-warning text-dark{% else %}bg-danger{% endif %} rounded-pill">{{ a['total_score'] }}</span>
-                    {% else %}
-                    <span class="badge bg-light text-dark rounded-pill">{{ t('Done') }}</span>
-                    {% endif %}
-                    <span class="small text-muted ms-auto">{{ a['taken_at'] }}</span>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-muted small mb-0">{{ t('No assessments recorded yet.') }}</p>
-        {% endif %}
-        <a href="{{ url_for('assessments.take_assessment', patient_id=patient['id']) }}" class="btn btn-sm btn-outline-primary rounded-pill mt-3">
-            <i class="bi bi-plus-circle me-1"></i>{{ t('New Assessment') }}
-        </a>
-    </div>
-</div>
-
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
-    <div class="p-5 border-b border-slate-100">
-        <h5 class="font-bold mb-0"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>{{ t('Assessment Trends') }}</h5>
-    </div>
-    <div class="p-4">
-        <canvas id="assessmentTrendsChart" height="250"></canvas>
-        <p class="text-muted small mb-0 mt-2 text-center" id="trendsEmpty" style="display:none">{{ t('No assessments recorded yet.') }}</p>
-    </div>
-</div>
-
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
-    <div class="p-5 border-b border-slate-100">
-        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoalsBody" aria-expanded="false" aria-controls="patientGoalsBody" onclick="toggleStablePanel(this)">
-            <span class="font-bold mb-0"><i class="bi bi-bullseye me-2 text-primary"></i>{{ t('Goals') }}</span>
-            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
-        </button>
-    </div>
-    <div class="p-5 d-none" id="patientGoalsBody">
+    <div class="p-5">
         <form method="post" action="{{ url_for('add_goal', patient_id=patient['id']) }}" class="d-flex flex-column flex-md-row gap-2 mb-3">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="text" name="description" class="form-control" placeholder="{{ t('Add a treatment goal') }}" required>
@@ -197,80 +157,27 @@
     </div>
 </div>
 
+        {% elif active_tab == 'gdocs' %}
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
     <div class="p-5 border-b border-slate-100">
-        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientTreatmentPlanBody" aria-expanded="false" aria-controls="patientTreatmentPlanBody" onclick="toggleStablePanel(this)">
-            <span class="font-bold mb-0"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Treatment Plan') }}</span>
-            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
-        </button>
+        <h5 class="font-bold mb-0"><i class="bi bi-google me-2 text-primary"></i>{{ t('Google Docs') }}</h5>
     </div>
-    <div class="p-5 d-none" id="patientTreatmentPlanBody">
-        <p class="text-muted mb-3">{{ t('Create and manage structured treatment plans with SMART goals.') }}</p>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ url_for('treatment_plans.view_patient_plans', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill">
-                <i class="bi bi-eye me-1"></i>{{ t('View Plans') }}
-            </a>
-            <a href="{{ url_for('treatment_plans.create_plan', patient_id=patient['id']) }}" class="btn btn-primary rounded-pill">
-                <i class="bi bi-plus-circle me-1"></i>{{ t('New Plan') }}
-            </a>
+    <div class="p-5">
+        {% if patient['gdoc_id'] %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-success rounded-pill">{{ t('Connected') }}</span>
+            <span class="small text-muted">{{ patient['gdoc_id'] }}</span>
         </div>
-        <hr class="my-3">
-        <form method="post" action="{{ url_for('update_treatment_plan', patient_id=patient['id']) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="form-label small text-muted">{{ t('Legacy treatment plan notes (quick notes)') }}</label>
-            <textarea name="treatment_plan" class="form-control" rows="4" placeholder="{{ t('Describe the overall treatment plan, therapeutic approach, and long-term goals...') }}">{{ patient['treatment_plan'] or '' }}</textarea>
-            <div class="mt-2 d-flex justify-content-end">
-                <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">{{ t('Save') }}</button>
-            </div>
-        </form>
+        <p class="small text-muted mb-3">{{ t('Google Docs content is synced from the connected document. Use the Google Docs auto-sync in Administration to pull updates.') }}</p>
+        {% else %}
+        <p class="text-muted mb-3">{{ t('No Google Doc is linked to this patient yet.') }}</p>
+        <p class="small text-muted">{{ t('To link a Google Doc, go to the patient detail page in Google Docs integration or set up auto-sync from the Administration page.') }}</p>
+        {% endif %}
+        <a href="{{ url_for('admin.administration') }}" class="btn btn-outline-primary rounded-pill btn-sm">
+            <i class="bi bi-gear me-1"></i>{{ t('Google Sync Settings') }}
+        </a>
     </div>
 </div>
-
-<div class="bg-white rounded-2xl shadow-sm border border-slate-100">
-    <div class="p-5 border-b border-slate-100">
-        <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientGoogleDocsBody" aria-expanded="false" aria-controls="patientGoogleDocsBody" onclick="toggleStablePanel(this)">
-            <span class="font-bold mb-0"><i class="bi bi-file-earmark-richtext me-2 text-primary"></i>{{ t('Google Docs') }}</span>
-            <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
-        </button>
-    </div>
-    <div class="p-5 d-none" id="patientGoogleDocsBody">
-                <div class="d-flex flex-wrap gap-2 mb-3">
-                    {% if patient['gdoc_id'] %}
-                    <a href="{{ url_for('open_gdoc', patient_id=patient['id']) }}" class="btn btn-outline-primary rounded-pill" target="_blank" rel="noopener noreferrer">
-                        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open Doc') }}
-                    </a>
-                    <form method="post" action="{{ url_for('sync_from_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-secondary rounded-pill"><i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync Notes') }}</button>
-                    </form>
-                    <form method="post" action="{{ url_for('detach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-outline-danger rounded-pill"><i class="bi bi-link-45deg me-1"></i>{{ t('Detach') }}</button>
-                    </form>
-                    {% else %}
-                    <form method="post" action="{{ url_for('link_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form" data-open-doc="true">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-primary rounded-pill"><i class="bi bi-plus-circle me-1"></i>{{ t('Create Doc') }}</button>
-                    </form>
-                    {% endif %}
-                </div>
-                <form method="post" action="{{ url_for('attach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label class="form-label">{{ t('Attach Existing Google Doc') }}</label>
-                    <div class="d-flex flex-column flex-md-row gap-2">
-                        <input type="text" name="doc_url" class="form-control" placeholder="{{ t('Google Doc URL') }}" required>
-                        <button type="submit" class="btn btn-outline-primary rounded-pill px-4">{{ t('Attach') }}</button>
-                    </div>
-                </form>
-                <div class="small text-muted mt-3">
-                    {% if patient['gdoc_id'] %}
-                    {{ t('Linked document ID') }}: {{ patient['gdoc_id'] }}
-                    {% else %}
-                    {{ t('No Google Doc linked yet.') }}
-                    {% endif %}
-                </div>
-            </div>
-        </div>
 
         {% elif active_tab == 'notes' %}
         <div class="card border-0 shadow-sm mb-4">
