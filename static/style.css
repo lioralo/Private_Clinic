@@ -340,6 +340,7 @@ h1, h2, h3, h4, h5 {
 .btn-primary {
     background-color: var(--color-primary);
     border-color: var(--color-primary);
+    color: #fff !important;
     border-radius: var(--radius-full);
     padding: 0.6rem 1.5rem;
     font-weight: 700;
@@ -598,8 +599,8 @@ input.form-control[type="password"] {
 }
 
 .pill-nav .nav-link.active {
-    color: #fff;
-    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    color: #fff !important;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark)) !important;
     box-shadow: 0 8px 20px rgba(59, 130, 246, 0.20);
 }
 

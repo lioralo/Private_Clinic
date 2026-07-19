@@ -232,7 +232,55 @@ def administration():
     unread_inquiries = db.execute(
         "SELECT COUNT(*) AS c FROM contact_inquiries WHERE COALESCE(is_read,0)=0"
     ).fetchone()['c']
-    return render_template('administration.html', unread_inquiries=unread_inquiries)
+
+    from app import get_site_settings, _list_connected_google_docs, _get_google_docs_auto_sync_state, list_encrypted_backups
+    from app import _get_gdocs_auto_sync_health, _smtp_health_check
+    site_settings = get_site_settings(db)
+    admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
+    smtp_health = _smtp_health_check()
+    recent_auth_events = db.execute(
+        "SELECT action, details, created_at FROM audit_logs WHERE action LIKE 'auth_%' ORDER BY created_at DESC LIMIT 8"
+    ).fetchall()
+    backup_files = list_encrypted_backups()
+
+    try:
+        raw_enabled = json.loads(site_settings.get('google_enabled_integrations') or '["calendar","docs","sheets"]')
+        if not isinstance(raw_enabled, list): raise ValueError
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raw_enabled = ['calendar', 'docs', 'sheets']
+    enabled_integrations = [k for k in raw_enabled if k in ('calendar', 'docs', 'sheets')]
+    google_calendar_ui = {
+        'google_libs': bool(_gcal and getattr(_gcal, 'GOOGLE_LIBS_AVAILABLE', False)),
+        'client_configured': False, 'connected': False, 'calendar_id': None, 'calendars': [],
+        'enabled_integrations': enabled_integrations, 'error': None,
+    }
+    if _gcal:
+        try:
+            google_calendar_ui['client_configured'] = bool(_gcal._client_secrets_available())
+            if google_calendar_ui['client_configured']:
+                google_calendar_ui['connected'] = bool(_gcal.is_connected(db))
+                if google_calendar_ui['connected']:
+                    google_calendar_ui['calendar_id'] = str(_gcal.get_calendar_id(db) or '')
+                    calendars_raw = _gcal.list_calendars(db)
+                    google_calendar_ui['calendars'] = calendars_raw if isinstance(calendars_raw, list) else []
+        except Exception as exc:
+            google_calendar_ui['error'] = str(exc)
+
+    connected_google_docs = _list_connected_google_docs(db)
+    gdocs_auto_sync_state = _get_google_docs_auto_sync_state(db, connected_docs=connected_google_docs)
+    gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
+
+    return render_template('administration.html',
+        unread_inquiries=unread_inquiries,
+        site_settings=site_settings,
+        admin=admin,
+        smtp_health=smtp_health,
+        recent_auth_events=recent_auth_events,
+        backup_files=backup_files,
+        google_calendar_ui=google_calendar_ui,
+        gdocs_auto_sync_state=gdocs_auto_sync_state,
+        gdocs_auto_sync_health=gdocs_auto_sync_health,
+    )
 
 
 @admin_bp.route('/admin/export-dashboard', methods=['POST'])

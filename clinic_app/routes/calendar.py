@@ -383,11 +383,12 @@ def _nearest_calendar_anchor_date(db, user):
     if user.role == 'patient' and user.patient_id:
         patient_clause = ' AND patient_id = ?'
         params.append(user.patient_id)
+    # Look for the nearest future appointment (today or later)
     future_appt = db.execute(
         f'''
         SELECT appointment_date
         FROM appointments
-                WHERE appointment_date >= ?
+        WHERE appointment_date >= ?
           {patient_clause}
         ORDER BY appointment_date ASC, appointment_time ASC
         LIMIT 1
@@ -396,31 +397,7 @@ def _nearest_calendar_anchor_date(db, user):
     ).fetchone()
     if future_appt and parse_date_safe(future_appt['appointment_date']):
         return parse_date_safe(future_appt['appointment_date'])
-    past_appt = db.execute(
-        f'''
-        SELECT appointment_date
-        FROM appointments
-        WHERE appointment_date < ?
-          {patient_clause}
-        ORDER BY appointment_date DESC, appointment_time DESC
-        LIMIT 1
-        ''',
-        [today.isoformat(), *params]
-    ).fetchone()
-    if past_appt and parse_date_safe(past_appt['appointment_date']):
-        return parse_date_safe(past_appt['appointment_date'])
-    if user.role == 'admin':
-        for table, date_col in [
-            ('group_sessions', 'session_date'),
-            ('blocked_slots', 'blocked_date'),
-        ]:
-            for direction, cmp in [('ASC', '>='), ('DESC', '<')]:
-                row = db.execute(
-                    f'SELECT {date_col} AS day FROM {table} WHERE {date_col} {cmp} ? ORDER BY {date_col} {direction} LIMIT 1',
-                    (today.isoformat(),)
-                ).fetchone()
-                if row and parse_date_safe(row['day']):
-                    return parse_date_safe(row['day'])
+    # No future appointments — anchor to today to show the current week
     return today
 
 
