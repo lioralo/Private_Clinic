@@ -244,23 +244,32 @@
 <div class="row g-4 align-items-start">
     <div class="col-12">
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white border-0 p-3">
-                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="groupMgmtBody" aria-expanded="false" aria-controls="groupMgmtBody" onclick="toggleStablePanel(this)">
-                    <span class="fw-bold text-primary">{{ txt('Group Management', 'ניהול קבוצה') }}</span>
-                    <i class="bi bi-chevron-down stable-toggle-icon"></i>
-                </button>
+            <div class="card-header bg-white border-0 pt-3 pb-0">
+                <ul class="nav nav-tabs pill-nav" role="tablist" id="groupMgmtTabs">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#gTabInfo" type="button" role="tab">{{ txt('Info', 'פרטים') }}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gTabSessions" type="button" role="tab">{{ txt('Sessions', 'מפגשים') }} <span class="badge bg-light text-dark ms-1">{{ group_sessions|length }}</span></button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gTabMembers" type="button" role="tab">{{ txt('Members', 'משתתפים') }}{% if group_members %} <span class="badge bg-secondary ms-1">{{ group_members|length }}</span>{% endif %}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gTabSchedule" type="button" role="tab">{{ txt('Schedule', 'קביעת מפגש') }}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gTabSupervision" type="button" role="tab">{{ txt('Supervision', 'הדרכה') }}{% if group_supervisions %} <span class="badge bg-primary ms-1">{{ group_supervisions|length }}</span>{% endif %}</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gTabDelete" type="button" role="tab"><i class="bi bi-trash me-1"></i>{{ txt('Delete', 'מחיקה') }}</button>
+                    </li>
+                </ul>
             </div>
-            <div class="card-body p-3 d-none" id="groupMgmtBody">
-                <div class="d-flex flex-wrap gap-2" id="groupMgmtTabs">
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab active" data-pane="groupMgmtPaneInfo" type="button">{{ txt('Group Info', 'פרטי קבוצה') }}</button>
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSchedule" type="button">{{ txt('Schedule Session', 'קביעת מפגש') }}</button>
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneMembers" type="button">{{ txt('Members', 'משתתפים') }}{% if group_members %} <span class="badge bg-secondary rounded-pill ms-1">{{ group_members|length }}</span>{% endif %}</button>
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneHistory" type="button">{{ txt('Member History', 'היסטוריית משתתפים') }}</button>
-                    <button class="btn btn-sm btn-outline-secondary rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneSupervision" type="button">{{ txt('Supervision', 'הדרכה') }}{% if group_supervisions %} <span class="badge bg-primary rounded-pill ms-1">{{ group_supervisions|length }}</span>{% endif %}</button>
-                    <button class="btn btn-sm btn-outline-danger rounded-pill group-mgmt-tab" data-pane="groupMgmtPaneDanger" type="button">{{ txt('Delete Group', 'מחיקת קבוצה') }}</button>
-                </div>
-                <div id="groupMgmtCanvas" class="mt-3 pt-3 border-top">
-                    <div id="groupMgmtPaneInfo" class="group-mgmt-pane">
+            <div class="card-body">
+                <div class="tab-content">
+                    {# Tab: Info #}
+                    <div class="tab-pane fade show active" id="gTabInfo" role="tabpanel">
                         <form method="post" action="{{ url_for('update_group_info', group_id=group['id']) }}" class="row g-3" id="groupInfoForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <fieldset id="groupInfoFieldset" class="row g-3" disabled>
@@ -328,8 +337,94 @@
                             </div>
                             {% endif %}
                         </div>
-                    </div>
-                    <div id="groupMgmtPaneSchedule" class="group-mgmt-pane d-none">
+                    </div>{# /gTabInfo #}
+
+                    {# Tab: Sessions #}
+                    <div class="tab-pane fade" id="gTabSessions" role="tabpanel">
+                        {% set next_session = upcoming_sessions_all[0] if upcoming_sessions_all|length > 0 else none %}
+                        {% set upcoming_queue = upcoming_sessions_all[1:] if upcoming_sessions_all|length > 1 else [] %}
+                        <ul class="nav nav-pills gap-2 mb-3" role="tablist" id="sessionSubTabs">
+                            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#gNextMeeting" type="button">{{ txt('Next', 'הבא') }}</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#gUpcoming" type="button">{{ txt('Upcoming', 'מתוכננים') }} {% if upcoming_queue %}<span class="badge bg-primary ms-1">{{ upcoming_queue|length }}</span>{% endif %}</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#gPast" type="button">{{ txt('Past', 'עבר') }} {% if past_sessions_all %}<span class="badge bg-secondary ms-1">{{ past_sessions_all|length }}</span>{% endif %}</button></li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane show active" id="gNextMeeting">
+                                {% if next_session %}
+                                {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
+                                {% else %}{{ empty_state(icon='bi-calendar-event', message=txt('No upcoming meetings.', 'אין מפגשים קרובים.')) }}{% endif %}
+                            </div>
+                            <div class="tab-pane" id="gUpcoming">
+                                <div class="d-flex flex-column gap-3">
+                                    {% for session in upcoming_queue %}
+                                    {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
+                                    {% else %}{{ empty_state(icon='bi-calendar-plus', message=txt('No upcoming sessions.', 'אין מפגשים מתוכננים.')) }}{% endfor %}
+                                </div>
+                            </div>
+                            <div class="tab-pane" id="gPast">
+                                <div class="d-flex flex-column gap-2">
+                                    {% for session in past_sessions_all %}
+                                    <div class="border rounded-3 overflow-hidden bg-white">
+                                        <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#pastSession{{ session['id'] }}" aria-expanded="false">
+                                            <span class="fw-semibold">{{ session['session_date'] }} &middot; {{ session['session_time'] }}{% if session['title'] %} &middot; {{ session['title'] }}{% endif %}</span>
+                                            <i class="bi bi-chevron-down stable-toggle-icon"></i>
+                                        </button>
+                                        <div class="collapse" id="pastSession{{ session['id'] }}">
+                                            <div class="p-3 border-top">{{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions, group, false) }}</div>
+                                        </div>
+                                    </div>
+                                    {% else %}{{ empty_state(icon='bi-clock-history', message=txt('No past meetings.', 'אין מפגשי עבר.')) }}{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>{# /gTabSessions #}
+
+                    {# Tab: Members #}
+                    <div class="tab-pane fade" id="gTabMembers" role="tabpanel">
+                        <div class="list-group list-group-flush border rounded-3 mb-3" style="max-height:380px;overflow-y:auto">
+                            {% for member in group_members %}
+                            <div class="list-group-item py-3">
+                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                                    <div class="small">
+                                        <div class="fw-semibold"><a href="{{ url_for('patient_detail', patient_id=member['patient_id']) }}" class="text-decoration-none">{{ member['patient_name'] }}</a></div>
+                                        <div class="text-muted">Since {{ member['joined_at'][:10] if member['joined_at'] else 'Unknown' }}</div>
+                                        <div class="mt-1 d-flex gap-1 flex-wrap">
+                                            <span class="badge bg-light text-dark border">{{ txt('Arrived', 'הגיע') }} {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
+                                            {% if member['status'] == 'ongoing' %}<span class="badge bg-success-subtle text-success border">{{ txt('Ongoing', 'בטיפול') }}</span>{% endif %}
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" data-bs-toggle="collapse" data-bs-target="#memberRemove{{ member['patient_id'] }}">{{ txt('Remove', 'הסרה') }}</button>
+                                </div>
+                                <div class="collapse mt-3 border rounded-3 p-3 bg-light" id="memberRemove{{ member['patient_id'] }}">
+                                    <form method="post" action="{{ url_for('remove_group_member', group_id=group['id'], patient_id=member['patient_id']) }}" onsubmit="return confirmMemberRemoval(this)">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="small fw-semibold mb-2">{{ txt('Remove options', 'אפשרויות הסרה') }}</div>
+                                        <div class="d-flex flex-column gap-2 mb-3">
+                                            <label class="border rounded-3 p-2 small"><input class="form-check-input me-2" type="radio" name="removal_mode" value="keep" checked>{{ txt('Remove from group only', 'הסרה מהקבוצה בלבד') }}</label>
+                                            <label class="border rounded-3 p-2 small"><input class="form-check-input me-2" type="radio" name="removal_mode" value="archive">{{ txt('Remove and archive patient', 'הסרה והעברה לארכיון') }}</label>
+                                            <label class="border rounded-3 p-2 small text-danger"><input class="form-check-input me-2" type="radio" name="removal_mode" value="delete">{{ txt('Remove and delete patient data', 'הסרה ומחיקת נתוני מטופל') }}</label>
+                                        </div>
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" data-bs-toggle="collapse" data-bs-target="#memberRemove{{ member['patient_id'] }}">{{ txt('Cancel', 'ביטול') }}</button>
+                                            <button type="submit" class="btn btn-danger btn-sm rounded-pill">{{ txt('Confirm', 'אישור') }}</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            {% else %}{{ empty_state(icon='bi-people', message=txt('No members yet.', 'עדיין לא נוספו משתתפים.')) }}{% endfor %}
+                        </div>
+                        <form method="post" action="{{ url_for('add_group_member', group_id=group['id']) }}" class="d-flex gap-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <select name="patient_id" class="form-select form-select-sm" required>
+                                <option value="">{{ txt('Add group patient...', 'הוספת מטופל...') }}</option>
+                                {% for patient in patients %}<option value="{{ patient['id'] }}">{{ patient['name'] }}</option>{% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Add', 'הוספה') }}</button>
+                        </form>
+                    </div>{# /gTabMembers #}
+
+                    {# Tab: Schedule #}
+                    <div class="tab-pane fade" id="gTabSchedule" role="tabpanel">
                         <form method="post" action="{{ url_for('add_group_session', group_id=group['id']) }}" class="row g-3" id="groupScheduleForm">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="col-md-6">
@@ -338,7 +433,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small">{{ txt('Title', 'כותרת') }}</label>
-                                <input type="text" name="title" class="form-control form-control-sm" placeholder="Optional">
+                                <input type="text" name="title" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small">{{ txt('Start', 'התחלה') }}</label>
@@ -361,8 +456,8 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small">{{ txt('Meeting Link', 'קישור למפגש') }}</label>
-                                <input type="url" name="meeting_link" class="form-control form-control-sm" placeholder="https://...">
+                                <label class="form-label small">{{ txt('Meeting Link', 'קישור') }}</label>
+                                <input type="url" name="meeting_link" class="form-control form-control-sm">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small">{{ txt('Recurrence', 'חזרתיות') }}</label>
@@ -376,280 +471,119 @@
                                 <input type="number" name="recurrence_interval_weeks" class="form-control form-control-sm" min="1" value="1">
                             </div>
                             <div class="col-12 recurrence-only d-none">
-                                <label class="form-label small d-block mb-2">{{ txt('When should the recurring meetings end?', 'מתי סדרת המפגשים תסתיים?') }}</label>
-                                <div class="d-flex flex-column gap-2">
-                                    <label class="border rounded-3 p-2 small">
-                                        <input class="form-check-input me-2" type="radio" name="recurrence_end_mode" value="count" checked>
-                                        {{ txt('End by number of meetings', 'סיום לפי מספר מפגשים') }}
-                                    </label>
-                                    <label class="border rounded-3 p-2 small">
-                                        <input class="form-check-input me-2" type="radio" name="recurrence_end_mode" value="date">
-                                        {{ txt('End by date', 'סיום לפי תאריך') }}
-                                    </label>
+                                <label class="form-label small d-block mb-2">{{ txt('End mode', 'אופן סיום') }}</label>
+                                <div class="d-flex gap-3">
+                                    <label class="small"><input class="form-check-input me-1" type="radio" name="recurrence_end_mode" value="count" checked>{{ txt('By count', 'לפי כמות') }}</label>
+                                    <label class="small"><input class="form-check-input me-1" type="radio" name="recurrence_end_mode" value="date">{{ txt('By date', 'לפי תאריך') }}</label>
                                 </div>
                             </div>
                             <div class="col-md-6 recurrence-only recurrence-by-count d-none">
-                                <label class="form-label small">{{ txt('How many meetings?', 'כמה מפגשים?') }}</label>
+                                <label class="form-label small">{{ txt('How many?', 'כמה?') }}</label>
                                 <input type="number" name="recurrence_count" class="form-control form-control-sm" min="1" max="104" value="8">
                             </div>
                             <div class="col-md-6 recurrence-only recurrence-by-date d-none">
-                                <label class="form-label small">{{ txt('Last meeting date', 'תאריך מפגש אחרון') }}</label>
+                                <label class="form-label small">{{ txt('End date', 'תאריך סיום') }}</label>
                                 <input type="date" name="recurrence_end_date" class="form-control form-control-sm">
                             </div>
                             <div class="col-12 d-flex justify-content-end">
                                 <button type="submit" class="btn btn-success btn-sm rounded-pill">{{ txt('Book Session', 'קביעת מפגש') }}</button>
                             </div>
                         </form>
-                    </div>
-                    <div id="groupMgmtPaneMembers" class="group-mgmt-pane d-none">
-                        <div class="list-group list-group-flush border rounded-3 mb-3">
-                            {% for member in group_members %}
-                            <div class="list-group-item py-3">
-                                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-                                    <div class="small">
-                                        <div class="fw-semibold">
-                                            <a href="{{ url_for('patient_detail', patient_id=member['patient_id']) }}" class="text-decoration-none text-dark">{{ member['patient_name'] }}</a>
-                                        </div>
-                                        <div class="text-muted">Since {{ member['joined_at'][:10] if member['joined_at'] else 'Unknown' }}</div>
-                                        <div class="mt-1 d-flex gap-1 flex-wrap">
-                                            <span class="badge bg-light text-dark border">{{ txt('Arrived', 'הגיע') }} {{ arrived_count_map.get(member['patient_id'], 0) }}</span>
-                                            {% if member['status'] == 'ongoing' %}<span class="badge bg-success-subtle text-success border">{{ txt('Ongoing', 'בטיפול') }}</span>{% endif %}
-                                            {% if member.get('has_recurring') %}<span class="badge bg-info-subtle text-info border">{{ txt('Recurring', 'חוזר') }}</span>{% endif %}
-                                        </div>
-                                    </div>
-                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="toggleMemberPanel({{ member['patient_id'] }})">{{ txt('Remove', 'הסרה') }}</button>
-                                </div>
-                                <div class="member-remove-panel mt-3 border rounded-3 p-3 bg-light" id="member-remove-panel-{{ member['patient_id'] }}">
-                                    <form method="post" action="{{ url_for('remove_group_member', group_id=group['id'], patient_id=member['patient_id']) }}" onsubmit="return confirmMemberRemoval(this)">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <div class="small fw-semibold mb-2">{{ txt('How should', 'כיצד להסיר את') }} {{ member['patient_name'] }}{{ txt(' be removed?', '?') }}</div>
-                                        <div class="d-flex flex-column gap-2 mb-3">
-                                            <label class="border rounded-3 p-2 small">
-                                                <input class="form-check-input me-2" type="radio" name="removal_mode" value="keep" checked>
-                                                {{ txt('Remove from this group only', 'הסרה מהקבוצה בלבד') }}
-                                            </label>
-                                            <label class="border rounded-3 p-2 small">
-                                                <input class="form-check-input me-2" type="radio" name="removal_mode" value="archive">
-                                                {{ txt('Remove and move patient to archived', 'הסרה והעברה לארכיון') }}
-                                            </label>
-                                            <label class="border rounded-3 p-2 small text-danger">
-                                                <input class="form-check-input me-2" type="radio" name="removal_mode" value="delete">
-                                                {{ txt('Remove and delete all patient data', 'הסרה ומחיקת כל נתוני המטופל') }}
-                                            </label>
-                                        </div>
-                                        <div class="d-flex justify-content-end gap-2">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleMemberPanel({{ member['patient_id'] }})">{{ txt('Cancel', 'ביטול') }}</button>
-                                            <button type="submit" class="btn btn-danger btn-sm rounded-pill">{{ txt('Confirm Removal', 'אישור הסרה') }}</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                            {% else %}
-                            {{ empty_state(icon='bi-people', message=txt('No members added yet.', 'עדיין לא נוספו משתתפים.')) }}
-                            {% endfor %}
-                        </div>
-                        <form method="post" action="{{ url_for('add_group_member', group_id=group['id']) }}" class="d-flex gap-2">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <select name="patient_id" class="form-select form-select-sm" required>
-                                <option value="">{{ txt('Add group patient...', 'הוספת מטופל קבוצה...') }}</option>
-                                {% for patient in patients %}
-                                <option value="{{ patient['id'] }}">{{ patient['name'] }}</option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill">{{ txt('Add', 'הוספה') }}</button>
-                        </form>
-                        <div class="small text-muted mt-2">{{ txt('Suggestions include only patients with type "group".', 'ההצעות כוללות רק מטופלים מסוג קבוצה.') }}</div>
-                    </div>
-                    <div id="groupMgmtPaneHistory" class="group-mgmt-pane d-none" style="max-height: 420px; overflow-y: auto;">
-                        <div class="list-group list-group-flush">
-                            {% for row in member_history_rows %}
-                            <div class="list-group-item py-3">
-                                <div class="small fw-semibold mb-2">{{ row['patient_name'] }}</div>
-                                <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2 member-history-form" id="member-history-form-{{ row['id'] }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="return_group_id" value="{{ group['id'] }}">
-                                    <div class="col-6">
-                                        <label class="form-label small mb-1">{{ txt('Joined', 'הצטרף') }}</label>
-                                        <input type="date" class="form-control form-control-sm member-history-input" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" data-original-value="{{ (row['joined_at'] or '')[:10] }}" required disabled>
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label small mb-1">{{ txt('Left', 'עזב') }}</label>
-                                        <input type="date" class="form-control form-control-sm member-history-input" name="left_date" value="{{ (row['left_at'] or '')[:10] }}" data-original-value="{{ (row['left_at'] or '')[:10] }}" disabled>
-                                    </div>
-                                    <div class="col-12 d-flex justify-content-between align-items-center">
-                                        <div class="small text-muted">
-                                            {% if row['left_at'] %}{{ txt('Closed period', 'תקופה סגורה') }}{% else %}{{ txt('Active period', 'תקופה פעילה') }}{% endif %}
-                                            {% if row['membership_days'] is not none %} · {{ row['membership_days'] }} days{% endif %}
-                                        </div>
-                                        <div class="d-flex gap-2">
-                                            <button class="btn btn-outline-secondary btn-sm rounded-pill" type="button" data-history-edit-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, true)">{{ txt('Edit', 'עריכה') }}</button>
-                                            <button class="btn btn-outline-secondary btn-sm rounded-pill d-none" type="button" data-history-cancel-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, false)">{{ txt('Cancel', 'ביטול') }}</button>
-                                            <button class="btn btn-outline-primary btn-sm rounded-pill d-none" type="submit" data-history-save-btn="{{ row['id'] }}">{{ txt('Save Dates', 'שמירת תאריכים') }}</button>
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-                            {% else %}
-                            {{ empty_state(icon='bi-clock-history', message=txt('No member history yet.', 'עדיין אין היסטוריית משתתפים.')) }}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <div id="groupMgmtPaneSupervision" class="group-mgmt-pane d-none">
+                    </div>{# /gTabSchedule #}
+
+                    {# Tab: Supervision #}
+                    <div class="tab-pane fade" id="gTabSupervision" role="tabpanel">
                         <form method="post" action="{{ url_for('add_group_supervision', group_id=group['id']) }}" class="row g-2 mb-3">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="col-12">
+                            <div class="col-md-6">
                                 <label class="form-label small fw-bold">{{ txt('Date', 'תאריך') }}</label>
                                 <input type="date" name="supervision_date" class="form-control form-control-sm" required>
                             </div>
-                            <div class="col-12">
+                            <div class="col-md-6">
                                 <label class="form-label small fw-bold">{{ txt('Supervisor', 'מדריך') }}</label>
-                                <input type="text" name="supervisor_name" class="form-control form-control-sm" placeholder="{{ txt('Supervisor name', 'שם המדריך') }}">
+                                <input type="text" name="supervisor_name" class="form-control form-control-sm">
                             </div>
                             <div class="col-12">
                                 <label class="form-label small fw-bold">{{ txt('Content', 'תוכן') }}</label>
-                                <textarea name="content" class="form-control form-control-sm" rows="5" required placeholder="{{ txt('Supervision content...', 'תוכן ההדרכה...') }}"></textarea>
+                                <textarea name="content" class="form-control form-control-sm" rows="4" required></textarea>
                             </div>
                             <div class="col-12 d-flex justify-content-end">
-                                <button type="submit" class="btn btn-primary btn-sm rounded-pill"><i class="bi bi-plus-circle me-1"></i>{{ txt('Add Supervision', 'הוסף הדרכה') }}</button>
+                                <button type="submit" class="btn btn-primary btn-sm rounded-pill"><i class="bi bi-plus-circle me-1"></i>{{ txt('Add Supervision', 'הוספה') }}</button>
                             </div>
                         </form>
                         {% if group_supervisions %}
-                        <hr class="my-2">
-                        <div class="small text-muted text-uppercase fw-bold mb-2">{{ txt('Recent', 'אחרון') }}</div>
-                        <div class="d-flex flex-column gap-2" style="max-height:300px;overflow-y:auto;">
-                            {% for sup in group_supervisions[:3] %}
-                            <div class="border rounded-3 p-2 bg-light small">
-                                <div class="fw-semibold">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} · {{ sup['supervisor_name'] }}{% endif %}</div>
-                                <div style="white-space:pre-wrap;">{{ sup['content'][:200] }}{% if sup['content']|length > 200 %}…{% endif %}</div>
+                        <div class="d-flex flex-column gap-2" style="max-height:400px;overflow-y:auto">
+                            {% for sup in group_supervisions %}
+                            <div class="border rounded-3 p-3 bg-light small" id="supervision-{{ sup['id'] }}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="fw-semibold">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &middot; {{ sup['supervisor_name'] }}{% endif %}</div>
+                                    <form method="post" action="{{ url_for('delete_group_supervision', group_id=group['id'], sup_id=sup['id']) }}" data-confirm-modal data-confirm-message="{{ txt('Delete this supervision record?', 'למחוק רשומה זו?') }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                                <div class="mt-2" style="white-space:pre-wrap">{{ sup['content'][:300] }}{% if sup['content']|length > 300 %}&hellip;{% endif %}</div>
                             </div>
                             {% endfor %}
                         </div>
-                        {% if group_supervisions|length > 3 %}
-                        <div class="small text-muted mt-1">{{ txt('See all in the main panel below.', 'ראה הכל בלוח מטה.') }}</div>
-                        {% endif %}
-                        {% endif %}
-                    </div>
-                    <div id="groupMgmtPaneDanger" class="group-mgmt-pane d-none">
-                        <p class="small text-muted mb-3">{{ txt('You can move the group to history or permanently delete the group and all related group data.', 'אפשר להעביר את הקבוצה להיסטוריה או למחוק לצמיתות את הקבוצה ואת כל נתוני הקבוצה.') }}</p>
-                        <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" onclick="toggleGroupDeletePanel()">{{ txt('Delete Options', 'אפשרויות מחיקה') }}</button>
-                        <div class="group-delete-panel mt-3 border rounded-3 p-3 bg-light" id="group-delete-panel">
-                            <form method="post" action="{{ url_for('delete_group', group_id=group['id']) }}" onsubmit="return confirmGroupDelete(this)">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="return_to" value="detail">
-                                <div class="d-flex flex-column gap-2 mb-3">
-                                    <label class="border rounded-3 p-2 small">
-                                        <input class="form-check-input me-2" type="radio" name="delete_mode" value="archive" checked>
-                                        {{ txt('Delete group and move it to history', 'מחיקת קבוצה והעברה להיסטוריה') }}
-                                    </label>
-                                    <label class="border rounded-3 p-2 small text-danger">
-                                        <input class="form-check-input me-2" type="radio" name="delete_mode" value="delete">
-                                        {{ txt('Delete group and delete all related group data', 'מחיקת הקבוצה וכל נתוני הקבוצה') }}
-                                    </label>
-                                </div>
-                                <div class="d-flex justify-content-end gap-2">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="toggleGroupDeletePanel()">{{ txt('Cancel', 'ביטול') }}</button>
-                                    <button type="submit" class="btn btn-danger btn-sm rounded-pill">{{ txt('Confirm Group Delete', 'אישור מחיקה') }}</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+                        {% else %}{{ empty_state(icon='bi-shield-check', message=txt('No supervision records.', 'אין רשומות הדרכה.')) }}{% endif %}
+                    </div>{# /gTabSupervision #}
 
-    <div class="col-12">
-        {% set next_session = upcoming_sessions_all[0] if upcoming_sessions_all|length > 0 else none %}
-        {% set upcoming_queue = upcoming_sessions_all[1:] if upcoming_sessions_all|length > 1 else [] %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <h5 class="fw-bold mb-0 text-primary">{{ txt('Group Sessions', 'מפגשי קבוצה') }}</h5>
-                    <div class="small text-muted">{{ txt('Comfortable editing layout: next meeting on top, past events in the middle, upcoming queue below.', 'תצוגה נוחה לעריכה: מפגש קרוב למעלה, מפגשי עבר באמצע, ותור מפגשים קרובים למטה.') }}</div>
-                </div>
-                <span class="badge bg-light text-dark border">{{ group_sessions|length }} {{ txt('total', 'בסך הכל') }}</span>
-            </div>
-            <div class="card-body">
-                <ul class="nav nav-pills gap-2 mb-3" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#nextMeetingPane" type="button" role="tab">{{ txt('Next Meeting', 'המפגש הקרוב') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pastMeetingsPane" type="button" role="tab">{{ txt('Past Meetings', 'מפגשי עבר') }}</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#upcomingQueuePane" type="button" role="tab">{{ txt('Upcoming Queue', 'מפגשים קרובים נוספים') }}</button>
-                    </li>
-                </ul>
-                <div class="tab-content border rounded-4 bg-light-subtle p-3">
-                    <div class="tab-pane show active" id="nextMeetingPane" role="tabpanel">
-                        {% if next_session %}
-                        {{ render_session_card(next_session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
-                        {% else %}
-                        {{ empty_state(icon='bi-calendar-event', message=txt('No upcoming meetings yet.', 'אין מפגשים קרובים עדיין.')) }}
-                        {% endif %}
-                    </div>
-                    <div class="tab-pane" id="pastMeetingsPane" role="tabpanel">
-                        <div class="d-flex flex-column gap-2">
-                            {% for session in past_sessions_all %}
-                            <div class="border rounded-3 overflow-hidden bg-white">
-                                <button class="btn w-100 text-start px-3 py-2 d-flex justify-content-between align-items-center" type="button" data-panel-id="pastSession{{ session['id'] }}" aria-expanded="false" aria-controls="pastSession{{ session['id'] }}" onclick="toggleStablePanel(this)">
-                                    <span class="fw-semibold">{{ session['session_date'] }} · {{ session['session_time'] }}{% if session['title'] %} · {{ session['title'] }}{% endif %}</span>
-                                    <i class="bi bi-chevron-down stable-toggle-icon"></i>
-                                </button>
-                                <div class="d-none" id="pastSession{{ session['id'] }}">
-                                    <div class="p-3 border-top">
-                                        {{ render_session_card(session, true, session_member_map, attendance_by_session, group_supervisions, group, false) }}
-                                    </div>
-                                </div>
-                            </div>
-                            {% else %}
-                            {{ empty_state(icon='bi-clock-history', message=txt('No past meetings yet.', 'עדיין אין מפגשי עבר.')) }}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <div class="tab-pane" id="upcomingQueuePane" role="tabpanel">
-                        <div class="d-flex flex-column gap-3">
-                            {% for session in upcoming_queue %}
-                            {{ render_session_card(session, false, session_member_map, attendance_by_session, group_supervisions, group) }}
-                            {% else %}
-                            {{ empty_state(icon='bi-calendar-plus', message=txt('No additional upcoming meetings.', 'אין מפגשים קרובים נוספים.')) }}
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Supervision History -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 p-3">
-                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="supervisionHistoryBody" aria-expanded="false" aria-controls="supervisionHistoryBody" onclick="toggleStablePanel(this)">
-                    <span class="fw-bold text-primary"><i class="bi bi-shield-check me-2"></i>{{ txt('Supervision', 'הדרכה') }}</span>
-                    <span class="d-flex align-items-center gap-2">
-                        <span class="badge bg-light text-dark border">{{ group_supervisions|length }} {{ txt('total', 'בסך הכל') }}</span>
-                        <i class="bi bi-chevron-down stable-toggle-icon"></i>
-                    </span>
-                </button>
-            </div>
-            <div class="card-body d-none" id="supervisionHistoryBody">
-                {% for sup in group_supervisions %}
-                <div class="border rounded-4 p-3 mb-3 bg-white shadow-sm" id="supervision-{{ sup['id'] }}">
-                    <div class="d-flex justify-content-between align-items-start gap-3">
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold mb-1">{{ sup['supervision_date'] }}{% if sup['supervisor_name'] %} &nbsp;·&nbsp; {{ sup['supervisor_name'] }}{% endif %}</div>
-                            <div class="small text-dark" style="white-space:pre-wrap;">{{ sup['content'] }}</div>
-                        </div>
-                        <form method="post" action="{{ url_for('delete_group_supervision', group_id=group['id'], sup_id=sup['id']) }}" data-confirm-modal data-confirm-message="{{ txt('Delete this supervision record?', 'למחוק רשומת הדרכה זו?') }}">
+                    {# Tab: Delete #}
+                    <div class="tab-pane fade" id="gTabDelete" role="tabpanel">
+                        <p class="small text-muted mb-3">{{ txt('Move to history or permanently delete the group and all its data.', 'העבר להיסטוריה או מחק לצמיתות את הקבוצה.') }}</p>
+                        <form method="post" action="{{ url_for('delete_group', group_id=group['id']) }}" onsubmit="return confirmGroupDelete(this)">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill"><i class="bi bi-trash"></i></button>
+                            <input type="hidden" name="return_to" value="detail">
+                            <div class="d-flex flex-column gap-2 mb-3">
+                                <label class="border rounded-3 p-2 small"><input class="form-check-input me-2" type="radio" name="delete_mode" value="archive" checked>{{ txt('Move group to history', 'העברת קבוצה להיסטוריה') }}</label>
+                                <label class="border rounded-3 p-2 small text-danger"><input class="form-check-input me-2" type="radio" name="delete_mode" value="delete">{{ txt('Delete group and all data', 'מחיקת הקבוצה וכל הנתונים') }}</label>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-danger btn-sm rounded-pill">{{ txt('Confirm Delete', 'אישור מחיקה') }}</button>
+                            </div>
                         </form>
+                    </div>{# /gTabDelete #}
+
+                </div>{# /tab-content #}
+            </div>{# /card-body #}
+        </div>{# /card #}
+    </div>{# /col-12 #}
+</div>{# /row #}
+
+{# ── Member History (collapsible below) ───────────────────────── #}
+<div class="card border-0 shadow-sm mb-4">
+    <button class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center text-start w-100" type="button" data-bs-toggle="collapse" data-bs-target="#memberHistoryCollapse" aria-expanded="false">
+        <span class="fw-bold text-primary"><i class="bi bi-clock-history me-2"></i>{{ txt('Member History', 'היסטוריית משתתפים') }}</span>
+        <i class="bi bi-chevron-down text-muted"></i>
+    </button>
+    <div class="collapse" id="memberHistoryCollapse">
+        <div class="card-body" style="max-height:420px;overflow-y:auto">
+            {% for row in member_history_rows %}
+            <div class="list-group-item py-3">
+                <div class="small fw-semibold mb-2">{{ row['patient_name'] }}</div>
+                <form method="post" action="{{ url_for('update_group_member_history_dates', history_id=row['id']) }}" class="row g-2 member-history-form" id="member-history-form-{{ row['id'] }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_group_id" value="{{ group['id'] }}">
+                    <div class="col-6">
+                        <label class="form-label small mb-1">{{ txt('Joined', 'הצטרף') }}</label>
+                        <input type="date" class="form-control form-control-sm member-history-input" name="joined_date" value="{{ (row['joined_at'] or '')[:10] }}" data-original-value="{{ (row['joined_at'] or '')[:10] }}" required disabled>
                     </div>
-                </div>
-                {% else %}
-                {{ empty_state(icon='bi-shield-check', message=txt('No supervision records yet.', 'אין עדיין רשומות הדרכה.')) }}
-                {% endfor %}
+                    <div class="col-6">
+                        <label class="form-label small mb-1">{{ txt('Left', 'עזב') }}</label>
+                        <input type="date" class="form-control form-control-sm member-history-input" name="left_date" value="{{ (row['left_at'] or '')[:10] }}" data-original-value="{{ (row['left_at'] or '')[:10] }}" disabled>
+                    </div>
+                    <div class="col-12 d-flex justify-content-between align-items-center">
+                        <div class="small text-muted">{% if row['left_at'] %}{{ txt('Closed', 'סגורה') }}{% else %}{{ txt('Active', 'פעילה') }}{% endif %}{% if row['membership_days'] is not none %} &middot; {{ row['membership_days'] }} days{% endif %}</div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm rounded-pill" type="button" data-history-edit-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, true)">{{ txt('Edit', 'עריכה') }}</button>
+                            <button class="btn btn-outline-secondary btn-sm rounded-pill d-none" type="button" data-history-cancel-btn="{{ row['id'] }}" onclick="toggleMemberHistoryEdit({{ row['id'] }}, false)">{{ txt('Cancel', 'ביטול') }}</button>
+                            <button class="btn btn-outline-primary btn-sm rounded-pill d-none" type="submit" data-history-save-btn="{{ row['id'] }}">{{ txt('Save', 'שמירה') }}</button>
+                        </div>
+                    </div>
+                </form>
             </div>
+            {% else %}{{ empty_state(icon='bi-clock-history', message=txt('No member history yet.', 'אין היסטוריית משתתפים.')) }}{% endfor %}
         </div>
     </div>
 </div>
@@ -657,83 +591,17 @@
 <script>
 const csrfToken = document.getElementById('groups_csrf_token').value;
 
-// Group management horizontal tabs
-(function() {
-    var tabs = document.querySelectorAll('.group-mgmt-tab');
-    var canvas = document.getElementById('groupMgmtCanvas');
-    var panes = document.querySelectorAll('.group-mgmt-pane');
-    tabs.forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            var targetId = this.getAttribute('data-pane');
-            tabs.forEach(function(b) { b.classList.remove('active'); });
-            this.classList.add('active');
-            panes.forEach(function(p) { p.classList.add('d-none'); });
-            var target = document.getElementById(targetId);
-            if (target) { target.classList.remove('d-none'); }
-            canvas.style.display = '';
-        });
-    });
-})();
-const isHebrew = {{ 'true' if is_he else 'false' }};
-const labels = {
-    removePatient: isHebrew ? 'להסיר את המטופל מהקבוצה?' : 'Remove this patient from the group?',
-    removeArchive: isHebrew ? 'להסיר את המטופל מהקבוצה ולהעביר לארכיון?' : 'Remove this patient from the group and move the patient to archived records?',
-    removeDelete: isHebrew ? 'להסיר את המטופל מהקבוצה ולמחוק את כל הנתונים? פעולה זו בלתי הפיכה.' : 'Remove this patient from the group and delete all patient data? This cannot be undone.',
-    moveHistory: isHebrew ? 'להעביר את הקבוצה להיסטוריה?' : 'Move this group to history?',
-    deleteGroup: isHebrew ? 'למחוק את הקבוצה ואת כל הנתונים הקשורים? פעולה זו בלתי הפיכה.' : 'Delete this group and all related group data? This cannot be undone.',
-    saveError: isHebrew ? 'לא ניתן לשמור שינויים במפגש.' : 'Could not save session changes.',
-    deleteSessionConfirm: isHebrew ? 'למחוק את המפגש הזה?' : 'Delete this group session?',
-    deleteSessionError: isHebrew ? 'לא ניתן למחוק את המפגש.' : 'Could not delete session.',
-    linkSupervisionError: isHebrew ? 'לא ניתן לקשר הדרכה למפגש.' : 'Could not link supervision to this session.',
-    groupDocsError: isHebrew ? 'לא ניתן לעדכן את מסמך Google של הקבוצה.' : 'Could not update the group Google Doc.',
-    groupDocsDetachConfirm: isHebrew ? 'לנתק את מסמך Google מהקבוצה?' : 'Detach the Google Doc from this group?',
-    groupDocsPushConfirm: isHebrew ? 'הרשומות יתווספו לסוף מסמך Google ולא יחליפו תוכן קיים. להמשיך?' : 'This will append records to the end of Google Docs and will not replace existing content. Continue?'
-};
-
-function minutesToTime(totalMinutes) {
-    const h = Math.floor(totalMinutes / 60) % 24;
-    const m = totalMinutes % 60;
-    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-}
-
-function timeToMinutes(hhmm) {
-    if (!hhmm) return 0;
-    const parts = hhmm.split(':').map(Number);
-    return (parts[0] * 60) + parts[1];
-}
-
+// Google Docs: scroll to Info tab + Google Docs section
 function openGroupDocsPanel() {
-    const infoTab = document.querySelector('.group-mgmt-tab[data-pane="groupMgmtPaneInfo"]');
-    if (infoTab) {
-        infoTab.click();
+    var infoTabBtn = document.querySelector('#groupMgmtTabs [data-bs-target="#gTabInfo"]');
+    if (infoTabBtn) {
+        var tab = new bootstrap.Tab(infoTabBtn);
+        tab.show();
     }
-    const docsPanel = document.getElementById('groupDocsIntegrationPanel');
-    if (docsPanel) {
-        docsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-}
-
-function toggleStablePanel(button) {
-    const panelId = button.getAttribute('data-panel-id');
-    const panel = panelId ? document.getElementById(panelId) : null;
-    if (!panel) return;
-    const isExpanded = button.getAttribute('aria-expanded') === 'true';
-    button.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
-    panel.classList.toggle('d-none', isExpanded);
-    const icon = button.querySelector('.stable-toggle-icon');
-    if (icon) {
-        icon.classList.toggle('bi-chevron-down', isExpanded);
-        icon.classList.toggle('bi-chevron-up', !isExpanded);
-    }
-}
-
-function toggleMemberPanel(patientId) {
-    const panel = document.getElementById('member-remove-panel-' + patientId);
-    panel.classList.toggle('is-open');
-}
-
-function toggleGroupDeletePanel() {
-    document.getElementById('group-delete-panel').classList.toggle('is-open');
+    setTimeout(function() {
+        var docsPanel = document.getElementById('groupDocsIntegrationPanel');
+        if (docsPanel) docsPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
 }
 
 function confirmMemberRemoval(form) {
