@@ -3,6 +3,7 @@
 @theme {
     --color-primary: #3B82F6;
     --color-primary-container: #DBEAFE;
+    --color-primary-soft: #DBEAFE;
     --color-on-primary: #FFFFFF;
     --color-on-primary-container: #1E40AF;
     --color-secondary: #64748B;
@@ -34,4 +35,35 @@
     --font-family-headline: "Poppins", "Heebo", sans-serif;
     --font-family-body: "Roboto", "Heebo", sans-serif;
     --font-family-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Dark mode: override Tailwind CSS custom properties */
+[data-bs-theme="dark"] {
+    --color-primary: #60A5FA;
+    --color-primary-container: #1E3A5F;
+    --color-primary-soft: #1E3A5F;
+    --color-on-primary-container: #BFDBFE;
+    --color-secondary: #94A3B8;
+    --color-secondary-container: #1E293B;
+    --color-on-secondary-container: #CBD5E1;
+    --color-surface: #1E293B;
+    --color-surface-container: #0F172A;
+    --color-surface-container-low: #1E293B;
+    --color-surface-container-lowest: #0F172A;
+    --color-surface-container-high: #334155;
+    --color-surface-container-highest: #475569;
+    --color-on-surface: #E2E8F0;
+    --color-on-surface-variant: #94A3B8;
+    --color-outline: #334155;
+    --color-outline-variant: #475569;
+    --color-primary-fixed: #1E3A5F;
+    --color-primary-fixed-dim: #162E4E;
+    --color-success: #4ADE80;
+    --color-warning: #FBBF24;
+    --color-danger: #F87171;
+    --color-error: #F87171;
+    --color-error-container: #7F1D1D;
+    --color-on-error-container: #FECACA;
+    --color-background: #0F172A;
+    --color-on-background: #E2E8F0;
 }

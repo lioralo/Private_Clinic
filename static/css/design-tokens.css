@@ -1,0 +1,113 @@
+/* ══════════════════════════════════════════════════════════════
+   Design Tokens — Single Source of Truth
+   Provides CSS custom properties consumed by style.css, login.css,
+   layout.css, and other non-Tailwind styles.
+   Tailwind v4 tokens (--color-*, --font-family-*) are defined in
+   input.css and overridden there for dark mode.
+   ================================================================= */
+
+:root {
+    /* ── Brand Colors (aliased from Tailwind --color-* tokens) ── */
+    --primary-color:    var(--color-primary);
+    --primary-dark:     var(--color-primary-dark, #2563EB);
+    --primary-soft:     var(--color-primary-container);
+    --accent-color:     var(--color-accent, #8B5CF6);
+    --secondary-color:  var(--color-secondary);
+    --background-color: var(--color-background);
+    --surface-color:    var(--color-surface);
+    --text-color:       var(--color-on-surface);
+    --muted-color:      var(--text-muted, #64748B);
+    --border-color:     var(--color-outline-variant);
+
+    /* ── Semantic Colors ───────────────────────────────────── */
+    --color-accent-dark:       #7C3AED;
+    --color-success-soft:      #DCFCE7;
+    --color-success-dark:      #166534;
+    --color-warning-soft:      #FEF3C7;
+    --color-warning-dark:      #92400E;
+    --color-danger-soft:       #FEE2E2;
+    --color-danger-dark:       #991B1B;
+
+    /* ── Typography ────────────────────────────────────────── */
+    --font-headline:           var(--font-family-headline);
+    --font-body:               var(--font-family-body);
+    --font-hebrew:             "Heebo", sans-serif;
+    --font-mono:               var(--font-family-mono);
+
+    --text-muted:              var(--color-on-surface-variant);
+
+    /* ── Spacing & Sizing ──────────────────────────────────── */
+    --radius-sm:               0.25rem;
+    --radius-md:               0.5rem;
+    --radius-lg:               0.75rem;
+    --radius-xl:               1rem;
+    --radius-2xl:              1.5rem;
+    --radius-full:             9999px;
+
+    --spacing-xs:              0.25rem;
+    --spacing-sm:              0.5rem;
+    --spacing-md:              1rem;
+    --spacing-lg:              1.5rem;
+    --spacing-xl:              2rem;
+
+    /* ── Input Sizing ──────────────────────────────────────── */
+    --input-min-height:        2.55rem;
+    --textbox-min-height:      7.5rem;
+    --textbox-min-height-sm:   6rem;
+
+    /* ── Shadows ───────────────────────────────────────────── */
+    --shadow-soft:             0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-card:             0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    --shadow-card-hover:       0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+    --shadow-dropdown:         0 4px 12px rgba(0, 0, 0, 0.08);
+
+    /* ── Sidebar ───────────────────────────────────────────── */
+    --sidebar-width:           16rem;
+    --sidebar-link-active-bg:  var(--color-primary);
+    --sidebar-link-active-fg:  #FFFFFF;
+    --sidebar-link-hover-bg:   color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+    /* ── Transitions ───────────────────────────────────────── */
+    --transition-fast:         0.15s ease;
+    --transition-normal:       0.2s ease;
+    --transition-slow:         0.28s ease;
+
+    /* ── Bootstrap Overrides ───────────────────────────────── */
+    --bs-primary:              var(--color-primary);
+    --bs-primary-rgb:          59, 130, 246;
+    --bs-secondary:            var(--color-secondary);
+    --bs-secondary-rgb:        100, 116, 139;
+    --bs-success:              var(--color-success);
+    --bs-success-rgb:          22, 163, 74;
+    --bs-warning:              var(--color-warning);
+    --bs-warning-rgb:          217, 119, 6;
+    --bs-danger:               var(--color-danger);
+    --bs-danger-rgb:           220, 38, 38;
+    --bs-link-color:           var(--color-primary);
+    --bs-link-hover-color:     var(--color-primary-dark, #2563EB);
+}
+
+/* ── Density Variants ──────────────────────────────────────── */
+html[data-density="compact"] {
+    --input-min-height:        2.3rem;
+    --textbox-min-height:      6rem;
+    --textbox-min-height-sm:   5rem;
+}
+html[data-density="large"] {
+    --input-min-height:        2.85rem;
+    --textbox-min-height:      9.5rem;
+    --textbox-min-height-sm:   7.5rem;
+}
+
+/* ── Accessibility: High Contrast ──────────────────────────── */
+.a11y-high-contrast,
+.a11y-high-contrast body {
+    --color-background: #000;
+    --color-on-background: #fff;
+    --color-surface: #111;
+    --color-on-surface: #fff;
+    --border-color: #555;
+    --text-muted: #ccc;
+    --color-primary: #ff0;
+    --color-primary-dark: #ff0;
+}

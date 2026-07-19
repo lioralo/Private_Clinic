@@ -165,13 +165,13 @@
 }
 
 .form-control {
-    border: 2px solid #e5e7eb;
-    border-radius: 12px;
+    border: 2px solid var(--color-outline-variant);
+    border-radius: var(--radius-lg);
     padding: 0.75rem 1rem;
     font-size: 1rem;
     font-weight: 500;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    background-color: #fafafa;
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+    background-color: var(--color-surface-container-low);
 }
 
 .form-control:focus {
@@ -252,10 +252,10 @@
 .btn-primary {
     background: linear-gradient(135deg, var(--bs-primary) 0%, #2563EB 100%);
     border: none;
-    border-radius: 12px;
+    border-radius: var(--radius-full);
     font-weight: 700;
     letter-spacing: 0.01em;
-    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    transition: background-color var(--transition-normal), transform var(--transition-normal), box-shadow var(--transition-normal);
     padding: 0.875rem 1.5rem;
     font-size: 1rem;
     color: white;

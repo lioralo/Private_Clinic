@@ -1,3 +1,4 @@
+import json
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, current_user
 from clinic_app.models import get_db
@@ -54,3 +55,38 @@ def patient_search():
         'status': r['status'], 'patient_type': r['patient_type'],
         'treatment_method': r['treatment_method'],
     } for r in rows])
+
+
+@patients_bp.route('/bulk-status', methods=['POST'])
+@login_required
+def bulk_status():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json() or {}
+    patient_ids = data.get('patient_ids', [])
+    status = data.get('status', '')
+    if not patient_ids or status not in ('ongoing', 'candidate', 'waiting', 'archived'):
+        return jsonify({'error': 'Invalid request'}), 400
+    db = get_db()
+    placeholders = ','.join('?' for _ in patient_ids)
+    db.execute(f'UPDATE patients SET status = ? WHERE id IN ({placeholders})',
+               [status] + patient_ids)
+    db.commit()
+    return jsonify({'success': True, 'updated': len(patient_ids)})
+
+
+@patients_bp.route('/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json() or {}
+    patient_ids = data.get('patient_ids', [])
+    if not patient_ids:
+        return jsonify({'error': 'Invalid request'}), 400
+    db = get_db()
+    placeholders = ','.join('?' for _ in patient_ids)
+    db.execute(f'UPDATE patients SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})',
+               patient_ids)
+    db.commit()
+    return jsonify({'success': True, 'deleted': len(patient_ids)})

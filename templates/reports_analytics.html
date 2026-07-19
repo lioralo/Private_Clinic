@@ -107,20 +107,36 @@
         </div>
     </div>
 </div>
+
+{# ── Clinical Trends ─────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-activity me-2 text-primary"></i>{{ t('Clinical Trends — Assessment Scores Over Time') }}</h5></div>
+            <div class="card-body p-4"><canvas id="clinicalTrendsChart" height="220"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white py-3 border-0"><h5 class="mb-0 fw-bold"><i class="bi bi-people-fill me-2 text-primary"></i>{{ t('Sessions per Patient') }}</h5></div>
+            <div class="card-body p-4"><canvas id="sessionDistChart" height="220"></canvas></div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
 (function() {
-    var colors = ['#2563eb','#dc2626','#16a34a','#ca8a04','#9333ea','#0891b2'];
+    var colors = ['#2563eb','#dc2626','#16a34a','#ca8a04','#9333ea','#0891b2','#d946ef','#0d9488','#ea580c','#4f46e5'];
 
     var sc = document.getElementById('sessionsChart');
     if (sc) {
         var sh = {{ sessions_history|tojson }};
         new Chart(sc, { type: 'line', data: {
             labels: sh.map(function(h) { return h.month; }),
-            datasets: [{ label: '{{ t("Sessions") }}', data: sh.map(function(h) { return h.count; }), borderColor: '#2563eb', backgroundColor: '#2563eb20', fill: true, tension: 0.3, pointRadius: 4 }]
+            datasets: [{ label: '{{ t("Sessions") }}', data: sh.map(function(h) { return h.count; }), borderColor: '#3B82F6', backgroundColor: '#3B82F620', fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#3B82F6' }]
         }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
     }
 
@@ -129,7 +145,7 @@
         var pa = {{ patient_additions|tojson }};
         new Chart(pc, { type: 'bar', data: {
             labels: pa.map(function(h) { return h.month; }),
-            datasets: [{ label: '{{ t("New Patients") }}', data: pa.map(function(h) { return h.count; }), backgroundColor: '#16a34a', borderRadius: 6 }]
+            datasets: [{ label: '{{ t("New Patients") }}', data: pa.map(function(h) { return h.count; }), backgroundColor: '#16A34A', borderRadius: 6 }]
         }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
     }
 
@@ -140,6 +156,35 @@
             labels: sd.map(function(h) { return h.status; }),
             datasets: [{ data: sd.map(function(h) { return h.count; }), backgroundColor: colors.slice(0, sd.length) }]
         }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+    }
+
+    // Clinical trends: assessment scores over time
+    var ctc = document.getElementById('clinicalTrendsChart');
+    if (ctc) {
+        var ct = {{ clinical_trends|tojson }};
+        var assessmentNames = Array.from(new Set(ct.map(function(d) { return d.assessment_name; })));
+        var months = Array.from(new Set(ct.map(function(d) { return d.month; }))).sort();
+        var datasets = assessmentNames.map(function(name, i) {
+            var data = months.map(function(m) {
+                var found = ct.find(function(d) { return d.assessment_name === name && d.month === m; });
+                return found ? found.avg_score : null;
+            });
+            return { label: name, data: data, borderColor: colors[i], backgroundColor: colors[i] + '20', tension: 0.3, pointRadius: 3, spanGaps: true };
+        });
+        new Chart(ctc, { type: 'line', data: { labels: months, datasets: datasets },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { title: { display: true, text: '{{ t("Average Score") }}' } } }, plugins: { legend: { position: 'bottom' } } } });
+    }
+
+    // Session distribution per patient
+    var sdc = document.getElementById('sessionDistChart');
+    if (sdc) {
+        var sd2 = {{ session_distribution|tojson }};
+        var buckets = ['1','2-5','6-12','13-24','25+'];
+        var distData = buckets.map(function(b) { var f = sd2.find(function(d) { return d.bucket === b; }); return f ? f.patients : 0; });
+        new Chart(sdc, { type: 'bar', data: {
+            labels: buckets,
+            datasets: [{ label: '{{ t("Patients") }}', data: distData, backgroundColor: '#3B82F688', borderRadius: 6 }]
+        }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, title: { display: true, text: '{{ t("Patients") }}' } }, x: { title: { display: true, text: '{{ t("Completed Sessions") }}' } } }, plugins: { legend: { display: false } } } });
     }
 })();
 </script>

@@ -174,9 +174,18 @@
 
 {# ─── TABLE VIEW ─── #}
 <div id="crmTableView" class="crm-table-wrap mb-4">
+    {# Bulk actions toolbar (hidden until items selected) #}
+    <div id="bulkToolbar" class="d-none align-items-center gap-2 px-3 py-2 border-bottom" style="background:var(--color-primary-soft)">
+        <span id="bulkCount" class="fw-bold text-primary text-sm me-2">0 {{ t('selected') }}</span>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="bulkChangeStatus('ongoing')">{{ t('Mark Ongoing') }}</button>
+        <button type="button" class="btn btn-sm btn-outline-warning rounded-pill" onclick="bulkChangeStatus('candidate')">{{ t('Mark Candidate') }}</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="bulkChangeStatus('archived')">{{ t('Archive') }}</button>
+        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill ms-auto" onclick="bulkDelete()">{{ t('Delete') }}</button>
+    </div>
     <table class="table crm-table">
         <thead>
             <tr>
+                <th style="width:30px"><input type="checkbox" id="selectAllCheckbox" class="form-check-input" onchange="toggleSelectAll(this)" title="{{ t('Select all') }}"></th>
                 {% if sort_by == 'manual_order' %}<th class="crm-drag-col"></th>{% endif %}
                 <th>{{ t('Name') }}</th>
                 <th>{{ t('Status') }}</th>
@@ -195,6 +204,7 @@
                 {% else %}patient-status-archived{% endif %}"
                 data-href="{{ url_for('patient_detail', patient_id=patient['id'], tab='intake' if patient['patient_type'] in ['initial-intake', 'diagnosee'] or patient['has_intake_tab'] else 'info') }}"
                 data-patient-id="{{ patient['id'] }}">
+                <td onclick="event.stopPropagation()"><input type="checkbox" class="form-check-input bulk-checkbox" data-patient-id="{{ patient['id'] }}" onchange="updateBulkToolbar()"></td>
                 {% if sort_by == 'manual_order' %}
                 <td class="crm-drag-handle" title="{{ t('Drag to reorder') }}"><i class="bi bi-grip-vertical text-muted"></i></td>
                 {% endif %}
@@ -421,5 +431,67 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     {% endif %}
 });
+</script>
+
+<script>
+// ── Bulk operations ──────────────────────────────────────────────
+function getSelectedIds() {
+    var checkboxes = document.querySelectorAll('.bulk-checkbox:checked');
+    return Array.from(checkboxes).map(function(cb) { return cb.dataset.patientId; });
+}
+
+function updateBulkToolbar() {
+    var ids = getSelectedIds();
+    var toolbar = document.getElementById('bulkToolbar');
+    var count = document.getElementById('bulkCount');
+    if (!toolbar || !count) return;
+    if (ids.length > 0) {
+        toolbar.classList.remove('d-none');
+        toolbar.classList.add('d-flex');
+        count.textContent = ids.length + ' selected';
+    } else {
+        toolbar.classList.add('d-none');
+        toolbar.classList.remove('d-flex');
+    }
+    var selectAll = document.getElementById('selectAllCheckbox');
+    if (selectAll) selectAll.checked = (ids.length === document.querySelectorAll('.bulk-checkbox').length);
+}
+
+function toggleSelectAll(el) {
+    document.querySelectorAll('.bulk-checkbox').forEach(function(cb) { cb.checked = el.checked; });
+    updateBulkToolbar();
+}
+
+function bulkChangeStatus(status) {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    if (!confirm('Change ' + ids.length + ' patient(s) to ' + status + '?')) return;
+    var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
+    fetch('/api/patients/bulk-status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({patient_ids: ids, status: status})
+    }).then(function(r) { return r.json(); })
+      .then(function(data) {
+          if (data.success) { location.reload(); }
+          else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
+      }).catch(console.error);
+}
+
+function bulkDelete() {
+    var ids = getSelectedIds();
+    if (!ids.length) return;
+    if (!confirm('Delete ' + ids.length + ' patient(s)? This action is reversible.')) return;
+    var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
+    fetch('/api/patients/bulk-delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({patient_ids: ids})
+    }).then(function(r) { return r.json(); })
+      .then(function(data) {
+          if (data.success) { location.reload(); }
+          else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
+      }).catch(console.error);
+}
 </script>
 {% endblock %}

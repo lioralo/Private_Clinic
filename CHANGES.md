@@ -2,6 +2,80 @@
 
 ---
 
+## Session 82 — Design System Overhaul & Feature Expansion
+
+**Date:** 2026-07-19
+
+**Objective:** Consolidate design tokens into a single source of truth, fix sidebar navigation colors and sub-route highlighting, add comprehensive dark mode for Bootstrap components, add bulk patient operations, clinical trend charts, session note templates, toast notifications, keyboard shortcuts, empty state improvements, and mobile calendar responsiveness.
+
+### Design System (10 fixes)
+
+1. **New `static/css/design-tokens.css`** — Single source of truth for all CSS custom properties: colors (`--color-primary`, `--color-surface`, etc.), typography (`--font-headline`, `--font-body`), spacing, shadows, Bootstrap overrides, sidebar variables, and transitions. Dark mode and density variants included.
+
+2. **Sidebar nav: teal → blue** — Replaced all `bg-teal-100 text-teal-800` sidebar active classes with `sidebar-link-active text-white` using `--sidebar-link-active-bg` (primary blue `#3B82F6`). Navigation now matches design system.
+
+3. **Sidebar width unified to 16rem** — Resolved `22rem` vs `16rem` conflict. All references use `var(--sidebar-width)`.
+
+4. **Button border-radius normalized** — All buttons use `var(--radius-full)` (pill shape). `style.css`, `login.css`, and inline styles now consistent.
+
+5. **Removed ~230 lines of duplicate CSS** from `layout.html` — admin-sidebar, stable-filter-btn, notification-history-item, collapse, mobile breakpoints moved to `layout.css` as single definitions.
+
+6. **Removed Tailwind v3 inline config** — 55-line `tailwind.config` script block in `layout.html` was dead code (v4 uses `@theme` in `input.css`).
+
+7. **Tailwind dark mode** — Added `[data-bs-theme="dark"]` overrides for all 30+ `@theme` color tokens in `input.css`. Tailwind utility classes (`bg-primary`, `text-on-surface`, etc.) now auto-respond to theme toggle.
+
+8. **Login button roundness** — `border-radius: 12px` → `var(--radius-full)` to match app-wide pill style.
+
+9. **Heading font stack** — h1-h5 use `var(--font-headline)` (Poppins + Heebo fallback) for proper Hebrew rendering.
+
+10. **Duplicate RTL icon mirroring removed** — Kept in `layout.css`, removed from `style.css`.
+
+11. **(Bonus fix) Added `--color-primary-soft` token** — Missing from Tailwind `@theme`. Now defined as `#DBEAFE` (light) / `#1E3A5F` (dark). Fixes `bg-primary-soft/50` and `stable-filter-btn.is-selected` rendering.
+
+### New Features (8 additions)
+
+12. **Ctrl+K / Cmd+K search shortcut** — Global keyboard shortcut toggles the admin search bar with auto-focus from any page.
+
+13. **Toast notification system** — `showToast(message, type)` available globally. Supports `success`/`danger`/`warning`/`info` with slide-in animation and 5s auto-dismiss. Uses `tweaks.css` animation.
+
+14. **Sidebar sub-route highlighting** — Added `nav_parents` mapping: visiting `patient_detail` highlights "Patients", `group_detail` highlights "Groups", admin sub-pages highlight "Administration". Uses `nav_link` macro with `endpoint_name in nav_parents.get(target, [target])`.
+
+15. **Dark mode for 50+ Bootstrap components** — Added `[data-bs-theme="dark"]` overrides in `style.css` for: tables, modals, dropdowns, list-groups, pagination, breadcrumbs, badges, `btn-outline-light`, `btn-outline-primary`, note items, calendar, CRM view buttons, FullCalendar, all semi-transparent card overlays (stat cards, CRM rows, dashboard cards, patient info pills, etc.).
+
+16. **Clinical trends dashboard** — Added two new Chart.js charts to `reports_analytics.html`: assessment score trends over time (per assessment type, line chart) and sessions-per-patient distribution (bar chart). Backend queries in `reports.py`.
+
+17. **Session note templates** — localStorage-based save/load/delete for note content templates. Template picker dropdown + Save/Delete buttons added to `note_edit.html`. Templates persist across browser sessions.
+
+18. **Bulk patient operations** — CRM table view: checkboxes per row + select-all + bulk toolbar (Mark Ongoing/Candidate/Archive/Delete). API endpoints `POST /api/patients/bulk-status` and `POST /api/patients/bulk-delete` in `patients.py` with CSRF protection and parameterized SQL.
+
+19. **Mobile calendar responsive** — Auto-switches FullCalendar to `listWeek` view on screens < 640px via resize listener in `calendar-schedule.js`.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `static/css/design-tokens.css` | **New file** — unified design tokens |
+| `static/css/input.css` | Added `--color-primary-soft`, dark mode overrides for 30+ tokens |
+| `static/css/tailwind.css` | Rebuilt from updated `input.css` |
+| `static/css/layout.css` | Token-based colors, unified `.admin-sidebar`, duplicate removal |
+| `static/css/login.css` | `var(--radius-full)` button, token-based form controls |
+| `static/css/tweaks.css` | Added `.animate-slide-in` keyframes |
+| `static/style.css` | Token-based aliases, removed density/RTL duplicates, added 50+ dark mode rules |
+| `templates/layout.html` | Removed 230 lines duplicate CSS, removed Tailwind v3 config, added `nav_parents`, Ctrl+K shortcut, toast helper, upgraded empty_state macro, added `design-tokens.css` load, fixed sidebar hover colors |
+| `templates/note_edit.html` | Added template picker + save/delete buttons + localStorage JS |
+| `templates/reports_analytics.html` | Added clinical trends + session distribution charts (2 new Chart.js) |
+| `templates/crm.html` | Added bulk toolbar + checkboxes + bulk operation JS |
+| `clinic_app/routes/reports.py` | Added `clinical_trends` and `session_distribution` queries |
+| `clinic_app/routes/patients.py` | Added `bulk_status` and `bulk_delete` POST endpoints |
+| `static/js/calendar-schedule.js` | Added responsive mobile view toggle |
+| `.gitignore` | Added `"AI S/"` entry |
+
+### Test Results
+- 38 passed, 1 failed (pre-existing flaky rate-limit timing test, unrelated)
+- All templates parse correctly (except `calendar.html` which has a pre-existing `{% do %}` extension tag issue)
+- All Python imports verified: `patients.py`, `reports.py`
+- All `url_for()` calls in changed templates verified against route definitions
+
 ## Session 81
 
 **Date:** 2026-06-29

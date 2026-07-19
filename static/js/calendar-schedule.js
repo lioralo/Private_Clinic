@@ -878,6 +878,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     Cal.calendar.render();
 
+    // Mobile responsive: auto-switch to list view on small screens
+    var calendarViewMode = 'auto';
+    function applyResponsiveCalendar() {
+        if (!Cal.calendar) return;
+        var isSmall = window.innerWidth < 640;
+        if (isSmall && calendarViewMode !== 'list') {
+            Cal.calendar.changeView('listWeek');
+            calendarViewMode = 'list';
+        } else if (!isSmall && calendarViewMode !== 'week') {
+            Cal.calendar.changeView('timeGridWeek');
+            calendarViewMode = 'week';
+        }
+    }
+    applyResponsiveCalendar();
+    window.addEventListener('resize', function() {
+        clearTimeout(Cal._resizeTimer);
+        Cal._resizeTimer = setTimeout(applyResponsiveCalendar, 250);
+    });
+
     if (Cal.bookingManagementMode) {
         Cal.bookingManagementMode.querySelectorAll('button[data-mode]').forEach(function(btn) {
             btn.addEventListener('click', function() {

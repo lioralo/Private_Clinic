@@ -192,6 +192,32 @@ def clinic_analytics():
         GROUP BY month ORDER BY month DESC LIMIT 12
     ''').fetchall()
 
+    # Clinical trends: PHQ-9 / GAD-7 monthly averages (last 12 months)
+    clinical_trends = db.execute('''
+        SELECT at.name AS assessment_name,
+               strftime('%Y-%m', a.taken_at) AS month,
+               ROUND(AVG(a.total_score), 1) AS avg_score,
+               COUNT(*) AS count
+        FROM assessments a
+        JOIN assessment_types at ON at.id = a.assessment_type_id
+        WHERE a.taken_at >= date('now', '-12 months')
+        GROUP BY at.name, month
+        ORDER BY at.name, month
+    ''').fetchall()
+
+    # Patient engagement: sessions per patient distribution
+    session_distribution = db.execute('''
+        SELECT CASE
+            WHEN cnt = 1 THEN '1'
+            WHEN cnt BETWEEN 2 AND 5 THEN '2-5'
+            WHEN cnt BETWEEN 6 AND 12 THEN '6-12'
+            WHEN cnt BETWEEN 13 AND 24 THEN '13-24'
+            ELSE '25+'
+        END AS bucket, COUNT(*) AS patients
+        FROM (SELECT patient_id, COUNT(*) AS cnt FROM appointments WHERE status = 'completed' GROUP BY patient_id)
+        GROUP BY bucket ORDER BY MIN(cnt)
+    ''').fetchall()
+
     return render_template('reports_analytics.html',
         month_start=month_start,
         sessions_this_month=sessions_this_month,
@@ -208,6 +234,8 @@ def clinic_analytics():
         assessment_improvement=_to_dicts(assessment_improvement),
         meeting_types=_to_dicts(meeting_types),
         patient_additions=_to_dicts(list(reversed(patient_additions))),
+        clinical_trends=_to_dicts(clinical_trends),
+        session_distribution=_to_dicts(session_distribution),
     )
 
 
