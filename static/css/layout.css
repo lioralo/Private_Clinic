@@ -18,8 +18,13 @@
 }
 
 .sidebar-link-active {
-    background-color: var(--sidebar-link-active-bg) !important;
-    color: var(--sidebar-link-active-fg) !important;
+    background-color: #3B82F6 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .sidebar-link-active {
+    background-color: #2563EB !important;
+    color: #ffffff !important;
 }
 
 .admin-sidebar {

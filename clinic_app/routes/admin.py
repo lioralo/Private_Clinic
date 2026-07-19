@@ -234,7 +234,7 @@ def administration():
     ).fetchone()['c']
 
     from app import get_site_settings, _list_connected_google_docs, _get_google_docs_auto_sync_state, list_encrypted_backups
-    from app import _get_gdocs_auto_sync_health, _smtp_health_check
+    from app import _get_gdocs_auto_sync_health
     site_settings = get_site_settings(db)
     admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
     smtp_health = _smtp_health_check()

@@ -338,9 +338,9 @@ h1, h2, h3, h4, h5 {
 }
 
 .btn-primary {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: #fff !important;
+    background-color: #3B82F6;
+    border-color: #3B82F6;
+    color: #fff;
     border-radius: var(--radius-full);
     padding: 0.6rem 1.5rem;
     font-weight: 700;
@@ -349,10 +349,21 @@ h1, h2, h3, h4, h5 {
 }
 
 .btn-primary:hover {
-    background-color: var(--color-primary-dark);
-    border-color: var(--color-primary-dark);
+    background-color: #2563EB;
+    border-color: #2563EB;
     transform: translateY(-1px);
     box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
+
+[data-bs-theme="dark"] .btn-primary {
+    background-color: #2563EB;
+    border-color: #2563EB;
+    color: #fff;
+}
+[data-bs-theme="dark"] .btn-primary:hover {
+    background-color: #1D4ED8;
+    border-color: #1D4ED8;
+    color: #fff;
 }
 
 .btn-outline-secondary,
