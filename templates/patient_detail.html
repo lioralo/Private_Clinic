@@ -723,89 +723,540 @@
         </div>
 
         {% elif active_tab == 'intake' and intake_enabled %}
-        {% set intake_long_text_fields = [
-            'main_complaint', 'problem_history', 'early_anamnesis',
-            'medical_conditions', 'psychiatric_conditions',
-            'appearance_fit_note', 'appearance_ordered_note', 'cooperation_note', 'eye_contact_note',
-            'behavior_note', 'speech_note', 'mood_note', 'affect_note',
-            'referral_details', 'diag_referral_question', 'diag_test_battery', 'diag_observations',
-            'diag_differential', 'diag_impression', 'diag_recommendations', 'diag_followup_plan', 'diag_final_summary'
-        ] %}
-        {% set intake_tabs = [
-            ('intakePaneMeeting', t('Meeting & Referral'), [
-                'meeting_location', 'meeting_location_specify', 'meeting_time', 'meeting_duration', 'meeting_conductor',
-                'referral_source', 'referral_date', 'main_complaint', 'problem_history', 'early_anamnesis'
-            ]),
-            ('intakePaneSocial', t('Social & Clinical Background'), [
-                'family_status', 'guardian_status', 'guardian_by_whom', 'living_with', 'living_with_other',
-                'disability_status', 'disability_percent', 'medical_conditions', 'psychiatric_conditions'
-            ]),
-            ('intakePaneRisk', t('Risk Assessment'), [
-                'self_harm_level', 'self_harm_recent', 'self_harm_count',
-                'forced_treatment', 'substance_use', 'medical_cannabis', 'alcohol_use'
-            ]),
-            ('intakePaneMse1', t('MSE: Appearance & Affect'), [
-                'appearance_fit', 'appearance_fit_note', 'appearance_ordered', 'appearance_ordered_note',
-                'cooperation', 'cooperation_note', 'eye_contact', 'eye_contact_note',
-                'behavior_normal', 'behavior_note', 'speech_style', 'speech_note',
-                'mood', 'mood_note', 'affect_match', 'affect_state', 'affect_note'
-            ]),
-            ('intakePaneMse2', t('MSE: Cognition & Thought'), [
-                'thinking_normal', 'thinking_rate', 'thinking_sequence', 'thinking_content',
-                'perception_normal', 'perception_abnormal', 'reality_testing', 'judgment', 'self_insight',
-                'orientation', 'memory'
-            ]),
-            ('intakePanePlan', t('Treatment & Referral Plan'), [
-                'referral_target', 'referral_details', 'patient_consent',
-                'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration'
-            ]),
-            ('intakePaneDiagnostic', t('Diagnostic Summary'), [
-                'diag_referral_question', 'diag_test_battery', 'diag_observations',
-                'diag_differential', 'diag_impression', 'diag_recommendations',
-                'diag_followup_plan', 'diag_final_summary'
-            ])
-        ] %}
+        {% set risk_level = intake_form_data.get('overall_risk', '') %}
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                    <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Intake Form') }}</h5>
-                    <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill">DOCX</a>
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>{{ t('Intake Form') }}</h5>
+                        <div class="small text-muted mt-1">
+                            <span id="intakeStepLabel">{{ t('Step 1 of 8') }}</span>
+                            <span class="mx-2">|</span>
+                            <span id="intakeDraftStatus" class="text-muted"></span>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill btn-sm">{{ t('Export DOCX') }}</a>
                 </div>
             </div>
-            <div class="card-body">
-                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" class="row g-3" id="intakeForm" data-patient-id="{{ patient['id'] }}">
+            <div class="card-body p-4">
+                {# Step Progress #}
+                <div class="d-flex align-items-center gap-1 mb-4 flex-wrap" id="intakeStepper">
+                    {% set steps = [
+                        t('Admin'), t('Profile'), t('Complaint'), t('Medical'),
+                        t('Risk & Safety'), t('MSE'), t('Background'), t('Consent')
+                    ] %}
+                    {% for s in steps %}
+                    <div class="intake-step-node {% if loop.first %}active{% endif %}" data-step="{{ loop.index0 }}">
+                        <span class="intake-step-num">{{ loop.index }}</span>
+                    </div>
+                    {% if not loop.last %}
+                    <div class="intake-step-line"></div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                <form method="post" action="{{ url_for('update_patient_info', patient_id=patient['id']) }}" id="intakeForm" data-patient-id="{{ patient['id'] }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="active_tab" value="intake">
                     <input type="hidden" name="background" value="{{ patient['background'] or '' }}">
                     <input type="hidden" name="treatment_info" value="{{ patient['treatment_info'] or '' }}">
-                    <div class="col-12">
-                        <div class="d-flex flex-wrap gap-2" id="intakeTabsNav">
-                            {% for pane_id, pane_title, pane_fields in intake_tabs %}
-                            <button type="button" class="btn rounded-pill {% if loop.first %}btn-primary{% else %}btn-outline-secondary{% endif %} intake-tab-btn" data-intake-pane="{{ pane_id }}">{{ pane_title }}</button>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        {% for pane_id, pane_title, pane_fields in intake_tabs %}
-                        <div id="{{ pane_id }}" class="intake-pane border rounded-4 p-3 bg-light-subtle {% if not loop.first %}d-none{% endif %}">
-                            <div class="row g-3">
-                                {% for field in pane_fields %}
-                                <div class="{% if field in intake_long_text_fields %}col-12{% else %}col-md-6{% endif %}">
-                                    <label class="form-label">{{ t(field.replace('_', ' ')|title) }}</label>
-                                    {% if field in intake_long_text_fields %}
-                                    <textarea name="intake_{{ field }}" class="form-control" rows="4">{{ intake_form_data.get(field, '') }}</textarea>
-                                    {% else %}
-                                    <input type="text" name="intake_{{ field }}" class="form-control" value="{{ intake_form_data.get(field, '') }}">
-                                    {% endif %}
+
+                    {# Step 1: Admin Metadata #}
+                    <div class="intake-pane" id="intakeStep0">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-2"></i>{{ t('General & Administrative Metadata') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Meeting Mode') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for m in ['In-Person','Phone','Video (Zoom)','Home Visit'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('meeting_location','') == m %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_meeting_location" data-value="{{ m }}">
+                                        <input type="radio" name="intake_meeting_location" value="{{ m }}" class="d-none" {% if intake_form_data.get('meeting_location','') == m %}checked{% endif %}>
+                                        {{ t(m) }}
+                                    </label>
+                                    {% endfor %}
                                 </div>
-                                {% endfor %}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Intake Date') }}</label>
+                                <input type="date" name="intake_intake_date" class="form-control form-control-sm" value="{{ intake_form_data.get('intake_date', '') }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Intake Time') }}</label>
+                                <input type="time" name="intake_meeting_time" class="form-control form-control-sm" value="{{ intake_form_data.get('meeting_time', '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Clinician / Intake Conductor') }}</label>
+                                <input type="text" name="intake_meeting_conductor" class="form-control form-control-sm" value="{{ intake_form_data.get('meeting_conductor', '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Referral Source') }}</label>
+                                <select name="intake_referral_source" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for r in ['Self-Referral','HMO / Family Doctor','Hospital / ER','Secretariat / Admin','Word of Mouth','Other'] %}
+                                    <option value="{{ r }}" {% if intake_form_data.get('referral_source','') == r %}selected{% endif %}>{{ t(r) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Target Department') }}</label>
+                                <select name="intake_target_unit" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for u in ['Short-Term Therapy','Long-Term Psychotherapy','CBT Clinic','Couples/Sex Therapy','Trauma & Rehabilitation','Diagnostic Assessment'] %}
+                                    <option value="{{ u }}" {% if intake_form_data.get('target_unit','') == u %}selected{% endif %}>{{ t(u) }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                         </div>
-                        {% endfor %}
                     </div>
-                    <div class="col-12 d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                        <div id="intakeDraftStatus" class="small text-muted"></div>
-                        <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Intake') }}</button>
+
+                    {# Step 2: Patient Profile #}
+                    <div class="intake-pane d-none" id="intakeStep1">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-lines-fill me-2"></i>{{ t('Patient Profile & Demographics') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Kupat Cholim (HMO)') }}</label>
+                                <select name="intake_hmo" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for h in ['Clalit','Maccabi','Meuhedet','Leumit','Private'] %}
+                                    <option value="{{ h }}" {% if intake_form_data.get('hmo','') == h %}selected{% endif %}>{{ h }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Religious Sector') }}</label>
+                                <select name="intake_religious_sector" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for s in ['Secular (Hiloni)','Traditional (Masorti)','Religious (Dati)','Ultra-Orthodox (Haredi)','Other'] %}
+                                    <option value="{{ s }}" {% if intake_form_data.get('religious_sector','') == s %}selected{% endif %}>{{ t(s) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Marital Status') }}</label>
+                                <select name="intake_family_status" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for m in ['Single','Newlywed','Married','Divorced','Widowed','In Relationship'] %}
+                                    <option value="{{ m }}" {% if intake_form_data.get('family_status','') == m %}selected{% endif %}>{{ t(m) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Living Arrangements') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for l in ['Alone','With Spouse','With Parents','With Children','Roommates','Institutional'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if l in (intake_form_data.get('living_with','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_living_with" data-value="{{ l }}">
+                                        <input type="checkbox" name="intake_living_with" value="{{ l }}" class="d-none" {% if l in (intake_form_data.get('living_with','') or '').split(', ') %}checked{% endif %}>
+                                        {{ t(l) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Living With — Other') }}</label>
+                                <input type="text" name="intake_living_with_other" class="form-control form-control-sm" value="{{ intake_form_data.get('living_with_other', '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Emergency Contact Name') }}</label>
+                                <input type="text" name="intake_emergency_name" class="form-control form-control-sm" value="{{ intake_form_data.get('emergency_name', '') }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Relationship') }}</label>
+                                <input type="text" name="intake_emergency_relation" class="form-control form-control-sm" value="{{ intake_form_data.get('emergency_relation', '') }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Phone') }}</label>
+                                <input type="tel" name="intake_emergency_phone" class="form-control form-control-sm" value="{{ intake_form_data.get('emergency_phone', '') }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Step 3: Chief Complaint #}
+                    <div class="intake-pane d-none" id="intakeStep2">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-chat-left-text me-2"></i>{{ t('Chief Complaint & Presenting Problem') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Primary Complaint Categories') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% set cats = ['Anxiety & Panic','Depression & Low Mood','Somatic / Medical Distress','Intimacy & Sexual Health','Marital / Relationship Difficulties','Identity & Life Transitions','Grief & Loss','Academic / Occupational Stress'] %}
+                                    {% for c in cats %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if c in (intake_form_data.get('complaint_categories','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_complaint_categories" data-value="{{ c }}">
+                                        <input type="checkbox" name="intake_complaint_categories" value="{{ c }}" class="d-none" {% if c in (intake_form_data.get('complaint_categories','') or '').split(', ') %}checked{% endif %}>
+                                        {{ t(c) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Detailed Narrative') }}</label>
+                                <textarea name="intake_main_complaint" class="form-control" rows="5">{{ intake_form_data.get('main_complaint', '') }}</textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Onset & Duration') }}</label>
+                                <select name="intake_onset_duration" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for o in ['Less than 1 month','1-6 months','6-12 months','1-5 years','Chronic / Long-standing'] %}
+                                    <option value="{{ o }}" {% if intake_form_data.get('onset_duration','') == o %}selected{% endif %}>{{ t(o) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Problem History') }}</label>
+                                <textarea name="intake_problem_history" class="form-control" rows="4">{{ intake_form_data.get('problem_history', '') }}</textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Current Distress Level') }} — <span id="intakeDistressLabel">5</span>/10</label>
+                                <input type="range" name="intake_distress_level" class="form-range" min="0" max="10" value="{{ intake_form_data.get('distress_level', '5') }}" id="intakeDistressSlider"
+                                    style="--range-pct: {{ (intake_form_data.get('distress_level', '5')|int / 10 * 100)|int }}%">
+                                <div class="d-flex justify-content-between small text-muted"><span>{{ t('No Distress') }}</span><span>{{ t('Extreme Crisis') }}</span></div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Impact on Daily Functioning') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for i in ['Work / Study','Intimacy / Sexuality','Family Life','Social Life','Sleep / Appetite'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if i in (intake_form_data.get('impact_functioning','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_impact_functioning" data-value="{{ i }}">
+                                        <input type="checkbox" name="intake_impact_functioning" value="{{ i }}" class="d-none" {% if i in (intake_form_data.get('impact_functioning','') or '').split(', ') %}checked{% endif %}>
+                                        {{ t(i) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Step 4: Medical & Psychiatric History #}
+                    <div class="intake-pane d-none" id="intakeStep3">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-heart-pulse me-2"></i>{{ t('Medical & Psychiatric History') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Medical Conditions') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for c in ['Chronic Pain','Dermatological / Gynecological','Neurological','Cardiovascular','Endocrine','None'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if c in (intake_form_data.get('medical_conditions','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_medical_conditions" data-value="{{ c }}">
+                                        <input type="checkbox" name="intake_medical_conditions" value="{{ c }}" class="d-none" {% if c in (intake_form_data.get('medical_conditions','') or '').split(', ') %}checked{% endif %}>
+                                        {{ t(c) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Medical Conditions — Details') }}</label>
+                                <textarea name="intake_medical_conditions_detail" class="form-control" rows="3">{{ intake_form_data.get('medical_conditions_detail', '') }}</textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Previous Psychotherapy?') }}</label>
+                                <div class="d-flex gap-2">
+                                    {% for v in ['Yes','In Past','No'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('previous_therapy','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_previous_therapy" data-value="{{ v }}">
+                                        <input type="radio" name="intake_previous_therapy" value="{{ v }}" class="d-none" {% if intake_form_data.get('previous_therapy','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Previous Hospitalization?') }}</label>
+                                <div class="d-flex gap-2">
+                                    {% for v in ['Yes','No'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('previous_hospitalization','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_previous_hospitalization" data-value="{{ v }}">
+                                        <input type="radio" name="intake_previous_hospitalization" value="{{ v }}" class="d-none" {% if intake_form_data.get('previous_hospitalization','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('ADD / ADHD?') }}</label>
+                                <div class="d-flex gap-2">
+                                    {% for v in ['Diagnosed','Suspected','None'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('add_adhd','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_add_adhd" data-value="{{ v }}">
+                                        <input type="radio" name="intake_add_adhd" value="{{ v }}" class="d-none" {% if intake_form_data.get('add_adhd','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Psychiatric Conditions / Diagnoses') }}</label>
+                                <textarea name="intake_psychiatric_conditions" class="form-control" rows="3">{{ intake_form_data.get('psychiatric_conditions', '') }}</textarea>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <h6 class="fw-bold text-primary mb-3">{{ t('Medications') }}</h6>
+                        <div class="row g-2 mb-2" id="intakeMedicationRows">
+                            {% set meds = intake_form_data.get('medications_json', '[]') %}
+                            {% set meds_list = [] %}
+                            {% if meds is string and meds|length > 2 %}{% set meds_list = meds|tojson %}{% endif %}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="intakeAddMedication()"><i class="bi bi-plus-circle me-1"></i>{{ t('Add Medication') }}</button>
+                        <input type="hidden" name="intake_medications_json" id="intakeMedicationsJson" value="{{ intake_form_data.get('medications_json', '[]') }}">
+                        <hr class="my-3">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Alcohol Use') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['None','Social / Occasional','Heavy / Problematic'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('alcohol_use','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_alcohol_use" data-value="{{ v }}">
+                                        <input type="radio" name="intake_alcohol_use" value="{{ v }}" class="d-none" {% if intake_form_data.get('alcohol_use','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Cannabis / Other Substances') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['None','Medical License','Recreational','In Past'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('substance_use','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_substance_use" data-value="{{ v }}">
+                                        <input type="radio" name="intake_substance_use" value="{{ v }}" class="d-none" {% if intake_form_data.get('substance_use','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small">{{ t('Tobacco / Nicotine') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['None','Daily','Occasional'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('tobacco_use','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_tobacco_use" data-value="{{ v }}">
+                                        <input type="radio" name="intake_tobacco_use" value="{{ v }}" class="d-none" {% if intake_form_data.get('tobacco_use','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Step 5: Risk & Safety #}
+                    <div class="intake-pane d-none" id="intakeStep4">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-shield-exclamation me-2"></i>{{ t('Risk & Safety Assessment') }}</h6>
+                        <div id="intakeRiskBadge" class="mb-3 text-center" style="display:none">
+                            <span class="badge rounded-pill px-4 py-2 fs-6" id="intakeRiskBadgeLabel"></span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Suicidal Ideation') }}</label>
+                                <div class="d-flex gap-2 flex-wrap" id="intakeSuicideRadios">
+                                    {% for v in ['None','Passive (Thoughts of death without intent)','Active (Ideation with intent/plan)'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('suicidal_ideation','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_suicidal_ideation" data-value="{{ v }}">
+                                        <input type="radio" name="intake_suicidal_ideation" value="{{ v }}" class="d-none" {% if intake_form_data.get('suicidal_ideation','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {# C-SSRS Conditional #}
+                            <div id="intakeCssrsPanel" class="col-12 border rounded-4 p-3 bg-light" style="display:none">
+                                <h6 class="fw-bold small text-danger mb-2">{{ t('C-SSRS Detail') }}</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-4"><label class="small">{{ t('Intent') }}</label>
+                                        <select name="intake_cssrs_intent" class="form-select form-select-sm"><option value="">{{ t('Select...') }}</option>
+                                            {% for v in ['No Intent','Ambivalent','Clear Intent'] %}<option value="{{ v }}" {% if intake_form_data.get('cssrs_intent','')==v %}selected{% endif %}>{{ t(v) }}</option>{% endfor %}</select></div>
+                                    <div class="col-md-4"><label class="small">{{ t('Plan') }}</label>
+                                        <select name="intake_cssrs_plan" class="form-select form-select-sm"><option value="">{{ t('Select...') }}</option>
+                                            {% for v in ['No Plan','Vague Plan','Specific Plan'] %}<option value="{{ v }}" {% if intake_form_data.get('cssrs_plan','')==v %}selected{% endif %}>{{ t(v) }}</option>{% endfor %}</select></div>
+                                    <div class="col-md-4"><label class="small">{{ t('Access to Means') }}</label>
+                                        <select name="intake_cssrs_means" class="form-select form-select-sm"><option value="">{{ t('Select...') }}</option>
+                                            {% for v in ['No Access','Limited Access','Full Access'] %}<option value="{{ v }}" {% if intake_form_data.get('cssrs_means','')==v %}selected{% endif %}>{{ t(v) }}</option>{% endfor %}</select></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Self-Harm History') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['Never','Past History (>1 yr)','Recent (<1 yr)'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('self_harm_recent','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_self_harm_recent" data-value="{{ v }}">
+                                        <input type="radio" name="intake_self_harm_recent" value="{{ v }}" class="d-none" {% if intake_form_data.get('self_harm_recent','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Risk to Others / Violence') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['None','Low','Moderate','High'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('risk_to_others','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_risk_to_others" data-value="{{ v }}">
+                                        <input type="radio" name="intake_risk_to_others" value="{{ v }}" class="d-none" {% if intake_form_data.get('risk_to_others','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Self-Harm Level') }}</label>
+                                <select name="intake_self_harm_level" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for v in ['None','Low','Moderate','Severe / Immediate'] %}
+                                    <option value="{{ v }}" {% if intake_form_data.get('self_harm_level','') == v %}selected{% endif %}>{{ t(v) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <input type="hidden" name="intake_overall_risk" id="intakeOverallRisk" value="{{ intake_form_data.get('overall_risk', '') }}">
+                        </div>
+                    </div>
+
+                    {# Step 6: MSE #}
+                    <div class="intake-pane d-none" id="intakeStep5">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-brain me-2"></i>{{ t('Mental Status Examination (MSE)') }}</h6>
+                        <div class="row g-3">
+                            {% for mse_field, mse_opts in [
+                                ('appearance_home', ['Neat / Appropriate','Disheveled','Unkempt','Phone / Unobserved']),
+                                ('cooperation', ['Fully Cooperative','Guarded','Hostile','Eager to Please','Passive']),
+                                ('motor_behavior', ['Normal','Restless / Agitated','Retarded / Slowed','Tics / Tremors']),
+                                ('speech_pattern', ['Fluent / Coherent','Rapid / Pressured','Slow / Hesitant','Low Volume / Muted']),
+                                ('affect', ['Full Range / Appropriate','Constricted / Blunted','Flat','Labile (Fluctuating)']),
+                                ('thought_process', ['Goal-Directed / Logical','Circumstantial / Tangential','Flight of Ideas','Perseverative']),
+                                ('thought_content', ['Normal','Anxiety / Somatic','Phobia / Fear','Obsessive','Suicidal / Helpless','Delusional / Paranoiac']),
+                                ('perception', ['Normal','Auditory Hallucinations','Visual Hallucinations','Depersonalization / Derealization']),
+                            ] %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t(mse_field.replace('_',' ')|title) }}</label>
+                                <div class="d-flex flex-wrap gap-1">
+                                    {% for o in mse_opts %}
+                                    <label class="badge rounded-pill px-2 py-1 border intake-check-label {% if o in (intake_form_data.get(mse_field,'') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" style="font-size:0.72rem" data-group="intake_{{ mse_field }}" data-value="{{ o }}">
+                                        <input type="checkbox" name="intake_{{ mse_field }}" value="{{ o }}" class="d-none" {% if o in (intake_form_data.get(mse_field,'') or '').split(', ') %}checked{% endif %}>
+                                        {{ t(o) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Mood (Subjective)') }}</label>
+                                <input type="text" name="intake_mood" class="form-control form-control-sm" value="{{ intake_form_data.get('mood', '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Cognition & Orientation') }}</label>
+                                <div class="d-flex flex-wrap gap-1">
+                                    {% for o in ['Oriented x3','Impaired Concentration','Memory Deficits'] %}
+                                    <label class="badge rounded-pill px-2 py-1 border intake-check-label {% if o in (intake_form_data.get('cognition','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" style="font-size:0.72rem" data-group="intake_cognition" data-value="{{ o }}">
+                                        <input type="checkbox" name="intake_cognition" value="{{ o }}" class="d-none" {% if o in (intake_form_data.get('cognition','') or '').split(', ') %}checked{% endif %}>{{ t(o) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Insight & Judgment') }}</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    {% for v in ['Good / Intact','Fair / Partial','Poor / Impaired'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('insight_judgment','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_insight_judgment" data-value="{{ v }}">
+                                        <input type="radio" name="intake_insight_judgment" value="{{ v }}" class="d-none" {% if intake_form_data.get('insight_judgment','') == v %}checked{% endif %}>{{ t(v) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('MSE Notes') }}</label>
+                                <textarea name="intake_mse_notes" class="form-control" rows="3">{{ intake_form_data.get('mse_notes', '') }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Step 7: Psychosocial Background #}
+                    <div class="intake-pane d-none" id="intakeStep6">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-people me-2"></i>{{ t('Psychosocial & Developmental History') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Family of Origin Background') }}</label>
+                                <textarea name="intake_early_anamnesis" class="form-control" rows="4" placeholder="{{ t('Birth order, parents, family atmosphere, religious context...') }}">{{ intake_form_data.get('early_anamnesis', '') }}</textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Educational Level') }}</label>
+                                <input type="text" name="intake_education" class="form-control form-control-sm" value="{{ intake_form_data.get('education', '') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Occupation / Employment') }}</label>
+                                <input type="text" name="intake_occupation" class="form-control form-control-sm" value="{{ intake_form_data.get('occupation', '') }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Social Support System') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for s in ['Strong Family Support','Close Friends','Community / Synagogue','Isolated / Lacks Support'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if s in (intake_form_data.get('social_support','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_social_support" data-value="{{ s }}">
+                                        <input type="checkbox" name="intake_social_support" value="{{ s }}" class="d-none" {% if s in (intake_form_data.get('social_support','') or '').split(', ') %}checked{% endif %}>{{ t(s) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Major Life Events / Trauma') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for e in ['Recent Marriage','Bereavement','Medical Diagnosis','Relocation','Financial Stress'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if e in (intake_form_data.get('life_events','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_life_events" data-value="{{ e }}">
+                                        <input type="checkbox" name="intake_life_events" value="{{ e }}" class="d-none" {% if e in (intake_form_data.get('life_events','') or '').split(', ') %}checked{% endif %}>{{ t(e) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Disability Status') }}</label>
+                                <input type="text" name="intake_disability_status" class="form-control form-control-sm" value="{{ intake_form_data.get('disability_status', '') }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Step 8: Consent & Summary #}
+                    <div class="intake-pane d-none" id="intakeStep7">
+                        <h6 class="fw-bold text-primary mb-3"><i class="bi bi-check2-circle me-2"></i>{{ t('Summary, Referral & Consent') }}</h6>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Diagnostic Impressions / Clinical Formulation') }}</label>
+                                <textarea name="intake_diag_impression" class="form-control" rows="4">{{ intake_form_data.get('diag_impression', '') }}</textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Recommended Treatment Type') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for t in ['Individual Psychotherapy','CBT / Focused Therapy','Couples Therapy','Psychiatric Evaluation','Medical Specialist Referral'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if t in (intake_form_data.get('treatment_approach','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_treatment_approach" data-value="{{ t }}">
+                                        <input type="checkbox" name="intake_treatment_approach" value="{{ t }}" class="d-none" {% if t in (intake_form_data.get('treatment_approach','') or '').split(', ') %}checked{% endif %}>{{ t(t) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">{{ t('Therapist Preference') }}</label>
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% for p in ['Female Therapist','Male Therapist','Religious / Sector-Aware','Trauma Specialist'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if p in (intake_form_data.get('therapist_preference','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_therapist_preference" data-value="{{ p }}">
+                                        <input type="checkbox" name="intake_therapist_preference" value="{{ p }}" class="d-none" {% if p in (intake_form_data.get('therapist_preference','') or '').split(', ') %}checked{% endif %}>{{ t(p) }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Session Frequency') }}</label>
+                                <select name="intake_treatment_frequency" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for f in ['Weekly (1x/week)','Twice Weekly','Bi-weekly'] %}
+                                    <option value="{{ f }}" {% if intake_form_data.get('treatment_frequency','') == f %}selected{% endif %}>{{ t(f) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold small">{{ t('Duration') }}</label>
+                                <select name="intake_treatment_estimated_duration" class="form-select form-select-sm">
+                                    <option value="">{{ t('Select...') }}</option>
+                                    {% for d in ['Short-term (3 months)','Medium (6 months)','Open-ended / Long-term'] %}
+                                    <option value="{{ d }}" {% if intake_form_data.get('treatment_estimated_duration','') == d %}selected{% endif %}>{{ t(d) }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small">{{ t('Referral Details') }}</label>
+                                <textarea name="intake_referral_details" class="form-control" rows="3">{{ intake_form_data.get('referral_details', '') }}</textarea>
+                            </div>
+                            <div class="col-12 border rounded-4 p-3 bg-light">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="intake_patient_consent" id="intakeConsentBox" onchange="buildIntakeConsent()" {% if intake_form_data.get('patient_consent','') in ('Yes','yes','on','1','True') %}checked{% endif %}>
+                                    <label class="form-check-label small fw-semibold" for="intakeConsentBox">{{ t('Patient consents to treatment plan and data storage per Israeli Privacy Law. Information disclosure (Vituur Sodiot) discussed.') }}</label>
+                                </div>
+                                <p class="small text-muted mb-0">{{ t('Consent recorded:') }} <span id="intakeConsentTimestamp">{{ intake_form_data.get('consent_timestamp', '') }}</span></p>
+                                <input type="hidden" name="intake_consent_timestamp" id="intakeConsentTimestampInput" value="{{ intake_form_data.get('consent_timestamp', '') }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Navigation buttons #}
+                    <div class="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-2">
+                        <button type="button" class="btn btn-outline-secondary rounded-pill d-none" id="intakePrevBtn" onclick="intakeNavigate(-1)">
+                            <i class="bi bi-chevron-left me-1"></i>{{ t('Previous') }}
+                        </button>
+                        <div class="d-flex gap-2 ms-auto align-items-center">
+                            <div id="intakeDraftStatus2" class="small text-muted me-2"></div>
+                            <button type="button" class="btn btn-primary rounded-pill" id="intakeNextBtn" onclick="intakeNavigate(1)">{{ t('Next') }} <i class="bi bi-chevron-right ms-1"></i></button>
+                            <button type="submit" class="btn btn-success rounded-pill d-none" id="intakeSubmitBtn">{{ t('Save Intake') }}</button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -841,7 +1292,6 @@
                         <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Upload') }}</button>
                     </div>
                 </form>
-
                 <div class="d-grid gap-2">
                     {% for doc in diagnosis_documents %}
                     <div class="border rounded-4 p-3 bg-light-subtle d-flex justify-content-between align-items-start gap-3 flex-wrap">
@@ -1199,36 +1649,164 @@ function toggleStablePanel(button) {
     }
 }
 
-function initIntakeTabs() {
-    const tabs = Array.from(document.querySelectorAll('.intake-tab-btn'));
-    if (!tabs.length) {
-        return;
-    }
-
-    const panes = Array.from(document.querySelectorAll('.intake-pane'));
-    const setActivePane = function (paneId) {
-        tabs.forEach(function (tab) {
-            const isActive = tab.getAttribute('data-intake-pane') === paneId;
-            tab.classList.toggle('btn-primary', isActive);
-            tab.classList.toggle('btn-outline-secondary', !isActive);
-        });
-
-        panes.forEach(function (pane) {
-            pane.classList.toggle('d-none', pane.id !== paneId);
-        });
-    };
-
-    tabs.forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            setActivePane(tab.getAttribute('data-intake-pane'));
-        });
-    });
-
-    const activeBtn = tabs.find(function (tab) {
-        return tab.classList.contains('btn-primary');
-    });
-    setActivePane((activeBtn || tabs[0]).getAttribute('data-intake-pane'));
+{# ── INTAKE WIZARD JS ─────────────────────────────────────────── #}
+var intakeCurrentStep = 0;
+var intakeTotalSteps = 8;
+function intakeNavigate(dir) {
+    var panes = document.querySelectorAll('#intakeForm .intake-pane');
+    if (!panes.length) return;
+    panes[intakeCurrentStep].classList.add('d-none');
+    intakeCurrentStep = Math.min(Math.max(intakeCurrentStep + dir, 0), intakeTotalSteps - 1);
+    panes[intakeCurrentStep].classList.remove('d-none');
+    updateIntakeUI();
+    if (intakeCurrentStep === 4) calcIntakeRisk();
+    if (intakeCurrentStep === 7) buildIntakeConsent();
 }
+function updateIntakeUI() {
+    document.getElementById('intakeStepLabel').textContent = '{{ t("Step") }} ' + (intakeCurrentStep + 1) + ' {{ t("of") }} ' + intakeTotalSteps;
+    document.getElementById('intakePrevBtn').classList.toggle('d-none', intakeCurrentStep === 0);
+    document.getElementById('intakeNextBtn').classList.toggle('d-none', intakeCurrentStep === intakeTotalSteps - 1);
+    document.getElementById('intakeSubmitBtn').classList.toggle('d-none', intakeCurrentStep !== intakeTotalSteps - 1);
+    document.querySelectorAll('.intake-step-node').forEach(function(n, i) {
+        n.classList.toggle('active', i <= intakeCurrentStep);
+        n.classList.toggle('completed', i < intakeCurrentStep);
+    });
+}
+function initIntakeWizard() {
+    var panes = document.querySelectorAll('#intakeForm .intake-pane');
+    if (!panes.length) return;
+    intakeTotalSteps = panes.length;
+    panes.forEach(function(p, i) { if (i !== 0) p.classList.add('d-none'); });
+    updateIntakeUI();
+}
+
+{# ── Radio/Chip Buttons ────────────────────────────────────────── #}
+function initIntakeRadios() {
+    document.querySelectorAll('.intake-radio-label').forEach(function(l) {
+        l.addEventListener('click', function(e) {
+            var group = this.getAttribute('data-group');
+            var radio = this.querySelector('input[type=radio]');
+            document.querySelectorAll('[data-group="' + group + '"]').forEach(function(s) {
+                s.classList.remove('bg-primary', 'text-white', 'border-primary');
+                s.classList.add('bg-white', 'text-dark');
+            });
+            this.classList.add('bg-primary', 'text-white', 'border-primary');
+            this.classList.remove('bg-white', 'text-dark');
+            if (radio) radio.checked = true;
+            if (this.closest('#intakeSuicideRadios')) toggleCssrsPanel();
+            calcIntakeRisk();
+        });
+    });
+}
+function initIntakeCheckboxes() {
+    document.querySelectorAll('.intake-check-label').forEach(function(l) {
+        l.addEventListener('click', function(e) {
+            if (e.target.tagName === 'INPUT') return;
+            var cb = this.querySelector('input[type=checkbox]');
+            if (cb) { cb.checked = !cb.checked; }
+            this.classList.toggle('bg-primary');
+            this.classList.toggle('text-white');
+            this.classList.toggle('border-primary');
+            this.classList.toggle('bg-white');
+            this.classList.toggle('text-dark');
+            calcIntakeRisk();
+        });
+    });
+}
+function toggleCssrsPanel() {
+    var panel = document.getElementById('intakeCssrsPanel');
+    var selected = document.querySelector('input[name="intake_suicidal_ideation"]:checked');
+    var val = selected ? selected.value : '';
+    if (panel) panel.style.display = (val && val !== 'None') ? '' : 'none';
+}
+
+{# ── Risk Assessment ───────────────────────────────────────────── #}
+function calcIntakeRisk() {
+    var suicide = (document.querySelector('input[name="intake_suicidal_ideation"]:checked') || {}).value || '';
+    var selfHarm = (document.querySelector('input[name="intake_self_harm_recent"]:checked') || {}).value || '';
+    var violence = (document.querySelector('input[name="intake_risk_to_others"]:checked') || {}).value || '';
+    var level = document.querySelector('select[name="intake_self_harm_level"]') ? document.querySelector('select[name="intake_self_harm_level"]').value : '';
+    var badge = document.getElementById('intakeRiskBadge');
+    var label = document.getElementById('intakeRiskBadgeLabel');
+    var hidden = document.getElementById('intakeOverallRisk');
+    if (!badge || !label) return;
+    var risk = 'LOW';
+    if (suicide.includes('Active') || violence === 'High' || (level && level.includes('Severe'))) risk = 'HIGH';
+    else if (suicide.includes('Passive') || selfHarm.includes('Recent') || violence === 'Moderate') risk = 'MEDIUM';
+    var colors = {LOW: 'bg-success', MEDIUM: 'bg-warning text-dark', HIGH: 'bg-danger'};
+    var emoji = {LOW: '🟢', MEDIUM: '🟡', HIGH: '🔴'};
+    badge.style.display = '';
+    label.className = 'badge rounded-pill px-4 py-2 fs-6 ' + (colors[risk] || 'bg-secondary');
+    label.textContent = emoji[risk] + ' ' + '{{ t("Risk Level:") }}'.replace(':','') + ' ' + risk;
+    if (hidden) hidden.value = risk;
+}
+
+{# ── Medication Table ──────────────────────────────────────────── #}
+function initIntakeMedications() {
+    var jsonInput = document.getElementById('intakeMedicationsJson');
+    var rows = document.getElementById('intakeMedicationRows');
+    if (!rows || !jsonInput) return;
+    try { var meds = JSON.parse(jsonInput.value || '[]'); if (!Array.isArray(meds)) meds = []; } catch(e) { meds = []; }
+    if (!meds.length && jsonInput.value) { rows.innerHTML = '<div class="col-12 text-muted small">Loading...</div>'; return; }
+    if (!meds.length) return;
+    meds.forEach(function(m, i) { addMedicationRow(m.name||'', m.dosage||'', m.purpose||'', m.prescriber||'', i); });
+    syncMedicationsJson();
+}
+function addMedicationRow(name, dosage, purpose, prescriber, idx) {
+    var rows = document.getElementById('intakeMedicationRows');
+    if (!rows) return;
+    var div = document.createElement('div');
+    div.className = 'col-12';
+    div.innerHTML = '<div class="row g-1 align-items-end">' +
+        '<div class="col-md-3"><input class="form-control form-control-sm med-name" placeholder="{{ t("Medication") }}" value="' + (name||'') + '"></div>' +
+        '<div class="col-md-3"><input class="form-control form-control-sm med-dosage" placeholder="{{ t("Dosage") }}" value="' + (dosage||'') + '"></div>' +
+        '<div class="col-md-2"><input class="form-control form-control-sm med-purpose" placeholder="{{ t("Purpose") }}" value="' + (purpose||'') + '"></div>' +
+        '<div class="col-md-3"><input class="form-control form-control-sm med-prescriber" placeholder="{{ t("Prescriber") }}" value="' + (prescriber||'') + '"></div>' +
+        '<div class="col-md-1"><button type="button" class="btn btn-outline-danger btn-sm rounded-pill med-remove" onclick="this.closest(\'.col-12\').remove();syncMedicationsJson()" title="{{ t("Remove") }}"><i class="bi bi-x-lg"></i></button></div></div>';
+    rows.appendChild(div);
+    div.querySelectorAll('input').forEach(function(inp) { inp.addEventListener('input', syncMedicationsJson); });
+}
+function intakeAddMedication() { addMedicationRow('','','',''); syncMedicationsJson(); }
+function syncMedicationsJson() {
+    var input = document.getElementById('intakeMedicationsJson');
+    var rows = document.getElementById('intakeMedicationRows');
+    if (!input || !rows) return;
+    var meds = [];
+    rows.querySelectorAll('.col-12').forEach(function(row) {
+        meds.push({
+            name: (row.querySelector('.med-name')||{}).value||'',
+            dosage: (row.querySelector('.med-dosage')||{}).value||'',
+            purpose: (row.querySelector('.med-purpose')||{}).value||'',
+            prescriber: (row.querySelector('.med-prescriber')||{}).value||''
+        });
+    });
+    input.value = JSON.stringify(meds);
+}
+
+{# ── Distress Slider ───────────────────────────────────────────── #}
+function initIntakeSlider() {
+    var slider = document.getElementById('intakeDistressSlider');
+    var label = document.getElementById('intakeDistressLabel');
+    if (!slider || !label) return;
+    slider.addEventListener('input', function() {
+        label.textContent = slider.value;
+        slider.style.setProperty('--range-pct', (slider.value / 10 * 100) + '%');
+    });
+}
+
+function initIntakeRisk() { toggleCssrsPanel(); calcIntakeRisk(); }
+function buildIntakeConsent() {
+    var cb = document.getElementById('intakeConsentBox');
+    var ts = document.getElementById('intakeConsentTimestamp');
+    var input = document.getElementById('intakeConsentTimestampInput');
+    if (cb && cb.checked && ts && input) {
+        var now = new Date().toISOString();
+        ts.textContent = now.replace('T',' ').substring(0,19);
+        input.value = now;
+    }
+}
+
+{# ── Draft Protection (same as before) ─────────────────────────── #}
 
 function initIntakeDraftProtection() {
     const form = document.getElementById('intakeForm');
@@ -1350,8 +1928,13 @@ function initIntakeDraftProtection() {
 
 document.addEventListener('DOMContentLoaded', function () {
     togglePatientInfoEdit(false);
-    initIntakeTabs();
+    initIntakeWizard();
+    initIntakeRadios();
+    initIntakeCheckboxes();
+    initIntakeMedications();
+    initIntakeRisk();
     initIntakeDraftProtection();
+    initIntakeSlider();
     const appointmentStatusToken = '{{ csrf_token() }}';
 
     const loadPreviousBtn = document.getElementById('loadPreviousMeetingsBtn');

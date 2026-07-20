@@ -3165,7 +3165,8 @@ def intake_form_fields():
         'meeting_location', 'meeting_location_specify', 'meeting_time', 'meeting_duration', 'meeting_conductor',
         'main_complaint', 'problem_history', 'early_anamnesis', 'referral_source', 'referral_date',
         'family_status', 'guardian_status', 'guardian_by_whom', 'living_with', 'living_with_other',
-        'disability_status', 'disability_percent', 'self_harm_level', 'self_harm_recent', 'self_harm_count',
+        'disability_status', 'disability_percent',
+        'self_harm_level', 'self_harm_recent', 'self_harm_count',
         'forced_treatment', 'substance_use', 'medical_cannabis', 'alcohol_use',
         'medical_conditions', 'psychiatric_conditions',
         'appearance_fit', 'appearance_fit_note', 'appearance_ordered', 'appearance_ordered_note',
@@ -3179,24 +3180,41 @@ def intake_form_fields():
         'treatment_approach', 'treatment_frequency', 'treatment_estimated_duration',
         'diag_referral_question', 'diag_test_battery', 'diag_observations',
         'diag_differential', 'diag_impression', 'diag_recommendations',
-        'diag_followup_plan', 'diag_final_summary'
+        'diag_followup_plan', 'diag_final_summary',
+        # New fields from 8-step wizard
+        'intake_date', 'target_unit',
+        'hmo', 'religious_sector',
+        'emergency_name', 'emergency_relation', 'emergency_phone',
+        'complaint_categories',
+        'onset_duration', 'distress_level', 'impact_functioning',
+        'medical_conditions_detail',
+        'previous_therapy', 'previous_hospitalization', 'add_adhd',
+        'medications_json',
+        'tobacco_use',
+        'suicidal_ideation',
+        'cssrs_intent', 'cssrs_plan', 'cssrs_means',
+        'risk_to_others', 'overall_risk',
+        'appearance_home', 'motor_behavior', 'speech_pattern', 'affect',
+        'thought_process', 'thought_content', 'perception',
+        'cognition', 'insight_judgment', 'mse_notes',
+        'education', 'occupation', 'social_support', 'life_events',
+        'therapist_preference',
+        'consent_timestamp',
     ]
 
 
 def intake_multi_select_fields():
     return {
-        'appearance_fit',
-        'appearance_ordered',
-        'behavior_normal',
-        'speech_style',
-        'mood',
-        'affect_match',
-        'affect_state',
-        'thinking_normal',
-        'thinking_rate',
-        'thinking_sequence',
-        'thinking_content',
+        'appearance_fit', 'appearance_ordered', 'behavior_normal',
+        'speech_style', 'mood', 'affect_match', 'affect_state',
+        'thinking_normal', 'thinking_rate', 'thinking_sequence', 'thinking_content',
         'referral_target',
+        # New multi-select fields
+        'complaint_categories', 'impact_functioning', 'living_with',
+        'medical_conditions',
+        'appearance_home', 'motor_behavior', 'speech_pattern', 'affect',
+        'thought_process', 'thought_content', 'perception', 'cognition',
+        'social_support', 'life_events', 'treatment_approach', 'therapist_preference',
     }
 
 
