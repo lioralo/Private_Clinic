@@ -735,7 +735,7 @@
                             <span id="intakeDraftStatus" class="text-muted"></span>
                         </div>
                     </div>
-                    <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id']) }}" class="btn btn-outline-secondary rounded-pill btn-sm">{{ t('Export DOCX') }}</a>
+                    <a href="{{ url_for('export_patient_intake_docx', patient_id=patient['id'], lang=lang) }}" class="btn btn-outline-secondary rounded-pill btn-sm">{{ t('Export DOCX') }}</a>
                 </div>
             </div>
             <div class="card-body p-4">
@@ -905,9 +905,11 @@
                             </div>
                             <div class="col-12">
                                 <label class="form-label fw-semibold small">{{ t('Current Distress Level') }} — <span id="intakeDistressLabel">5</span>/10</label>
-                                <input type="range" name="intake_distress_level" class="form-range" min="0" max="10" value="{{ intake_form_data.get('distress_level', '5') }}" id="intakeDistressSlider"
-                                    style="--range-pct: {{ (intake_form_data.get('distress_level', '5')|int / 10 * 100)|int }}%">
-                                <div class="d-flex justify-content-between small text-muted"><span>{{ t('No Distress') }}</span><span>{{ t('Extreme Crisis') }}</span></div>
+                                <div style="max-width:520px">
+                                    <input type="range" name="intake_distress_level" class="form-range" min="0" max="10" value="{{ intake_form_data.get('distress_level', '5') }}" id="intakeDistressSlider"
+                                        style="--range-pct: {{ (intake_form_data.get('distress_level', '5')|int / 10 * 100)|int }}%">
+                                    <div class="d-flex justify-content-between small text-muted"><span>{{ t('No Distress') }}</span><span>{{ t('Extreme Crisis') }}</span></div>
+                                </div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label fw-semibold small">{{ t('Impact on Daily Functioning') }}</label>
@@ -958,16 +960,6 @@
                                     {% for v in ['Yes','No'] %}
                                     <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('previous_hospitalization','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_previous_hospitalization" data-value="{{ v }}">
                                         <input type="radio" name="intake_previous_hospitalization" value="{{ v }}" class="d-none" {% if intake_form_data.get('previous_hospitalization','') == v %}checked{% endif %}>{{ t(v) }}
-                                    </label>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-semibold small">{{ t('ADD / ADHD?') }}</label>
-                                <div class="d-flex gap-2">
-                                    {% for v in ['Diagnosed','Suspected','None'] %}
-                                    <label class="badge rounded-pill px-3 py-2 border intake-radio-label {% if intake_form_data.get('add_adhd','') == v %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_add_adhd" data-value="{{ v }}">
-                                        <input type="radio" name="intake_add_adhd" value="{{ v }}" class="d-none" {% if intake_form_data.get('add_adhd','') == v %}checked{% endif %}>{{ t(v) }}
                                     </label>
                                     {% endfor %}
                                 </div>

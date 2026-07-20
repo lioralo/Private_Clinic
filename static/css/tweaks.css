@@ -112,12 +112,12 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    max-width: 480px;
     height: 8px;
     border-radius: 4px;
     background: linear-gradient(to right, var(--color-success) 0%, var(--color-success) var(--range-pct), var(--color-warning) var(--range-pct), var(--color-warning) 80%, var(--color-danger) 80%);
     outline: none;
     display: block;
+    margin-bottom: 4px;
 }
 #intakeDistressSlider::-webkit-slider-thumb {
     -webkit-appearance: none;

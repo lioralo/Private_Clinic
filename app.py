@@ -3188,7 +3188,7 @@ def intake_form_fields():
         'complaint_categories',
         'onset_duration', 'distress_level', 'impact_functioning',
         'medical_conditions_detail',
-        'previous_therapy', 'previous_hospitalization', 'add_adhd',
+        'previous_therapy', 'previous_hospitalization',
         'medications_json',
         'tobacco_use',
         'suicidal_ideation',
@@ -3255,37 +3255,121 @@ def serialize_intake_assessment(data):
 
 def build_intake_docx(patient_name, intake_data, language='en'):
     import os
-    document = Document()
+    from datetime import date
 
-    # Logo
+    document = Document()
+    is_he = language == 'he'
+
+    # ── Margins ──────────────────────────────────────────────────
+    for section in document.sections:
+        section.top_margin = Inches(0.7)
+        section.bottom_margin = Inches(0.6)
+        section.left_margin = Inches(0.9)
+        section.right_margin = Inches(0.9)
+
+    # ── Logo + Clinic Name Header ────────────────────────────────
     logo_path = os.path.join(os.path.dirname(__file__), 'static', 'Logo.png')
     if os.path.isfile(logo_path):
         try:
-            from docx.shared import Inches, Pt, RGBColor
+            from docx.shared import Inches as In, Pt, RGBColor
             from docx.enum.text import WD_ALIGN_PARAGRAPH
+            from docx.oxml.ns import qn
             p = document.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_after = Pt(2)
             run = p.add_run()
-            run.add_picture(logo_path, width=Inches(1.2))
+            run.add_picture(logo_path, width=In(1.0))
+            # Clinic name below logo
+            p2 = document.add_paragraph()
+            p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p2.paragraph_format.space_after = Pt(12)
+            run2 = p2.add_run("Lior Aloni — Private Clinic" if not is_he else "ליאור אלוני — קליניקה פרטית")
+            run2.font.size = Pt(11)
+            run2.font.color.rgb = RGBColor(59, 130, 246)
+            run2.bold = True
         except Exception:
             pass
 
-    # Title
-    is_he = language == 'he'
-    title = f"סיכום אינטייק — {patient_name}" if is_he else f"Intake Summary — {patient_name}"
-    h = document.add_heading(title, level=0)
+    # ── Title ────────────────────────────────────────────────────
+    title_text = f"סיכום אינטייק — {patient_name}" if is_he else f"Intake Summary — {patient_name}"
+    h = document.add_heading(title_text, level=0)
+    h.paragraph_format.space_before = Pt(0)
+    h.paragraph_format.space_after = Pt(2)
     for run in h.runs:
+        run.font.size = Pt(20)
         try:
-            from docx.shared import Pt
-            run.font.size = Pt(18)
-        except ImportError:
+            run.font.color.rgb = RGBColor(24, 24, 27)
+        except (NameError, AttributeError):
             pass
 
-    # Subtitle
-    subtitle = "פורמט מובנה | DSM-5 / MSE / C-SSRS" if is_he else "Structured Format | DSM-5 / MSE / C-SSRS"
-    document.add_paragraph(subtitle).runs[0].italic = True if document.paragraphs else True
+    # Date
+    date_p = document.add_paragraph()
+    date_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    date_p.paragraph_format.space_after = Pt(18)
+    date_run = date_p.add_run(date.today().strftime('%d/%m/%Y'))
+    date_run.font.size = Pt(10)
+    date_run.font.color.rgb = RGBColor(148, 163, 184)
+    date_run.italic = True
 
-    # Sections with their fields
+    # ── Helper: section heading ──────────────────────────────────
+    def add_section_heading(text):
+        h = document.add_heading(text, level=1)
+        h.paragraph_format.space_before = Pt(18)
+        h.paragraph_format.space_after = Pt(8)
+        for run in h.runs:
+            run.font.size = Pt(14)
+            try:
+                run.font.color.rgb = RGBColor(59, 130, 246)
+            except NameError:
+                pass
+
+    # ── Helper: field with label ──────────────────────────────────
+    def add_field(label, value):
+        if not value:
+            return
+        # Label
+        lp = document.add_paragraph()
+        lp.paragraph_format.space_before = Pt(8)
+        lp.paragraph_format.space_after = Pt(2)
+        lrun = lp.add_run(label)
+        lrun.bold = True
+        lrun.font.size = Pt(10)
+        try:
+            lrun.font.color.rgb = RGBColor(71, 85, 105)
+        except NameError:
+            pass
+        # Value
+        vp = document.add_paragraph()
+        vp.paragraph_format.space_after = Pt(4)
+        vp.paragraph_format.left_indent = Inches(0.1)
+        vrun = vp.add_run(value)
+        vrun.font.size = Pt(10)
+
+    # ── Helper: risk badge paragraph ──────────────────────────────
+    def add_risk_badge(level):
+        vp = document.add_paragraph()
+        vp.paragraph_format.space_after = Pt(4)
+        vp.paragraph_format.left_indent = Inches(0.1)
+        try:
+            from docx.oxml.ns import qn as qn2
+            shading = vp.paragraph_format.element.get_or_add_pPr()  # not directly, use paragraph XML
+        except:
+            pass
+        run = vp.add_run()
+        run.text = f"  {level}  "
+        run.bold = True
+        run.font.size = Pt(12)
+        try:
+            if level == 'HIGH':
+                run.font.color.rgb = RGBColor(185, 28, 28)  # red
+            elif level == 'MEDIUM':
+                run.font.color.rgb = RGBColor(180, 83, 9)   # amber
+            else:
+                run.font.color.rgb = RGBColor(21, 128, 61)  # green
+        except NameError:
+            pass
+
+    # ── Sections ──────────────────────────────────────────────────
     sections = [
         (("Admin Metadata", "מטא-דאטה ניהולי"), [
             ('meeting_location', ('Meeting Mode', 'אופן הפגישה')),
@@ -3320,7 +3404,6 @@ def build_intake_docx(patient_name, intake_data, language='en'):
             ('psychiatric_conditions', ('Psychiatric Diagnoses', 'אבחנות פסיכיאטריות')),
             ('previous_therapy', ('Previous Therapy', 'טיפול קודם')),
             ('previous_hospitalization', ('Previous Hospitalization', 'אשפוז קודם')),
-            ('add_adhd', ('ADD / ADHD', 'ADD / ADHD')),
             ('alcohol_use', ('Alcohol Use', 'צריכת אלכוהול')),
             ('substance_use', ('Substance Use', 'שימוש בחומרים')),
             ('tobacco_use', ('Tobacco Use', 'שימוש בטבק')),
@@ -3333,7 +3416,6 @@ def build_intake_docx(patient_name, intake_data, language='en'):
             ('self_harm_recent', ('Self-Harm History', 'היסטוריית פגיעה עצמית')),
             ('self_harm_level', ('Self-Harm Level', 'רמת פגיעה')),
             ('risk_to_others', ('Risk to Others', 'סיכון לאחרים')),
-            ('overall_risk', ('Overall Risk Level', 'רמת סיכון כוללת')),
         ]),
         (("Mental Status Examination", "בדיקת מצב נפשי"), [
             ('appearance_home', ('Appearance', 'הופעה')),
@@ -3368,7 +3450,24 @@ def build_intake_docx(patient_name, intake_data, language='en'):
         ]),
     ]
 
-    # Also include medications as a special section
+    # Render sections
+    for (section_en, section_he), fields in sections:
+        section_title = section_he if is_he else section_en
+        has_content = any((intake_data.get(k) or '').strip() for k, _ in fields)
+        if not has_content:
+            continue
+        add_section_heading(section_title)
+        for field_key, (label_en, label_he) in fields:
+            value = (intake_data.get(field_key) or '').strip()
+            if not value:
+                continue
+            label = label_he if is_he else label_en
+            if field_key == 'overall_risk':
+                add_risk_badge(value)
+            else:
+                add_field(label, value)
+
+    # ── Medications Table ─────────────────────────────────────────
     meds_json = intake_data.get('medications_json', '[]')
     meds = []
     try:
@@ -3378,59 +3477,45 @@ def build_intake_docx(patient_name, intake_data, language='en'):
     except (json.JSONDecodeError, TypeError):
         pass
 
-    for (section_en, section_he), fields in sections:
-        section_title = section_he if is_he else section_en
-        has_content = False
-        for field_key, (label_en, label_he) in fields:
-            value = (intake_data.get(field_key) or '').strip()
-            if value:
-                has_content = True
-                break
-        if not has_content:
-            continue
-        document.add_heading(section_title, level=1)
-        for field_key, (label_en, label_he) in fields:
-            value = (intake_data.get(field_key) or '').strip()
-            if not value:
-                continue
-            label = label_he if is_he else label_en
-            document.add_heading(label, level=2)
-            if field_key == 'overall_risk':
-                p = document.add_paragraph()
-                run = p.add_run(f"{value}")
-                try:
-                    from docx.shared import RGBColor
-                    run.bold = True
-                    if value == 'HIGH':
-                        run.font.color.rgb = RGBColor(220, 38, 38)
-                    elif value == 'MEDIUM':
-                        run.font.color.rgb = RGBColor(217, 119, 6)
-                    else:
-                        run.font.color.rgb = RGBColor(22, 163, 74)
-                except (ImportError, AttributeError):
-                    pass
-            else:
-                document.add_paragraph(value)
-
-    # Medications section
     if meds:
-        document.add_heading("Medications" if not is_he else "תרופות", level=1)
-        table = document.add_table(rows=1, cols=4, style='Light Grid Accent 1')
+        add_section_heading("Medications" if not is_he else "תרופות")
+        table = document.add_table(rows=1, cols=4)
+        table.style = 'Light Grid Accent 1'
         hdr = table.rows[0].cells
-        if is_he:
-            hdr[0].text = 'תרופה'; hdr[1].text = 'מינון'; hdr[2].text = 'מטרה'; hdr[3].text = 'רושם מרשם'
-        else:
-            hdr[0].text = 'Medication'; hdr[1].text = 'Dosage'; hdr[2].text = 'Purpose'; hdr[3].text = 'Prescriber'
+        cols = ('Medication', 'Dosage', 'Purpose', 'Prescriber') if not is_he else ('תרופה', 'מינון', 'מטרה', 'רושם מרשם')
+        for i, c in enumerate(cols):
+            hdr[i].text = c
+            for p in hdr[i].paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                    run.font.size = Pt(9)
         for m in meds:
             if not isinstance(m, dict):
                 continue
             row = table.add_row().cells
-            row[0].text = m.get('name', '')
-            row[1].text = m.get('dosage', '')
-            row[2].text = m.get('purpose', '')
-            row[3].text = m.get('prescriber', '')
+            vals = (m.get('name', ''), m.get('dosage', ''), m.get('purpose', ''), m.get('prescriber', ''))
+            for i, v in enumerate(vals):
+                row[i].text = v
+                for p in row[i].paragraphs:
+                    for run in p.runs:
+                        run.font.size = Pt(9)
 
-    if len(document.paragraphs) <= 2:
+    # ── Footer ────────────────────────────────────────────────────
+    try:
+        footer = document.sections[0].footer
+        fp = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        frun = fp.add_run(
+            "Lior Aloni Clinic • Confidential" if not is_he else "ליאור אלוני — קליניקה פרטית • חסוי"
+        )
+        frun.font.size = Pt(8)
+        frun.font.color.rgb = RGBColor(148, 163, 184)
+        frun.italic = True
+    except Exception:
+        pass
+
+    # ── Empty state ───────────────────────────────────────────────
+    if len(document.paragraphs) <= 3:
         empty_text = 'No intake data available.' if not is_he else 'אין נתוני אינטייק זמינים.'
         document.add_paragraph(empty_text)
 
@@ -8679,7 +8764,7 @@ def export_patient_intake_docx(patient_id):
         flash('No intake form data found for export.')
         return redirect_to_patient_tab(patient_id, 'intake')
 
-    language = (request.args.get('lang') or 'en').strip().lower()
+    language = (request.args.get('lang') or session.get('lang') or 'en').strip().lower()
     if language not in {'en', 'he'}:
         language = 'en'
 
@@ -8687,7 +8772,8 @@ def export_patient_intake_docx(patient_id):
     safe_name = secure_filename(patient['name'] or f'patient_{patient_id}')
     if not safe_name:
         safe_name = f'patient_{patient_id}'
-    output_name = f'intake_{safe_name}.docx'
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    output_name = f'intake_{safe_name}_{today_str}.docx'
     buffer = BytesIO()
     document.save(buffer)
     buffer.seek(0)
