@@ -3254,30 +3254,184 @@ def serialize_intake_assessment(data):
 
 
 def build_intake_docx(patient_name, intake_data, language='en'):
+    import os
     document = Document()
-    title = f"Intake Summary - {patient_name}" if language != 'he' else f"סיכום אינטייק - {patient_name}"
-    document.add_heading(title, level=1)
 
-    label_map = {
-        'main_complaint': ('Main complaint', 'תלונה עיקרית'),
-        'problem_history': ('Problem history / current illness', 'היסטוריה של הבעיה / מחלה נוכחית'),
-        'early_anamnesis': ('Early anamnesis', 'אנמנזה מוקדמת'),
-        'referral_source': ('Referral source', 'גורם מפנה'),
-        'referral_date': ('Referral date', 'תאריך הפניה'),
-        'meeting_location': ('Meeting location', 'מיקום הפגישה'),
-        'summary': ('Summary', 'סיכום'),
-    }
+    # Logo
+    logo_path = os.path.join(os.path.dirname(__file__), 'static', 'Logo.png')
+    if os.path.isfile(logo_path):
+        try:
+            from docx.shared import Inches, Pt, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            p = document.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run()
+            run.add_picture(logo_path, width=Inches(1.2))
+        except Exception:
+            pass
 
-    for field in intake_form_fields():
-        value = (intake_data.get(field) or '').strip()
-        if not value:
+    # Title
+    is_he = language == 'he'
+    title = f"סיכום אינטייק — {patient_name}" if is_he else f"Intake Summary — {patient_name}"
+    h = document.add_heading(title, level=0)
+    for run in h.runs:
+        try:
+            from docx.shared import Pt
+            run.font.size = Pt(18)
+        except ImportError:
+            pass
+
+    # Subtitle
+    subtitle = "פורמט מובנה | DSM-5 / MSE / C-SSRS" if is_he else "Structured Format | DSM-5 / MSE / C-SSRS"
+    document.add_paragraph(subtitle).runs[0].italic = True if document.paragraphs else True
+
+    # Sections with their fields
+    sections = [
+        (("Admin Metadata", "מטא-דאטה ניהולי"), [
+            ('meeting_location', ('Meeting Mode', 'אופן הפגישה')),
+            ('meeting_conductor', ('Clinician', 'מראיין')),
+            ('intake_date', ('Intake Date', 'תאריך אינטייק')),
+            ('meeting_time', ('Intake Time', 'שעת אינטייק')),
+            ('referral_source', ('Referral Source', 'גורם מפנה')),
+            ('target_unit', ('Target Department', 'יחידת יעד')),
+        ]),
+        (("Patient Profile", "פרופיל מטופל"), [
+            ('family_status', ('Marital Status', 'מצב משפחתי')),
+            ('hmo', ('HMO', 'קופת חולים')),
+            ('religious_sector', ('Religious Sector', 'מגזר דתי')),
+            ('living_with', ('Living With', 'מגורים')),
+            ('living_with_other', ('Living With — Other', 'מגורים — אחר')),
+            ('emergency_name', ('Emergency Contact Name', 'איש קשר חירום')),
+            ('emergency_relation', ('Emergency Relation', 'קרבה')),
+            ('emergency_phone', ('Emergency Phone', 'טלפון חירום')),
+            ('disability_status', ('Disability', 'נכות')),
+        ]),
+        (("Chief Complaint", "תלונה עיקרית"), [
+            ('complaint_categories', ('Categories', 'קטגוריות')),
+            ('main_complaint', ('Narrative', 'תיאור')),
+            ('onset_duration', ('Onset & Duration', 'תחילה ומשך')),
+            ('distress_level', ('Distress Level (0-10)', 'רמת מצוקה')),
+            ('impact_functioning', ('Impact on Functioning', 'השפעה תפקודית')),
+            ('problem_history', ('Problem History', 'היסטוריית הבעיה')),
+        ]),
+        (("Medical & Psychiatric History", "היסטוריה רפואית ופסיכיאטרית"), [
+            ('medical_conditions', ('Medical Conditions', 'מצבים רפואיים')),
+            ('medical_conditions_detail', ('Medical Conditions Detail', 'פירוט רפואי')),
+            ('psychiatric_conditions', ('Psychiatric Diagnoses', 'אבחנות פסיכיאטריות')),
+            ('previous_therapy', ('Previous Therapy', 'טיפול קודם')),
+            ('previous_hospitalization', ('Previous Hospitalization', 'אשפוז קודם')),
+            ('add_adhd', ('ADD / ADHD', 'ADD / ADHD')),
+            ('alcohol_use', ('Alcohol Use', 'צריכת אלכוהול')),
+            ('substance_use', ('Substance Use', 'שימוש בחומרים')),
+            ('tobacco_use', ('Tobacco Use', 'שימוש בטבק')),
+        ]),
+        (("Risk & Safety", "סיכון ובטיחות"), [
+            ('suicidal_ideation', ('Suicidal Ideation', 'מחשבות אובדניות')),
+            ('cssrs_intent', ('Intent', 'כוונה')),
+            ('cssrs_plan', ('Plan', 'תוכנית')),
+            ('cssrs_means', ('Access to Means', 'גישה לאמצעים')),
+            ('self_harm_recent', ('Self-Harm History', 'היסטוריית פגיעה עצמית')),
+            ('self_harm_level', ('Self-Harm Level', 'רמת פגיעה')),
+            ('risk_to_others', ('Risk to Others', 'סיכון לאחרים')),
+            ('overall_risk', ('Overall Risk Level', 'רמת סיכון כוללת')),
+        ]),
+        (("Mental Status Examination", "בדיקת מצב נפשי"), [
+            ('appearance_home', ('Appearance', 'הופעה')),
+            ('cooperation', ('Cooperation', 'שיתוף פעולה')),
+            ('motor_behavior', ('Motor Behavior', 'התנהגות מוטורית')),
+            ('speech_pattern', ('Speech Pattern', 'דפוס דיבור')),
+            ('mood', ('Mood', 'מצב רוח')),
+            ('affect', ('Affect', 'אפקט')),
+            ('thought_process', ('Thought Process', 'תהליך חשיבה')),
+            ('thought_content', ('Thought Content', 'תוכן חשיבה')),
+            ('perception', ('Perception', 'תפיסה')),
+            ('cognition', ('Cognition', 'קוגניציה')),
+            ('insight_judgment', ('Insight & Judgment', 'תובנה ושיפוט')),
+            ('mse_notes', ('MSE Notes', 'הערות MSE')),
+        ]),
+        (("Psychosocial Background", "רקע פסיכוסוציאלי"), [
+            ('early_anamnesis', ('Family Background', 'רקע משפחתי')),
+            ('education', ('Education', 'השכלה')),
+            ('occupation', ('Occupation', 'עיסוק')),
+            ('social_support', ('Social Support', 'תמיכה חברתית')),
+            ('life_events', ('Life Events', 'אירועי חיים')),
+        ]),
+        (("Treatment Plan & Consent", "תוכנית טיפול והסכמה"), [
+            ('diag_impression', ('Clinical Formulation', 'ניסוח קליני')),
+            ('treatment_approach', ('Recommended Treatment', 'טיפול מומלץ')),
+            ('therapist_preference', ('Therapist Preference', 'העדפת מטפל/ת')),
+            ('treatment_frequency', ('Session Frequency', 'תדירות')),
+            ('treatment_estimated_duration', ('Duration', 'משך')),
+            ('referral_details', ('Referral Details', 'פרטי הפניה')),
+            ('patient_consent', ('Consent Given', 'הסכמה')),
+            ('consent_timestamp', ('Consent Timestamp', 'חותמת הסכמה')),
+        ]),
+    ]
+
+    # Also include medications as a special section
+    meds_json = intake_data.get('medications_json', '[]')
+    meds = []
+    try:
+        meds = json.loads(meds_json) if isinstance(meds_json, str) else meds_json
+        if not isinstance(meds, list):
+            meds = []
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    for (section_en, section_he), fields in sections:
+        section_title = section_he if is_he else section_en
+        has_content = False
+        for field_key, (label_en, label_he) in fields:
+            value = (intake_data.get(field_key) or '').strip()
+            if value:
+                has_content = True
+                break
+        if not has_content:
             continue
-        label_en, label_he = label_map.get(field, (field.replace('_', ' ').title(), field.replace('_', ' ')))
-        document.add_heading(label_he if language == 'he' else label_en, level=2)
-        document.add_paragraph(value)
+        document.add_heading(section_title, level=1)
+        for field_key, (label_en, label_he) in fields:
+            value = (intake_data.get(field_key) or '').strip()
+            if not value:
+                continue
+            label = label_he if is_he else label_en
+            document.add_heading(label, level=2)
+            if field_key == 'overall_risk':
+                p = document.add_paragraph()
+                run = p.add_run(f"{value}")
+                try:
+                    from docx.shared import RGBColor
+                    run.bold = True
+                    if value == 'HIGH':
+                        run.font.color.rgb = RGBColor(220, 38, 38)
+                    elif value == 'MEDIUM':
+                        run.font.color.rgb = RGBColor(217, 119, 6)
+                    else:
+                        run.font.color.rgb = RGBColor(22, 163, 74)
+                except (ImportError, AttributeError):
+                    pass
+            else:
+                document.add_paragraph(value)
 
-    if len(document.paragraphs) == 1:
-        empty_text = 'No intake data available.' if language != 'he' else 'אין נתוני אינטייק זמינים.'
+    # Medications section
+    if meds:
+        document.add_heading("Medications" if not is_he else "תרופות", level=1)
+        table = document.add_table(rows=1, cols=4, style='Light Grid Accent 1')
+        hdr = table.rows[0].cells
+        if is_he:
+            hdr[0].text = 'תרופה'; hdr[1].text = 'מינון'; hdr[2].text = 'מטרה'; hdr[3].text = 'רושם מרשם'
+        else:
+            hdr[0].text = 'Medication'; hdr[1].text = 'Dosage'; hdr[2].text = 'Purpose'; hdr[3].text = 'Prescriber'
+        for m in meds:
+            if not isinstance(m, dict):
+                continue
+            row = table.add_row().cells
+            row[0].text = m.get('name', '')
+            row[1].text = m.get('dosage', '')
+            row[2].text = m.get('purpose', '')
+            row[3].text = m.get('prescriber', '')
+
+    if len(document.paragraphs) <= 2:
+        empty_text = 'No intake data available.' if not is_he else 'אין נתוני אינטייק זמינים.'
         document.add_paragraph(empty_text)
 
     return document

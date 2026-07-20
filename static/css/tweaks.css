@@ -67,8 +67,15 @@
 }
 
 /* ── Intake Stepper ────────────────────────────────────────────── */
+#intakeStepper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+}
 .intake-step-node {
     width: 36px; height: 36px;
+    min-width: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -105,10 +112,12 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
+    max-width: 480px;
     height: 8px;
     border-radius: 4px;
     background: linear-gradient(to right, var(--color-success) 0%, var(--color-success) var(--range-pct), var(--color-warning) var(--range-pct), var(--color-warning) 80%, var(--color-danger) 80%);
     outline: none;
+    display: block;
 }
 #intakeDistressSlider::-webkit-slider-thumb {
     -webkit-appearance: none;
