@@ -142,7 +142,30 @@
     cursor: pointer;
     user-select: none;
     transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    color: #334155 !important;
+    background: #fff !important;
+    border-color: #d1d5db !important;
 }
 .intake-radio-label:hover, .intake-check-label:hover {
     border-color: var(--color-primary) !important;
+}
+/* Active/selected chip state */
+.intake-radio-label.bg-primary, .intake-check-label.bg-primary {
+    color: #fff !important;
+    background: #3B82F6 !important;
+    border-color: #3B82F6 !important;
+}
+
+/* Dark mode: ensure chip text is readable */
+[data-bs-theme="dark"] .intake-radio-label,
+[data-bs-theme="dark"] .intake-check-label {
+    color: #e2e8f0 !important;
+    background: #334155 !important;
+    border-color: #475569 !important;
+}
+[data-bs-theme="dark"] .intake-radio-label.bg-primary,
+[data-bs-theme="dark"] .intake-check-label.bg-primary {
+    color: #fff !important;
+    background: #2563EB !important;
+    border-color: #2563EB !important;
 }
