@@ -1254,6 +1254,7 @@
             </div>
         </div>
 
+        {% if false %}{# Diagnostic Documents — hidden per request #}
         <div class="card border-0 shadow-sm">
             <div class="card-header">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-folder2-open me-2 text-primary"></i>{{ t('Diagnostic Documents') }}</h5>
@@ -1306,6 +1307,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         {% elif active_tab == 'questionnaires' and questionnaire_tab_enabled %}
         <div class="card border-0 shadow-sm mb-4">

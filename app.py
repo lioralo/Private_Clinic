@@ -3256,6 +3256,8 @@ def serialize_intake_assessment(data):
 def build_intake_docx(patient_name, intake_data, language='en'):
     import os
     from datetime import date
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     document = Document()
     is_he = language == 'he'
@@ -3271,14 +3273,11 @@ def build_intake_docx(patient_name, intake_data, language='en'):
     logo_path = os.path.join(os.path.dirname(__file__), 'static', 'Logo.png')
     if os.path.isfile(logo_path):
         try:
-            from docx.shared import Inches as In, Pt, RGBColor
-            from docx.enum.text import WD_ALIGN_PARAGRAPH
-            from docx.oxml.ns import qn
             p = document.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p.paragraph_format.space_after = Pt(2)
             run = p.add_run()
-            run.add_picture(logo_path, width=In(1.0))
+            run.add_picture(logo_path, width=Inches(1.0))
             # Clinic name below logo
             p2 = document.add_paragraph()
             p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
