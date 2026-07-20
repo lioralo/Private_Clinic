@@ -1197,9 +1197,9 @@
                             <div class="col-12">
                                 <label class="form-label fw-semibold small">{{ t('Recommended Treatment Type') }}</label>
                                 <div class="d-flex flex-wrap gap-2">
-                                    {% for t in ['Individual Psychotherapy','CBT / Focused Therapy','Couples Therapy','Psychiatric Evaluation','Medical Specialist Referral'] %}
-                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if t in (intake_form_data.get('treatment_approach','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_treatment_approach" data-value="{{ t }}">
-                                        <input type="checkbox" name="intake_treatment_approach" value="{{ t }}" class="d-none" {% if t in (intake_form_data.get('treatment_approach','') or '').split(', ') %}checked{% endif %}>{{ t(t) }}
+                                    {% for tr in ['Individual Psychotherapy','CBT / Focused Therapy','Couples Therapy','Psychiatric Evaluation','Medical Specialist Referral'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if tr in (intake_form_data.get('treatment_approach','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_treatment_approach" data-value="{{ tr }}">
+                                        <input type="checkbox" name="intake_treatment_approach" value="{{ tr }}" class="d-none" {% if tr in (intake_form_data.get('treatment_approach','') or '').split(', ') %}checked{% endif %}>{{ t(tr) }}
                                     </label>
                                     {% endfor %}
                                 </div>
@@ -1207,9 +1207,9 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">{{ t('Therapist Preference') }}</label>
                                 <div class="d-flex flex-wrap gap-2">
-                                    {% for p in ['Female Therapist','Male Therapist','Religious / Sector-Aware','Trauma Specialist'] %}
-                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if p in (intake_form_data.get('therapist_preference','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_therapist_preference" data-value="{{ p }}">
-                                        <input type="checkbox" name="intake_therapist_preference" value="{{ p }}" class="d-none" {% if p in (intake_form_data.get('therapist_preference','') or '').split(', ') %}checked{% endif %}>{{ t(p) }}
+                                    {% for pr in ['Female Therapist','Male Therapist','Religious / Sector-Aware','Trauma Specialist'] %}
+                                    <label class="badge rounded-pill px-3 py-2 border intake-check-label {% if pr in (intake_form_data.get('therapist_preference','') or '').split(', ') %}bg-primary text-white border-primary{% else %}bg-white text-dark{% endif %}" data-group="intake_therapist_preference" data-value="{{ pr }}">
+                                        <input type="checkbox" name="intake_therapist_preference" value="{{ pr }}" class="d-none" {% if pr in (intake_form_data.get('therapist_preference','') or '').split(', ') %}checked{% endif %}>{{ t(pr) }}
                                     </label>
                                     {% endfor %}
                                 </div>
