@@ -1,60 +1,46 @@
-# Security Review (2026-04-18)
+# Security Review
 
-## Scope
-- Application-level static review of authentication/session/configuration/upload/public endpoints.
-- Validation of existing automated security tests.
+Scope: application-level security of the Private Psychotherapy Clinic Management System (Flask + SQLite). This document inventories the existing controls, records the automated test results, lists the hardening applied in this change, and enumerates the deployment-sensitive recommendations that were intentionally *not* auto-applied.
 
-## Validation Performed
-- Ran `python -m unittest -v tests.test_security` (all tests passed).
-- Ran full recommended regression suite to ensure security-adjacent changes did not break behavior.
+## Automated test results
 
-## Findings
+`python -m pytest tests/test_security.py` → **39 passed** (was 37 passing / 1 failing before this review).
 
-### High
-1. Default Flask secret fallback is weak in production misconfiguration.
-- Location: `app.py` (`app.secret_key = os.environ.get('SECRET_KEY', 'dev')`)
-- Risk: If `SECRET_KEY` is missing in production, session integrity can be compromised.
-- Recommended fix: Fail fast in non-testing when `SECRET_KEY` is missing/weak; keep insecure fallback only for explicit local dev mode.
+- The previously-failing `test_login_rate_limit_resets_after_successful_login` was a **test/route drift** issue, not a security regression: the test used `GET /logout`, but `/logout` is now `POST`-only, so the session was never ended and the follow-up assertion ran against an authenticated page. Fixed the test to `POST /logout`. The rate-limit reset logic itself was already correct.
+- Added `test_csrf_protection_active_but_webhook_is_exempt` to lock in the CSRF fix below.
 
-2. Hard-coded admin bootstrap credentials exist in code path.
-- Location: `_seed_admin_user` in `app.py`.
-- Risk: Predictable credentials are a critical account takeover risk if bootstrap flow runs unexpectedly.
-- Recommended fix: Require `DEFAULT_ADMIN_PASSWORD` env var (or generated one-time password printed only on first boot), set `force_password_change=1`, and remove embedded default password.
+## Control inventory (verified present)
 
-### Medium
-1. Google Docs webhook trust model is minimal.
-- Location: `/api/gdoc/webhook`.
-- Risk: Endpoint trusts `X-Goog-Channel-ID` only; spoofing may trigger unwanted sync work.
-- Recommended fix: Validate Google notification headers (resource state/id), store/verify channel metadata, and add request authenticity checks where possible.
+| Area | Control | Location |
+|------|---------|----------|
+| Authentication | Flask-Login; Werkzeug password hashing; dummy-hash timing-attack mitigation for unknown users | `app.py`, `clinic_app/routes/auth.py`, `clinic_app/config.py` |
+| 2FA | TOTP via `pyotp` (`valid_window=1`); hashed single-use recovery codes; 30-min TOTP re-auth window; admin (prod) required when configured | `app.py`, `clinic_app/routes/auth.py`, `clinic_app/routes/admin.py` |
+| Sessions | `HttpOnly` + configurable `SameSite`; inactivity timeout (default 5 min); `session_version` invalidation on security changes; heartbeat endpoint | `app.py` (`enforce_inactivity_timeout`, `enforce_session_version_match`) |
+| Authorization | Per-route `role`/ownership checks; patient-portal IDOR guards (assessments, receipts, files, goals, calendar) | `app.py`, `clinic_app/routes/*.py` |
+| CSRF | `CSRFProtect(app)` global; `is_csrf_exempt` flag now honored (see fix below) | `app.py` |
+| Rate limiting | DB-backed (`rate_limits`): login (5/300s + lockout), password reset, registration, public booking, contact-admin, and now public contact-inquiry | `clinic_app/routes/auth.py`, `clinic_app/utils.py`, `clinic_app/routes/messaging.py` |
+| Security headers | `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, CSP, and now HSTS over TLS | `app.py` (`apply_security_headers`) |
+| Secrets/crypto | `SECRET_KEY` length enforced (≥32) in prod; Fernet-encrypted backups; hashed password-reset tokens | `app.py`, `clinic_app/backup.py` |
+| Uploads | Extension allowlists (single source in `config.py`); `secure_filename`; 10 MB cap; path-traversal rejection (tested) | `clinic_app/config.py`, `app.py` |
 
-2. Public booking endpoints are CSRF-exempt and open by design.
-- Location: `/api/calendar/public/<token>/book`, `/api/calendar/open/<token>/book`.
-- Risk: Token brute force / abuse attempts if token entropy/monitoring/rate limits are insufficient.
-- Recommended fix: Add endpoint-level throttling/rate limiting, abuse logging, and optional CAPTCHA for repeated attempts.
+## Hardening applied in this change (safe, behavior-preserving)
 
-### Low
-1. Missing explicit secure cookie and hardening headers defaults.
-- Location: Flask app configuration/global response handling.
-- Risk: Reduced defense in depth.
-- Recommended fix: Set cookie security flags and add baseline headers:
-  - `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SAMESITE`
-  - `X-Content-Type-Options`, `X-Frame-Options`, strict `Referrer-Policy`, and CSP tuned to frontend requirements.
+1. **CSRF exemption mechanism was dead code — now functional.** Several server-to-server / public endpoints declared `is_csrf_exempt = True` (`billing.morning_webhook`, `calendar.api_public_calendar_book`, `calendar.api_open_slot_book`, `messaging.contact_inquiry`), but **nothing consumed that flag**, so `CSRFProtect` would reject the external POSTs (e.g. the Morning payment webhook) in production. Added a consumer right after `CSRFProtect(app)` that calls `csrf.exempt()` for every view flagged `is_csrf_exempt`, and flagged the Google Drive webhook `google_docs.gdoc_webhook` (it is authenticated by `_validate_gdoc_webhook_request()` and cannot carry a CSRF token). Verified: a normal POST without a token still returns `400`, while the webhook reaches its own auth check (`403`).
+2. **HSTS header** added to `apply_security_headers`, emitted **only** over HTTPS (direct `request.is_secure` or `X-Forwarded-Proto: https` from the TLS-terminating proxy) so a plain-HTTP dev origin is never told to force TLS. Value: `max-age=31536000; includeSubDomains`.
+3. **Rate-limited the public `/contact-inquiry` form** (unauthenticated + CSRF-exempt) at 5 requests / 5 minutes per client IP, reusing the existing `_check_db_rate_limit` helper — mirrors the authenticated `contact_admin` limiter and closes a spam/abuse gap.
 
-## Priority Implementation Plan
-1. Remove hard-coded admin credentials and enforce secure bootstrap flow.
-2. Enforce strong `SECRET_KEY` policy in non-dev runtime.
-3. Add rate limiting for public booking endpoints. (Implemented 2026-04-18)
-4. Add hardened security headers and cookie flags. (Implemented 2026-04-18)
-5. Strengthen webhook verification logic. (Implemented 2026-04-18 with optional shared secret)
+## Recommendations NOT auto-applied (deployment/behavior-sensitive — decide per environment)
 
-## Implemented In This Pass (2026-04-18)
-- Added public booking API rate limiting (`429` + `Retry-After`).
-- Added response security headers and secure session cookie defaults.
-- Added webhook required-header checks and optional secret verification.
-- Added/updated automated tests covering the above controls.
+These are real improvements but change deployment behavior or require product decisions, so they are documented rather than silently changed:
 
-## Suggested Next Security Tests
-- Add tests for missing/weak `SECRET_KEY` startup behavior in production mode.
-- Add tests ensuring no default admin password path is reachable without explicit env configuration.
-- Add abuse/rate-limit tests for public booking endpoints.
-- Add tests for security headers on authenticated and public routes.
+1. **`SESSION_COOKIE_SECURE` defaults to off.** It should be `1`/`true` in every TLS deployment so session cookies are never sent over plain HTTP. Set `SESSION_COOKIE_SECURE=1` in production env (`app.py` reads it). Left as-is to avoid breaking local HTTP dev.
+2. **Morning payment webhook has no signature verification.** `/webhooks/morning` is (correctly) CSRF-exempt but accepts any POST — anyone who learns the URL could post payment status. Add HMAC signature verification using a shared secret from the Morning dashboard before trusting payloads.
+3. **Secrets stored in plaintext at rest.** Google OAuth tokens (`google_calendar_tokens.token_json`) and Morning API credentials (`site_settings`) are stored unencrypted in SQLite. Consider encrypting them with the existing Fernet key material (`clinic_app/backup.py` pattern) so a DB leak does not expose live tokens.
+4. **CSP allows `'unsafe-inline'` and `'unsafe-eval'`.** This significantly weakens XSS mitigation. Migrating to nonce/hash-based inline scripts and removing `'unsafe-eval'` is a larger templating effort but meaningfully hardens the app.
+5. **`X-Forwarded-For` is trusted first-hop for rate-limit buckets** without a trusted-proxy allowlist, so a spoofed header could rotate buckets. Constrain to the known proxy (e.g. `ProxyFix` with an explicit hop count) in production.
+6. **Default admin username** falls back to `lioraloni` when `ADMIN_USERNAME` is unset. Always set `ADMIN_USERNAME`/`ADMIN_PASSWORD` explicitly on first deploy.
+
+## Notes
+
+- No SQL injection surface was found in application routes: queries are parameterized, and the few dynamic-identifier statements (migrations, admin export, backup restore) use hardcoded/table-metadata names, not HTTP input. No `eval`/`render_template_string` in application code.
+- `subprocess` is used only by the optional Bandit/pip-audit security-scan feature.

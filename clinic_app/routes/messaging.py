@@ -335,6 +335,23 @@ def contact_inquiry():
     if not redirect_target.startswith(request.host_url):
         redirect_target = url_for('about_page')
 
+    # Throttle this public, CSRF-exempt, unauthenticated form per client IP to
+    # curb spam/abuse (mirrors the authenticated contact_admin limiter).
+    from clinic_app.utils import _check_db_rate_limit, _record_db_rate_limit, _request_client_ip
+    rl_db = get_db()
+    bucket_key = f"contact-inquiry-{_request_client_ip()}"
+    retry_after = _check_db_rate_limit(rl_db, bucket_key, 'contact-inquiry', 5, 300)  # 5 per 5 minutes
+    if retry_after:
+        session['contact_form_data'] = {
+            'inquiry_name': name,
+            'inquiry_email': email or '',
+            'inquiry_phone': phone or '',
+            'inquiry_message': message,
+        }
+        flash(f'Too many messages. Please wait {retry_after} seconds before sending another.', 'warning')
+        return redirect(redirect_target + ('#contact-form' if '#' not in redirect_target else ''))
+    _record_db_rate_limit(rl_db, bucket_key, 'contact-inquiry')
+
     if errors:
         session['contact_form_data'] = {
             'inquiry_name': name,

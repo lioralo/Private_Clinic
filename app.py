@@ -368,6 +368,14 @@ app.config['TWILIO_AUTH_TOKEN'] = os.environ.get('TWILIO_AUTH_TOKEN', '')
 app.config['TWILIO_FROM_NUMBER'] = (os.environ.get('TWILIO_FROM_NUMBER') or '').strip()
 scheduler = BackgroundScheduler(daemon=True)
 csrf = CSRFProtect(app)
+
+# Honor `is_csrf_exempt = True` declared on view functions (public forms and
+# server-to-server webhooks that cannot present a CSRF token). All blueprints
+# are registered above, so their flagged views are already known here.
+for _exempt_view in set(app.view_functions.values()):
+    if getattr(_exempt_view, 'is_csrf_exempt', False):
+        csrf.exempt(_exempt_view)
+
 app.config['DATABASE'] = DATABASE
 
 def _allowed_upload(filename, allowed_set):
@@ -1657,6 +1665,13 @@ def apply_security_headers(response):
         "form-action 'self';"
     )
     response.headers.setdefault('Content-Security-Policy', csp_policy)
+    # HSTS: only advertise over HTTPS (directly or via the TLS-terminating proxy)
+    # so browsers are never told to force TLS on a plain-HTTP dev origin.
+    forwarded_proto = (request.headers.get('X-Forwarded-Proto') or '').split(',')[0].strip().lower()
+    if request.is_secure or forwarded_proto == 'https':
+        response.headers.setdefault(
+            'Strict-Transport-Security', 'max-age=31536000; includeSubDomains'
+        )
     return response
 
 
