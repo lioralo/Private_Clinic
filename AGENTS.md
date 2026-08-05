@@ -103,3 +103,21 @@ docker compose up -d
 
 ## Full Reference
 See [docs/FULL_REFERENCE.md](docs/FULL_REFERENCE.md) for complete documentation on setup, deployment, security, design system, and more.
+
+## Cursor Cloud specific instructions
+
+This is a single self-contained Flask app (`app.py`) backed by embedded SQLite — no external DB/services are required to run or test. The environment is Linux/bash (docs above use PowerShell). The startup update script already installs Python deps (into system Python via `pip install --break-system-packages`, because `python3-venv` is not available here) plus `pytest` (which is not in `requirements.txt`). Env vars: use bash `export VAR=value` instead of the PowerShell `$env:` syntax shown above.
+
+### Running the dev server
+- Start with `python3 app.py` (dev server on port 5000, auto-falls back to the next free port; override with `PORT`). `run.py` is an alternative wrapper.
+- `SECRET_KEY` must be **at least 32 characters** or `app.py` refuses to start (`RuntimeError`).
+- Do **not** run the dev server against the git-tracked `clinic.db` (writes would dirty a tracked file). Point `DATABASE` at a throwaway path, e.g. `export DATABASE=/workspace/clinic_dev.db` (any `*.db` except `clinic.db` is git-ignored).
+- Admin bootstrap only happens on **first** init of a fresh DB: set `ADMIN_USERNAME` / `ADMIN_PASSWORD` beforehand, otherwise a random temp password is printed to stdout and a forced password change is set.
+- Harmless startup warnings you can ignore on a fresh dev DB: `BACKUP_ENCRYPTION_KEY not set` and `Routine backup skipped: no such column: recurrence_days`.
+
+### Schema gotcha (important)
+`init_db()` only auto-applies Alembic migrations when the DB **already** contains an `alembic_version` table. A brand-new DB built only from `schema.sql` + `_run_db_migrations()` will be **missing tables added by later Alembic revisions** (e.g. `assessments`, `treatment_plans`), which causes `sqlite3.OperationalError: no such table` at runtime. To build a complete fresh dev DB, run `DATABASE=/workspace/clinic_dev.db python3 -m alembic upgrade heads` (note: **`heads`**, plural — the migration graph has multiple heads) before starting the app.
+
+### Tests & lint
+- Test command is documented above (`python -m pytest tests/ -q`, with `SECRET_KEY` / `FLASK_ENV` / `TESTING` set). ~291 pass. A large batch of failures is **pre-existing and not environment-related**: the test harness (`tests/test_app.py` `setUp`) builds its DB from `schema.sql` + `_run_db_migrations()` only (no Alembic), so Alembic-only tables (`assessments`, `treatment_plans`) are missing, and some tests hit outdated routes (e.g. they GET `/logout`, which is now POST-only → 405).
+- There is no configured linter (no flake8/ruff/pylint). The closest guardrail is the route-contract check: `python verification/refactor_guard.py check`.
