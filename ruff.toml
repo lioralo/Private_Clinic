@@ -1,0 +1,23 @@
+# Minimal, high-signal linting for the clinic app.
+#
+#   Install:  pip install ruff
+#   Run:      ruff check .
+#
+# The rule set is intentionally small so it surfaces real correctness problems
+# (bare `except:`, unused imports/variables, redefinitions/shadowing, and syntax
+# errors) without drowning the legacy monolith in stylistic noise. Widen `select`
+# over time as the codebase is cleaned up.
+target-version = "py312"
+line-length = 120
+
+extend-exclude = [
+    "archive",
+    "AI S",
+    ".venv_test",
+]
+
+[lint]
+# E4/E7/E9 = import, statement (incl. E722 bare-except) and syntax errors.
+# F        = pyflakes: unused imports (F401), redefinitions (F811),
+#            unused locals (F841), undefined names, etc.
+select = ["E4", "E7", "E9", "F"]

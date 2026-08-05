@@ -19,8 +19,10 @@ from clinic_app.models import get_db
 
 DUMMY_PASSWORD_HASH = generate_password_hash('dummy_password_for_timing_attack_mitigation')
 
-ALLOWED_UPLOAD_EXTENSIONS = {'.docx', '.pdf', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.xlsx', '.csv'}
-ALLOWED_DIAGNOSIS_EXTENSIONS = {'.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.tif'}
+# Single source of truth lives in clinic_app.config; re-exported here so existing
+# `from clinic_app.utils import ALLOWED_UPLOAD_EXTENSIONS` call sites keep working
+# and the two lists can never drift apart again.
+from clinic_app.config import ALLOWED_UPLOAD_EXTENSIONS, ALLOWED_DIAGNOSIS_EXTENSIONS
 
 def _request_client_ip():
     forwarded_for = (request.headers.get('X-Forwarded-For') or '').strip()
