@@ -1216,5 +1216,10 @@ def gdoc_webhook():
         try:
             _pull_gdoc_notes(db, patient)
         except Exception:
-            pass
+            current_app.logger.warning('Google Doc webhook pull failed', exc_info=True)
     return '', 200
+
+
+# Google Drive push notifications are server-to-server and cannot carry a CSRF
+# token; the request is authenticated by _validate_gdoc_webhook_request() above.
+gdoc_webhook.is_csrf_exempt = True

@@ -116,7 +116,9 @@ class SecurityTestCase(unittest.TestCase):
             ), follow_redirects=True)
             self.assertIn(b'Set up two-factor authentication from the admin profile before continuing.', success.data)
 
-            self.client.get('/logout', follow_redirects=True)
+            # /logout is POST-only; a GET no longer ends the session, which left
+            # this test asserting against an authenticated page.
+            self.client.post('/logout', follow_redirects=True)
 
             fail_after_success = self.client.post('/login', data=dict(
                 username='admin',
@@ -136,6 +138,22 @@ class SecurityTestCase(unittest.TestCase):
             password='admin'
         ), follow_redirects=True)
         self.assertIn(b'Account is disabled. Contact administrator.', rv.data)
+
+    def test_csrf_protection_active_but_webhook_is_exempt(self):
+        # With CSRF enabled, a normal POST without a token is rejected (400),
+        # while server-to-server endpoints flagged is_csrf_exempt are not blocked
+        # by CSRF (the Drive webhook reaches its own auth check and returns 403).
+        prev_csrf = app.config.get('WTF_CSRF_ENABLED')
+        app.config['WTF_CSRF_ENABLED'] = True
+        try:
+            protected = self.client.post('/login', data={'username': 'x', 'password': 'y'})
+            self.assertEqual(protected.status_code, 400)
+
+            webhook = self.client.post('/api/gdoc/webhook')
+            self.assertNotEqual(webhook.status_code, 400)
+            self.assertEqual(webhook.status_code, 403)
+        finally:
+            app.config['WTF_CSRF_ENABLED'] = prev_csrf
 
     def test_password_reset_request_generates_token_for_admin(self):
         rv = self.client.post('/forgot-password', data={
