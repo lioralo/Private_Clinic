@@ -8,6 +8,26 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'scripts'))
 import google_docs
 
+
+def _fake_doc_content(text, start=1):
+    """Build a Google Docs ``body.content`` list from plain text.
+
+    One paragraph per line, with sequential ``startIndex`` values beginning at
+    ``start`` (index 0 is reserved by the real API), so the character offsets in
+    the reconstructed text map to ``start + offset``.
+    """
+    content = []
+    idx = start
+    for line in text.splitlines(keepends=True):
+        content.append({'paragraph': {'elements': [{
+            'startIndex': idx,
+            'endIndex': idx + len(line),
+            'textRun': {'content': line},
+        }]}})
+        idx += len(line)
+    return content
+
+
 class TestGoogleDocs(unittest.TestCase):
 
     def test_parse_date(self):
@@ -102,23 +122,87 @@ class TestGoogleDocs(unittest.TestCase):
         self.assertEqual(text, 'Hello World\n')
         mock_svc.documents().get.assert_called_once_with(documentId='test_doc_id')
 
-    @patch('google_docs._docs_service')
-    def test_stamp_note_id_in_doc(self, mock_docs_service):
+    def _mock_docs_service_for(self, mock_docs_service, doc_text):
+        """Wire a mocked docs service whose get() returns a document body built
+        from ``doc_text`` (one paragraph per line, real-style startIndex)."""
         mock_svc = MagicMock()
         mock_docs_service.return_value = mock_svc
+        mock_svc.documents().get().execute.return_value = {
+            'body': {'content': _fake_doc_content(doc_text)}
+        }
+        mock_svc.documents().batchUpdate().execute.return_value = {}
+        # Reset call history created while wiring return_values above.
+        mock_svc.documents().get.reset_mock()
+        mock_svc.documents().batchUpdate.reset_mock()
+        return mock_svc
 
-        mock_batchUpdate = MagicMock()
-        mock_svc.documents().batchUpdate.return_value = mock_batchUpdate
+    @patch('google_docs._docs_service')
+    def test_stamp_note_id_in_doc_fallback_first_marker(self, mock_docs_service):
+        # No session_header → legacy behaviour: stamp the first [note:new].
+        text = "SESSION #1 | 2026-04-01 [note:new]\nBody\n"
+        mock_svc = self._mock_docs_service_for(mock_docs_service, text)
 
-        google_docs.stamp_note_id_in_doc('dummy_creds', 'test_doc_id', 42)
+        google_docs.stamp_note_id_in_doc('creds', 'doc', 42)
 
         mock_svc.documents().batchUpdate.assert_called_once()
-        kwargs = mock_svc.documents().batchUpdate.call_args[1]
-        self.assertEqual(kwargs['documentId'], 'test_doc_id')
-        requests = kwargs['body']['requests']
-        self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0]['replaceAllText']['replaceText'], '[note:id=42]')
-        self.assertEqual(requests[0]['replaceAllText']['containsText']['text'], '[note:new]')
+        requests = mock_svc.documents().batchUpdate.call_args[1]['body']['requests']
+        expected_index = 1 + text.index('[note:new]')
+        self.assertEqual(requests[0]['deleteContentRange']['range']['startIndex'], expected_index)
+        self.assertEqual(
+            requests[0]['deleteContentRange']['range']['endIndex'],
+            expected_index + len('[note:new]'),
+        )
+        self.assertEqual(requests[1]['insertText']['text'], '[note:id=42]')
+        self.assertEqual(requests[1]['insertText']['location']['index'], expected_index)
+
+    @patch('google_docs._docs_service')
+    def test_stamp_targets_correct_session_when_multiple_markers(self, mock_docs_service):
+        # Two [note:new] markers; only the one on the requested header is stamped.
+        text = (
+            "SESSION #1 | 2026-04-01 [note:new]\n"
+            "First body\n"
+            "SESSION #2 | 2026-04-02 [note:new]\n"
+            "Second body\n"
+        )
+        mock_svc = self._mock_docs_service_for(mock_docs_service, text)
+
+        google_docs.stamp_note_id_in_doc(
+            'creds', 'doc', 77, session_header='SESSION #2 | 2026-04-02 [note:new]'
+        )
+
+        requests = mock_svc.documents().batchUpdate.call_args[1]['body']['requests']
+        second_marker = text.index('[note:new]', text.index('[note:new]') + 1)
+        expected_index = 1 + second_marker
+        self.assertEqual(requests[0]['deleteContentRange']['range']['startIndex'], expected_index)
+        self.assertEqual(requests[1]['insertText']['text'], '[note:id=77]')
+
+    @patch('google_docs._docs_service')
+    def test_stamp_appends_id_for_untagged_header(self, mock_docs_service):
+        # Real-world Hebrew dash header with no [note:new] marker → append tag.
+        text = "SESSION #1 | 2026-04-01 [note:new]\nBody\nפגישה 6- 23/02/26\nHebrew body\n"
+        mock_svc = self._mock_docs_service_for(mock_docs_service, text)
+
+        google_docs.stamp_note_id_in_doc(
+            'creds', 'doc', 55, session_header='פגישה 6- 23/02/26'
+        )
+
+        requests = mock_svc.documents().batchUpdate.call_args[1]['body']['requests']
+        self.assertEqual(len(requests), 1)  # append only, no delete
+        self.assertEqual(requests[0]['insertText']['text'], ' [note:id=55]')
+        header_start = text.index('פגישה 6- 23/02/26')
+        line_end = text.index('\n', header_start)
+        self.assertEqual(requests[0]['insertText']['location']['index'], 1 + line_end)
+
+    @patch('google_docs._docs_service')
+    def test_stamp_is_noop_when_header_already_stamped(self, mock_docs_service):
+        text = "SESSION #1 | 2026-04-01 [note:id=5]\nBody\n"
+        mock_svc = self._mock_docs_service_for(mock_docs_service, text)
+
+        google_docs.stamp_note_id_in_doc(
+            'creds', 'doc', 9, session_header='SESSION #1 | 2026-04-01 [note:id=5]'
+        )
+
+        mock_svc.documents().batchUpdate.assert_not_called()
 
     @patch('google_docs._drive_service')
     def test_register_drive_watch(self, mock_drive_service):

@@ -326,60 +326,137 @@ def read_doc_text(creds, doc_id):
     return ''.join(parts)
 
 
-def stamp_note_id_in_doc(creds, doc_id, new_id, session_header=None):
+def _iter_text_runs(content_elements):
+    """Yield (doc_start_index, text) for every textRun in document order,
+    recursing into table cells. ``doc_start_index`` is the Google Docs
+    character index of the first character of the run."""
+    for element in content_elements or []:
+        if not isinstance(element, dict):
+            continue
+        paragraph = element.get('paragraph')
+        if paragraph:
+            for pe in paragraph.get('elements', []):
+                text_run = pe.get('textRun')
+                if not text_run:
+                    continue
+                start_index = pe.get('startIndex')
+                if start_index is None:
+                    continue
+                yield start_index, text_run.get('content', '')
+        table = element.get('table')
+        if table:
+            for row in table.get('tableRows', []):
+                for cell in row.get('tableCells', []):
+                    yield from _iter_text_runs(cell.get('content', []))
+
+
+def _build_doc_index_map(content_elements):
+    """Return ``(full_text, index_map)`` for a document body.
+
+    ``full_text`` is the concatenation of every textRun (identical to what
+    :func:`read_doc_text` returns) and ``index_map[i]`` is the Google Docs
+    character index of ``full_text[i]``, so an offset located in ``full_text``
+    can be translated back to a concrete edit location in the document.
     """
-    Stamp ONE '[note:new]' marker with '[note:id=N]' using position-based
-    replacement from the document's structural content tree.
-    Guarantees only one occurrence is stamped per call.
+    chars = []
+    index_map = []
+    for start_index, text in _iter_text_runs(content_elements):
+        for offset, ch in enumerate(text):
+            chars.append(ch)
+            index_map.append(start_index + offset)
+    return ''.join(chars), index_map
+
+
+def _normalize_header_ws(value):
+    """Collapse all whitespace to single spaces for tolerant header matching."""
+    return re.sub(r'\s+', ' ', (value or '')).strip()
+
+
+def _locate_session_tag_edit(full_text, session_header):
+    """Decide where/how to write a note-id tag for a specific session header.
+
+    Returns one of:
+        None              – the header could not be located (caller falls back)
+        ('noop', None)    – the header already carries a [note:id=...] tag
+        ('replace', pos)  – replace the [note:new] marker at offset ``pos``
+        ('append', pos)   – append the id tag at offset ``pos`` (untagged header)
+
+    Offsets are positions within ``full_text``.
+    """
+    target = _normalize_header_ws(session_header)
+    if not target:
+        return None
+    for match in _SESSION_RE.finditer(full_text):
+        if _normalize_header_ws(match.group(0)) != target:
+            continue
+        line_start = full_text.rfind('\n', 0, match.start()) + 1
+        line_end = full_text.find('\n', match.start())
+        if line_end == -1:
+            line_end = len(full_text)
+        existing_new = full_text.find('[note:new]', line_start, line_end)
+        if existing_new != -1:
+            return ('replace', existing_new)
+        if _NOTE_ID_RE.search(full_text[line_start:line_end]):
+            return ('noop', None)
+        append_pos = line_end
+        while append_pos > line_start and full_text[append_pos - 1] in ' \t\r':
+            append_pos -= 1
+        return ('append', append_pos)
+    return None
+
+
+def stamp_note_id_in_doc(creds, doc_id, new_id, session_header=None):
+    """Stamp the session identified by ``session_header`` with ``[note:id=N]``.
+
+    The tag is written to the SPECIFIC session line rather than merely the first
+    ``[note:new]`` in the document, so every meeting is stamped exactly once and
+    is never re-imported on the next sync. If that header already carries a
+    ``[note:new]`` marker it is replaced; an untagged header gets the tag
+    appended; and a header already carrying ``[note:id=...]`` is left untouched.
+    When ``session_header`` is missing or cannot be located, the legacy
+    behaviour (stamp the first ``[note:new]`` in the document) is used.
     """
     new_tag = f'[note:id={new_id}]'
     svc = _docs_service(creds)
 
     doc = svc.documents().get(documentId=doc_id).execute()
-    body = doc.get('body', {})
-    content = body.get('content', [])
-    tag_pos = _find_tag_in_content(content, '[note:new]')
+    content = doc.get('body', {}).get('content', [])
+    full_text, index_map = _build_doc_index_map(content)
 
-    if tag_pos is None:
+    edit = _locate_session_tag_edit(full_text, session_header)
+    if edit is None:
+        first_new = full_text.find('[note:new]')
+        if first_new == -1:
+            return
+        edit = ('replace', first_new)
+
+    mode, text_pos = edit
+    if mode == 'noop':
         return
 
-    svc.documents().batchUpdate(documentId=doc_id, body={
-        'requests': [
-            {'deleteContentRange': {
-                'range': {
-                    'startIndex': tag_pos,
-                    'endIndex': tag_pos + len('[note:new]')
-                }
-            }},
-            {'insertText': {
-                'location': {'index': tag_pos},
-                'text': new_tag,
-            }}
-        ]
-    }).execute()
+    if text_pos < len(index_map):
+        doc_index = index_map[text_pos]
+    elif index_map:
+        doc_index = index_map[-1] + 1
+    else:
+        return
 
-
-def _find_tag_in_content(content_elements, tag):
-    """Walk the doc structural tree and return the character start-index
-    of the first occurrence of 'tag', or None if not found."""
-    for element in content_elements:
-        if 'paragraph' in element:
-            para = element['paragraph']
-            for pe in para.get('elements', []):
-                tr = pe.get('textRun')
-                if not tr:
-                    continue
-                text = tr.get('content', '')
-                pos = text.find(tag)
-                if pos >= 0:
-                    return pe['startIndex'] + pos
-        if 'table' in element:
-            for row in element['table'].get('tableRows', []):
-                for cell in row.get('tableCells', []):
-                    pos = _find_tag_in_content(cell.get('content', []), tag)
-                    if pos is not None:
-                        return pos
-    return None
+    requests = []
+    if mode == 'replace':
+        requests.append({'deleteContentRange': {'range': {
+            'startIndex': doc_index,
+            'endIndex': doc_index + len('[note:new]'),
+        }}})
+        requests.append({'insertText': {
+            'location': {'index': doc_index},
+            'text': new_tag,
+        }})
+    else:  # append
+        requests.append({'insertText': {
+            'location': {'index': doc_index},
+            'text': ' ' + new_tag,
+        }})
+    svc.documents().batchUpdate(documentId=doc_id, body={'requests': requests}).execute()
 
 
 def register_drive_watch(creds, doc_id, webhook_url):
