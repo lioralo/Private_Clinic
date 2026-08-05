@@ -382,18 +382,53 @@ def _pull_gdoc_notes(db, patient):
                 )
                 synced += 1
                 continue
-            duplicate = db.execute(
-                '''SELECT id FROM notes
-                   WHERE patient_id = ?
-                     AND COALESCE(session_number, '') = COALESCE(?, '')
-                     AND COALESCE(note_date, '') = COALESCE(?, '')
-                     AND content = ?
-                   ORDER BY id DESC
-                   LIMIT 1''',
-                (patient['id'], session_number, note_date, content)
-            ).fetchone()
-            if duplicate:
-                gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], duplicate['id'], session_header=item.get('raw_header'))
+            # Idempotent import: find an existing note for THIS meeting so a
+            # re-sync (or an edit made in the doc) updates the same row instead
+            # of inserting a duplicate. The session number is the strongest
+            # identity (unique per patient); fall back to the note date for
+            # untagged headers that omit it, then to an exact-content match.
+            existing_note = None
+            if session_number is not None:
+                # Direct comparison (not COALESCE) so SQLite applies the
+                # INTEGER column affinity to the text parameter and '6' matches 6.
+                existing_note = db.execute(
+                    '''SELECT id FROM notes
+                       WHERE patient_id = ?
+                         AND session_number IS NOT NULL
+                         AND session_number = ?
+                       ORDER BY id DESC
+                       LIMIT 1''',
+                    (patient['id'], session_number)
+                ).fetchone()
+            if existing_note is None and note_date:
+                existing_note = db.execute(
+                    '''SELECT id FROM notes
+                       WHERE patient_id = ?
+                         AND session_number IS NULL
+                         AND COALESCE(note_date, '') = COALESCE(?, '')
+                       ORDER BY id DESC
+                       LIMIT 1''',
+                    (patient['id'], note_date)
+                ).fetchone()
+            if existing_note is None:
+                existing_note = db.execute(
+                    '''SELECT id FROM notes
+                       WHERE patient_id = ?
+                         AND COALESCE(session_number, '') = COALESCE(?, '')
+                         AND COALESCE(note_date, '') = COALESCE(?, '')
+                         AND content = ?
+                       ORDER BY id DESC
+                       LIMIT 1''',
+                    (patient['id'], session_number, note_date, content)
+                ).fetchone()
+            if existing_note:
+                db.execute(
+                    '''UPDATE notes
+                       SET session_number = ?, note_date = ?, content = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ? AND patient_id = ?''',
+                    (session_number, note_date, content, existing_note['id'], patient['id'])
+                )
+                gdocs.stamp_note_id_in_doc(creds, patient['gdoc_id'], existing_note['id'], session_header=item.get('raw_header'))
                 synced += 1
                 continue
             cursor = db.execute(
@@ -526,6 +561,20 @@ def _pull_group_gdoc_notes(db, group):
 
     group_name = group['name'] if 'name' in group.keys() else ''
 
+    def _stamp_group_session(session_id, raw_header):
+        """Tag the group doc header with [note:id=session_id] so subsequent
+        pulls match this meeting by id instead of re-importing it. Best-effort:
+        a stamping failure (e.g. a transient Google API error) must not lose the
+        database work already done in this pull."""
+        if not session_id or not raw_header:
+            return
+        try:
+            gdocs.stamp_note_id_in_doc(creds, group['gdoc_id'], int(session_id), session_header=raw_header)
+        except Exception:
+            current_app.logger.warning(
+                'Failed to stamp group session id into Google Doc', exc_info=True
+            )
+
     def _apply_attendance_from_doc(session_id, participants, missing_entries, session_date=None, session_time=None, session_title=None, session_summary=None):
         if not session_id:
             return
@@ -636,11 +685,13 @@ def _pull_group_gdoc_notes(db, group):
                 continue
 
             target = None
+            matched_by_id = False
             if isinstance(note_tag, int):
                 target = db.execute(
                     'SELECT id, session_date, session_time, title, session_summary FROM group_sessions WHERE id = ? AND group_id = ?',
                     (note_tag, group['id'])
                 ).fetchone()
+                matched_by_id = target is not None
 
             if target is None and meeting_title:
                 target = title_session_map.get(_title_key_no_date(meeting_title))
@@ -656,6 +707,17 @@ def _pull_group_gdoc_notes(db, group):
 
             if target is None and session_number_index and session_number_index <= len(ordered_sessions):
                 target = ordered_sessions[session_number_index - 1]
+
+            # Final idempotency guard: never insert a second row for a meeting
+            # that already exists for this (group, date, title).
+            if target is None and note_date and meeting_title:
+                target = db.execute('''
+                    SELECT id, session_date, session_time, title, session_summary
+                    FROM group_sessions
+                    WHERE group_id = ? AND session_date = ?
+                      AND COALESCE(title, '') = COALESCE(?, '')
+                    ORDER BY id ASC LIMIT 1
+                ''', (group['id'], note_date, meeting_title)).fetchone()
 
             if target is not None:
                 final_summary = structured_summary or content
@@ -687,6 +749,8 @@ def _pull_group_gdoc_notes(db, group):
                     session_title=meeting_title or (target['title'] if 'title' in target.keys() else None),
                     session_summary=structured_summary,
                 )
+                if not matched_by_id:
+                    _stamp_group_session(int(target['id']), item.get('raw_header'))
                 continue
 
             title = meeting_title or (f"Imported Session {session_number}" if session_number else 'Imported Session')
@@ -705,6 +769,7 @@ def _pull_group_gdoc_notes(db, group):
                 session_title=title,
                 session_summary=structured_summary or content,
             )
+            _stamp_group_session(int(created_id), item.get('raw_header'))
             synced += 1
 
         db.commit()
