@@ -433,14 +433,6 @@ def _validate_password_strength(password, username=None, email=None):
     from clinic_app.utils import _validate_password_strength as _impl
     return _impl(password, username=username, email=email)
 
-    lowered = candidate.lower()
-    for source in (username or '', email or ''):
-        token = str(source).strip().lower()
-        if token and len(token) >= 3 and token in lowered:
-            return False, 'Password should not include your username or email.'
-
-    return True, ''
-
 
 def _security_retention_cleanup(db):
     global _SECURITY_RETENTION_LAST_CHECK_TS
@@ -1770,7 +1762,10 @@ def _run_automated_security_scan(db, force=False):
                 if elapsed < interval_seconds:
                     return {'ran': False, 'reason': 'not-due'}
             except Exception:
-                pass
+                app.logger.warning(
+                    'Could not parse security_scan_last_run_at (%r); running scan anyway',
+                    last_run_raw, exc_info=True,
+                )
                 
     results = _run_security_scan_logic()
     now_str = datetime.now(timezone.utc).isoformat()
@@ -2793,7 +2788,10 @@ def init_db():
                     already_initialized = True
                     alembic_managed = True
             except Exception:
-                pass
+                app.logger.debug(
+                    'Could not probe alembic_version during init_db; treating DB as fresh',
+                    exc_info=True,
+                )
 
             if alembic_managed:
                 # Auto-apply pending Alembic migrations
@@ -3287,7 +3285,7 @@ def build_intake_docx(patient_name, intake_data, language='en'):
             run2.font.color.rgb = RGBColor(59, 130, 246)
             run2.bold = True
         except Exception:
-            pass
+            app.logger.debug('Intake DOCX header branding skipped', exc_info=True)
 
     # ── Title ────────────────────────────────────────────────────
     title_text = f"סיכום אינטייק — {patient_name}" if is_he else f"Intake Summary — {patient_name}"
@@ -3352,8 +3350,8 @@ def build_intake_docx(patient_name, intake_data, language='en'):
         try:
             from docx.oxml.ns import qn as qn2
             shading = vp.paragraph_format.element.get_or_add_pPr()  # not directly, use paragraph XML
-        except:
-            pass
+        except Exception:
+            app.logger.debug('Intake DOCX risk-badge shading skipped', exc_info=True)
         run = vp.add_run()
         run.text = f"  {level}  "
         run.bold = True
@@ -3511,7 +3509,7 @@ def build_intake_docx(patient_name, intake_data, language='en'):
         frun.font.color.rgb = RGBColor(148, 163, 184)
         frun.italic = True
     except Exception:
-        pass
+        app.logger.debug('Intake DOCX footer branding skipped', exc_info=True)
 
     # ── Empty state ───────────────────────────────────────────────
     if len(document.paragraphs) <= 3:
@@ -6363,7 +6361,7 @@ def _process_calendar_external_events(db, week_start, week_end, user):
                 if evt['google_event_id'] and evt['google_event_id'] not in our_event_ids:
                     external_events.append(evt)
         except Exception:
-            pass
+            app.logger.warning('Failed to fetch external Google Calendar events', exc_info=True)
     return external_events
 
 
@@ -8935,7 +8933,8 @@ def manage_access(patient_id):
             )
             _send_smtp_email(patient['email'], subject, body)
         except Exception:
-            pass  # Email failure is non-fatal
+            # Email failure is non-fatal: the account change already succeeded.
+            app.logger.warning('Failed to send patient portal access email', exc_info=True)
 
     return redirect_to_patient_tab(patient_id, 'info')
 
@@ -8981,7 +8980,8 @@ def reset_portal_password(patient_id):
             )
             _send_smtp_email(patient['email'], subject, body)
         except Exception:
-            pass  # Email failure is non-fatal
+            # Email failure is non-fatal: the password was already reset.
+            app.logger.warning('Failed to send patient portal password reset email', exc_info=True)
 
     return redirect_to_patient_tab(patient_id, 'info')
 
