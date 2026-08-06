@@ -913,7 +913,7 @@ def api_calendar_vacancy_update(override_id):
         ''', (slot_date, start_time.strftime('%H:%M'), override_id))
         db.execute('''
             UPDATE availability
-            SET slot_date = ?, slot_time = ?, duration_minutes = ?, weekday = NULL, recurrence = NULL
+            SET slot_date = ?, slot_time = ?, duration_minutes = ?, weekday = NULL, recurrence = 'one_time'
             WHERE id = ?
         ''', (slot_date, start_time.strftime('%H:%M'), duration, override_id))
 
