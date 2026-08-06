@@ -156,7 +156,7 @@
 </nav>
 {%- endmacro %}
 
-{% macro empty_state(icon='bi-inbox', title='', message='', cta_url='', cta_text='', colspan='') -%}
+{% macro empty_state(icon='bi-inbox', title='', message='', cta_url='', cta_text='', colspan='', cta_onclick='') -%}
     {% if colspan %}
     <td colspan="{{ colspan }}" class="text-center py-5">
     {% else %}
@@ -167,8 +167,8 @@
         </div>
         {% if title %}<h5 class="fw-bold mb-2 text-slate-700">{{ title }}</h5>{% endif %}
         <p class="text-muted mb-3 max-w-sm mx-auto">{{ message }}</p>
-        {% if cta_url and cta_text %}
-        <a href="{{ cta_url }}" class="btn btn-primary rounded-pill px-5 py-2 shadow-sm">{{ cta_text }}</a>
+        {% if cta_text and (cta_url or cta_onclick) %}
+        <a href="{{ cta_url or '#' }}"{% if cta_onclick %} onclick="{{ cta_onclick }}"{% endif %} class="btn btn-primary rounded-pill px-5 py-2 shadow-sm">{{ cta_text }}</a>
         {% endif %}
     {% if colspan %}
     </td>
@@ -300,8 +300,9 @@
             <button id="adminSidebarToggle" type="button" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
                 <i class="bi bi-list" style="font-size:18px"></i>
             </button>
-            <button id="searchToggleBtn" type="button" class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Toggle search') }}" title="{{ t('Search') }}">
+            <button id="searchToggleBtn" type="button" class="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Toggle search') }}" title="{{ t('Search') }} (Ctrl+K)">
                 <i class="bi bi-search" style="font-size:16px"></i>
+                <kbd class="hidden lg:inline text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-200 rounded px-1 py-0.5">Ctrl K</kbd>
             </button>
             <div class="flex-1"></div>
             {# Notification bell (visible in top bar on mobile, hidden on desktop where floating icon is used) #}
@@ -345,7 +346,7 @@
     <div class="flex items-center gap-3">
         <a href="#" class="p-2 text-black hover:text-teal-800 transition-colors relative no-underline"
            data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
-           title="{{ t('Notifications') }}">
+           aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
             <i class="bi bi-bell-fill" style="font-size:22px"></i>
             {% if notification_unread_count is defined and notification_unread_count > 0 %}
             <span class="notification-badge absolute top-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" style="inset-inline-end:0.25rem;"></span>
@@ -353,7 +354,7 @@
         </a>
         <a href="#" class="p-2 text-black hover:text-teal-800 transition-colors no-underline"
            data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas"
-           title="{{ t('Messages') }}">
+           aria-label="{{ t('Messages') }}" title="{{ t('Messages') }}">
             <i class="bi bi-chat-dots-fill" style="font-size:22px"></i>
         </a>
         <a href="{{ url_for('public_resources') }}" class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
@@ -688,7 +689,7 @@
             var bg = { success: 'bg-emerald-50 border-emerald-200 text-emerald-800', danger: 'bg-red-50 border-red-200 text-red-800', warning: 'bg-amber-50 border-amber-200 text-amber-800', info: 'bg-blue-50 border-blue-200 text-blue-800' };
             var toast = document.createElement('div');
             toast.className = 'flex items-center gap-3 border rounded-2xl px-4 py-3 shadow-lg text-sm font-medium animate-slide-in ' + (bg[type] || bg.info);
-            toast.innerHTML = '<i class="bi ' + (icons[type] || icons.info) + ' text-lg"></i><span class="flex-1">' + message + '</span><button class="hover:opacity-70 transition-opacity" onclick="this.parentElement.remove()"><i class="bi bi-x-lg"></i></button>';
+            toast.innerHTML = '<i class="bi ' + (icons[type] || icons.info) + ' text-lg"></i><span class="flex-1">' + message + '</span><button class="hover:opacity-70 transition-opacity" aria-label="{{ 'סגור' if lang == 'he' else 'Close' }}" onclick="this.parentElement.remove()"><i class="bi bi-x-lg"></i></button>';
             toast.setAttribute('role', 'alert');
             container.appendChild(toast);
             setTimeout(function() { toast.remove(); }, 5000);
@@ -760,9 +761,9 @@
             <div class="mb-3">
                 <label class="form-label small mb-1">{{ 'גודל טקסט' if lang == 'he' else 'Text size' }}</label>
                 <div class="d-flex gap-2">
-                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="small">{{ 'א׳' if lang == 'he' else 'A' }}</button>
-                    <button class="a11y-font-size btn btn-sm border flex-fill active" data-size="normal">{{ 'א׳' if lang == 'he' else 'A' }}</button>
-                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="large">{{ 'א׳' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="small" aria-label="{{ 'טקסט קטן' if lang == 'he' else 'Small text' }}" style="font-size:0.8rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill active" data-size="normal" aria-label="{{ 'טקסט רגיל' if lang == 'he' else 'Normal text' }}" style="font-size:1rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="large" aria-label="{{ 'טקסט גדול' if lang == 'he' else 'Large text' }}" style="font-size:1.35rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
                 </div>
             </div>
             <div class="mb-3">

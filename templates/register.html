@@ -4,7 +4,7 @@
 <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
         <div class="d-flex align-items-center mb-4">
-            <h2 class="mb-0 fw-bold text-primary">Register as Candidate</h2>
+            <h2 class="mb-0 fw-bold text-primary">{{ t('Register as Candidate') }}</h2>
         </div>
 
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
@@ -14,29 +14,29 @@
 
                     <div class="row g-4">
                         <div class="col-md-12">
-                            <label for="name" class="form-label text-uppercase smallest fw-bold">Full Name</label>
-                            <input type="text" class="form-control" name="name" id="name" placeholder="John Doe" value="{{ request.form.get('name', '') }}" required>
+                            <label for="name" class="form-label text-uppercase smallest fw-bold">{{ t('Full Name') }} <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="name" id="name" placeholder="{{ t('Full Name') }}" value="{{ request.form.get('name', '') }}" required>
                         </div>
 
                         <div class="col-md-12">
-                            <label for="email" class="form-label text-uppercase smallest fw-bold">Email Address</label>
+                            <label for="email" class="form-label text-uppercase smallest fw-bold">{{ t('Email Address') }}</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light text-muted"><i class="bi bi-envelope"></i></span>
-                                <input type="email" class="form-control" name="email" id="email" placeholder="john@example.com" value="{{ request.form.get('email', '') }}">
+                                <input type="email" class="form-control" name="email" id="email" placeholder="name@example.com" value="{{ request.form.get('email', '') }}" dir="ltr">
                             </div>
                         </div>
 
                         <div class="col-md-12">
-                            <label for="phone" class="form-label text-uppercase smallest fw-bold">Phone Number</label>
+                            <label for="phone" class="form-label text-uppercase smallest fw-bold">{{ t('Phone Number') }}</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light text-muted"><i class="bi bi-telephone"></i></span>
-                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="+1 (234) 567-890" value="{{ request.form.get('phone', '') }}">
+                                <input type="tel" class="form-control" name="phone" id="phone" placeholder="050-1234567" value="{{ request.form.get('phone', '') }}" dir="ltr" inputmode="tel">
                             </div>
                         </div>
 
                         <div class="col-12 mt-5">
                             <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill">
-                                <i class="bi bi-person-check me-2"></i> Submit Application
+                                <i class="bi bi-person-check me-2"></i> {{ t('Submit Application') }}
                             </button>
                         </div>
                     </div>
@@ -44,7 +44,7 @@
             </div>
         </div>
         <p class="text-center mt-4 text-muted small">
-            Already have an account? <a href="{{ url_for('login') }}" class="text-primary fw-bold text-decoration-none">Login here</a>.
+            {{ t('Already have an account?') }} <a href="{{ url_for('login') }}" class="text-primary fw-bold text-decoration-none">{{ t('Login here') }}</a>.
         </p>
     </div>
 </div>

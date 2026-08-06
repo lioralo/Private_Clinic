@@ -186,7 +186,7 @@
 {% endif %}
 
 {% if not groups %}
-{{ empty_state(icon='bi-people', title=txt('No groups yet', 'עדיין אין קבוצות'), message=txt('Create your first group to get started.', 'צרו קבוצה ראשונה כדי להתחיל.'), cta_text=txt('Create Group', 'יצירת קבוצה')) }}
+{{ empty_state(icon='bi-people', title=txt('No groups yet', 'עדיין אין קבוצות'), message=txt('Create your first group to get started.', 'צרו קבוצה ראשונה כדי להתחיל.'), cta_text=txt('Create Group', 'יצירת קבוצה'), cta_url='#', cta_onclick='toggleCreateGroupPanel(); return false;') }}
 {% endif %}
 
 <script>

@@ -1502,12 +1502,12 @@
 
         <div class="card border-0 shadow-sm patient-actions-panel">
             <div class="card-header">
-                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientActionsBody" aria-expanded="false" aria-controls="patientActionsBody" onclick="toggleStablePanel(this)">
+                <button class="btn w-100 text-start d-flex justify-content-between align-items-center px-0" type="button" data-panel-id="patientActionsBody" aria-expanded="true" aria-controls="patientActionsBody" onclick="toggleStablePanel(this)">
                     <span class="mb-0 fw-bold"><i class="bi bi-sliders2 me-2 text-primary"></i>{{ t('Actions') }}</span>
-                    <i class="bi bi-chevron-down text-muted stable-toggle-icon"></i>
+                    <i class="bi bi-chevron-up text-muted stable-toggle-icon"></i>
                 </button>
             </div>
-            <div class="card-body d-grid gap-3 d-none" id="patientActionsBody">
+            <div class="card-body d-grid gap-3" id="patientActionsBody">
                 <form method="post" action="{{ url_for('toggle_self_booking', patient_id=patient['id']) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="active_tab" value="{{ active_tab }}">

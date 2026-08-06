@@ -333,6 +333,12 @@
     {% endfor %}
 </div>
 
+{% if not patients %}
+<div class="mb-4">
+    {{ empty_state(icon='bi-people', title=t('No patients found'), message=t('Try adjusting your filters, or add a new patient to get started.'), cta_url=url_for('add_patient'), cta_text=t('New Patient')) }}
+</div>
+{% endif %}
+
 {# SortableJS from CDN (loaded only when manual_order sort is active) #}
 {% if sort_by == 'manual_order' %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>

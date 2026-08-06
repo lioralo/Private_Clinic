@@ -251,7 +251,7 @@
                             </form>
                             <div class="flex-grow-1">
                                 <div class="fw-semibold small {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
-                                <div class="text-muted" style="font-size:.75rem;">{{ goal['status'] }}</div>
+                                <div class="text-muted" style="font-size:.75rem;">{{ t(goal['status']) }}</div>
                             </div>
                         </div>
                         {% endfor %}
