@@ -674,6 +674,12 @@ def mark_notifications_read():
             return jsonify({'status': 'error', 'message': 'No notification selected.'}), 400
 
         placeholders = ','.join(['?'] * len(notification_ids))
+        db.execute(f'''
+            UPDATE notifications
+            SET is_read = 1
+            WHERE id IN ({placeholders})
+              AND recipient_user_id = ?
+        ''', [*notification_ids, current_user.id])
     db.commit()
     return jsonify({'status': 'success'})
 
