@@ -407,13 +407,22 @@ def parse_recurrence_days(appt):
 
 def has_time_conflict(db, day_obj, start_dt, end_dt, exclude_appointment_id=None, exclude_group_session_id=None, exclude_block_id=None):
     day_iso = day_obj.isoformat()
+    # Include recurring series that may land on this day (not only literal appointment_date).
     appointment_rows = db.execute('''
-        SELECT id, appointment_time, duration_minutes
+        SELECT id, appointment_date, appointment_time, duration_minutes,
+               is_recurring, recurrence_interval, recurrence_days,
+               recurrence_end_date, recurrence_count, cancelled_dates
         FROM appointments
-        WHERE appointment_date = ?
-    ''', (day_iso,)).fetchall()
+        WHERE COALESCE(status, 'scheduled') = 'scheduled'
+          AND (
+                (COALESCE(is_recurring, 0) = 0 AND appointment_date = ?)
+             OR (COALESCE(is_recurring, 0) = 1 AND appointment_date <= ?)
+          )
+    ''', (day_iso, day_iso)).fetchall()
     for row in appointment_rows:
         if exclude_appointment_id and int(row['id']) == int(exclude_appointment_id):
+            continue
+        if not recurring_occurrences_between(row, day_obj, day_obj):
             continue
         row_start = combine_dt(day_obj, row['appointment_time'])
         row_end = row_start + timedelta(minutes=int(row['duration_minutes'] or 60))

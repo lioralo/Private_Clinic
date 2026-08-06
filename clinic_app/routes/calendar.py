@@ -170,7 +170,10 @@ def _process_calendar_group_sessions(group_sessions, user, events, occupied):
 
 
 def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
-    for block in blocks:
+    seen_block_keys = set()
+    # Keep lowest id when duplicate (date, time, duration, title) rows exist.
+    ordered_blocks = sorted(blocks, key=lambda row: int(row['id']))
+    for block in ordered_blocks:
         block_date = parse_date_safe(block['blocked_date'])
         if not block_date:
             continue
@@ -182,6 +185,16 @@ def _process_calendar_blocks(blocks, user, events, occupied, weekend_specials):
         if block_type != 'blocked':
             block_type = 'blocked'
         raw_title = block['title'] or 'Blocked Slot'
+        time_key = (block['blocked_time'] or '')[:5]
+        dedupe_key = (
+            block_date.isoformat(),
+            time_key,
+            duration,
+            (raw_title or '').strip().lower(),
+        )
+        if dedupe_key in seen_block_keys:
+            continue
+        seen_block_keys.add(dedupe_key)
         visible_title = raw_title if (user.role == 'admin' or not is_private) else 'Unavailable'
         occupied.append((start_dt, end_dt))
         if user.role != 'admin':
@@ -337,8 +350,12 @@ def build_week_calendar_snapshot(db, week_start, user):
         SELECT a.*, p.name AS patient_name, p.status AS patient_status, p.patient_type AS patient_type
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
-        WHERE (a.is_recurring = 0 AND a.appointment_date BETWEEN ? AND ?)
-           OR (a.is_recurring = 1 AND a.appointment_date <= ?)
+        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
+          AND COALESCE(p.is_deleted, 0) = 0
+          AND (
+                (COALESCE(a.is_recurring, 0) = 0 AND a.appointment_date BETWEEN ? AND ?)
+             OR (COALESCE(a.is_recurring, 0) = 1 AND a.appointment_date <= ?)
+          )
         ORDER BY a.appointment_date ASC, a.appointment_time ASC
     ''', (week_start.isoformat(), week_end.isoformat(), week_end.isoformat())).fetchall()
     blocks = db.execute('''

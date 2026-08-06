@@ -23,6 +23,7 @@ from clinic_app.utils import (
     _smtp_settings_summary, _smtp_health_check, _send_smtp_email,
     _check_public_rate_limit, _request_client_ip,
     parse_date_safe, redirect_to_patient_tab,
+    recurring_occurrences_between,
 )
 
 _scripts_dir = str(Path(__file__).resolve().parent.parent.parent / 'scripts')
@@ -46,34 +47,86 @@ admin_bp = Blueprint('admin', __name__)
 # Dashboard helpers
 # ---------------------------------------------------------------------------
 
-def _get_dashboard_today_appointments(db, today):
-    tomorrow = today + timedelta(days=1)
-    return db.execute('''
+def _expand_dashboard_appointments(db, range_start, range_end):
+    """Return appointment occurrences in [range_start, range_end], expanding recurring series."""
+    rows = db.execute('''
         SELECT a.id, a.appointment_date, a.appointment_time, a.duration_minutes,
-               a.meeting_type, a.meeting_link, a.is_recurring,
+               a.meeting_type, a.meeting_link, a.is_recurring, a.meeting_title,
+               a.recurrence_interval, a.recurrence_days, a.recurrence_end_date,
+               a.recurrence_count, a.cancelled_dates,
                p.id AS patient_id, p.name AS patient_name,
                p.status AS patient_status, p.treatment_method
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id
         WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
           AND COALESCE(p.is_deleted, 0) = 0
-          AND a.appointment_date IN (?, ?)
+          AND (
+                (COALESCE(a.is_recurring, 0) = 0 AND a.appointment_date BETWEEN ? AND ?)
+             OR (COALESCE(a.is_recurring, 0) = 1 AND a.appointment_date <= ?)
+          )
         ORDER BY a.appointment_time ASC
-    ''', (today.isoformat(), tomorrow.isoformat())).fetchall()
+    ''', (range_start.isoformat(), range_end.isoformat(), range_end.isoformat())).fetchall()
+
+    results = []
+    seen = set()
+    for appt in rows:
+        for occ in recurring_occurrences_between(appt, range_start, range_end):
+            time_key = (appt['appointment_time'] or '')[:5]
+            dedupe_key = (int(appt['patient_id']), occ.isoformat(), time_key)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            item = dict(appt)
+            item['appointment_date'] = occ.isoformat()
+            item['source'] = 'appointment'
+            item['group_id'] = None
+            results.append(item)
+    return results
+
+
+def _get_dashboard_group_sessions(db, range_start, range_end):
+    rows = db.execute('''
+        SELECT gs.id, gs.session_date AS appointment_date, gs.session_time AS appointment_time,
+               gs.duration_minutes, gs.meeting_type, gs.meeting_link, gs.title AS meeting_title,
+               g.id AS group_id, g.name AS patient_name
+        FROM group_sessions gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE gs.session_date BETWEEN ? AND ?
+          AND COALESCE(g.is_active, 1) = 1
+          AND COALESCE(gs.status, 'scheduled') = 'scheduled'
+        ORDER BY gs.session_time ASC
+    ''', (range_start.isoformat(), range_end.isoformat())).fetchall()
+    results = []
+    for row in rows:
+        item = dict(row)
+        item['is_recurring'] = 0
+        item['patient_id'] = None
+        item['patient_status'] = None
+        item['treatment_method'] = None
+        item['source'] = 'group_session'
+        results.append(item)
+    return results
+
+
+def _get_dashboard_today_appointments(db, today):
+    items = _expand_dashboard_appointments(db, today, today)
+    items.extend(_get_dashboard_group_sessions(db, today, today))
+    items.sort(key=lambda a: ((a.get('appointment_time') or '')[:5], a.get('patient_name') or ''))
+    return items
 
 
 def _get_dashboard_week_appointments(db, today, week_end):
-    return db.execute('''
-        SELECT a.id, a.appointment_date, a.appointment_time, a.meeting_type,
-               p.id AS patient_id, p.name AS patient_name
-        FROM appointments a
-        JOIN patients p ON p.id = a.patient_id
-        WHERE COALESCE(a.status, 'scheduled') = 'scheduled'
-          AND COALESCE(p.is_deleted, 0) = 0
-          AND a.appointment_date > ?
-          AND a.appointment_date <= ?
-        ORDER BY a.appointment_date ASC, a.appointment_time ASC
-    ''', (today.isoformat(), week_end.isoformat())).fetchall()
+    range_start = today + timedelta(days=1)
+    if range_start > week_end:
+        return []
+    items = _expand_dashboard_appointments(db, range_start, week_end)
+    items.extend(_get_dashboard_group_sessions(db, range_start, week_end))
+    items.sort(key=lambda a: (
+        a.get('appointment_date') or '',
+        (a.get('appointment_time') or '')[:5],
+        a.get('patient_name') or '',
+    ))
+    return items
 
 
 def _get_dashboard_patient_counts(db, include_deleted=False):

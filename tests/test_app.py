@@ -3573,6 +3573,110 @@ class ClinicTestCase(unittest.TestCase):
         self.assertIn('Visible Resource', html)
         self.assertNotIn('Hidden Resource', html)
 
+    def test_dashboard_today_includes_recurring_and_group_sessions(self):
+        """Today's Schedule expands past-base recurring series and group sessions."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Recurring Dash Patient',
+            status='ongoing',
+        ), follow_redirects=True)
+
+        today = datetime.now().date()
+        # Base date one week earlier, same weekday → occurrence today
+        base_date = today - timedelta(days=7)
+        recurrence_day = str((today.weekday() + 1) % 7)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, ?, '09:30', 60, 'scheduled', 1, 1, ?, ?)
+            ''', (base_date.isoformat(), recurrence_day, (today + timedelta(days=90)).isoformat()))
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, is_active) VALUES (?, 'therapy', 'dash group', 1)",
+                ('Dash Therapy Group',)
+            )
+            group = db.execute("SELECT id FROM groups WHERE name='Dash Therapy Group'").fetchone()
+            db.execute('''
+                INSERT INTO group_sessions (
+                    group_id, session_date, session_time, duration_minutes, title, status, meeting_type
+                ) VALUES (?, ?, '11:00', 90, 'Morning Group', 'scheduled', 'in-person')
+            ''', (group['id'], today.isoformat()))
+            db.commit()
+
+        rv = self.client.get('/admin/dashboard')
+        assert rv.status_code == 200
+        html = rv.data.decode('utf-8')
+        assert 'Recurring Dash Patient' in html
+        assert 'Dash Therapy Group' in html
+        assert '09:30' in html
+        assert '11:00' in html
+
+    def test_calendar_dedupes_identical_blocked_slots(self):
+        """Duplicate blocked_slots rows emit a single red calendar event."""
+        self.login('lioraloni', 'Flo@tingind4')
+        today = datetime.now().date()
+        week_start = today - timedelta(days=(today.weekday() + 1) % 7)
+
+        with app.app_context():
+            db = get_db()
+            for _ in range(2):
+                db.execute('''
+                    INSERT INTO blocked_slots
+                    (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                    VALUES (?, '14:00', 60, 'Named Booking', 0, 'blocked', 1)
+                ''', (today.isoformat(),))
+            db.commit()
+
+        rv = self.client.get(f'/api/calendar/snapshot?week_start={week_start.isoformat()}')
+        assert rv.status_code == 200
+        events = rv.get_json().get('events') or []
+        block_events = [
+            e for e in events
+            if (e.get('meta') or {}).get('type') == 'block'
+            and e.get('title') == 'Named Booking'
+            and (e.get('start') or '').startswith(today.isoformat())
+        ]
+        assert len(block_events) == 1
+
+    def test_block_creation_conflicts_with_recurring_occurrence(self):
+        """has_time_conflict expands recurring appointments for the target day."""
+        self.login('lioraloni', 'Flo@tingind4')
+        self.client.post('/add_patient', data=dict(
+            name='Conflict Recurring Patient',
+            status='ongoing',
+        ), follow_redirects=True)
+
+        today = datetime.now().date()
+        base_date = today - timedelta(days=7)
+        recurrence_day = str((today.weekday() + 1) % 7)
+
+        with app.app_context():
+            db = get_db()
+            db.execute('''
+                INSERT INTO appointments (
+                    patient_id, appointment_date, appointment_time, duration_minutes,
+                    status, is_recurring, recurrence_interval, recurrence_days, recurrence_end_date
+                ) VALUES (1, ?, '15:00', 60, 'scheduled', 1, 1, ?, ?)
+            ''', (base_date.isoformat(), recurrence_day, (today + timedelta(days=90)).isoformat()))
+            db.commit()
+
+        end_time = '16:00'
+        rv = self.client.post('/api/calendar/block', data=dict(
+            blocked_date=today.isoformat(),
+            blocked_time='15:00',
+            end_time=end_time,
+            block_type='blocked',
+            title='Should Conflict',
+        ))
+        assert rv.status_code == 409
+        payload = rv.get_json()
+        assert payload.get('status') == 'error'
+        assert 'appointment' in (payload.get('message') or '').lower()
+
+
 class TemplateFilterTests(unittest.TestCase):
     def test_from_iso_date_valid(self):
         self.assertEqual(from_iso_date('2023-10-25'), date(2023, 10, 25))

@@ -43,19 +43,19 @@
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
     <div class="p-5 border-b border-slate-100">
         <div class="d-flex flex-column gap-3">
-            <div class="chip-row">
+            <div class="chip-row" aria-label="{{ t('Legend') }}">
                 <span class="badge rounded-pill calendar-chip" style="background:#2563eb;">{{ t('Ongoing') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#f59e0b;">{{ t('Candidate/Waiting') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#6b7280;">{{ t('Archived') }}</span>
                 {% if current_user.role == 'admin' %}
-                <span class="badge rounded-pill calendar-chip" style="background:#dc2626;">{{ t('Blocked') }}</span>
+                <span class="badge rounded-pill calendar-chip calendar-chip-blocked" style="background:#dc2626;">{{ t('Blocked') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#8b5cf6;">{{ t('Group Session') }}</span>
                 <span class="badge rounded-pill calendar-chip" style="background:#10b981;">{{ t('Vacant Slot') }}</span>
                 {% endif %}
-                <span class="badge rounded-pill calendar-chip bg-secondary"><i class="bi bi-camera-video-fill"></i></span>
+                <span class="badge rounded-pill calendar-chip bg-secondary" title="{{ t('Online') }}"><i class="bi bi-camera-video-fill"></i></span>
             </div>
             <div class="chip-row align-items-center" id="calendarFilters">
-                <span class="small fw-semibold text-muted me-1">{{ t('Filters:') }}</span>
+                <span class="small fw-semibold text-muted text-uppercase" style="letter-spacing:0.04em;font-size:0.7rem;">{{ t('Filters:') }}</span>
             <button type="button" class="btn btn-sm rounded-pill btn-primary filter-chip stable-filter-btn" data-filter="all">{{ t('All') }}</button>
             <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="ongoing">{{ t('Ongoing') }}</button>
             <button type="button" class="btn btn-sm rounded-pill btn-outline-primary filter-chip stable-filter-btn" data-filter="candidate">{{ t('Candidate/Waiting') }}</button>

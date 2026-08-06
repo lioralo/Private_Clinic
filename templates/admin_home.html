@@ -146,17 +146,29 @@
                 {% if today_appointments %}
                 <ul class="list-group list-group-flush">
                     {% for appt in today_appointments %}
+                    {% set is_group = appt.get('source') == 'group_session' %}
                     <li class="list-group-item dash-schedule-item">
                         <div class="dash-schedule-time">
-                            <span class="fw-bold text-primary">{{ appt['appointment_time'][:5] }}</span>
-                            <span class="text-muted small d-block">{{ appt['duration_minutes'] or 60 }}min</span>
+                            <span class="dash-time-primary">{{ appt['appointment_time'][:5] }}</span>
+                            <span class="dash-time-duration">{{ appt['duration_minutes'] or 60 }}min</span>
                         </div>
-                        <div class="flex-grow-1">
-                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="fw-semibold text-decoration-none">{{ appt['patient_name'] }}</a>
+                        <div class="flex-grow-1 min-w-0">
+                            {% if is_group and appt.get('group_id') %}
+                            <a href="{{ url_for('group_detail', group_id=appt['group_id']) }}" class="dash-schedule-name text-decoration-none">{{ appt['patient_name'] }}</a>
+                            {% elif appt.get('patient_id') %}
+                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="dash-schedule-name text-decoration-none">{{ appt['patient_name'] }}</a>
+                            {% else %}
+                            <span class="dash-schedule-name">{{ appt['patient_name'] }}</span>
+                            {% endif %}
                             {% if appt['treatment_method'] %}
                             <span class="badge crm-method-badge ms-1">{{ appt['treatment_method'] }}</span>
                             {% endif %}
-                            <div class="d-flex gap-2 mt-1 flex-wrap">
+                            <div class="dash-schedule-badges d-flex gap-1 mt-1 flex-wrap">
+                                {% if is_group %}
+                                <span class="badge bg-primary-subtle text-primary border">
+                                    <i class="bi bi-people me-1"></i>{{ t('Group') }}
+                                </span>
+                                {% endif %}
                                 {% if appt['meeting_type'] and appt['meeting_type'] != 'in-person' %}
                                 <span class="badge bg-info-subtle text-info border">
                                     <i class="bi bi-camera-video me-1"></i>{{ appt['meeting_type'] }}
@@ -173,7 +185,7 @@
                         </div>
                         {% if appt['meeting_link'] %}
                         <a href="{{ appt['meeting_link'] }}" target="_blank" rel="noopener noreferrer"
-                           class="btn btn-sm btn-outline-info rounded-pill" onclick="event.stopPropagation()">
+                           class="btn btn-sm btn-outline-info rounded-pill dash-join-btn" onclick="event.stopPropagation()">
                             <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Join') }}
                         </a>
                         {% endif %}
@@ -203,9 +215,19 @@
                             <i class="bi bi-calendar3 me-1"></i>{{ appt['appointment_date'] }}
                         </li>
                         {% endif %}
-                        <li class="list-group-item d-flex align-items-center gap-3 py-2 px-3">
-                            <span class="text-muted small" style="min-width:3.5rem">{{ appt['appointment_time'][:5] }}</span>
-                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="text-decoration-none fw-semibold flex-grow-1">{{ appt['patient_name'] }}</a>
+                        {% set is_group = appt.get('source') == 'group_session' %}
+                        <li class="list-group-item dash-week-item d-flex align-items-center gap-3 py-2 px-3">
+                            <span class="dash-time-primary dash-week-time">{{ appt['appointment_time'][:5] }}</span>
+                            {% if is_group and appt.get('group_id') %}
+                            <a href="{{ url_for('group_detail', group_id=appt['group_id']) }}" class="dash-schedule-name text-decoration-none flex-grow-1">{{ appt['patient_name'] }}</a>
+                            {% elif appt.get('patient_id') %}
+                            <a href="{{ url_for('patient_detail', patient_id=appt['patient_id']) }}" class="dash-schedule-name text-decoration-none flex-grow-1">{{ appt['patient_name'] }}</a>
+                            {% else %}
+                            <span class="dash-schedule-name flex-grow-1">{{ appt['patient_name'] }}</span>
+                            {% endif %}
+                            {% if is_group %}
+                            <span class="badge bg-primary-subtle text-primary border small"><i class="bi bi-people me-1"></i>{{ t('Group') }}</span>
+                            {% endif %}
                             {% if appt['meeting_type'] and appt['meeting_type'] != 'in-person' %}
                             <span class="badge bg-info-subtle text-info border small">{{ appt['meeting_type'] }}</span>
                             {% endif %}
