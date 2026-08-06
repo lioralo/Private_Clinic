@@ -4,6 +4,7 @@ import os
 import re
 import pyotp
 from app import app, get_db, _run_db_migrations
+from db_test_support import build_test_schema
 
 class SecurityTestCase(unittest.TestCase):
 
@@ -16,10 +17,8 @@ class SecurityTestCase(unittest.TestCase):
         self.client = app.test_client()
 
         with app.app_context():
+            build_test_schema(self.db_path)
             db = get_db()
-            with app.open_resource('clinic_app/schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            db.commit()
             _run_db_migrations(db)
 
             from werkzeug.security import generate_password_hash

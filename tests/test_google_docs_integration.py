@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from werkzeug.security import generate_password_hash
 
 from app import app, get_db, _run_db_migrations
+from db_test_support import build_test_schema
 from scripts.google_docs import parse_doc_into_notes
 import app as app_module
 
@@ -30,10 +31,8 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
         self.client = app.test_client()
 
         with app.app_context():
+            build_test_schema(self.db_path)
             db = get_db()
-            with app.open_resource('clinic_app/schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            db.commit()
             _run_db_migrations(db)
             db.commit()
 
