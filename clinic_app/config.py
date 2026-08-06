@@ -63,8 +63,12 @@ _GDOC_AUTO_SYNC_WORKER_STARTED = False
 _GDOC_AUTO_SYNC_STOP_EVENT = threading.Event()
 _GDOC_MANUAL_SYNC_JOB_LOCK = threading.Lock()
 _GDOC_MANUAL_SYNC_JOBS = {}
-_GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+# Mutable container so workers share the active-id via the same object reference
+# (plain `= None` rebinding after `from config import ...` only updates one module).
+_GDOC_MANUAL_SYNC_STATE = {'active_job_id': None}
+_GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None  # legacy alias; prefer _GDOC_MANUAL_SYNC_STATE
 _GDOC_MANUAL_SYNC_MAX_JOBS = 40
+_GDOC_MANUAL_SYNC_STALE_SECONDS = 15 * 60
 _REMINDER_WORKER_STATE_LOCK = threading.Lock()
 _REMINDER_WORKER_STARTED = False
 _REMINDER_WORKER_STOP_EVENT = threading.Event()
@@ -112,6 +116,7 @@ DEFAULT_SITE_SETTINGS = {
     'gdocs_auto_sync_targets_json': '[]',
     'gdocs_auto_sync_targets_config_json': '[]',
     'gdocs_auto_sync_last_run_at': '',
+    'gdocs_manual_sync_job_json': '',
     'google_enabled_integrations': '["calendar","docs","sheets"]',
     'security_scan_enabled': '0',
     'security_scan_interval': 'daily',

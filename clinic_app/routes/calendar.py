@@ -1183,12 +1183,16 @@ def weekly_calendar():
             flash('Self-booking is currently disabled by your therapist.')
             return redirect(url_for('patient_home'))
 
-    initial_anchor = _nearest_calendar_anchor_date(db, current_user)
-    initial_week_start = _week_start_for_date(initial_anchor).isoformat()
+    # Always open on the current week so the first visit isn't an empty far-future week
+    # (nearest future appointment can jump months ahead when the caseload is sparse).
+    initial_week_start = _week_start_for_date(datetime.now().date()).isoformat()
+    next_anchor = _nearest_calendar_anchor_date(db, current_user)
+    next_week_start = _week_start_for_date(next_anchor).isoformat() if next_anchor else initial_week_start
 
     return render_template('calendar.html', patient_options=patient_options, can_self_schedule=can_self_schedule,
                            is_admin=(current_user.role == 'admin'),
-                           initial_week_start=initial_week_start)
+                           initial_week_start=initial_week_start,
+                           next_appointment_week_start=next_week_start)
 
 
 # --- Moved from app.py: api_create_public_booking_link ---

@@ -476,6 +476,26 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             json.dumps(['patient:1', f'group:{group_id}'])
         )
 
+    def test_administration_saves_google_docs_auto_sync_settings(self):
+        """Save Auto Sync on /admin/administration must persist (was GET-only → 405)."""
+        self._login_admin()
+
+        rv = self.client.post('/admin/administration', data={
+            'gdocs_auto_sync_enabled': '1',
+            'gdocs_auto_sync_interval': 'twice_daily',
+        }, follow_redirects=True)
+
+        self.assertEqual(rv.status_code, 200)
+        self.assertNotIn(b'Method Not Allowed', rv.data)
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('SELECT setting_key, setting_value FROM site_settings').fetchall()
+            settings = {row['setting_key']: row['setting_value'] for row in rows}
+
+        self.assertEqual(settings.get('gdocs_auto_sync_enabled'), '1')
+        self.assertEqual(settings.get('gdocs_auto_sync_interval'), 'twice_daily')
+
     def test_auto_sync_now_runs_selected_targets(self):
         self._login_admin()
 

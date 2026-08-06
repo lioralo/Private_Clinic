@@ -206,7 +206,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     Cal.syncWeekFromAnchor = function() {
         Cal.currentWeekStart = Cal.nowWeekAnchor;
-        Cal.calendarWeekLabel.textContent = Cal.formatWeekLabel(Cal.currentWeekStart);
+        if (Cal.calendarWeekLabel) {
+            Cal.calendarWeekLabel.textContent = Cal.formatWeekLabel(Cal.currentWeekStart);
+        }
         if (Cal.availableWeekSelect) {
             Cal.availableWeekSelect.value = Cal.nowWeekAnchor;
         }

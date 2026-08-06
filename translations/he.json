@@ -1170,5 +1170,11 @@
   "paused": "מושהה",
   "Message therapist": "הודעה למטפל/ת",
   "Request a meeting": "בקשת פגישה",
-  "Back to top": "חזרה למעלה"
+  "Back to top": "חזרה למעלה",
+  "Calendar connection and Google Docs auto-sync.": "חיבור ליומן וסנכרון אוטומטי של Google Docs.",
+  "Starting sync...": "מתחיל סנכרון...",
+  "Sync finished": "הסנכרון הסתיים",
+  "Sync already running": "סנכרון כבר פועל",
+  "Sync is taking longer than expected. Refresh to check status.": "הסנכרון לוקח יותר מהצפוי. רעננו לבדיקת סטטוס.",
+  "Next appointment week": "שבוע הפגישה הבאה"
 }

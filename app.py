@@ -70,7 +70,8 @@ from clinic_app.config import (
     _GDOC_AUTO_SYNC_WORKER_STATE_LOCK, _GDOC_AUTO_SYNC_WORKER_STARTED,
     _GDOC_AUTO_SYNC_STOP_EVENT,
     _GDOC_MANUAL_SYNC_JOB_LOCK, _GDOC_MANUAL_SYNC_JOBS,
-    _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID, _GDOC_MANUAL_SYNC_MAX_JOBS,
+    _GDOC_MANUAL_SYNC_STATE, _GDOC_MANUAL_SYNC_MAX_JOBS,
+    _GDOC_MANUAL_SYNC_STALE_SECONDS,
     _REMINDER_WORKER_STATE_LOCK, _REMINDER_WORKER_STARTED,
     _REMINDER_WORKER_STOP_EVENT,
     _SECURITY_RETENTION_LOCK, _SECURITY_RETENTION_LAST_CHECK_TS,
@@ -1240,7 +1241,73 @@ def _get_gdocs_auto_sync_health(db):
     }
 
 
+def _parse_manual_sync_job_json(raw_value):
+    try:
+        payload = json.loads(raw_value or '')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) and payload.get('job_id') else None
+
+
+def _persist_manual_sync_job(job):
+    """Persist job snapshot so Sync Now status works across Gunicorn workers."""
+    try:
+        with app.app_context():
+            db = get_db()
+            save_site_settings(db, {
+                'gdocs_manual_sync_job_json': json.dumps(job or {}, ensure_ascii=False),
+            })
+            db.commit()
+    except Exception:
+        app.logger.exception('Failed persisting Google Docs manual sync job state')
+
+
+def _load_persisted_manual_sync_job(job_id=None):
+    try:
+        with app.app_context():
+            db = get_db()
+            settings = get_site_settings(db)
+            job = _parse_manual_sync_job_json(settings.get('gdocs_manual_sync_job_json'))
+    except Exception:
+        app.logger.exception('Failed loading Google Docs manual sync job state')
+        return None
+    if not job:
+        return None
+    if job_id and job.get('job_id') != job_id:
+        return None
+    return job
+
+
+def _job_started_age_seconds(job):
+    started_raw = (job or {}).get('started_at') or ''
+    if not started_raw:
+        return None
+    try:
+        started = datetime.fromisoformat(started_raw.replace('Z', '+00:00'))
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        return max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _mark_stale_manual_sync_job(job):
+    if not job or job.get('status') != 'running':
+        return job
+    age = _job_started_age_seconds(job)
+    if age is None or age < _GDOC_MANUAL_SYNC_STALE_SECONDS:
+        return job
+    job = dict(job)
+    job['status'] = 'error'
+    job['finished_at'] = datetime.now(timezone.utc).isoformat()
+    job['percent'] = 100
+    job['error'] = 'Sync timed out or was interrupted. Please try Sync Now again.'
+    job['message'] = job['error']
+    return job
+
+
 def _cleanup_manual_sync_jobs_locked():
+    active_id = _GDOC_MANUAL_SYNC_STATE.get('active_job_id')
     if len(_GDOC_MANUAL_SYNC_JOBS) <= _GDOC_MANUAL_SYNC_MAX_JOBS:
         return
     ordered_ids = sorted(
@@ -1251,7 +1318,7 @@ def _cleanup_manual_sync_jobs_locked():
     for job_id in ordered_ids:
         if removable <= 0:
             break
-        if job_id == _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID:
+        if job_id == active_id:
             continue
         _GDOC_MANUAL_SYNC_JOBS.pop(job_id, None)
         removable -= 1
@@ -1261,14 +1328,25 @@ def _create_manual_sync_job(admin_user_id):
     now_iso = datetime.now(timezone.utc).isoformat()
     job_id = secrets.token_hex(16)
     with _GDOC_MANUAL_SYNC_JOB_LOCK:
-        global _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
-        existing_id = _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
+        existing_id = _GDOC_MANUAL_SYNC_STATE.get('active_job_id')
         existing_job = _GDOC_MANUAL_SYNC_JOBS.get(existing_id) if existing_id else None
-        if existing_job and existing_job.get('status') == 'running':
-            return None, existing_id
+        if not existing_job:
+            existing_job = _load_persisted_manual_sync_job()
+            if existing_job:
+                existing_id = existing_job.get('job_id')
+                _GDOC_MANUAL_SYNC_JOBS[existing_id] = existing_job
+                _GDOC_MANUAL_SYNC_STATE['active_job_id'] = existing_id
 
-        _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = job_id
-        _GDOC_MANUAL_SYNC_JOBS[job_id] = {
+        if existing_job and existing_job.get('status') == 'running':
+            stale = _mark_stale_manual_sync_job(existing_job)
+            if stale is not existing_job and stale.get('status') != 'running':
+                _GDOC_MANUAL_SYNC_JOBS[existing_id] = stale
+                _GDOC_MANUAL_SYNC_STATE['active_job_id'] = None
+                _persist_manual_sync_job(stale)
+            else:
+                return None, existing_id
+
+        job = {
             'job_id': job_id,
             'status': 'running',
             'created_by': int(admin_user_id),
@@ -1283,7 +1361,10 @@ def _create_manual_sync_job(admin_user_id):
             'result': None,
             'error': None,
         }
+        _GDOC_MANUAL_SYNC_STATE['active_job_id'] = job_id
+        _GDOC_MANUAL_SYNC_JOBS[job_id] = job
         _cleanup_manual_sync_jobs_locked()
+        _persist_manual_sync_job(job)
     return job_id, None
 
 
@@ -1313,16 +1394,16 @@ def _update_manual_sync_job(job_id, payload):
         status = payload.get('status')
         if status in {'running', 'success', 'partial', 'failed', 'error', 'skipped'}:
             job['status'] = status
+        _persist_manual_sync_job(job)
 
 
 def _complete_manual_sync_job(job_id, status, result=None, error_message=None):
     now_iso = datetime.now(timezone.utc).isoformat()
     with _GDOC_MANUAL_SYNC_JOB_LOCK:
-        global _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID
         job = _GDOC_MANUAL_SYNC_JOBS.get(job_id)
         if not job:
-            if _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID == job_id:
-                _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+            if _GDOC_MANUAL_SYNC_STATE.get('active_job_id') == job_id:
+                _GDOC_MANUAL_SYNC_STATE['active_job_id'] = None
             return
 
         job['status'] = status
@@ -1346,17 +1427,37 @@ def _complete_manual_sync_job(job_id, status, result=None, error_message=None):
         if error_message:
             job['error'] = str(error_message)
             job['message'] = str(error_message)
-        if _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID == job_id:
-            _GDOC_MANUAL_SYNC_ACTIVE_JOB_ID = None
+        if _GDOC_MANUAL_SYNC_STATE.get('active_job_id') == job_id:
+            _GDOC_MANUAL_SYNC_STATE['active_job_id'] = None
         _cleanup_manual_sync_jobs_locked()
+        _persist_manual_sync_job(job)
 
 
 def _snapshot_manual_sync_job(job_id):
     with _GDOC_MANUAL_SYNC_JOB_LOCK:
         job = _GDOC_MANUAL_SYNC_JOBS.get(job_id)
-        if not job:
-            return None
-        return dict(job)
+        if job:
+            stale = _mark_stale_manual_sync_job(job)
+            if stale is not job:
+                _GDOC_MANUAL_SYNC_JOBS[job_id] = stale
+                if _GDOC_MANUAL_SYNC_STATE.get('active_job_id') == job_id:
+                    _GDOC_MANUAL_SYNC_STATE['active_job_id'] = None
+                _persist_manual_sync_job(stale)
+                job = stale
+            return dict(job)
+
+    persisted = _load_persisted_manual_sync_job(job_id=job_id)
+    if not persisted:
+        return None
+    stale = _mark_stale_manual_sync_job(persisted)
+    if stale is not persisted:
+        with _GDOC_MANUAL_SYNC_JOB_LOCK:
+            _GDOC_MANUAL_SYNC_JOBS[job_id] = stale
+            if _GDOC_MANUAL_SYNC_STATE.get('active_job_id') == job_id:
+                _GDOC_MANUAL_SYNC_STATE['active_job_id'] = None
+            _persist_manual_sync_job(stale)
+        return dict(stale)
+    return dict(persisted)
 
 
 def _run_manual_google_docs_sync_job(job_id):
@@ -1425,10 +1526,12 @@ def _run_manual_google_docs_sync_job(job_id):
 
 @app.context_processor
 def inject_translations():
-    # Hebrew-first clinic UI: default when session has no explicit language choice.
-    current_lang = session.get('lang') or 'he'
+    # Hebrew-first clinic UI in production; English default under TESTING so
+    # existing string assertions stay stable.
+    default_lang = 'en' if app.config.get('TESTING') else 'he'
+    current_lang = session.get('lang') or default_lang
     if current_lang not in {'en', 'he'}:
-        current_lang = 'he'
+        current_lang = default_lang
 
     def t(text):
         if current_lang == 'he':

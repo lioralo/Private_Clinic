@@ -33,7 +33,8 @@
     {
       "endpoint": "admin.administration",
       "methods": [
-        "GET"
+        "GET",
+        "POST"
       ],
       "rule": "/admin/administration"
     },

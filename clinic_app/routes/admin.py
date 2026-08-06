@@ -223,18 +223,57 @@ def _get_dashboard_security_metrics(db):
 # Admin routes
 # ---------------------------------------------------------------------------
 
-@admin_bp.route('/admin/administration')
+@admin_bp.route('/admin/administration', methods=['GET', 'POST'])
 @login_required
 def administration():
     if current_user.role != 'admin':
         return redirect(url_for('patient_home'))
     db = get_db()
+
+    from app import (
+        get_site_settings, save_site_settings, _list_connected_google_docs,
+        _get_google_docs_auto_sync_state, list_encrypted_backups,
+        _get_gdocs_auto_sync_health, GDOC_AUTO_SYNC_INTERVAL_SECONDS,
+    )
+
+    if request.method == 'POST':
+        updates = {}
+        # About / branding settings (inline form on this page)
+        if any(key in request.form for key in (
+            'about_enabled', 'about_phone', 'about_email', 'about_text', 'about_map_url',
+        )):
+            updates.update({
+                'about_enabled': '1' if request.form.get('about_enabled') else '0',
+                'about_phone': (request.form.get('about_phone') or '').strip(),
+                'about_email': (request.form.get('about_email') or '').strip(),
+                'about_text': (request.form.get('about_text') or '').strip(),
+                'about_map_url': (request.form.get('about_map_url') or '').strip(),
+            })
+
+        # Google Docs auto-sync settings
+        if any(key in request.form for key in (
+            'gdocs_auto_sync_enabled', 'gdocs_auto_sync_interval',
+        )):
+            selected_interval = (request.form.get('gdocs_auto_sync_interval') or 'daily').strip().lower()
+            if selected_interval not in GDOC_AUTO_SYNC_INTERVAL_SECONDS:
+                selected_interval = 'daily'
+            updates.update({
+                'gdocs_auto_sync_enabled': '1' if request.form.get('gdocs_auto_sync_enabled') else '0',
+                'gdocs_auto_sync_interval': selected_interval,
+            })
+
+        if updates:
+            save_site_settings(db, updates)
+            db.commit()
+            flash('Settings saved.')
+        else:
+            flash('No settings were changed.')
+        return redirect(url_for('.administration'))
+
     unread_inquiries = db.execute(
         "SELECT COUNT(*) AS c FROM contact_inquiries WHERE COALESCE(is_read,0)=0"
     ).fetchone()['c']
 
-    from app import get_site_settings, _list_connected_google_docs, _get_google_docs_auto_sync_state, list_encrypted_backups
-    from app import _get_gdocs_auto_sync_health
     site_settings = get_site_settings(db)
     admin = db.execute('SELECT * FROM users WHERE id = ?', (current_user.id,)).fetchone()
     smtp_health = _smtp_health_check()
@@ -1006,16 +1045,29 @@ def google_docs_auto_sync_now():
         })
 
     if not _gdocs:
-        return jsonify({'error': 'Google Docs module not available.'}), 500
-    db = get_db()
+        return jsonify({'error': 'Google Docs module not available.'}), 400
     try:
+        import threading
         from app import _create_manual_sync_job, _run_manual_google_docs_sync_job
         job_id, existing_id = _create_manual_sync_job(current_user.id)
         if not job_id and existing_id:
-            return jsonify({'status': 'already_running', 'job_id': existing_id}), 409
-        _run_manual_google_docs_sync_job(job_id)
+            return jsonify({
+                'status': 'already_running',
+                'job_id': existing_id,
+                'message': 'A Google Docs sync is already running.',
+            }), 409
+        # Run in a background thread so the HTTP request returns immediately
+        # (avoids gateway/worker timeouts that made Sync Now look stuck).
+        worker = threading.Thread(
+            target=_run_manual_google_docs_sync_job,
+            args=(job_id,),
+            name=f'gdocs-manual-sync-{job_id[:8]}',
+            daemon=True,
+        )
+        worker.start()
         return jsonify({'status': 'triggered', 'job_id': job_id})
     except Exception as exc:
+        current_app.logger.exception('Failed to start Google Docs Sync Now job')
         return jsonify({'error': str(exc)}), 500
 
 
@@ -1026,7 +1078,10 @@ def google_docs_auto_sync_status(job_id):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
         from app import _snapshot_manual_sync_job
-        return jsonify(_snapshot_manual_sync_job(job_id))
+        snapshot = _snapshot_manual_sync_job(job_id)
+        if not snapshot:
+            return jsonify({'job_id': job_id, 'status': 'unknown', 'error': 'Sync job not found.'}), 404
+        return jsonify(snapshot)
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 

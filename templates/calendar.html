@@ -15,7 +15,7 @@
             <p class="hero-subtitle mb-0">{{ t('Plan meetings, expose vacant times to patients, and review follow-up pressure from one scheduling workspace.') }}</p>
         </div>
         {% if current_user.role == 'admin' %}
-        <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary bg-white">{{ t('Back to CRM') }}</a>
+        <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-secondary bg-white">{{ t('Patients') }}</a>
         {% endif %}
     </div>
 </section>
@@ -72,19 +72,22 @@
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Showing') }}</span>
         <span class="big" id="calendarWeekLabel">{{ t('Current week') }}</span>
-        <div class="mt-2 d-flex gap-1 flex-wrap" id="calendarWeekNav" dir="ltr">
+        <div class="mt-2 d-flex gap-1 flex-wrap align-items-center" id="calendarWeekNav" dir="ltr">
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarPrevWeek" aria-label="{{ t('Previous week') }}"><i class="bi bi-chevron-left"></i></button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarTodayWeek">{{ t('Today') }}</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" id="calendarNextWeek" aria-label="{{ t('Next week') }}"><i class="bi bi-chevron-right"></i></button>
+            {% if next_appointment_week_start and next_appointment_week_start != initial_week_start %}
+            <button type="button" class="btn btn-sm btn-outline-primary" id="calendarNextApptWeek" data-week-start="{{ next_appointment_week_start }}">{{ t('Next appointment week') }}</button>
+            {% endif %}
         </div>
     </div>
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Ongoing this week') }}</span>
-        <span class="big" id="ongoingThisWeek">{{ t('None') }}</span>
+        <span class="big text-break" id="ongoingThisWeek">{{ t('None') }}</span>
     </div>
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Booking mode') }}</span>
-        <span class="big" id="selectedSlotText">{{ t('Click a slot, then confirm in the panel') }}</span>
+        <span class="big text-break" id="selectedSlotText" style="font-size:1rem;line-height:1.35;">{{ t('Click a slot, then confirm in the panel') }}</span>
     </div>
     <div class="calendar-mini-card">
         <span class="eyebrow">{{ t('Follow-Up') }}</span>
@@ -506,7 +509,8 @@ window.I18N = {
     showLess: {{ t('Show less')|tojson }}
 };
 window.CALENDAR_CONFIG = {
-    initialWeekStart: {{ initial_week_start|tojson if initial_week_start is defined else 'null' }}
+    initialWeekStart: {{ initial_week_start|tojson if initial_week_start is defined else 'null' }},
+    nextAppointmentWeekStart: {{ next_appointment_week_start|tojson if next_appointment_week_start is defined else 'null' }}
 };
 </script>
 <script src="{{ url_for('static', filename='js/calendar-core.js') }}"></script>

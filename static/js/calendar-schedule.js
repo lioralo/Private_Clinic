@@ -301,6 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     Cal.calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'timeGridWeek',
+        initialDate: Cal.parseIsoDate(Cal.nowWeekAnchor),
         direction: document.documentElement.dir,
         height: 'auto',
         expandRows: true,
@@ -348,12 +349,21 @@ document.addEventListener('DOMContentLoaded', function() {
             return { start: start, end: endExclusive };
         },
         datesSet: function(info) {
-            var start = new Date(info.start);
-            var yyyy = start.getFullYear();
-            var mm = String(start.getMonth() + 1).padStart(2, '0');
-            var dd = String(start.getDate()).padStart(2, '0');
-            Cal.currentWeekStart = yyyy + '-' + mm + '-' + dd;
-            Cal.calendarWeekLabel.textContent = Cal.formatWeekLabel(Cal.currentWeekStart);
+            // Prefer startStr (YYYY-MM-DD) to avoid timezone off-by-one that made
+            // the first calendar load show an empty neighboring week.
+            var startStr = (info && info.startStr) ? String(info.startStr).slice(0, 10) : '';
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
+                var start = new Date(info.start);
+                var yyyy = start.getFullYear();
+                var mm = String(start.getMonth() + 1).padStart(2, '0');
+                var dd = String(start.getDate()).padStart(2, '0');
+                startStr = yyyy + '-' + mm + '-' + dd;
+            }
+            Cal.currentWeekStart = startStr;
+            Cal.nowWeekAnchor = startStr;
+            if (Cal.calendarWeekLabel) {
+                Cal.calendarWeekLabel.textContent = Cal.formatWeekLabel(Cal.currentWeekStart);
+            }
             Cal.loadSnapshot();
         },
         select: function(info) {
@@ -1085,6 +1095,14 @@ document.addEventListener('DOMContentLoaded', function() {
     Cal.refreshWeekOptions();
     Cal.calendar.gotoDate(Cal.parseIsoDate(Cal.nowWeekAnchor));
     Cal.loadSnapshot();
+
+    var nextApptWeekBtn = document.getElementById('calendarNextApptWeek');
+    if (nextApptWeekBtn) {
+        nextApptWeekBtn.addEventListener('click', function() {
+            var week = this.getAttribute('data-week-start');
+            if (week) Cal.goToWeek(week);
+        });
+    }
 
     setInterval(function() {
         var nextAnchor = Cal.getWeekStartString(new Date());
