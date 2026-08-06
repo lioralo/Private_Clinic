@@ -1161,5 +1161,14 @@
   "Consent recorded:": "הסכמה נרשמה:",
   "Previous": "הקודם",
   "Next": "הבא",
-  "Export DOCX": "ייצוא DOCX"
+  "Export DOCX": "ייצוא DOCX",
+  "active": "פעיל",
+  "achieved": "הושג",
+  "in_progress": "בביצוע",
+  "discontinued": "הופסק",
+  "revised": "עודכן",
+  "paused": "מושהה",
+  "Message therapist": "הודעה למטפל/ת",
+  "Request a meeting": "בקשת פגישה",
+  "Back to top": "חזרה למעלה"
 }

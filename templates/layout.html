@@ -510,7 +510,7 @@
             {% endif %}
             <div class="input-group">
                 <input type="text" id="messageContent" class="form-control" placeholder="{{ t('Type a message...') }}" required dir="auto">
-                <button type="submit" class="btn btn-primary"><i class="bi bi-send-fill"></i></button>
+                <button type="submit" class="btn btn-primary" aria-label="{{ t('Send') }}"><i class="bi bi-send-fill"></i></button>
             </div>
         </form>
 
@@ -761,9 +761,9 @@
             <div class="mb-3">
                 <label class="form-label small mb-1">{{ 'גודל טקסט' if lang == 'he' else 'Text size' }}</label>
                 <div class="d-flex gap-2">
-                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="small" aria-label="{{ 'טקסט קטן' if lang == 'he' else 'Small text' }}" style="font-size:0.8rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
-                    <button class="a11y-font-size btn btn-sm border flex-fill active" data-size="normal" aria-label="{{ 'טקסט רגיל' if lang == 'he' else 'Normal text' }}" style="font-size:1rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
-                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="large" aria-label="{{ 'טקסט גדול' if lang == 'he' else 'Large text' }}" style="font-size:1.35rem;line-height:1">{{ 'א' if lang == 'he' else 'A' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="small" aria-label="{{ 'טקסט קטן' if lang == 'he' else 'Small text' }}" aria-pressed="false" style="font-size:0.8rem;line-height:1.2">{{ 'קטן' if lang == 'he' else 'S' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill active" data-size="normal" aria-label="{{ 'טקסט רגיל' if lang == 'he' else 'Normal text' }}" aria-pressed="true" style="font-size:1rem;line-height:1.2">{{ 'רגיל' if lang == 'he' else 'M' }}</button>
+                    <button class="a11y-font-size btn btn-sm border flex-fill" data-size="large" aria-label="{{ 'טקסט גדול' if lang == 'he' else 'Large text' }}" aria-pressed="false" style="font-size:1.15rem;line-height:1.2">{{ 'גדול' if lang == 'he' else 'L' }}</button>
                 </div>
             </div>
             <div class="mb-3">
@@ -808,13 +808,24 @@
         widget.style.display = '';
         document.querySelectorAll('.a11y-font-size').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                document.querySelectorAll('.a11y-font-size').forEach(function(b) { b.classList.remove('active', 'btn-primary'); b.classList.add('border'); });
+                document.querySelectorAll('.a11y-font-size').forEach(function(b) {
+                    b.classList.remove('active', 'btn-primary');
+                    b.classList.add('border');
+                    b.setAttribute('aria-pressed', 'false');
+                });
                 this.classList.add('active', 'btn-primary'); this.classList.remove('border');
+                this.setAttribute('aria-pressed', 'true');
                 prefs.fontSize = this.dataset.size;
                 savePrefs(prefs);
                 applyPrefs(prefs);
             });
-            if (btn.dataset.size === prefs.fontSize) { btn.classList.add('active', 'btn-primary'); btn.classList.remove('border'); }
+            if (btn.dataset.size === prefs.fontSize) {
+                btn.classList.add('active', 'btn-primary');
+                btn.classList.remove('border');
+                btn.setAttribute('aria-pressed', 'true');
+            } else {
+                btn.setAttribute('aria-pressed', 'false');
+            }
         });
         var hcToggle = document.getElementById('a11yHighContrast');
         hcToggle.checked = !!prefs.highContrast;
@@ -830,8 +841,16 @@
             savePrefs(prefs);
             applyPrefs(prefs);
         });
-        toggle.addEventListener('click', function() { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; });
-        close.addEventListener('click', function() { panel.style.display = 'none'; });
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.addEventListener('click', function() {
+            var open = panel.style.display === 'none';
+            panel.style.display = open ? 'block' : 'none';
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        close.addEventListener('click', function() {
+            panel.style.display = 'none';
+            toggle.setAttribute('aria-expanded', 'false');
+        });
     })();
     </script>
     <style>
@@ -897,7 +916,7 @@
       });
     }
     </script>
-    <button id="scrollTopBtn" class="btn btn-primary rounded-circle shadow" style="position:fixed;bottom:24px;right:24px;width:44px;height:44px;display:none;z-index:50;align-items:center;justify-content:center;" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="{{ t('Back to top') }}">
+    <button id="scrollTopBtn" class="btn btn-primary rounded-circle shadow" style="position:fixed;bottom:24px;right:24px;width:44px;height:44px;display:none;z-index:50;align-items:center;justify-content:center;" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="{{ t('Back to top') }}" aria-label="{{ t('Back to top') }}">
         <i class="bi bi-arrow-up"></i>
     </button>
     <script>

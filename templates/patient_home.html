@@ -146,7 +146,20 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                {{ empty_state(icon='bi-calendar-x', message=t('No upcoming appointments.')) }}
+                <div class="text-center py-4">
+                    <div class="mx-auto mb-3 inline-flex items-center justify-content-center w-16 h-16 rounded-full bg-primary-soft/50">
+                        <i class="bi bi-calendar-x text-primary" style="font-size:1.75rem;opacity:0.6"></i>
+                    </div>
+                    <p class="text-muted mb-3">{{ t('No upcoming appointments.') }}</p>
+                    <div class="d-flex flex-wrap gap-2 justify-content-center">
+                        <button type="button" class="btn btn-outline-primary rounded-pill" data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas">
+                            <i class="bi bi-chat-dots me-1"></i>{{ t('Message therapist') }}
+                        </button>
+                        <a href="#booking-request-notes" class="btn btn-primary rounded-pill">
+                            <i class="bi bi-calendar-plus me-1"></i>{{ t('Request a meeting') }}
+                        </a>
+                    </div>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -195,13 +208,13 @@
 
         {% if shared_notes %}
         <div class="card border-0 shadow-sm rounded-4 mt-4">
-            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#sharedNotesCollapse" aria-expanded="false" style="cursor:pointer;">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#sharedNotesCollapse" aria-expanded="true" style="cursor:pointer;">
                 <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
                     <span><i class="bi bi-journal-text text-muted me-2"></i>{{ t('Shared Notes from Your Therapist') }}</span>
                     <i class="bi bi-chevron-down text-muted small"></i>
                 </h5>
             </div>
-            <div class="collapse" id="sharedNotesCollapse">
+            <div class="collapse show" id="sharedNotesCollapse">
                 <div class="card-body px-4 pb-4">
                     {% for note in shared_notes %}
                     <div class="mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
@@ -224,13 +237,13 @@
 
         {% if goals or patient['treatment_plan'] %}
         <div class="card border-0 shadow-sm rounded-4 mt-4">
-            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#treatmentPlanCollapse" aria-expanded="false" style="cursor:pointer;">
+            <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#treatmentPlanCollapse" aria-expanded="true" style="cursor:pointer;">
                 <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
                     <span><i class="bi bi-bullseye text-primary me-2"></i>{{ t('Treatment Plan & Goals') }}</span>
                     <i class="bi bi-chevron-down text-muted small"></i>
                 </h5>
             </div>
-            <div class="collapse" id="treatmentPlanCollapse">
+            <div class="collapse show" id="treatmentPlanCollapse">
                 <div class="card-body px-4 pb-4">
                     {% if patient['treatment_plan'] %}
                     <div class="mb-3 p-3 bg-light rounded-3">
@@ -245,13 +258,13 @@
                         <div class="d-flex align-items-center gap-2 p-2 rounded-3 {% if goal['status'] == 'achieved' %}bg-success-subtle{% else %}bg-light{% endif %}">
                             <form method="post" action="{{ url_for('patient_achieve_goal', goal_id=goal['id']) }}" class="d-inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent" title="{% if goal['status'] == 'achieved' %}{{ t('Re-open') }}{% else %}{{ t('Mark achieved') }}{% endif %}">
+                                <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent" title="{% if goal['status'] == 'achieved' %}{{ t('Re-open') }}{% else %}{{ t('Mark achieved') }}{% endif %}" aria-label="{% if goal['status'] == 'achieved' %}{{ t('Re-open') }}{% else %}{{ t('Mark achieved') }}{% endif %}">
                                     <i class="bi {% if goal['status'] == 'achieved' %}bi-check-circle-fill text-success{% else %}bi-circle text-muted{% endif %}" style="font-size:1.2rem;"></i>
                                 </button>
                             </form>
                             <div class="flex-grow-1">
                                 <div class="fw-semibold small {% if goal['status'] == 'achieved' %}text-decoration-line-through text-muted{% endif %}">{{ goal['description'] }}</div>
-                                <div class="text-muted" style="font-size:.75rem;">{{ t(goal['status']) }}</div>
+                                <div class="text-muted" style="font-size:.75rem;">{{ t(goal['status']) }}{% if goal['created_at'] %} · {{ goal['created_at'][:10] }}{% endif %}</div>
                             </div>
                         </div>
                         {% endfor %}
@@ -316,8 +329,8 @@
             <div class="card-footer bg-white border-0 px-4 pb-4">
                 <form method="POST" action="{{ url_for('contact_admin') }}" class="d-flex gap-2">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="text" name="content" class="form-control form-control-sm rounded-pill" placeholder="{{ t('Type a message…') }}" required autocomplete="off">
-                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">
+                    <input type="text" name="content" class="form-control form-control-sm rounded-pill" placeholder="{{ t('Type a message…') }}" required autocomplete="off" aria-label="{{ t('Type a message…') }}">
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3" aria-label="{{ t('Send') }}">
                         <i class="bi bi-send-fill"></i>
                     </button>
                 </form>

@@ -468,36 +468,57 @@ function toggleSelectAll(el) {
     updateBulkToolbar();
 }
 
+function askBulkConfirm(message, btnColor, onConfirm) {
+    var confirmModal = document.getElementById('confirmModal');
+    if (!confirmModal || typeof bootstrap === 'undefined') {
+        if (window.confirm(message)) onConfirm();
+        return;
+    }
+    document.getElementById('confirmModalMessage').textContent = message;
+    var reasonWrap = document.getElementById('confirmModalReasonWrap');
+    if (reasonWrap) reasonWrap.classList.add('d-none');
+    var confirmBtn = document.getElementById('confirmModalBtn');
+    confirmBtn.className = 'btn btn-' + (btnColor || 'danger');
+    confirmBtn.onclick = function() {
+        var modal = bootstrap.Modal.getInstance(confirmModal);
+        if (modal) modal.hide();
+        onConfirm();
+    };
+    new bootstrap.Modal(confirmModal).show();
+}
+
 function bulkChangeStatus(status) {
     var ids = getSelectedIds();
     if (!ids.length) return;
-    if (!confirm('Change ' + ids.length + ' patient(s) to ' + status + '?')) return;
-    var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
-    fetch('/api/patients/bulk-status', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({patient_ids: ids, status: status})
-    }).then(function(r) { return r.json(); })
-      .then(function(data) {
-          if (data.success) { location.reload(); }
-          else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
-      }).catch(console.error);
+    askBulkConfirm('Change ' + ids.length + ' patient(s) to ' + status + '?', 'primary', function() {
+        var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
+        fetch('/api/patients/bulk-status', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({patient_ids: ids, status: status})
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+              if (data.success) { location.reload(); }
+              else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
+          }).catch(console.error);
+    });
 }
 
 function bulkDelete() {
     var ids = getSelectedIds();
     if (!ids.length) return;
-    if (!confirm('Delete ' + ids.length + ' patient(s)? This action is reversible.')) return;
-    var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
-    fetch('/api/patients/bulk-delete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-        body: JSON.stringify({patient_ids: ids})
-    }).then(function(r) { return r.json(); })
-      .then(function(data) {
-          if (data.success) { location.reload(); }
-          else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
-      }).catch(console.error);
+    askBulkConfirm('Delete ' + ids.length + ' patient(s)? This action is reversible.', 'danger', function() {
+        var csrf = document.getElementById('csrf_token') ? document.getElementById('csrf_token').value : '';
+        fetch('/api/patients/bulk-delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({patient_ids: ids})
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+              if (data.success) { location.reload(); }
+              else { if (typeof showToast === 'function') showToast(data.error || 'Error', 'danger'); }
+          }).catch(console.error);
+    });
 }
 </script>
 {% endblock %}
