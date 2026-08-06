@@ -147,20 +147,6 @@
     }
     if (np) np.addEventListener('input', upd);
     if (cp) cp.addEventListener('input', upd);
-    // Admin password strength JS (reduced from profile)
-    var adminPw = document.getElementById('adminNewPasswordInput');
-    var adminHint = document.getElementById('adminPasswordStrengthHint');
-    if (adminPw && adminHint) {
-        adminPw.addEventListener('input', function() {
-            var v = String(adminPw.value || '');
-            var checks = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(v) && v.length >= 10;
-            var strong = /(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}/.test(v);
-            if (!v) { adminHint.className = 'text-muted'; adminHint.textContent = 'Use 10+ chars with uppercase, lowercase, number, and special symbol.'; }
-            else if (strong) { adminHint.className = 'text-success'; adminHint.textContent = 'Strong password.'; }
-            else if (checks) { adminHint.className = 'text-warning'; adminHint.textContent = 'Moderate — add more length.'; }
-            else { adminHint.className = 'text-danger'; adminHint.textContent = 'Weak — add uppercase, lowercase, number, and special char.'; }
-        });
-    }
 })();
 </script>
 {% endblock %}

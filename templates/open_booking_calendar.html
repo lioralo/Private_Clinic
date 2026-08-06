@@ -32,6 +32,7 @@
 
             <div id="publicBookingResult" class="alert d-none"></div>
 
+            {% if slots %}
             <form id="publicBookingForm" class="row g-3">
                 <div class="col-12">
                     <label class="form-label fw-semibold">{{ 'שעה פנויה' if is_he else 'Available Slot' }} <span class="text-danger">*</span></label>
@@ -80,16 +81,17 @@
                     <button id="submitPublicBooking" type="submit" class="btn btn-primary w-100 fw-semibold">{{ 'שליחת קביעה' if is_he else 'Submit Booking' }}</button>
                 </div>
             </form>
-
-            {% if not slots %}
-            {{ empty_state(icon='bi-calendar-x', message=('כרגע אין שעות פנויות. נסה/י שוב מאוחר יותר.' if is_he else 'No available slots right now. Please try again later.')) }}
+            {% else %}
+            <div class="text-center py-5">
+                <p class="text-muted mb-0">{{ 'כרגע אין שעות פנויות. נסה/י שוב מאוחר יותר.' if is_he else 'No available slots right now. Please try again later.' }}</p>
+            </div>
             {% endif %}
             {% endif %}
         </div>
     </div>
 </div>
 
-{% if not link_invalid %}
+{% if not link_invalid and slots %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('publicBookingForm');
