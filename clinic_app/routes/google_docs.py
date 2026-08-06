@@ -4,7 +4,7 @@ import json
 from functools import wraps
 
 from flask import (
-    Blueprint, flash, jsonify, redirect, request, session, current_app,
+    Blueprint, flash, jsonify, redirect, request, session, current_app, url_for,
 )
 from flask_login import current_user, login_required
 
@@ -970,7 +970,7 @@ def open_gdoc(patient_id):
     patient = db.execute('SELECT gdoc_id FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if not patient or not patient['gdoc_id']:
         flash('No Google Doc linked for this patient.')
-        return redirect(url_for('patients.patient_detail', patient_id=patient_id))
+        return redirect(url_for('patient_detail', patient_id=patient_id))
     return redirect(f'https://docs.google.com/document/d/{patient["gdoc_id"]}/edit')
 
 
@@ -1094,7 +1094,7 @@ def open_group_gdoc(group_id):
     group = db.execute('SELECT gdoc_id FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group or not group['gdoc_id']:
         flash('No Google Doc linked for this group.')
-        return redirect(url_for('groups.group_detail', group_id=group_id))
+        return redirect(url_for('group_detail', group_id=group_id))
     return redirect(f"https://docs.google.com/document/d/{group['gdoc_id']}/edit")
 
 
