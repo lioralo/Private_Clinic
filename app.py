@@ -1425,14 +1425,19 @@ def _run_manual_google_docs_sync_job(job_id):
 
 @app.context_processor
 def inject_translations():
+    # Hebrew-first clinic UI: default when session has no explicit language choice.
+    current_lang = session.get('lang') or 'he'
+    if current_lang not in {'en', 'he'}:
+        current_lang = 'he'
+
     def t(text):
-        if session.get('lang') == 'he':
+        if current_lang == 'he':
             return HEBREW_TRANSLATIONS.get(text, text)
         return text
     ui_density = (session.get('ui_density') or 'balanced').strip().lower()
     if ui_density not in {'compact', 'balanced', 'large'}:
         ui_density = 'balanced'
-    return dict(t=t, lang=session.get('lang', 'en'), ui_density=ui_density)
+    return dict(t=t, lang=current_lang, ui_density=ui_density)
 
 def _get_notification_unread_count(db, user):
     if not getattr(user, 'is_authenticated', False):
