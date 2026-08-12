@@ -8,25 +8,24 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="theme-color" content="#0d6efd">
+    <meta name="theme-color" content="#134e4a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="mobile-web-app-capable" content="yes">
 
     <!-- Critical inline CSS — prevents FOUC before external CSS loads -->
     <style>
-        html { background: #f7f9fb; transition: background-color 0.3s ease; scrollbar-gutter: stable; }
-        body { background: #f7f9fb; color: #111827; font-family: 'Roboto', 'Heebo', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; min-height: 100vh; margin: 0; transition: background-color 0.3s ease, color 0.3s ease; }
-        [data-bs-theme="dark"] html, [data-bs-theme="dark"] body { background: #0F172A; color: #E2E8F0; }
+        html { background: #f7f8f9; transition: background-color 0.35s cubic-bezier(0.32, 0.72, 0, 1); scrollbar-gutter: stable; }
+        body { background: #f7f8f9; color: #191c1e; font-family: 'Plus Jakarta Sans', 'Heebo', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; min-height: 100vh; margin: 0; transition: background-color 0.35s cubic-bezier(0.32, 0.72, 0, 1), color 0.35s cubic-bezier(0.32, 0.72, 0, 1); }
+        [data-bs-theme="dark"] html, [data-bs-theme="dark"] body { background: #0f172a; color: #e2e8f0; }
         .app-shell { position: relative; contain: layout style; }
         .skip-link:not(:focus) { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-        .skip-link:focus { position: fixed; top: 0.5rem; inset-inline-start: 0.5rem; z-index: 9999; padding: 0.75rem 1.5rem; background: #3B82F6; color: #fff; font-weight: 700; border-radius: 0.5rem; text-decoration: none; outline: 2px solid #60A5FA; outline-offset: 2px; }
+        .skip-link:focus { position: fixed; top: 0.5rem; inset-inline-start: 0.5rem; z-index: 9999; padding: 0.75rem 1.5rem; background: #134e4a; color: #fff; font-weight: 700; border-radius: 0.5rem; text-decoration: none; outline: 2px solid #87beb8; outline-offset: 2px; }
         .fc-media-screen { min-height: 400px; }
     </style>
 
-    <!-- Font preloads: Poppins (headlines) + Heebo (Hebrew body) -->
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/poppins/v22/pxiByp8kv8JHgFVrLDD4Z1xlFQ.woff2">
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/poppins/v22/pxiByp8kv8JHgFVrLEL4Z1xlFQ.woff2">
+    <!-- Font preloads: Plus Jakarta Sans + Heebo (Hebrew) -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/plusjakartasans/v12/LDIbaikIYuMwGiFFZ4fEw8IIAQ.woff2">
     <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/heebo/v26/NGSpv5_NC0k9P_v6ZUCbLRAHxK1EiSysdUmm.woff2">
 
     <!-- Bootstrap CSS (forms, tabs, modals, offcanvas) -->
@@ -41,15 +40,16 @@
     <!-- Tailwind CSS (built) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}?v={{ app_version }}">
 
-    <!-- Fonts: Poppins (headlines), Roboto (body), Heebo (Hebrew) — display=optional avoids layout shift -->
+    <!-- Fonts: Plus Jakarta Sans (UI) + Heebo (Hebrew) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Heebo:wght@400;500;600;700;800&display=optional" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Heebo:wght@400;500;600;700;800&display=optional" rel="stylesheet">
 
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}?v={{ app_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ app_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}?v={{ app_version }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-components.css') }}?v={{ app_version }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}" media="print">
 
     <!-- Dashboard & calendar specific styles load per-page -->
@@ -148,7 +148,7 @@
             <a href="{{ item.url }}" class="text-primary hover:underline">{{ item.label }}</a>
             <i class="bi bi-chevron-right text-xs opacity-40"></i>
             {% else %}
-            <span class="font-semibold text-[#191c1e]">{{ item.label }}</span>
+            <span class="font-semibold text-on-surface">{{ item.label }}</span>
             {% endif %}
         </li>
         {% endfor %}
@@ -188,14 +188,14 @@
     <div id="adminSidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar - no scroll, all content must fit viewport #}
-    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar flex-shrink-0 bg-slate-50 flex flex-col px-4 py-3 border-r border-slate-200">
+    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar flex-shrink-0 bg-surface flex flex-col px-4 py-3 border-e border-outline-variant">
 
         {# Brand - compact #}
         <div class="flex flex-col items-center mb-2 px-1 flex-shrink-0">
             <img src="{{ url_for('static', filename='Logo.png') }}" alt="Logo" class="w-10 h-10 rounded-xl object-contain mb-1">
-            <h1 class="font-black text-teal-950 text-xs text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
-            <p class="text-[8px] text-slate-500 uppercase tracking-widest text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
-            <span class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 text-[10px] font-bold uppercase tracking-wider">{{ t('Admin') }}</span>
+            <h1 class="font-black text-primary text-xs text-center leading-tight">{% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}</h1>
+            <p class="text-[8px] text-on-surface-variant uppercase tracking-widest text-center">{% if lang == 'he' %}קליניקה פרטית{% else %}Private Clinic{% endif %}</p>
+            <span class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-soft text-primary text-[10px] font-bold uppercase tracking-wider">{{ t('Admin') }}</span>
         </div>
 
         {# Main Nav #}
@@ -220,7 +220,7 @@
 
             {% macro nav_link(target, icon, label) %}
             <a href="{{ url_for(target) }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 {% if endpoint_name in nav_parents.get(target, [target]) %}sidebar-link-active{% else %}text-[#191c1e] hover:bg-primary-soft/50{% endif %} no-underline">
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-300 {% if endpoint_name in nav_parents.get(target, [target]) %}sidebar-link-active{% else %}text-on-surface hover:bg-primary-soft/60{% endif %} no-underline">
                 <i class="bi {{ icon }}" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ label }}</span>
             </a>
@@ -237,7 +237,7 @@
 
             {# Messages #}
             <a href="#"
-               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-[#191c1e] hover:bg-primary-soft/50 no-underline"
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-300 text-on-surface hover:bg-primary-soft/60 no-underline"
                data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas">
                 <i class="bi bi-chat-dots-fill" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Messages') }}</span>
@@ -252,9 +252,9 @@
         </a>
 
         {# Notifications & Profile #}
-        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+        <div class="border-t border-outline-variant pt-3 space-y-0.5 flex-shrink-0">
             <button type="button"
-               class="w-full flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline relative"
+               class="w-full flex items-center gap-3 text-on-surface hover:bg-primary-soft/60 rounded-lg px-4 py-2.5 transition-colors duration-300 text-xs font-bold no-underline relative"
                data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas">
                 <i class="bi bi-bell-fill" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Notifications') }}</span>
@@ -263,7 +263,7 @@
                 {% endif %}
             </button>
             <button id="installPwaBtn" type="button"
-               class="d-none w-full flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline"
+               class="d-none w-full flex items-center gap-3 text-on-surface hover:bg-primary-soft/60 rounded-lg px-4 py-2.5 transition-colors duration-300 text-xs font-bold no-underline"
                onclick="pwaInstall()">
                 <i class="bi bi-download" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Install App') }}</span>
@@ -271,19 +271,19 @@
         </div>
 
         {# Bottom: theme toggle, language + logout #}
-        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+        <div class="border-t border-outline-variant pt-3 space-y-0.5 flex-shrink-0">
             <button id="themeToggle" type="button"
-               class="w-full flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline">
+               class="w-full flex items-center gap-3 text-on-surface hover:bg-primary-soft/60 rounded-lg px-4 py-2.5 transition-colors duration-300 text-xs font-bold no-underline">
                 <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:16px;width:18px;text-align:center"></i>
                 <span id="themeToggleLabel">{{ t('Dark Mode') }}</span>
             </button>
             <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-               class="flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline">
+               class="flex items-center gap-3 text-on-surface hover:bg-primary-soft/60 rounded-lg px-4 py-2.5 transition-colors duration-300 text-xs font-bold no-underline">
                 <i class="bi bi-translate" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{% if lang == 'en' %}עברית{% else %}English{% endif %}</span>
             </a>
             <a href="{{ url_for('logout') }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 text-[#191c1e] hover:bg-primary-soft/50 no-underline"
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-300 text-on-surface hover:bg-primary-soft/60 no-underline"
                onclick="event.preventDefault(); this.nextElementSibling.submit();">
                 <i class="bi bi-box-arrow-right" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ t('Logout') }}</span>
@@ -298,17 +298,17 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {# Top bar: mobile toggle + search toggle (visible on all screen sizes) #}
-        <div class="flex items-center px-3 py-2 border-b border-slate-200 bg-white gap-2">
-            <button id="adminSidebarToggle" type="button" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Open menu') }}" aria-expanded="false">
+        <div class="admin-topbar">
+            <button id="adminSidebarToggle" type="button" class="lg:hidden admin-icon-btn" aria-label="{{ t('Open menu') }}" aria-expanded="false">
                 <i class="bi bi-list" style="font-size:18px"></i>
             </button>
-            <button id="searchToggleBtn" type="button" class="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors" aria-label="{{ t('Toggle search') }}" title="{{ t('Search') }} (Ctrl+K)">
+            <button id="searchToggleBtn" type="button" class="inline-flex items-center gap-1.5 h-9 px-2.5 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-low transition-colors" aria-label="{{ t('Toggle search') }}" title="{{ t('Search') }} (Ctrl+K)">
                 <i class="bi bi-search" style="font-size:16px"></i>
                 <kbd class="hidden lg:inline text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-200 rounded px-1 py-0.5">Ctrl K</kbd>
             </button>
             <div class="flex-1"></div>
             {# Notification bell (visible in top bar on mobile, hidden on desktop where floating icon is used) #}
-            <button type="button" class="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 text-black hover:bg-slate-100 transition-colors relative"
+            <button type="button" class="lg:hidden admin-icon-btn relative"
                     data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
                     aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
                 <i class="bi bi-bell-fill" style="font-size:16px"></i>
@@ -319,7 +319,7 @@
         </div>
 
         {# Search bar (collapsible — reserved height prevents layout jump) #}
-        <div id="searchBar" class="px-3 border-b border-slate-200 bg-gray-50" aria-hidden="true">
+        <div id="searchBar" class="px-3 border-b border-outline-variant bg-surface-container" aria-hidden="true">
             <form method="get" action="{{ url_for('admin_global_search') }}" class="flex gap-2">
                 <input type="text" name="q" class="form-control form-control-sm border-0 bg-white rounded-lg flex-1" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2" dir="auto">
                 <button class="btn btn-sm btn-primary rounded-lg" type="submit">
@@ -336,17 +336,17 @@
 
 {% elif current_user.is_authenticated and current_user.role == 'patient' %}
 {# ── PATIENT: simple top nav ──────────────────────────────────── #}
-<nav aria-label="{{ t('Patient navigation') }}" class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
+<nav aria-label="{{ t('Patient navigation') }}" class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2 border-b border-outline-variant">
     <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
-            <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
+        <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+            <i class="bi bi-shield-check text-accent" style="font-size:18px"></i>
         </div>
-        <a href="{{ url_for('index') }}" class="font-bold text-teal-900 text-base font-headline">
+        <a href="{{ url_for('index') }}" class="font-bold text-primary text-base font-headline">
             {% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}
         </a>
     </div>
     <div class="flex items-center gap-3">
-        <a href="#" class="p-2 text-black hover:text-teal-800 transition-colors relative no-underline"
+        <a href="#" class="p-2 text-on-surface hover:text-primary transition-colors relative no-underline"
            data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas"
            aria-label="{{ t('Notifications') }}" title="{{ t('Notifications') }}">
             <i class="bi bi-bell-fill" style="font-size:22px"></i>
@@ -354,27 +354,27 @@
             <span class="notification-badge absolute top-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" style="inset-inline-end:0.25rem;"></span>
             {% endif %}
         </a>
-        <a href="#" class="p-2 text-black hover:text-teal-800 transition-colors no-underline"
+        <a href="#" class="p-2 text-on-surface hover:text-primary transition-colors no-underline"
            data-bs-toggle="offcanvas" data-bs-target="#messagesOffcanvas" aria-controls="messagesOffcanvas"
            aria-label="{{ t('Messages') }}" title="{{ t('Messages') }}">
             <i class="bi bi-chat-dots-fill" style="font-size:22px"></i>
         </a>
-        <a href="{{ url_for('public_resources') }}" class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
+        <a href="{{ url_for('public_resources') }}" class="text-on-surface hover:text-primary font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('Resources') }}
         </a>
         {% if site_settings.get('about_enabled') == '1' or current_user.is_authenticated and current_user.role == 'admin' %}
-        <a href="{{ url_for('about_page') }}" class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
+        <a href="{{ url_for('about_page') }}" class="text-on-surface hover:text-primary font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('About') }}
         </a>
         {% endif %}
         <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm px-3 py-1.5 border border-slate-200 rounded-full transition-colors no-underline">
+           class="text-on-surface hover:text-primary font-bold text-sm px-3 py-1.5 border border-outline-variant rounded-full transition-colors no-underline">
             {% if lang == 'en' %}עברית{% else %}English{% endif %}
         </a>
         <a href="{{ url_for('patient_settings') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline">{{ t('Settings') }}</a>
+           class="text-on-surface hover:text-primary font-bold text-sm transition-colors no-underline">{{ t('Settings') }}</a>
         <a href="{{ url_for('logout') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm transition-colors no-underline"
+           class="text-on-surface hover:text-primary font-bold text-sm transition-colors no-underline"
            onclick="event.preventDefault(); this.nextElementSibling.submit();">{{ t('Logout') }}</a>
         <form method="post" action="{{ url_for('logout') }}" class="d-none">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -386,32 +386,32 @@
 
 {% else %}
 {# ── PUBLIC / UNAUTHENTICATED ─────────────────────────────────── #}
-<nav aria-label="{{ t('Site navigation') }}" class="fixed top-0 w-full z-50 bg-white/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2">
+<nav aria-label="{{ t('Site navigation') }}" class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md shadow-sm flex justify-between items-center flex-wrap px-4 sm:px-6 py-2.5 gap-2 border-b border-outline-variant">
     <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-[#134e4a] flex items-center justify-center">
-            <i class="bi bi-shield-check text-[#87beb8]" style="font-size:18px"></i>
+        <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+            <i class="bi bi-shield-check text-accent" style="font-size:18px"></i>
         </div>
-        <a href="{{ url_for('index') }}" class="font-bold text-teal-900 text-base font-headline">
+        <a href="{{ url_for('index') }}" class="font-bold text-primary text-base font-headline">
             {% if lang == 'he' %}ליאור אלוני{% else %}Lior Aloni{% endif %}
         </a>
     </div>
     <div class="flex items-center gap-3">
         <a href="{{ url_for('public_resources') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
+           class="text-on-surface hover:text-primary font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('Resources') }}
         </a>
         {% if site_settings.get('about_enabled') == '1' or current_user.is_authenticated and current_user.role == 'admin' %}
         <a href="{{ url_for('about_page') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm transition-colors hidden sm:block no-underline">
+           class="text-on-surface hover:text-primary font-bold text-sm transition-colors hidden sm:block no-underline">
             {{ t('About') }}
         </a>
         {% endif %}
         <a href="{{ url_for('set_lang', lang='he' if lang == 'en' else 'en') }}"
-           class="text-black hover:text-teal-800 font-bold text-sm px-3 py-1.5 border border-slate-200 rounded-full transition-colors no-underline">
+           class="text-on-surface hover:text-primary font-bold text-sm px-3 py-1.5 border border-outline-variant rounded-full transition-colors no-underline">
             {% if lang == 'en' %}עברית{% else %}English{% endif %}
         </a>
         <a href="{{ url_for('login') }}"
-           class="bg-teal-800 text-white font-semibold text-sm px-4 py-2 rounded-full hover:bg-teal-900 transition-colors">
+           class="bg-primary text-white font-semibold text-sm px-4 py-2 rounded-full hover:opacity-90 transition-opacity">
             {{ t('Login') }}
         </a>
     </div>
@@ -433,14 +433,14 @@
 </main>
 {% else %}
 </main>
-<footer class="py-6 border-t border-slate-200 text-center">
-    <span class="text-black text-sm font-bold">{{ t('Private Psychotherapy Clinic') }}</span>
-    <span class="text-slate-300 mx-2">•</span>
-    <a href="{{ url_for('accessibility_statement') }}" class="text-black font-bold text-sm hover:text-teal-800 transition-colors no-underline">
+<footer class="py-6 border-t border-outline-variant text-center bg-surface" style="content-visibility:auto;contain-intrinsic-size:60px;">
+    <span class="text-on-surface text-sm font-bold">{{ t('Private Psychotherapy Clinic') }}</span>
+    <span class="text-outline mx-2">•</span>
+    <a href="{{ url_for('accessibility_statement') }}" class="text-on-surface font-bold text-sm hover:text-primary transition-colors no-underline">
         {{ 'הצהרת נגישות' if lang == 'he' else 'Accessibility Statement' }}
     </a>
     <span class="text-slate-300 mx-2">•</span>
-    <a href="{{ url_for('privacy_policy') }}" class="text-black font-bold text-sm hover:text-teal-800 transition-colors no-underline">
+    <a href="{{ url_for('privacy_policy') }}" class="text-on-surface font-bold text-sm hover:text-primary transition-colors no-underline">
         {{ 'מדיניות פרטיות' if lang == 'he' else 'Privacy Policy' }}
     </a>
 </footer>
@@ -754,7 +754,7 @@
 
     <!-- Accessibility preferences -->
     <div id="accessibilityWidget" style="display:none">
-        <button id="a11yToggle" class="btn btn-sm rounded-circle shadow-sm" style="position:fixed;bottom:1rem;inset-inline-end:1rem;z-index:9999;width:44px;height:44px;background:#134e4a;color:white;border:none;font-size:1.2rem;display:flex;align-items:center;justify-content:center" aria-label="{{ 'נגישות' if lang == 'he' else 'Accessibility' }}" title="{{ 'הגדרות נגישות' if lang == 'he' else 'Accessibility settings' }}">
+        <button id="a11yToggle" class="btn btn-sm rounded-circle shadow-sm" style="position:fixed;bottom:1rem;inset-inline-end:1rem;z-index:9999;width:44px;height:44px;background:var(--color-primary);color:white;border:none;font-size:1.2rem;display:flex;align-items:center;justify-content:center" aria-label="{{ 'נגישות' if lang == 'he' else 'Accessibility' }}" title="{{ 'הגדרות נגישות' if lang == 'he' else 'Accessibility settings' }}">
             <i class="bi bi-universal-access"></i>
         </button>
         <div id="a11yPanel" class="shadow-lg rounded-2xl p-4" style="position:fixed;bottom:5rem;inset-inline-end:1rem;z-index:9998;width:280px;background:white;border:1px solid #e5e7eb;display:none">
@@ -869,7 +869,7 @@
         .a11y-high-contrast .btn-primary { background: #ff0 !important; color: #000 !important; border-color: #ff0 !important; }
         .a11y-wide-spacing p, .a11y-wide-spacing li, .a11y-wide-spacing .card-body { line-height: 2 !important; }
         .a11y-wide-spacing .form-control, .a11y-wide-spacing textarea { line-height: 2 !important; }
-        .a11y-font-size.active { background: #134e4a !important; color: white !important; border-color: #134e4a !important; }
+        .a11y-font-size.active { background: var(--color-primary) !important; color: white !important; border-color: var(--color-primary) !important; }
     </style>
 
     {% block scripts %}{% endblock %}

@@ -151,8 +151,8 @@
 /* Active/selected chip state */
 .intake-radio-label.bg-primary, .intake-check-label.bg-primary {
     color: #fff !important;
-    background: #3B82F6 !important;
-    border-color: #3B82F6 !important;
+    background: var(--color-primary) !important;
+    border-color: var(--color-primary) !important;
 }
 
 /* Dark mode: ensure chip text is readable */
@@ -165,6 +165,6 @@
 [data-bs-theme="dark"] .intake-radio-label.bg-primary,
 [data-bs-theme="dark"] .intake-check-label.bg-primary {
     color: #fff !important;
-    background: #2563EB !important;
-    border-color: #2563EB !important;
+    background: var(--color-primary-container) !important;
+    border-color: var(--color-primary-container) !important;
 }

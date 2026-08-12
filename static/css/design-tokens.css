@@ -55,24 +55,26 @@
     --textbox-min-height:      7.5rem;
     --textbox-min-height-sm:   6rem;
 
-    /* ── Shadows ───────────────────────────────────────────── */
-    --shadow-soft:             0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-card:             0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-    --shadow-card-hover:       0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-    --shadow-dropdown:         0 4px 12px rgba(0, 0, 0, 0.08);
+    /* ── Shadows (ambient, diffused — Soft Structuralism) ─── */
+    --shadow-soft:             var(--shadow-soft, 0 1px 2px rgba(19, 78, 74, 0.04), 0 4px 16px rgba(19, 78, 74, 0.06));
+    --shadow-card:             var(--shadow-card, 0 2px 8px rgba(19, 78, 74, 0.05), 0 12px 32px rgba(19, 78, 74, 0.07));
+    --shadow-card-hover:       var(--shadow-card-hover, 0 4px 12px rgba(19, 78, 74, 0.08), 0 20px 48px rgba(19, 78, 74, 0.1));
+    --shadow-dropdown:         0 8px 24px rgba(19, 78, 74, 0.1);
 
     /* ── Admin layout ───────────────────────────────────────── */
     --admin-topbar-height:     3rem;
     --admin-searchbar-height:  0px;
     --sidebar-width:           16rem;
+    --sidebar-border:          var(--color-outline-variant);
     --sidebar-link-active-bg:  color-mix(in srgb, var(--color-primary) 12%, transparent);
     --sidebar-link-active-fg:  var(--color-primary);
     --sidebar-link-hover-bg:   color-mix(in srgb, var(--color-primary) 8%, transparent);
 
-    /* ── Transitions ───────────────────────────────────────── */
-    --transition-fast:         0.15s ease;
-    --transition-normal:       0.2s ease;
-    --transition-slow:         0.28s ease;
+    /* ── Transitions (fluid cubic-bezier) ──────────────────── */
+    --ease-fluid:              cubic-bezier(0.32, 0.72, 0, 1);
+    --transition-fast:         0.2s var(--ease-fluid);
+    --transition-normal:       0.35s var(--ease-fluid);
+    --transition-slow:         0.7s var(--ease-fluid);
 
     /* ── Bootstrap Overrides ───────────────────────────────── */
     --bs-primary:              var(--color-primary);

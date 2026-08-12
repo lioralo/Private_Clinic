@@ -1,41 +1,57 @@
 @import "tailwindcss";
 
 @theme {
+    /* ── Brand: therapeutic teal (clinic identity) ─────────── */
     --color-primary: #134e4a;
-    --color-primary-dark: #0f766e;
+    --color-primary-dark: #0f3d3a;
     --color-primary-container: #ccfbf1;
-    --color-primary-soft: #ccfbf1;
-    --color-on-primary: #FFFFFF;
-    --color-on-primary-container: #115e59;
-    --color-secondary: #64748B;
-    --color-secondary-container: #F1F5F9;
-    --color-on-secondary: #FFFFFF;
+    --color-primary-soft: #f0fdfa;
+    --color-on-primary: #ffffff;
+    --color-on-primary-container: #134e4a;
+    --color-accent: #87beb8;
+    --color-accent-dark: #5a9e98;
+
+    --color-secondary: #64748b;
+    --color-secondary-container: #f1f5f9;
+    --color-on-secondary: #ffffff;
     --color-on-secondary-container: #475569;
-    --color-surface: #FFFFFF;
-    --color-surface-container: #F8FAFC;
-    --color-surface-container-low: #F1F5F9;
-    --color-surface-container-lowest: #FFFFFF;
-    --color-surface-container-high: #E2E8F0;
-    --color-surface-container-highest: #CBD5E1;
-    --color-on-surface: #111827;
-    --color-on-surface-variant: #475569;
-    --color-outline: #CBD5E1;
-    --color-outline-variant: #E2E8F0;
+
+    --color-surface: #ffffff;
+    --color-surface-container: #f7f8f9;
+    --color-surface-container-low: #f1f5f9;
+    --color-surface-container-lowest: #ffffff;
+    --color-surface-container-high: #e8ecef;
+    --color-surface-container-highest: #d1d9e0;
+
+    --color-on-surface: #191c1e;
+    --color-on-surface-variant: #5a6578;
+    --color-outline: #d1d9e0;
+    --color-outline-variant: #e8ecef;
+
     --color-primary-fixed: #ccfbf1;
     --color-primary-fixed-dim: #99f6e4;
-    --color-success: #16A34A;
-    --color-warning: #D97706;
-    --color-danger: #DC2626;
-    --color-error: #DC2626;
-    --color-error-container: #FEE2E2;
-    --color-on-error: #FFFFFF;
-    --color-on-error-container: #991B1B;
-    --color-background: #f7f9fb;
-    --color-on-background: #111827;
 
-    --font-family-headline: "Poppins", "Heebo", sans-serif;
-    --font-family-body: "Roboto", "Heebo", sans-serif;
+    --color-success: #16a34a;
+    --color-warning: #d97706;
+    --color-danger: #dc2626;
+    --color-error: #dc2626;
+    --color-error-container: #fee2e2;
+    --color-on-error: #ffffff;
+    --color-on-error-container: #991b1b;
+
+    --color-background: #f7f8f9;
+    --color-on-background: #191c1e;
+
+    --font-family-headline: "Plus Jakarta Sans", "Heebo", sans-serif;
+    --font-family-body: "Plus Jakarta Sans", "Heebo", sans-serif;
     --font-family-mono: "JetBrains Mono", ui-monospace, monospace;
+
+    --shadow-soft: 0 1px 2px rgba(19, 78, 74, 0.04), 0 4px 16px rgba(19, 78, 74, 0.06);
+    --shadow-card: 0 2px 8px rgba(19, 78, 74, 0.05), 0 12px 32px rgba(19, 78, 74, 0.07);
+    --shadow-card-hover: 0 4px 12px rgba(19, 78, 74, 0.08), 0 20px 48px rgba(19, 78, 74, 0.1);
+
+    --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-fluid: 700ms;
 }
 
 /* Dark mode: override Tailwind CSS custom properties */
@@ -43,29 +59,41 @@
     --color-primary: #5eead4;
     --color-primary-dark: #2dd4bf;
     --color-primary-container: #134e4a;
-    --color-primary-soft: #134e4a;
+    --color-primary-soft: #0f3d3a;
     --color-on-primary-container: #ccfbf1;
-    --color-secondary: #94A3B8;
-    --color-secondary-container: #1E293B;
-    --color-on-secondary-container: #CBD5E1;
-    --color-surface: #1E293B;
-    --color-surface-container: #0F172A;
-    --color-surface-container-low: #1E293B;
-    --color-surface-container-lowest: #0F172A;
+    --color-accent: #87beb8;
+    --color-accent-dark: #5a9e98;
+
+    --color-secondary: #94a3b8;
+    --color-secondary-container: #1e293b;
+    --color-on-secondary-container: #cbd5e1;
+
+    --color-surface: #1e293b;
+    --color-surface-container: #0f172a;
+    --color-surface-container-low: #1e293b;
+    --color-surface-container-lowest: #0f172a;
     --color-surface-container-high: #334155;
     --color-surface-container-highest: #475569;
-    --color-on-surface: #E2E8F0;
-    --color-on-surface-variant: #94A3B8;
+
+    --color-on-surface: #e2e8f0;
+    --color-on-surface-variant: #94a3b8;
     --color-outline: #334155;
     --color-outline-variant: #475569;
+
     --color-primary-fixed: #134e4a;
-    --color-primary-fixed-dim: #0f766e;
-    --color-success: #4ADE80;
-    --color-warning: #FBBF24;
-    --color-danger: #F87171;
-    --color-error: #F87171;
-    --color-error-container: #7F1D1D;
-    --color-on-error-container: #FECACA;
-    --color-background: #0F172A;
-    --color-on-background: #E2E8F0;
+    --color-primary-fixed-dim: #0f3d3a;
+
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --color-error: #f87171;
+    --color-error-container: #7f1d1d;
+    --color-on-error-container: #fecaca;
+
+    --color-background: #0f172a;
+    --color-on-background: #e2e8f0;
+
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.15);
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.18), 0 12px 32px rgba(0, 0, 0, 0.22);
+    --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.22), 0 20px 48px rgba(0, 0, 0, 0.28);
 }

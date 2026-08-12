@@ -5,17 +5,18 @@
 {% block content %}
 
 {# ── Header ──────────────────────────────────────────────── #}
-<div class="flex justify-between items-start flex-wrap gap-3 mb-5">
+<header class="page-header reveal">
     <div>
-        <h2 class="text-2xl font-bold text-teal-900 font-headline flex items-center gap-2 mb-1">
+        <p class="page-header__eyebrow">{{ t('Admin') }}</p>
+        <h2 class="page-header__title">
             <i class="bi bi-speedometer2 text-[28px]"></i>{{ t('Clinic Dashboard') }}
         </h2>
-        <p class="text-slate-500 text-sm mb-0">
-            {{ t('Today is') }} <strong class="text-teal-800">{{ today.strftime('%A, %B %#d, %Y') }}</strong>
+        <p class="page-header__subtitle">
+            {{ t('Today is') }} <strong class="text-primary">{{ today.strftime('%A, %B %#d, %Y') }}</strong>
             &mdash; {{ today_appointments|length }} {{ t('session(s) scheduled today') }}
         </p>
     </div>
-    <div class="flex flex-wrap gap-2">
+    <div class="page-header__actions">
         <a href="{{ url_for('add_patient') }}" class="btn btn-primary btn-sm rounded-pill">
             <i class="bi bi-person-plus-fill me-1"></i>{{ t('Add Patient') }}
         </a>
@@ -32,38 +33,38 @@
             <i class="bi bi-bar-chart me-1"></i>{{ t('Analytics') }}
         </a>
     </div>
-</div>
+</header>
 
 {# ── Stats strip REMOVED - Now accessible via CRM dashboard buttons ─────────────────────── #}
 
 {# ── Quick Access Cards ──────────────────────────────────────── #}
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
-    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="metric-card reveal">
         <i class="bi bi-heart-fill text-success" style="font-size:1.5rem"></i>
         <div class="mt-2">
-            <div class="text-slate-500 text-sm font-semibold">{{ t('Ongoing') }}</div>
-            <div class="text-2xl font-bold text-success mt-1">{{ counts['ongoing'] }}</div>
+            <div class="metric-card__label">{{ t('Ongoing') }}</div>
+            <div class="metric-card__value text-success">{{ counts['ongoing'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="metric-card reveal">
         <i class="bi bi-hourglass-split text-warning" style="font-size:1.5rem"></i>
         <div class="mt-2">
-            <div class="text-slate-500 text-sm font-semibold">{{ t('Candidates') }}</div>
-            <div class="text-2xl font-bold text-warning mt-1">{{ counts['waiting'] }}</div>
+            <div class="metric-card__label">{{ t('Candidates') }}</div>
+            <div class="metric-card__value text-warning">{{ counts['waiting'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="metric-card reveal">
         <i class="bi bi-archive text-primary" style="font-size:1.5rem"></i>
         <div class="mt-2">
-            <div class="text-slate-500 text-sm font-semibold">{{ t('Archived') }}</div>
-            <div class="text-2xl font-bold text-primary mt-1">{{ counts['archived'] }}</div>
+            <div class="metric-card__label">{{ t('Archived') }}</div>
+            <div class="metric-card__value text-primary">{{ counts['archived'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="metric-card reveal">
         <i class="bi bi-trash text-danger" style="font-size:1.5rem"></i>
         <div class="mt-2">
-            <div class="text-slate-500 text-sm font-semibold">{{ t('Deleted') }}</div>
-            <div class="text-2xl font-bold text-danger mt-1">{{ counts.get('deleted', 0) }}</div>
+            <div class="metric-card__label">{{ t('Deleted') }}</div>
+            <div class="metric-card__value text-danger">{{ counts.get('deleted', 0) }}</div>
         </div>
     </a>
 </div>
