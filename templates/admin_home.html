@@ -137,7 +137,7 @@
     <div class="col-xl-8">
 
         {# Today's schedule #}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="today-schedule" open>
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="today-schedule" open>
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-clock-fill me-2 text-primary"></i>{{ t("Today's Schedule") }}</h6>
                 <span class="badge bg-primary rounded-pill">{{ today_appointments|length }}</span>
@@ -200,7 +200,7 @@
 
         {# This week #}
         {% if week_appointments %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="this-week">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="this-week">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>{{ t('Coming This Week') }}</h6>
                 <span class="badge bg-secondary rounded-pill">{{ week_appointments|length }}</span>
@@ -244,7 +244,7 @@
     <div class="col-xl-4">
 
         {# Google Docs auto-sync health #}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="gdocs-sync">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="gdocs-sync">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-arrow-down me-2 text-primary"></i>{{ t('Google Docs Auto Sync') }}</h6>
                 {% if gdocs_auto_sync_health.enabled %}
@@ -290,7 +290,7 @@
 
         {# Follow-up decisions needed #}
         {% if followup_patients %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" id="followupSection" data-section="followup">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" id="followupSection" data-section="followup">
             <summary class="card-header dash-card-header dash-card-header-warning">
                 <h6 class="mb-0 fw-bold text-warning-emphasis">
                     <i class="bi bi-exclamation-circle-fill me-2"></i>{{ t('Decision Needed') }}
@@ -319,7 +319,7 @@
 
         {# Waiting list — no upcoming appointment #}
         {% if waiting_patients %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="waiting-candidates">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="waiting-candidates">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>{{ t('Candidates — No Appointment') }}</h6>
                 <span class="badge bg-warning text-dark rounded-pill">{{ waiting_patients|length }}</span>
@@ -344,7 +344,7 @@
 
         {# Missing recurring alert #}
         {% if missing_recurring %}
-        <details class="card border-0 shadow-sm mb-4 border-danger-subtle dashboard-fold" data-section="missing-recurring">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 border-danger-subtle dashboard-fold" data-section="missing-recurring">
             <summary class="card-header dash-card-header dash-card-header-danger">
                 <h6 class="mb-0 fw-bold text-danger">
                     <i class="bi bi-arrow-repeat me-2"></i>{{ t('Ongoing — No Recurring Set') }}
@@ -373,7 +373,7 @@
 {# ── Bottom row: Recent patients + Recent activity ────────── #}
 <div class="row g-3 mt-0">
     <div class="col-md-6">
-        <details class="card border-0 shadow-sm dashboard-fold" data-section="recent-patients">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl dashboard-fold" data-section="recent-patients">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ t('Recently Added Patients') }}</h6>
             </summary>
@@ -411,7 +411,7 @@
     </div>
 
     <div class="col-md-6">
-        <details class="card border-0 shadow-sm dashboard-fold" data-section="recent-activity">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl dashboard-fold" data-section="recent-activity">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-activity me-2 text-primary"></i>{{ t('Recent Activity') }}</h6>
             </summary>

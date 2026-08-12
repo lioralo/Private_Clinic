@@ -1412,7 +1412,7 @@ footer {
 
 .patient-actions-panel {
     position: sticky;
-    top: var(--admin-topbar-height, 72px);
+    top: calc(var(--admin-topbar-height) + var(--admin-searchbar-height) + 0.5rem);
 }
 
 .patient-detail-grid .card {

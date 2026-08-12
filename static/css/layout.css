@@ -72,6 +72,10 @@
     border-bottom-width: 1px;
 }
 
+html.search-bar-open {
+    --admin-searchbar-height: 3rem;
+}
+
 .notification-recipient-list {
     max-height: 220px;
     overflow-y: auto;

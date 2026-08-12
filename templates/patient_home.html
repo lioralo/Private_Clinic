@@ -59,7 +59,7 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div class="col-lg-7">
-        <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 h-100">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-calendar-check text-primary me-2"></i>{{ t('Upcoming Appointments') }}
@@ -165,7 +165,7 @@
         </div>
 
         {% if past_appointments %}
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#pastAppointmentsCollapse" aria-expanded="false" style="cursor:pointer;">
                 <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
                     <span><i class="bi bi-clock-history text-muted me-2"></i>{{ t('Past Appointments') }}</span>
@@ -207,7 +207,7 @@
         {% endif %}
 
         {% if shared_notes %}
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#sharedNotesCollapse" aria-expanded="true" style="cursor:pointer;">
                 <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
                     <span><i class="bi bi-journal-text text-muted me-2"></i>{{ t('Shared Notes from Your Therapist') }}</span>
@@ -236,7 +236,7 @@
         {% endif %}
 
         {% if goals or patient['treatment_plan'] %}
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4" role="button" data-bs-toggle="collapse" data-bs-target="#treatmentPlanCollapse" aria-expanded="true" style="cursor:pointer;">
                 <h5 class="fw-bold mb-0 d-flex align-items-center justify-content-between">
                     <span><i class="bi bi-bullseye text-primary me-2"></i>{{ t('Treatment Plan & Goals') }}</span>
@@ -275,7 +275,7 @@
         </div>
         {% endif %}
 
-        <section class="card border-0 shadow-sm rounded-4 mt-4">
+        <section class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-body p-4">
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width:42px;height:42px;">
@@ -304,7 +304,7 @@
     </div>
 
     <div class="col-lg-5">
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mb-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4 d-flex justify-content-between align-items-center">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-chat-dots-fill text-primary me-2"></i>{{ t('Messages') }}
@@ -337,7 +337,7 @@
             </div>
         </div>
 
-        <div class="card border-0 shadow-sm rounded-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>{{ t('Shared Documents') }}
@@ -374,7 +374,7 @@
         </div>
 
         {% if chart_data and chart_data['session_data'] %}
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-graph-up text-primary me-2"></i>{{ t('Session Frequency') }}
@@ -400,7 +400,7 @@
         </div>
         {% endif %}
 
-        <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card border border-slate-100 shadow-sm rounded-2xl rounded-4 mt-4">
             <div class="card-header bg-white border-0 pt-4 pb-2 px-4">
                 <h5 class="fw-bold mb-0">
                     <i class="bi bi-receipt-cutoff text-primary me-2"></i>{{ t('Receipts') }}

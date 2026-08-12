@@ -63,6 +63,7 @@
 
     /* ── Admin layout ───────────────────────────────────────── */
     --admin-topbar-height:     3rem;
+    --admin-searchbar-height:  0px;
     --sidebar-width:           16rem;
     --sidebar-link-active-bg:  color-mix(in srgb, var(--color-primary) 12%, transparent);
     --sidebar-link-active-fg:  var(--color-primary);

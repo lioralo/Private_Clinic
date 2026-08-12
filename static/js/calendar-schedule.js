@@ -196,9 +196,9 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('vacancySlotEnd').value = endVal;
         document.getElementById('vacancySlotPattern').value = kind;
         document.getElementById('vacancySubmitBtn').textContent = 'Update Vacant Slot';
-        document.getElementById('vacancySubmitBtn').style.background = '#0d6efd';
+        document.getElementById('vacancySubmitBtn').style.background = '';
         document.getElementById('vacancyCancelEditBtn').classList.remove('d-none');
-        document.getElementById('vacancy-pane').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('vacancy-pane').scrollIntoView({ behavior: 'auto', block: 'nearest' });
     }
 
     if (document.getElementById('vacancyCancelEditBtn')) {
@@ -890,16 +890,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Mobile responsive: auto-switch to list view on small screens
     var calendarViewMode = 'auto';
+    var lastCalendarIsSmall = window.innerWidth < 640;
+
     function applyResponsiveCalendar() {
         if (!Cal.calendar) return;
         var isSmall = window.innerWidth < 640;
-        if (isSmall && calendarViewMode !== 'list') {
+        if (isSmall === lastCalendarIsSmall) return;
+        lastCalendarIsSmall = isSmall;
+
+        var mainEl = document.getElementById('main-content');
+        var scrollTop = mainEl ? mainEl.scrollTop : (window.scrollY || 0);
+
+        if (isSmall) {
             Cal.calendar.changeView('listWeek');
             calendarViewMode = 'list';
-        } else if (!isSmall && calendarViewMode !== 'week') {
+        } else {
             Cal.calendar.changeView('timeGridWeek');
             calendarViewMode = 'week';
         }
+
+        requestAnimationFrame(function() {
+            if (mainEl) {
+                mainEl.scrollTop = scrollTop;
+            } else {
+                window.scrollTo(0, scrollTop);
+            }
+        });
     }
     applyResponsiveCalendar();
     window.addEventListener('resize', function() {

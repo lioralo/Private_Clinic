@@ -2,7 +2,21 @@ window.showAppToast = function(message, options) {
     if (!message) return;
     const config = options || {};
     const variant = config.variant || 'primary';
-    const title = config.title || window.AppConfig.translations.clinicUpdate;
+    const typeMap = {
+        primary: 'info',
+        info: 'info',
+        success: 'success',
+        danger: 'danger',
+        warning: 'warning',
+        secondary: 'info',
+        light: 'info',
+        dark: 'info'
+    };
+    if (typeof window.showToast === 'function') {
+        window.showToast(String(message), typeMap[variant] || 'info');
+        return;
+    }
+    const title = config.title || (window.AppConfig && AppConfig.translations ? AppConfig.translations.clinicUpdate : 'Clinic Update');
     const autohide = config.autohide !== false;
     const delay = Number(config.delay || 5000);
     let container = document.getElementById('notificationContainer');
@@ -24,14 +38,15 @@ window.showAppToast = function(message, options) {
     const titleElement = document.createElement('strong');
     titleElement.className = 'me-auto';
     titleElement.textContent = title;
+    const translations = (window.AppConfig && AppConfig.translations) ? AppConfig.translations : {};
     const nowLabel = document.createElement('small');
     nowLabel.className = 'text-white-50';
-    nowLabel.textContent = AppConfig.translations.justNow;
+    nowLabel.textContent = translations.justNow || 'Just now';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'btn-close btn-close-white';
     closeButton.setAttribute('data-bs-dismiss', 'toast');
-    closeButton.setAttribute('aria-label', AppConfig.translations.close);
+    closeButton.setAttribute('aria-label', translations.close || 'Close');
     toastHeader.appendChild(icon);
     toastHeader.appendChild(titleElement);
     toastHeader.appendChild(nowLabel);
