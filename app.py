@@ -2086,6 +2086,10 @@ def _gdocs_auto_sync_worker_loop():
         try:
             with app.app_context():
                 db = get_db()
+                try:
+                    _renew_expiring_gdoc_watches(db)
+                except Exception:
+                    app.logger.exception('Google Docs watch renewal failed')
                 _run_google_docs_auto_sync(db, force=False, trigger_source='worker')
         except Exception:
             app.logger.exception('Google Docs auto-sync worker iteration failed')
@@ -2127,6 +2131,103 @@ def ensure_gdocs_auto_sync_worker_started():
         worker = threading.Thread(target=_gdocs_auto_sync_worker_loop, name='gdocs-auto-sync-worker', daemon=True)
         worker.start()
         _GDOC_AUTO_SYNC_WORKER_STARTED = True
+
+
+def _gdoc_webhook_public_url():
+    """Build absolute webhook URL from PUBLIC_BASE_URL (works outside request context)."""
+    configured_base = (app.config.get('PUBLIC_BASE_URL') or '').strip()
+    if not configured_base:
+        return None
+    try:
+        path = url_for('gdoc_webhook', _external=False)
+    except Exception:
+        path = '/api/gdoc/webhook'
+    return f"{configured_base.rstrip('/')}{path}"
+
+
+def _renew_expiring_gdoc_watches(db, within_hours=48):
+    """
+    Re-register Drive push watches that are expired or expiring soon.
+    Requires PUBLIC_BASE_URL so Google can reach /api/gdoc/webhook.
+    Returns number of watches renewed.
+    """
+    webhook_url = _gdoc_webhook_public_url()
+    if not webhook_url:
+        return 0
+    if not gdocs or not bool(getattr(gdocs, 'GDOCS_LIBS_AVAILABLE', True)):
+        return 0
+    if not gcal or not bool(getattr(gcal, 'GOOGLE_LIBS_AVAILABLE', True)):
+        return 0
+
+    creds = gcal.load_credentials(db)
+    if not creds:
+        return 0
+    try:
+        creds = gcal._refresh_and_save(db, creds)
+    except Exception:
+        app.logger.exception('Failed refreshing Google credentials for watch renewal')
+        return 0
+
+    now = datetime.now(timezone.utc)
+    renew_before = now + timedelta(hours=max(1, int(within_hours)))
+    candidates = []
+
+    try:
+        patient_rows = db.execute('''
+            SELECT id, gdoc_id, gdoc_watch_expiry
+            FROM patients
+            WHERE COALESCE(gdoc_id, '') <> ''
+              AND COALESCE(is_deleted, 0) = 0
+        ''').fetchall()
+    except sqlite3.OperationalError:
+        patient_rows = []
+    for row in patient_rows:
+        expiry = _parse_gdoc_watch_expiry(row['gdoc_watch_expiry'] if 'gdoc_watch_expiry' in row.keys() else None)
+        if expiry is not None and expiry > renew_before:
+            continue
+        candidates.append(('patient', int(row['id']), row['gdoc_id']))
+
+    try:
+        group_rows = db.execute('''
+            SELECT id, gdoc_id, gdoc_watch_expiry
+            FROM groups
+            WHERE COALESCE(gdoc_id, '') <> ''
+        ''').fetchall()
+    except sqlite3.OperationalError:
+        group_rows = []
+    for row in group_rows:
+        expiry = _parse_gdoc_watch_expiry(row['gdoc_watch_expiry'] if 'gdoc_watch_expiry' in row.keys() else None)
+        if expiry is not None and expiry > renew_before:
+            continue
+        candidates.append(('group', int(row['id']), row['gdoc_id']))
+
+    renewed = 0
+    for entity_type, entity_id, doc_id in candidates:
+        if not doc_id:
+            continue
+        try:
+            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
+        except Exception:
+            app.logger.warning(
+                'Failed renewing Drive watch for %s:%s', entity_type, entity_id, exc_info=True
+            )
+            continue
+        if entity_type == 'patient':
+            db.execute(
+                'UPDATE patients SET gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+                (channel_id, expiry, entity_id)
+            )
+        else:
+            db.execute(
+                'UPDATE groups SET gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+                (channel_id, expiry, entity_id)
+            )
+        renewed += 1
+
+    if renewed:
+        db.commit()
+        app.logger.info('Renewed %s Google Docs Drive watch channel(s)', renewed)
+    return renewed
 
 class User(UserMixin):
     def __init__(self, id, username, role, patient_id=None, display_name=None, session_version=0):

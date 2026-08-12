@@ -159,23 +159,62 @@
 
         {% elif active_tab == 'gdocs' %}
 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4">
-    <div class="p-5 border-b border-slate-100">
-        <h5 class="font-bold mb-0"><i class="bi bi-google me-2 text-primary"></i>{{ t('Google Docs') }}</h5>
-    </div>
-    <div class="p-5">
-        {% if patient['gdoc_id'] %}
-        <div class="d-flex align-items-center gap-2 mb-3">
-            <span class="badge bg-success rounded-pill">{{ t('Connected') }}</span>
-            <span class="small text-muted">{{ patient['gdoc_id'] }}</span>
+    <div class="p-5 border-b border-slate-100 d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h5 class="font-bold mb-1"><i class="bi bi-google me-2 text-primary"></i>{{ t('Google Docs') }}</h5>
+            <p class="small text-muted mb-0">{{ t('Create, attach, open, or sync this patient document.') }}</p>
         </div>
-        <p class="small text-muted mb-3">{{ t('Google Docs content is synced from the connected document. Use Google Sync to review status and pull updates.') }}</p>
-        {% else %}
-        <p class="text-muted mb-3">{{ t('No Google Doc is linked to this patient yet.') }}</p>
-        <p class="small text-muted">{{ t('To link a Google Doc, use the Google Docs actions on this patient or manage auto-sync from the Google Sync page.') }}</p>
-        {% endif %}
         <a href="{{ url_for('admin.google_docs_sync') }}" class="btn btn-outline-primary rounded-pill btn-sm">
             <i class="bi bi-gear me-1"></i>{{ t('Google Sync Settings') }}
         </a>
+    </div>
+    <div class="p-5">
+        {% if patient['gdoc_id'] %}
+        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+            <span class="badge bg-success rounded-pill">{{ t('Connected') }}</span>
+            <span class="small text-muted text-break">{{ patient['gdoc_id'] }}</span>
+        </div>
+        <p class="small text-muted mb-3">{{ t('Google Docs content is synced from the connected document. Use Sync Now below or the Google Sync page for clinic-wide runs.') }}</p>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <a href="{{ url_for('open_gdoc', patient_id=patient['id']) }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm rounded-pill">
+                <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Open Doc') }}
+            </a>
+            <form method="post" action="{{ url_for('sync_from_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill">
+                    <i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync Now') }}
+                </button>
+            </form>
+            <form method="post" action="{{ url_for('detach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form d-inline"
+                  onsubmit="return confirm('{{ t('Detach the Google Doc from this patient?') }}');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill">
+                    <i class="bi bi-unlink me-1"></i>{{ t('Detach Google Doc') }}
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <p class="text-muted mb-3">{{ t('No Google Doc is linked to this patient yet.') }}</p>
+        <div class="d-flex flex-column gap-3">
+            <div>
+                <form method="post" action="{{ url_for('link_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form" data-open-doc="true">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill">
+                        <i class="bi bi-file-earmark-plus me-1"></i>{{ t('Create Google Doc') }}
+                    </button>
+                </form>
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="patientGdocAttachInput">{{ t('Attach Existing Google Doc') }}</label>
+                <form method="post" action="{{ url_for('attach_gdoc', patient_id=patient['id']) }}" class="gdoc-json-form d-flex gap-2 flex-wrap">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="text" name="doc_url" id="patientGdocAttachInput" class="form-control form-control-sm" style="min-width:16rem;max-width:28rem"
+                           placeholder="https://docs.google.com/document/d/...">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill">{{ t('Attach') }}</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

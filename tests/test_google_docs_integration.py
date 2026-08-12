@@ -891,6 +891,81 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             self.assertEqual(per_target['patient:1']['last_status'], 'error')
             self.assertEqual(per_target['patient:1']['last_error'], 'denied')
 
+    def test_patient_gdocs_tab_renders_actions(self):
+        self._login_admin()
+        rv = self.client.get('/patient/1?tab=gdocs')
+        self.assertEqual(rv.status_code, 200)
+        html = rv.data.decode('utf-8')
+        self.assertIn('link-gdoc', html)
+        self.assertIn('attach-gdoc', html)
+
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('linked-doc-ui',))
+            db.commit()
+
+        rv2 = self.client.get('/patient/1?tab=gdocs')
+        self.assertEqual(rv2.status_code, 200)
+        html2 = rv2.data.decode('utf-8')
+        self.assertIn('sync-from-gdoc', html2)
+        self.assertIn('detach-gdoc', html2)
+        self.assertIn('linked-doc-ui', html2)
+
+    def test_gdoc_webhook_pulls_group_docs(self):
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id, gdoc_watch_channel) VALUES (?, ?, ?, ?, ?)",
+                ('Webhook Group', 'therapy', 'wh', 'group-doc-wh', 'group-channel-1')
+            )
+            db.commit()
+
+        with patch('clinic_app.routes.google_docs._pull_group_gdoc_notes', return_value=(2, None)) as mock_pull, \
+             patch.object(app_module, 'gdocs', Mock(GDOCS_LIBS_AVAILABLE=True)), \
+             patch.object(app_module, '_validate_gdoc_webhook_request', return_value=True):
+            rv = self.client.post('/api/gdoc/webhook', headers={
+                'X-Goog-Channel-ID': 'group-channel-1',
+                'X-Goog-Resource-State': 'update',
+            })
+        self.assertEqual(rv.status_code, 200)
+        self.assertTrue(mock_pull.called)
+
+    def test_renew_expiring_gdoc_watches(self):
+        prev_base = app.config.get('PUBLIC_BASE_URL')
+        app.config['PUBLIC_BASE_URL'] = 'https://clinic.example.com'
+        try:
+            with app.app_context():
+                db = get_db()
+                db.execute(
+                    "UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = 1",
+                    ('doc-renew-1', 'old-channel', '2000-01-01T00:00:00+00:00')
+                )
+                db.commit()
+
+                gdocs_mock = Mock()
+                gdocs_mock.GDOCS_LIBS_AVAILABLE = True
+                gdocs_mock.register_drive_watch.return_value = ('new-channel', '2099-01-01T00:00:00+00:00')
+                gcal_mock = Mock()
+                gcal_mock.GOOGLE_LIBS_AVAILABLE = True
+                gcal_mock.load_credentials.return_value = object()
+                gcal_mock._refresh_and_save.return_value = object()
+
+                with patch.object(app_module, 'gdocs', gdocs_mock), patch.object(app_module, 'gcal', gcal_mock):
+                    renewed = app_module._renew_expiring_gdoc_watches(db, within_hours=48)
+
+                self.assertEqual(renewed, 1)
+                row = db.execute(
+                    'SELECT gdoc_watch_channel, gdoc_watch_expiry FROM patients WHERE id = 1'
+                ).fetchone()
+                self.assertEqual(row['gdoc_watch_channel'], 'new-channel')
+                self.assertEqual(row['gdoc_watch_expiry'], '2099-01-01T00:00:00+00:00')
+                gdocs_mock.register_drive_watch.assert_called_once()
+                args = gdocs_mock.register_drive_watch.call_args[0]
+                self.assertEqual(args[1], 'doc-renew-1')
+                self.assertTrue(str(args[2]).endswith('/api/gdoc/webhook'))
+        finally:
+            app.config['PUBLIC_BASE_URL'] = prev_base
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -54,6 +54,37 @@ def _extract_google_doc_id(raw_value):
     return match.group(1) if match else raw_text
 
 
+def _resolve_gdoc_webhook_url():
+    """Prefer explicit form webhook_url; otherwise build from PUBLIC_BASE_URL."""
+    explicit = (request.form.get('webhook_url') or '').strip()
+    if explicit:
+        return explicit
+    try:
+        from app import build_external_public_url
+        return (build_external_public_url('gdoc_webhook') or '').strip()
+    except Exception:
+        configured_base = (current_app.config.get('PUBLIC_BASE_URL') or '').strip()
+        if not configured_base:
+            return ''
+        return f"{configured_base.rstrip('/')}/api/gdoc/webhook"
+
+
+def _register_gdoc_watch(creds, doc_id):
+    """Register Drive watch when a public webhook URL is available. Returns (channel_id, expiry)."""
+    from app import gdocs
+    webhook_url = _resolve_gdoc_webhook_url()
+    if not webhook_url or not gdocs:
+        return None, None
+    try:
+        result = gdocs.register_drive_watch(creds, doc_id, webhook_url)
+        if not isinstance(result, (tuple, list)) or len(result) < 2:
+            return None, None
+        return result[0], result[1]
+    except Exception:
+        current_app.logger.warning('Failed registering Google Doc Drive watch', exc_info=True)
+        return None, None
+
+
 def _extract_google_sheet_id(raw_value):
     raw_text = (raw_value or '').strip()
     if not raw_text:
@@ -899,13 +930,7 @@ def link_gdoc(patient_id):
         doc_id = gdocs.create_patient_doc(creds, patient['name'])
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
-    webhook_url = (request.form.get('webhook_url') or '').strip()
-    channel_id, expiry = None, None
-    if webhook_url:
-        try:
-            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
-        except Exception:
-            pass
+    channel_id, expiry = _register_gdoc_watch(creds, doc_id)
     db.execute(
         'UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
         (doc_id, channel_id, expiry, patient_id)
@@ -922,6 +947,7 @@ def link_gdoc(patient_id):
 @google_docs_bp.route('/patient/<int:patient_id>/attach-gdoc', methods=['POST'])
 @login_required
 def attach_gdoc(patient_id):
+    from app import gdocs, gcal
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
     doc_url = request.form.get('doc_url', '').strip()
@@ -934,7 +960,20 @@ def attach_gdoc(patient_id):
     patient = db.execute('SELECT * FROM patients WHERE id = ?', (patient_id,)).fetchone()
     if not patient:
         return jsonify({'error': 'Patient not found'}), 404
-    db.execute('UPDATE patients SET gdoc_id = ? WHERE id = ?', (doc_id, patient_id))
+    channel_id, expiry = None, None
+    dependency_error = _google_docs_dependency_error()
+    if not dependency_error and gcal:
+        creds = gcal.load_credentials(db)
+        if creds:
+            try:
+                creds = gcal._refresh_and_save(db, creds)
+                channel_id, expiry = _register_gdoc_watch(creds, doc_id)
+            except Exception:
+                current_app.logger.warning('Attach patient gdoc watch registration failed', exc_info=True)
+    db.execute(
+        'UPDATE patients SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+        (doc_id, channel_id, expiry, patient_id)
+    )
     db.commit()
     return jsonify({
         'status': 'ok',
@@ -1026,13 +1065,7 @@ def link_group_gdoc(group_id):
             doc_id = gdocs.create_patient_doc(creds, f"Group — {group_name}")
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
-    webhook_url = (request.form.get('webhook_url') or '').strip()
-    channel_id, expiry = None, None
-    if webhook_url:
-        try:
-            channel_id, expiry = gdocs.register_drive_watch(creds, doc_id, webhook_url)
-        except Exception:
-            pass
+    channel_id, expiry = _register_gdoc_watch(creds, doc_id)
     db.execute(
         'UPDATE groups SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
         (doc_id, channel_id, expiry, group_id)
@@ -1049,6 +1082,7 @@ def link_group_gdoc(group_id):
 @google_docs_bp.route('/groups/<int:group_id>/attach-gdoc', methods=['POST'])
 @login_required
 def attach_group_gdoc(group_id):
+    from app import gdocs, gcal
     if current_user.role != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
     doc_id = _extract_google_doc_id(request.form.get('doc_url', ''))
@@ -1058,7 +1092,20 @@ def attach_group_gdoc(group_id):
     group = db.execute('SELECT * FROM groups WHERE id = ?', (group_id,)).fetchone()
     if not group:
         return jsonify({'error': 'Group not found'}), 404
-    db.execute('UPDATE groups SET gdoc_id = ? WHERE id = ?', (doc_id, group_id))
+    channel_id, expiry = None, None
+    dependency_error = _google_docs_dependency_error()
+    if not dependency_error and gcal:
+        creds = gcal.load_credentials(db)
+        if creds:
+            try:
+                creds = gcal._refresh_and_save(db, creds)
+                channel_id, expiry = _register_gdoc_watch(creds, doc_id)
+            except Exception:
+                current_app.logger.warning('Attach group gdoc watch registration failed', exc_info=True)
+    db.execute(
+        'UPDATE groups SET gdoc_id = ?, gdoc_watch_channel = ?, gdoc_watch_expiry = ? WHERE id = ?',
+        (doc_id, channel_id, expiry, group_id)
+    )
     db.commit()
     return jsonify({
         'status': 'ok',
@@ -1217,6 +1264,11 @@ def gdoc_webhook():
             _pull_gdoc_notes(db, patient)
         except Exception:
             current_app.logger.warning('Google Doc webhook pull failed', exc_info=True)
+    elif group and group['gdoc_id'] and gdocs:
+        try:
+            _pull_group_gdoc_notes(db, group)
+        except Exception:
+            current_app.logger.warning('Google Doc group webhook pull failed', exc_info=True)
     return '', 200
 
 
