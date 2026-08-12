@@ -687,6 +687,174 @@ def recurring_occurrences_between(appt, range_start, range_end, max_occurrences=
     return sorted(occurrences)
 
 
+_ADMIN_BLOCK_TITLES = {
+    '',
+    'blocked slot',
+    'special occasion',
+    'clinic block',
+    'unavailable',
+}
+
+
+def _parse_named_block_title(title):
+    """Split 'Name — notes' style titles used by open-slot bookings."""
+    raw = (title or '').strip()
+    if not raw:
+        return '', None
+    for sep in (' \u2014 ', ' — ', ' - '):
+        if sep in raw:
+            name, notes = raw.split(sep, 1)
+            return name.strip(), (notes.strip() or None)
+    return raw, None
+
+
+def _is_preserved_admin_block_title(title):
+    return (title or '').strip().lower() in _ADMIN_BLOCK_TITLES
+
+
+def create_waiting_patient_appointment(
+    db,
+    *,
+    name,
+    phone=None,
+    email=None,
+    appointment_date,
+    appointment_time,
+    duration_minutes=60,
+    meeting_title='Named booking',
+    patient_status='waiting',
+):
+    """
+    Create a waiting/candidate patient + scheduled appointment.
+    Used by public open-slot booking, vacancy occupy-by-name, and block migration.
+    Returns (patient_id, appointment_id).
+    """
+    clean_name = (name or '').strip()
+    if not clean_name:
+        raise ValueError('Patient name is required')
+    time_value = (appointment_time or '')[:5]
+    patient_cur = db.execute(
+        '''
+        INSERT INTO patients (name, status, email, phone, patient_type)
+        VALUES (?, ?, ?, ?, 'private')
+        ''',
+        (clean_name, patient_status, (email or None), (phone or None) or None),
+    )
+    patient_id = int(patient_cur.lastrowid)
+    appt_cur = db.execute(
+        '''
+        INSERT INTO appointments (
+            patient_id, appointment_date, appointment_time, duration_minutes,
+            meeting_type, meeting_title, status, is_recurring
+        ) VALUES (?, ?, ?, ?, 'in-person', ?, 'scheduled', 0)
+        ''',
+        (
+            patient_id,
+            appointment_date,
+            time_value,
+            int(duration_minutes or 60),
+            meeting_title,
+        ),
+    )
+    return patient_id, int(appt_cur.lastrowid)
+
+
+def migrate_named_blocked_bookings_to_appointments(db):
+    """
+    Convert named public/occupy bookings stored as blocked_slots into
+    patients + appointments. Preserves true admin blocks.
+    Idempotent: only migrates matching rows; returns count migrated.
+    """
+    try:
+        rows = db.execute('''
+            SELECT *
+            FROM blocked_slots
+            WHERE COALESCE(is_private, 0) = 0
+              AND title IS NOT NULL
+              AND TRIM(title) != ''
+            ORDER BY id ASC
+        ''').fetchall()
+    except Exception:
+        return 0
+
+    migrated = 0
+    for block in rows:
+        title = (block['title'] or '').strip()
+        if _is_preserved_admin_block_title(title):
+            continue
+
+        name, notes = _parse_named_block_title(title)
+        if not name or _is_preserved_admin_block_title(name):
+            continue
+
+        block_type = (block['block_type'] or 'blocked').strip().lower() if 'block_type' in block.keys() else 'blocked'
+        created_by = block['created_by'] if 'created_by' in block.keys() else None
+
+        phone = None
+        matched_availability = False
+        try:
+            avail = db.execute('''
+                SELECT *
+                FROM availability
+                WHERE slot_date = ?
+                  AND substr(COALESCE(slot_time, ''), 1, 5) = substr(?, 1, 5)
+                  AND status = 'booked'
+                ORDER BY id DESC
+                LIMIT 1
+            ''', (block['blocked_date'], (block['blocked_time'] or '')[:5])).fetchone()
+        except Exception:
+            avail = None
+
+        if avail:
+            booked_name = (avail['booked_by_name'] or '').strip() if 'booked_by_name' in avail.keys() else ''
+            if booked_name and (
+                booked_name == name
+                or title.startswith(booked_name)
+                or booked_name.startswith(name)
+            ):
+                matched_availability = True
+                if 'booked_by_phone' in avail.keys():
+                    phone = avail['booked_by_phone'] or None
+
+        # Only convert public/open bookings: matched availability rows, or
+        # legacy inserts that never set created_by (open-slot / name occupy).
+        # Admin blocks always set created_by and must stay as red blocks.
+        should_migrate = matched_availability or created_by is None
+        if not should_migrate:
+            continue
+
+        meeting_title = 'Migrated from named blocked booking'
+        if matched_availability:
+            meeting_title = 'Migrated from open-slot booking'
+        elif block_type == 'special':
+            meeting_title = 'Migrated from vacancy occupy'
+        if notes:
+            meeting_title = f'{meeting_title} — {notes[:80]}'
+
+        try:
+            create_waiting_patient_appointment(
+                db,
+                name=name,
+                phone=phone,
+                appointment_date=block['blocked_date'],
+                appointment_time=block['blocked_time'],
+                duration_minutes=int(block['duration_minutes'] or 60),
+                meeting_title=meeting_title,
+                patient_status='waiting',
+            )
+            db.execute('DELETE FROM blocked_slots WHERE id = ?', (block['id'],))
+            migrated += 1
+        except Exception:
+            continue
+
+    if migrated:
+        try:
+            db.commit()
+        except Exception:
+            pass
+    return migrated
+
+
 def build_booking_management_payload(db, mode='upcoming', future_days=180, history_days=120):
     today = datetime.now().date()
     if mode == 'history':

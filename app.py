@@ -3066,6 +3066,14 @@ def _run_db_migrations(db):
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_read ON incoming_email(is_read)')
     db.execute('CREATE INDEX IF NOT EXISTS idx_incoming_email_created ON incoming_email(created_at)')
 
+    # Convert legacy named public bookings stored as blocked_slots into appointments.
+    # Alembic-managed DBs run the same conversion via revision c2d3e4f5a6b7.
+    try:
+        from clinic_app.utils import migrate_named_blocked_bookings_to_appointments
+        migrate_named_blocked_bookings_to_appointments(db)
+    except Exception:
+        pass
+
     db.commit()
 
 def _seed_admin_user(db):

@@ -13,6 +13,7 @@ from clinic_app.utils import (
     daterange, overlaps, _week_start_for_date, _check_public_rate_limit,
     has_time_conflict, _validate_appointment_duration,
     build_booking_management_payload,
+    create_waiting_patient_appointment,
     ensure_ongoing_recurrence_from_previous_week,
     ensure_ongoing_patients_have_upcoming_bookings,
     ensure_default_recurring_vacancies,
@@ -857,10 +858,15 @@ def api_calendar_vacancy_occupy(override_id):
         ))
         booked_label = patient['name']
     else:
-        db.execute('''
-            INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
-            VALUES (?, ?, ?, ?, 0, 'special')
-        ''', (row['slot_date'], row['slot_time'], duration, occupant_name))
+        create_waiting_patient_appointment(
+            db,
+            name=occupant_name,
+            appointment_date=row['slot_date'],
+            appointment_time=row['slot_time'],
+            duration_minutes=duration,
+            meeting_title='Vacancy occupy (named)',
+            patient_status='waiting',
+        )
         booked_label = occupant_name
     db.execute('''
         UPDATE availability
@@ -1517,21 +1523,47 @@ def api_open_slot_book(token):
     if conflict:
         return jsonify({'status': 'error', 'message': 'This slot is no longer available \u2014 another booking was just made.'}), 409
 
-    full_title = booker_name
+    meeting_title = 'Self-booked via open slot'
     if booker_notes:
-        full_title = f"{booker_name} \u2014 {booker_notes}"
+        meeting_title = f'{meeting_title} — {booker_notes[:80]}'
 
-    db.execute('''
-        INSERT INTO blocked_slots (blocked_date, blocked_time, duration_minutes, title, is_private, block_type)
-        VALUES (?, ?, ?, ?, 0, 'blocked')
-    ''', (row['slot_date'], row['slot_time'], duration, full_title))
+    try:
+        patient_id, _appointment_id = create_waiting_patient_appointment(
+            db,
+            name=booker_name,
+            phone=booker_phone or None,
+            appointment_date=row['slot_date'],
+            appointment_time=row['slot_time'],
+            duration_minutes=duration,
+            meeting_title=meeting_title,
+            patient_status='waiting',
+        )
 
-    db.execute('''
-        UPDATE availability
-        SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_at = ?
-        WHERE id = ?
-    ''', (booker_name, booker_phone, datetime.now().isoformat(), row['id']))
-    db.commit()
+        db.execute('''
+            UPDATE availability
+            SET status = 'booked', booked_by_name = ?, booked_by_phone = ?, booked_notes = ?, booked_at = ?
+            WHERE id = ?
+        ''', (booker_name, booker_phone or None, booker_notes or None, datetime.now().isoformat(), row['id']))
+
+        contact_text = booker_phone or 'n/a'
+        notes_suffix = f' Notes: {booker_notes}.' if booker_notes else ''
+        message = (
+            f'New pending patient: {booker_name} booked {row["slot_date"]} at {row["slot_time"]}. '
+            f'Contact: {contact_text}.{notes_suffix}'
+        )
+        try:
+            db.execute('INSERT INTO notifications (message, is_read) VALUES (?, 0)', (message,))
+            db.execute(
+                'INSERT INTO audit_logs (patient_id, action, details) VALUES (?, ?, ?)',
+                (patient_id, 'open-slot-self-book', message)
+            )
+        except Exception:
+            pass
+        db.commit()
+    except Exception:
+        db.rollback()
+        return jsonify({'status': 'error', 'message': 'Booking failed due to a server error. Please try again.'}), 500
+
     return jsonify({'status': 'success', 'message': f'Your booking for {row["slot_date"]} at {row["slot_time"]} has been confirmed!'})
 
 

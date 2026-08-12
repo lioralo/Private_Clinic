@@ -3676,6 +3676,273 @@ class ClinicTestCase(unittest.TestCase):
         assert payload.get('status') == 'error'
         assert 'appointment' in (payload.get('message') or '').lower()
 
+    def test_open_slot_book_creates_waiting_patient_appointment(self):
+        """Public open-slot booking creates patient+appointment, not a red block."""
+        self.login('lioraloni', 'Flo@tingind4')
+        future_day = (datetime.now().date() + timedelta(days=9)).isoformat()
+        create_rv = self.client.post('/api/calendar/vacancy', data=dict(
+            slot_date=future_day,
+            slot_time='11:00',
+            end_time='12:00',
+            recurrence_pattern='one-time',
+        ))
+        assert create_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            row = db.execute(
+                "SELECT id FROM availability WHERE slot_date = ? AND slot_time = '11:00'",
+                (future_day,),
+            ).fetchone()
+            assert row is not None
+            token = 'test-open-slot-token-001'
+            db.execute(
+                'UPDATE availability SET share_token = ? WHERE id = ?',
+                (token, row['id']),
+            )
+            db.commit()
+            blocks_before = db.execute('SELECT COUNT(*) AS c FROM blocked_slots').fetchone()['c']
+
+        self.logout()
+        book_rv = self.client.post(
+            f'/api/calendar/open/{token}/book',
+            data=dict(name='Open Booker', phone='0501234567', notes='Prefers morning'),
+        )
+        assert book_rv.status_code == 200
+        assert book_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute(
+                "SELECT id, name, status, phone FROM patients WHERE name = 'Open Booker'"
+            ).fetchone()
+            assert patient is not None
+            assert patient['status'] == 'waiting'
+            assert patient['phone'] == '0501234567'
+            appt = db.execute(
+                '''
+                SELECT appointment_date, appointment_time, status, meeting_title
+                FROM appointments WHERE patient_id = ?
+                ''',
+                (patient['id'],),
+            ).fetchone()
+            assert appt is not None
+            assert appt['appointment_date'] == future_day
+            assert (appt['appointment_time'] or '')[:5] == '11:00'
+            assert appt['status'] == 'scheduled'
+            assert 'open slot' in (appt['meeting_title'] or '').lower()
+            blocks_after = db.execute('SELECT COUNT(*) AS c FROM blocked_slots').fetchone()['c']
+            assert blocks_after == blocks_before
+            avail = db.execute(
+                "SELECT status, booked_by_name FROM availability WHERE share_token = ?",
+                (token,),
+            ).fetchone()
+            assert avail['status'] == 'booked'
+            assert avail['booked_by_name'] == 'Open Booker'
+
+    def test_admin_vacancy_occupy_by_name_creates_appointment(self):
+        """Name-only vacancy occupy creates waiting patient + appointment, not a block."""
+        self.login('lioraloni', 'Flo@tingind4')
+        future_day = (datetime.now().date() + timedelta(days=11)).isoformat()
+        create_rv = self.client.post('/api/calendar/vacancy', data=dict(
+            slot_date=future_day,
+            slot_time='15:00',
+            end_time='16:00',
+            recurrence_pattern='one-time',
+        ))
+        assert create_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            override_id = db.execute(
+                "SELECT id FROM availability WHERE slot_date = ? AND slot_time = '15:00'",
+                (future_day,),
+            ).fetchone()['id']
+            blocks_before = db.execute('SELECT COUNT(*) AS c FROM blocked_slots').fetchone()['c']
+
+        rv = self.client.post(
+            f'/api/calendar/vacancy/{override_id}/occupy',
+            data=dict(occupant_name='Named Occupant'),
+        )
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            patient = db.execute(
+                "SELECT id, status FROM patients WHERE name = 'Named Occupant'"
+            ).fetchone()
+            assert patient is not None
+            assert patient['status'] == 'waiting'
+            appt = db.execute(
+                'SELECT id FROM appointments WHERE patient_id = ?',
+                (patient['id'],),
+            ).fetchone()
+            assert appt is not None
+            blocks_after = db.execute('SELECT COUNT(*) AS c FROM blocked_slots').fetchone()['c']
+            assert blocks_after == blocks_before
+
+    def test_admin_titled_block_stays_blocked_slot(self):
+        """Admin-created titled blocks remain red blocked_slots (not appointments)."""
+        self.login('lioraloni', 'Flo@tingind4')
+        booking_date, booking_time = self.next_allowed_booking_slot(
+            preferred_times=['10:00', '09:00', '14:00']
+        )
+        end_time = (datetime.strptime(booking_time, '%H:%M') + timedelta(hours=1)).strftime('%H:%M')
+        rv = self.client.post('/api/calendar/block', data=dict(
+            blocked_date=booking_date,
+            blocked_time=booking_time,
+            end_time=end_time,
+            block_type='blocked',
+            title='Staff Meeting',
+        ))
+        assert rv.status_code == 200
+        assert rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            block = db.execute(
+                "SELECT title, created_by FROM blocked_slots WHERE title = 'Staff Meeting'"
+            ).fetchone()
+            assert block is not None
+            assert block['created_by'] is not None
+            patient = db.execute(
+                "SELECT id FROM patients WHERE name = 'Staff Meeting'"
+            ).fetchone()
+            assert patient is None
+
+    def test_migrate_named_blocked_bookings_to_appointments(self):
+        """Historical named public blocks convert to waiting patients + appointments."""
+        from clinic_app.utils import migrate_named_blocked_bookings_to_appointments
+
+        self.login('lioraloni', 'Flo@tingind4')
+        day = (datetime.now().date() + timedelta(days=12)).isoformat()
+
+        with app.app_context():
+            db = get_db()
+            # Open-slot style: named block + matching booked availability, no created_by
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '09:00', 60, 'Legacy Booker — prefers email', 0, 'blocked', NULL)
+            ''', (day,))
+            db.execute('''
+                INSERT INTO availability
+                (slot_date, slot_time, duration_minutes, status, booked_by_name, booked_by_phone)
+                VALUES (?, '09:00', 60, 'booked', 'Legacy Booker', '0509998888')
+            ''', (day,))
+            # Occupy-by-name style: special, no created_by
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '10:00', 60, 'Legacy Occupant', 0, 'special', NULL)
+            ''', (day,))
+            # Admin block with custom title must stay
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '11:00', 60, 'Clinic Closed', 0, 'blocked', 1)
+            ''', (day,))
+            # Private block must stay
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '12:00', 60, 'Private Person', 1, 'blocked', NULL)
+            ''', (day,))
+            # Preserved admin title stays even without created_by
+            db.execute('''
+                INSERT INTO blocked_slots
+                (blocked_date, blocked_time, duration_minutes, title, is_private, block_type, created_by)
+                VALUES (?, '13:00', 60, 'Blocked Slot', 0, 'blocked', NULL)
+            ''', (day,))
+            db.commit()
+
+            migrated = migrate_named_blocked_bookings_to_appointments(db)
+            assert migrated == 2
+
+            legacy_patient = db.execute(
+                "SELECT id, status, phone FROM patients WHERE name = 'Legacy Booker'"
+            ).fetchone()
+            assert legacy_patient is not None
+            assert legacy_patient['status'] == 'waiting'
+            assert legacy_patient['phone'] == '0509998888'
+            assert db.execute(
+                'SELECT COUNT(*) AS c FROM appointments WHERE patient_id = ?',
+                (legacy_patient['id'],),
+            ).fetchone()['c'] == 1
+
+            occupy_patient = db.execute(
+                "SELECT id FROM patients WHERE name = 'Legacy Occupant'"
+            ).fetchone()
+            assert occupy_patient is not None
+
+            remaining_titles = {
+                r['title']
+                for r in db.execute(
+                    'SELECT title FROM blocked_slots WHERE blocked_date = ?',
+                    (day,),
+                ).fetchall()
+            }
+            assert remaining_titles == {'Clinic Closed', 'Private Person', 'Blocked Slot'}
+            assert 'Legacy Booker — prefers email' not in remaining_titles
+            assert 'Legacy Occupant' not in remaining_titles
+
+            # Idempotent
+            assert migrate_named_blocked_bookings_to_appointments(db) == 0
+
+    def test_migrated_open_booking_appears_as_appointment_not_red_block(self):
+        """After open-slot book, calendar snapshot shows appointment event, not block."""
+        self.login('lioraloni', 'Flo@tingind4')
+        future_day = (datetime.now().date() + timedelta(days=13)).isoformat()
+        day_obj = datetime.strptime(future_day, '%Y-%m-%d').date()
+        week_start = day_obj - timedelta(days=(day_obj.weekday() + 1) % 7)
+
+        create_rv = self.client.post('/api/calendar/vacancy', data=dict(
+            slot_date=future_day,
+            slot_time='16:30',
+            end_time='17:30',
+            recurrence_pattern='one-time',
+        ))
+        assert create_rv.get_json().get('status') == 'success'
+
+        with app.app_context():
+            db = get_db()
+            avail_id = db.execute(
+                "SELECT id FROM availability WHERE slot_date = ? AND slot_time = '16:30'",
+                (future_day,),
+            ).fetchone()['id']
+            token = 'test-open-slot-token-snapshot'
+            db.execute(
+                'UPDATE availability SET share_token = ? WHERE id = ?',
+                (token, avail_id),
+            )
+            db.commit()
+
+        self.logout()
+        book_rv = self.client.post(
+            f'/api/calendar/open/{token}/book',
+            data=dict(name='Snapshot Booker'),
+        )
+        assert book_rv.status_code == 200
+
+        self.login('lioraloni', 'Flo@tingind4')
+        snap = self.client.get(f'/api/calendar/snapshot?week_start={week_start.isoformat()}')
+        assert snap.status_code == 200
+        events = snap.get_json().get('events') or []
+        appt_events = [
+            e for e in events
+            if (e.get('meta') or {}).get('type') == 'appointment'
+            and 'Snapshot Booker' in (e.get('title') or '')
+            and (e.get('start') or '').startswith(future_day)
+        ]
+        block_events = [
+            e for e in events
+            if (e.get('meta') or {}).get('type') == 'block'
+            and 'Snapshot Booker' in (e.get('title') or '')
+        ]
+        assert len(appt_events) == 1
+        assert len(block_events) == 0
+
 
 class TemplateFilterTests(unittest.TestCase):
     def test_from_iso_date_valid(self):
