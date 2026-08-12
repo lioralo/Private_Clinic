@@ -1061,6 +1061,115 @@ def reject_cancel_request(request_id):
 # Google Docs auto-sync
 # ---------------------------------------------------------------------------
 
+@admin_bp.route('/admin/google-docs', methods=['GET', 'POST'])
+@login_required
+def google_docs_sync():
+    if current_user.role != 'admin':
+        return redirect(url_for('patient_home'))
+
+    db = get_db()
+    from app import (
+        get_site_settings, save_site_settings,
+        _list_connected_google_docs, _get_google_docs_auto_sync_state,
+        _get_recent_gdocs_sync_history, _get_gdocs_auto_sync_health,
+        _get_gdocs_per_target_status, _get_gdocs_sync_selection_warnings,
+        GDOC_AUTO_SYNC_INTERVAL_SECONDS, GDOC_AUTO_SYNC_GROUP_MODES,
+        _parse_gdoc_target_key, _format_gdoc_target_key,
+        _google_docs_dependency_error,
+    )
+
+    if request.method == 'POST':
+        selected_sync_targets = []
+        selected_sync_targets_config = []
+        for raw_target in request.form.getlist('gdoc_sync_targets'):
+            target_type, target_id = _parse_gdoc_target_key(raw_target)
+            if not target_type:
+                continue
+            target_key = _format_gdoc_target_key(target_type, target_id)
+            if not target_key or target_key in selected_sync_targets:
+                continue
+            selected_sync_targets.append(target_key)
+            target_mode = (request.form.get(f'gdoc_sync_mode::{target_key}') or 'pull').strip().lower()
+            if target_type == 'group':
+                target_mode = target_mode if target_mode in GDOC_AUTO_SYNC_GROUP_MODES else 'pull'
+            else:
+                target_mode = 'pull'
+            selected_sync_targets_config.append({'target_key': target_key, 'mode': target_mode})
+
+        selected_interval = (request.form.get('gdocs_auto_sync_interval') or 'daily').strip().lower()
+        if selected_interval not in GDOC_AUTO_SYNC_INTERVAL_SECONDS:
+            selected_interval = 'daily'
+
+        save_site_settings(db, {
+            'gdocs_auto_sync_enabled': '1' if request.form.get('gdocs_auto_sync_enabled') else '0',
+            'gdocs_auto_sync_interval': selected_interval,
+            'gdocs_auto_sync_targets_json': json.dumps(selected_sync_targets),
+            'gdocs_auto_sync_targets_config_json': json.dumps(selected_sync_targets_config),
+        })
+        db.commit()
+        flash('Google Docs sync settings saved.')
+        return redirect(url_for('.google_docs_sync'))
+
+    connected_google_docs = _list_connected_google_docs(db)
+    gdocs_auto_sync_state = _get_google_docs_auto_sync_state(db, connected_docs=connected_google_docs)
+    gdocs_auto_sync_health = _get_gdocs_auto_sync_health(db)
+    gdocs_sync_history = _get_recent_gdocs_sync_history(db, limit=20)
+    per_target_status = _get_gdocs_per_target_status(db, limit_runs=40)
+    selection_warnings = _get_gdocs_sync_selection_warnings(db, connected_docs=connected_google_docs)
+    selected_mode_by_key = dict(selection_warnings.get('mode_by_key') or {})
+    for item in gdocs_auto_sync_state.get('selected_targets') or []:
+        selected_mode_by_key.setdefault(item['target_key'], item.get('mode') or 'pull')
+
+    inventory = []
+    for doc in connected_google_docs:
+        status = per_target_status.get(doc['target_key']) or {}
+        inventory.append({
+            **doc,
+            'in_auto_sync': doc['target_key'] in selected_mode_by_key,
+            'sync_mode': selected_mode_by_key.get(doc['target_key']) or 'pull',
+            'last_status': status.get('last_status'),
+            'last_error': status.get('last_error'),
+            'last_run_at': status.get('last_run_at'),
+            'last_synced': status.get('last_synced'),
+            'last_action': status.get('last_action'),
+        })
+
+    dependency_error = _google_docs_dependency_error()
+    google_connected = False
+    google_client_configured = False
+    google_libs_ok = bool(_gcal and getattr(_gcal, 'GOOGLE_LIBS_AVAILABLE', False))
+    if _gcal:
+        try:
+            google_client_configured = bool(_gcal._client_secrets_available())
+            if google_client_configured:
+                google_connected = bool(_gcal.is_connected(db))
+        except Exception:
+            google_connected = False
+
+    return render_template(
+        'google_docs_sync.html',
+        connected_google_docs=connected_google_docs,
+        gdocs_inventory=inventory,
+        gdocs_auto_sync_state=gdocs_auto_sync_state,
+        gdocs_auto_sync_health=gdocs_auto_sync_health,
+        gdocs_sync_history=gdocs_sync_history,
+        selection_warnings=selection_warnings,
+        selected_mode_by_key=selected_mode_by_key,
+        interval_options=[
+            ('twice_daily', 'Twice daily'),
+            ('daily', 'Daily'),
+            ('twice_weekly', 'Twice weekly'),
+            ('weekly', 'Weekly'),
+            ('biweekly', 'Biweekly'),
+            ('monthly', 'Monthly'),
+        ],
+        dependency_error=dependency_error,
+        google_libs_ok=google_libs_ok,
+        google_client_configured=google_client_configured,
+        google_connected=google_connected,
+    )
+
+
 @admin_bp.route('/admin/google-docs/auto-sync-now', methods=['POST'])
 @login_required
 def google_docs_auto_sync_now():

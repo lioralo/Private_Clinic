@@ -796,6 +796,101 @@ class GoogleDocsIntegrationRoutesTest(unittest.TestCase):
             ['Initial Intake', 'Mood Tracker']
         )
 
+    def test_google_docs_sync_page_loads_for_admin(self):
+        self._login_admin()
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('patient-doc-page',))
+            db.execute(
+                '''INSERT INTO gdocs_sync_history
+                   (trigger_source, status, interval_key, targets_total, targets_processed,
+                    synced_total, synced_patients, synced_groups, pushed_groups, errors_json, details_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    'manual', 'partial', 'daily', 1, 0, 0, 0, 0, 0,
+                    json.dumps(['patient:1 -> boom']),
+                    json.dumps([{'target_key': 'patient:1', 'action': 'pull', 'status': 'error', 'error': 'boom'}]),
+                )
+            )
+            db.commit()
+
+        rv = self.client.get('/admin/google-docs')
+        self.assertEqual(rv.status_code, 200)
+        html = rv.data.decode('utf-8')
+        self.assertIn('patient-doc-page', html)
+        self.assertIn('Docs Test Patient', html)
+        self.assertIn('boom', html)
+
+    def test_google_docs_sync_page_saves_targets_and_modes(self):
+        self._login_admin()
+        with app.app_context():
+            db = get_db()
+            db.execute("UPDATE patients SET gdoc_id = ? WHERE id = 1", ('patient-doc-save',))
+            db.execute(
+                "INSERT INTO groups (name, group_type, description, gdoc_id) VALUES (?, ?, ?, ?)",
+                ('Sync Page Group', 'therapy', 'docs', 'group-doc-save')
+            )
+            group_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.commit()
+
+        rv = self.client.post('/admin/google-docs', data={
+            'gdocs_auto_sync_enabled': '1',
+            'gdocs_auto_sync_interval': 'weekly',
+            'gdoc_sync_targets': ['patient:1', f'group:{group_id}'],
+            f'gdoc_sync_mode::group:{group_id}': 'both',
+            'gdoc_sync_mode::patient:1': 'pull',
+        }, follow_redirects=True)
+        self.assertEqual(rv.status_code, 200)
+
+        with app.app_context():
+            db = get_db()
+            rows = db.execute('SELECT setting_key, setting_value FROM site_settings').fetchall()
+            settings = {row['setting_key']: row['setting_value'] for row in rows}
+
+        self.assertEqual(settings.get('gdocs_auto_sync_enabled'), '1')
+        self.assertEqual(settings.get('gdocs_auto_sync_interval'), 'weekly')
+        self.assertEqual(
+            settings.get('gdocs_auto_sync_targets_json'),
+            json.dumps(['patient:1', f'group:{group_id}'])
+        )
+        config = json.loads(settings.get('gdocs_auto_sync_targets_config_json') or '[]')
+        modes = {item['target_key']: item['mode'] for item in config}
+        self.assertEqual(modes.get('patient:1'), 'pull')
+        self.assertEqual(modes.get(f'group:{group_id}'), 'both')
+
+    def test_google_docs_sync_page_forbidden_for_non_admin(self):
+        rv = self.client.get('/admin/google-docs', follow_redirects=False)
+        self.assertIn(rv.status_code, (302, 401, 403))
+
+    def test_recent_history_includes_details_and_per_target_status(self):
+        with app.app_context():
+            db = get_db()
+            db.execute(
+                '''INSERT INTO gdocs_sync_history
+                   (trigger_source, status, interval_key, targets_total, targets_processed,
+                    synced_total, synced_patients, synced_groups, pushed_groups, errors_json, details_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    'worker', 'failed', 'daily', 1, 0, 0, 0, 0, 0,
+                    json.dumps(['patient:1 -> denied']),
+                    json.dumps([{
+                        'target_key': 'patient:1',
+                        'mode': 'pull',
+                        'action': 'pull',
+                        'status': 'error',
+                        'attempts': 2,
+                        'error': 'denied',
+                    }]),
+                )
+            )
+            db.commit()
+            history = app_module._get_recent_gdocs_sync_history(db, limit=5)
+            self.assertTrue(history)
+            self.assertEqual(history[0]['details'][0]['error'], 'denied')
+            per_target = app_module._get_gdocs_per_target_status(db)
+            self.assertEqual(per_target['patient:1']['last_status'], 'error')
+            self.assertEqual(per_target['patient:1']['last_error'], 'denied')
+
 
 if __name__ == '__main__':
     unittest.main()

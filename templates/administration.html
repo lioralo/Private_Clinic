@@ -86,6 +86,14 @@
         </a>
     </div>
     <div class="col-md-6 col-xl-3">
+        <a href="{{ url_for('admin.google_docs_sync') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
+            <div class="card-body p-4"><i class="bi bi-google text-primary mb-2" style="font-size:1.5rem"></i>
+                <h5 class="fw-bold text-dark">{{ t('Google Sync') }}</h5>
+                <p class="small text-muted mb-0">{{ t('Docs inventory, history & auto-sync') }}</p>
+            </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
         <a href="{{ url_for('admin_security_log') }}" class="card border-0 shadow-sm rounded-4 h-100 text-decoration-none hover-shadow">
             <div class="card-body p-4"><i class="bi bi-shield-check text-danger mb-2" style="font-size:1.5rem"></i>
                 <h5 class="fw-bold text-dark">{{ t('Security Log') }}</h5>
@@ -249,12 +257,15 @@
                 </div>
             </div>
 
-            <form method="post" action="{{ url_for('admin.administration') }}" class="border rounded-3 p-3">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+            <div class="border rounded-3 p-3">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                     <div>
                         <div class="fw-semibold">{{ t('Google Docs Auto Sync') }}</div>
                         <div class="small text-muted">
+                            {% if gdocs_auto_sync_health.last_status %}
+                            {{ t('Last status') }}: {{ gdocs_auto_sync_health.last_status }}
+                            ·
+                            {% endif %}
                             {% if gdocs_auto_sync_state.last_run_at %}
                             {{ t('Last sync:') }} {{ gdocs_auto_sync_state.last_run_at|strftime('%Y-%m-%d %H:%M') }}
                             {% else %}
@@ -262,27 +273,17 @@
                             {% endif %}
                         </div>
                     </div>
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" name="gdocs_auto_sync_enabled" id="gdocsAutoSyncEnabled" {% if gdocs_auto_sync_state.enabled %}checked{% endif %}>
-                        <label class="form-check-label small fw-semibold" for="gdocsAutoSyncEnabled">{{ t('Enable') }}</label>
-                    </div>
+                    {% if gdocs_auto_sync_state.enabled %}
+                    <span class="badge bg-success rounded-pill">{{ t('Enabled') }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary rounded-pill">{{ t('Disabled') }}</span>
+                    {% endif %}
                 </div>
-                <div class="row g-2 align-items-end">
-                    <div class="col-12 col-md-5">
-                        <label class="form-label small text-muted mb-1" for="gdocsAutoSyncInterval">{{ t('Interval') }}</label>
-                        <select class="form-select form-select-sm" name="gdocs_auto_sync_interval" id="gdocsAutoSyncInterval">
-                            {% for key, label in [('twice_daily','Twice daily'),('daily','Daily'),('twice_weekly','Twice weekly'),('weekly','Weekly'),('biweekly','Biweekly'),('monthly','Monthly')] %}
-                            <option value="{{ key }}" {% if gdocs_auto_sync_state.interval_key == key %}selected{% endif %}>{{ t(label) }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-7 d-flex flex-wrap gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3">{{ t('Save Auto Sync') }}</button>
-                        <button type="button" id="runGdocsAutoSyncNowBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3">{{ t('Sync Now') }}</button>
-                    </div>
-                </div>
-                <div id="gdocsAutoSyncStatus" class="small text-muted mt-2" aria-live="polite"></div>
-            </form>
+                <p class="small text-muted mb-3">{{ t('Manage connected documents, sync history, and Sync Now on the Google Sync page.') }}</p>
+                <a href="{{ url_for('admin.google_docs_sync') }}" class="btn btn-primary btn-sm rounded-pill px-3">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('Manage Google Sync') }}
+                </a>
+            </div>
         </div>
     </div>
 </div>

@@ -168,12 +168,12 @@
             <span class="badge bg-success rounded-pill">{{ t('Connected') }}</span>
             <span class="small text-muted">{{ patient['gdoc_id'] }}</span>
         </div>
-        <p class="small text-muted mb-3">{{ t('Google Docs content is synced from the connected document. Use the Google Docs auto-sync in Administration to pull updates.') }}</p>
+        <p class="small text-muted mb-3">{{ t('Google Docs content is synced from the connected document. Use Google Sync to review status and pull updates.') }}</p>
         {% else %}
         <p class="text-muted mb-3">{{ t('No Google Doc is linked to this patient yet.') }}</p>
-        <p class="small text-muted">{{ t('To link a Google Doc, go to the patient detail page in Google Docs integration or set up auto-sync from the Administration page.') }}</p>
+        <p class="small text-muted">{{ t('To link a Google Doc, use the Google Docs actions on this patient or manage auto-sync from the Google Sync page.') }}</p>
         {% endif %}
-        <a href="{{ url_for('admin.administration') }}" class="btn btn-outline-primary rounded-pill btn-sm">
+        <a href="{{ url_for('admin.google_docs_sync') }}" class="btn btn-outline-primary rounded-pill btn-sm">
             <i class="bi bi-gear me-1"></i>{{ t('Google Sync Settings') }}
         </a>
     </div>

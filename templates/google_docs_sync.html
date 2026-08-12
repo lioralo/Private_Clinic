@@ -1,0 +1,453 @@
+{% extends 'layout.html' %}
+{% block page_title %}{{ t('Google Sync') }}{% endblock %}
+{% block content %}
+{{ breadcrumb([
+    {'url': url_for('admin_dashboard'), 'label': t('Dashboard')},
+    {'url': '', 'label': t('Google Sync')}
+]) }}
+
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+        <h2 class="text-2xl font-bold text-teal-900 mb-1"><i class="bi bi-google me-2"></i>{{ t('Google Sync') }}</h2>
+        <p class="text-slate-500 text-sm mb-0">{{ t('Inventory connected Google Docs, review sync problems, and manage auto-sync.') }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('admin.google_setup') }}" class="btn btn-outline-secondary rounded-pill btn-sm">
+            <i class="bi bi-gear me-1"></i>{{ t('Setup Guide') }}
+        </a>
+        <button type="button" id="runGdocsAutoSyncNowBtn" class="btn btn-primary rounded-pill btn-sm px-3">
+            <i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync Now') }}
+        </button>
+    </div>
+</div>
+
+{# Health banner #}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <h5 class="fw-bold text-primary mb-0">{{ t('Sync Health') }}</h5>
+            {% if gdocs_auto_sync_health.enabled %}
+            <span class="badge bg-success rounded-pill">{{ t('Enabled') }}</span>
+            {% else %}
+            <span class="badge bg-secondary rounded-pill">{{ t('Disabled') }}</span>
+            {% endif %}
+            {% if gdocs_auto_sync_health.overdue %}
+            <span class="badge bg-danger rounded-pill">{{ t('Overdue') }}</span>
+            {% endif %}
+            {% if gdocs_auto_sync_health.last_status %}
+            {% set _status = gdocs_auto_sync_health.last_status %}
+            {% set _badge = 'bg-success' if _status == 'success' else ('bg-warning text-dark' if _status == 'partial' else 'bg-danger') %}
+            <span class="badge {{ _badge }} rounded-pill">{{ t('Last status') }}: {{ _status }}</span>
+            {% endif %}
+            {% if gdocs_auto_sync_health.last_trigger %}
+            <span class="badge bg-light text-dark border rounded-pill">{{ t('Trigger') }}: {{ gdocs_auto_sync_health.last_trigger }}</span>
+            {% endif %}
+        </div>
+        <div class="row g-3 small">
+            <div class="col-md-3">
+                <div class="text-muted">{{ t('Interval') }}</div>
+                <div class="fw-semibold">{{ gdocs_auto_sync_health.interval_key }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">{{ t('Selected docs') }}</div>
+                <div class="fw-semibold">{{ gdocs_auto_sync_health.selected_count }} / {{ gdocs_auto_sync_health.connected_count or connected_google_docs|length }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">{{ t('Last run') }}</div>
+                <div class="fw-semibold">
+                    {% if gdocs_auto_sync_health.last_run_at %}
+                    {{ gdocs_auto_sync_health.last_run_at|strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                    {{ t('Never synced') }}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted">{{ t('Next run') }}</div>
+                <div class="fw-semibold">
+                    {% if gdocs_auto_sync_health.next_run_at %}
+                    {{ gdocs_auto_sync_health.next_run_at|strftime('%Y-%m-%d %H:%M') }}
+                    {% else %}
+                    {{ t('Not scheduled') }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3 small">
+            {% if not google_libs_ok %}
+            <span class="badge bg-warning text-dark">{{ t('Google libraries not installed') }}</span>
+            {% elif not google_client_configured %}
+            <span class="badge bg-warning text-dark">{{ t('Google OAuth not configured') }}</span>
+            {% elif google_connected %}
+            <span class="badge bg-success">{{ t('Google connected') }}</span>
+            {% else %}
+            <span class="badge bg-secondary">{{ t('Google not connected') }}</span>
+            <a href="{{ url_for('google_calendar_connect') }}" class="btn btn-outline-success btn-sm rounded-pill py-0">{{ t('Connect Google') }}</a>
+            {% endif %}
+            {% if dependency_error %}
+            <span class="badge bg-danger">{{ t('Docs dependency issue') }}</span>
+            {% endif %}
+            {% if gdocs_auto_sync_health.last_synced_total is not none %}
+            <span class="badge bg-light text-dark border">{{ gdocs_auto_sync_health.last_synced_total }} {{ t('synced') }}</span>
+            {% endif %}
+        </div>
+        {% if dependency_error %}
+        <div class="alert alert-danger mt-3 mb-0 py-2 small">{{ dependency_error }}</div>
+        {% endif %}
+        {% if gdocs_auto_sync_health.last_errors %}
+        <div class="alert alert-warning mt-3 mb-0 py-2 small">
+            <div class="fw-semibold mb-1">{{ t('Latest run errors') }}</div>
+            <ul class="mb-0 ps-3">
+                {% for err in gdocs_auto_sync_health.last_errors[:5] %}
+                <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <div id="gdocsAutoSyncStatus" class="small text-muted mt-3" aria-live="polite"></div>
+    </div>
+</div>
+
+{% if selection_warnings.missing_selected %}
+<div class="alert alert-warning border-0 shadow-sm rounded-4">
+    <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i>{{ t('Selected docs missing connection') }}</div>
+    <div class="small mb-0">
+        {{ t('These auto-sync targets are saved but no longer linked to a Google Doc:') }}
+        {% for item in selection_warnings.missing_selected %}
+        <code class="me-1">{{ item.target_key }}</code>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if selection_warnings.unselected_connected and gdocs_auto_sync_health.enabled %}
+<div class="alert alert-info border-0 shadow-sm rounded-4">
+    <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>{{ t('Connected docs not in auto-sync') }}</div>
+    <div class="small mb-0">
+        {{ selection_warnings.unselected_connected|length }} {{ t('connected document(s) are not selected for automatic sync.') }}
+    </div>
+</div>
+{% endif %}
+
+{# Settings + selection #}
+<form method="post" action="{{ url_for('admin.google_docs_sync') }}" class="card border-0 shadow-sm rounded-4 mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
+        <h5 class="fw-bold text-primary mb-1">{{ t('Auto Sync Settings') }}</h5>
+        <p class="small text-muted mb-0">{{ t('Choose which connected documents sync automatically and how often.') }}</p>
+    </div>
+    <div class="card-body p-4">
+        <div class="row g-3 align-items-end mb-4">
+            <div class="col-md-auto">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="gdocs_auto_sync_enabled" id="gdocsAutoSyncEnabled" {% if gdocs_auto_sync_state.enabled %}checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="gdocsAutoSyncEnabled">{{ t('Enable recurring sync') }}</label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small text-muted mb-1" for="gdocsAutoSyncInterval">{{ t('Sync interval') }}</label>
+                <select class="form-select" name="gdocs_auto_sync_interval" id="gdocsAutoSyncInterval">
+                    {% for key, label in interval_options %}
+                    <option value="{{ key }}" {% if gdocs_auto_sync_state.interval_key == key %}selected{% endif %}>{{ t(label) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-auto">
+                <button type="submit" class="btn btn-primary rounded-pill px-4">{{ t('Save Auto Sync Settings') }}</button>
+            </div>
+        </div>
+
+        <h6 class="fw-bold mb-3">{{ t('Connected Google Docs') }}</h6>
+        {% if gdocs_inventory %}
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="small text-muted">
+                    <tr>
+                        <th scope="col">{{ t('Auto sync') }}</th>
+                        <th scope="col">{{ t('Document') }}</th>
+                        <th scope="col">{{ t('Type') }}</th>
+                        <th scope="col">{{ t('Mode') }}</th>
+                        <th scope="col">{{ t('Last sync') }}</th>
+                        <th scope="col">{{ t('Watch') }}</th>
+                        <th scope="col">{{ t('Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in gdocs_inventory %}
+                    <tr class="{% if doc.last_status == 'error' %}table-danger{% elif doc.watch_expired %}table-warning{% endif %}">
+                        <td>
+                            <input class="form-check-input" type="checkbox" name="gdoc_sync_targets" value="{{ doc.target_key }}" id="syncTarget_{{ loop.index }}" {% if doc.in_auto_sync %}checked{% endif %}>
+                        </td>
+                        <td>
+                            <label class="fw-semibold mb-0" for="syncTarget_{{ loop.index }}">{{ doc.label }}</label>
+                            <div class="small text-muted text-break">{{ doc.doc_id }}</div>
+                        </td>
+                        <td>
+                            {% if doc.target_type == 'group' %}
+                            <span class="badge bg-primary-subtle text-primary border">{{ t('Group') }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary border">{{ t('Patient') }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="min-width:11rem">
+                            {% if doc.target_type == 'group' %}
+                            <select class="form-select form-select-sm" name="gdoc_sync_mode::{{ doc.target_key }}">
+                                <option value="pull" {% if doc.sync_mode != 'both' %}selected{% endif %}>{{ t('Pull doc to site only') }}</option>
+                                <option value="both" {% if doc.sync_mode == 'both' %}selected{% endif %}>{{ t('Pull and push (two-way)') }}</option>
+                            </select>
+                            {% else %}
+                            <input type="hidden" name="gdoc_sync_mode::{{ doc.target_key }}" value="pull">
+                            <span class="small text-muted">{{ t('Pull doc to site only') }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if doc.last_status %}
+                            {% set _s = doc.last_status %}
+                            {% set _sb = 'bg-success' if _s == 'ok' else ('bg-warning text-dark' if _s == 'partial' else 'bg-danger') %}
+                            <span class="badge {{ _sb }}">{{ _s }}</span>
+                            {% if doc.last_run_at %}
+                            <div class="small text-muted mt-1">{{ doc.last_run_at }}</div>
+                            {% endif %}
+                            {% if doc.last_synced is not none %}
+                            <div class="small text-muted">{{ doc.last_synced }} {{ t('synced') }}</div>
+                            {% endif %}
+                            {% if doc.last_error %}
+                            <div class="small text-danger mt-1">{{ doc.last_error }}</div>
+                            {% endif %}
+                            {% else %}
+                            <span class="small text-muted">{{ t('No sync history yet.') }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if doc.watch_expired %}
+                            <span class="badge bg-danger">{{ t('Watch expired') }}</span>
+                            {% elif doc.watch_expiring_soon %}
+                            <span class="badge bg-warning text-dark">{{ t('Watch expiring soon') }}</span>
+                            {% elif doc.watch_expiry_at %}
+                            <span class="small text-muted">{{ doc.watch_expiry_at|strftime('%Y-%m-%d') }}</span>
+                            {% else %}
+                            <span class="small text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                <a class="btn btn-outline-secondary btn-sm rounded-pill" href="{{ doc.doc_url }}" target="_blank" rel="noopener noreferrer">{{ t('Open Doc') }}</a>
+                                {% if doc.target_type == 'patient' %}
+                                <a class="btn btn-outline-primary btn-sm rounded-pill" href="{{ url_for('patient_detail', patient_id=doc.target_id, tab='gdocs') }}">{{ t('Patient') }}</a>
+                                {% else %}
+                                <a class="btn btn-outline-primary btn-sm rounded-pill" href="{{ url_for('group_detail', group_id=doc.target_id) }}">{{ t('Group') }}</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="border rounded-3 p-4 bg-light">
+            <p class="mb-2 fw-semibold">{{ t('No Google Docs are linked yet.') }}</p>
+            <p class="small text-muted mb-3">{{ t('Link a document from a patient page or group page, then return here to include it in auto-sync.') }}</p>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{{ url_for('crm_dashboard') }}" class="btn btn-outline-primary btn-sm rounded-pill">{{ t('Patients') }}</a>
+                <a href="{{ url_for('groups_dashboard') }}" class="btn btn-outline-primary btn-sm rounded-pill">{{ t('Groups') }}</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</form>
+
+{# Recent runs #}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold text-primary mb-1">{{ t('Recent Google Docs Sync Runs') }}</h5>
+            <p class="small text-muted mb-0">{{ t('Full log of recent automatic and manual sync attempts.') }}</p>
+        </div>
+    </div>
+    <div class="card-body p-4">
+        {% if gdocs_sync_history %}
+        <div class="accordion" id="gdocsHistoryAccordion">
+            {% for run in gdocs_sync_history %}
+            {% set collapse_id = 'gdocsRun' ~ run.id %}
+            {% set _status = run.status %}
+            {% set _badge = 'bg-success' if _status == 'success' else ('bg-warning text-dark' if _status == 'partial' else 'bg-danger') %}
+            <div class="accordion-item border rounded-3 mb-2 overflow-hidden">
+                <h2 class="accordion-header" id="heading{{ run.id }}">
+                    <button class="accordion-button {% if not loop.first %}collapsed{% endif %} py-3" type="button" data-bs-toggle="collapse" data-bs-target="#{{ collapse_id }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="{{ collapse_id }}">
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100 pe-3">
+                            <span class="badge {{ _badge }}">{{ run.status }}</span>
+                            <span class="small fw-semibold">{{ run.run_at }}</span>
+                            <span class="badge bg-light text-dark border">{{ run.trigger_source }}</span>
+                            <span class="small text-muted ms-auto">{{ run.targets_processed }}/{{ run.targets_total }} · {{ run.synced_total }} {{ t('synced') }}</span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="{{ collapse_id }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#gdocsHistoryAccordion">
+                    <div class="accordion-body small">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3"><span class="text-muted">{{ t('Patients') }}:</span> {{ run.synced_patients }}</div>
+                            <div class="col-md-3"><span class="text-muted">{{ t('Groups pulled') }}:</span> {{ run.synced_groups }}</div>
+                            <div class="col-md-3"><span class="text-muted">{{ t('Groups pushed') }}:</span> {{ run.pushed_groups }}</div>
+                            <div class="col-md-3"><span class="text-muted">{{ t('Interval') }}:</span> {{ run.interval_key or '—' }}</div>
+                        </div>
+                        {% if run.errors %}
+                        <div class="mb-3">
+                            <div class="fw-semibold text-danger mb-1">{{ t('Errors') }}</div>
+                            <ul class="mb-0 ps-3">
+                                {% for err in run.errors %}
+                                <li>{{ err }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        {% if run.details %}
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>{{ t('Target') }}</th>
+                                        <th>{{ t('Action') }}</th>
+                                        <th>{{ t('Status') }}</th>
+                                        <th>{{ t('Synced') }}</th>
+                                        <th>{{ t('Error') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for detail in run.details %}
+                                    <tr>
+                                        <td><code>{{ detail.target_key }}</code></td>
+                                        <td>{{ detail.action or detail.mode or '—' }}</td>
+                                        <td>
+                                            {% set ds = detail.status or 'unknown' %}
+                                            <span class="badge {{ 'bg-success' if ds == 'ok' else 'bg-danger' }}">{{ ds }}</span>
+                                        </td>
+                                        <td>{{ detail.synced if detail.synced is not none else '—' }}</td>
+                                        <td class="text-danger">{{ detail.error or '' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-muted">{{ t('No per-target details stored for this run.') }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">{{ t('No sync history yet.') }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var syncBtn = document.getElementById('runGdocsAutoSyncNowBtn');
+    var statusEl = document.getElementById('gdocsAutoSyncStatus');
+    var defaultSyncLabel = '<i class="bi bi-arrow-repeat me-1"></i>{{ t('Sync Now') }}';
+
+    function setSyncBusy(busy, label) {
+        if (!syncBtn) return;
+        syncBtn.disabled = !!busy;
+        syncBtn.innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm me-1"></span>' + (label || '{{ t('Syncing...') }}')
+            : defaultSyncLabel;
+    }
+
+    function renderSyncStatus(job) {
+        if (!statusEl || !job) return;
+        var pct = (job.percent != null) ? (' · ' + job.percent + '%') : '';
+        var msg = job.message || job.error || job.result_message || job.status || '';
+        statusEl.textContent = msg + pct;
+        statusEl.className = 'small mt-3 ' + (
+            job.status === 'success' ? 'text-success' :
+            (job.status === 'error' || job.status === 'failed') ? 'text-danger' :
+            'text-muted'
+        );
+    }
+
+    function pollSyncJob(jobId, attempt) {
+        attempt = attempt || 0;
+        return fetch('/admin/google-docs/auto-sync-status/' + encodeURIComponent(jobId) + '?_=' + Date.now())
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+            .then(function(res) {
+                var job = res.data || {};
+                renderSyncStatus(job);
+                if (job.status === 'running' || job.status === 'triggered') {
+                    if (attempt > 120) {
+                        setSyncBusy(false);
+                        if (typeof showToast === 'function') showToast('{{ t('Sync is taking longer than expected. Refresh to check status.') }}', 'warning');
+                        return;
+                    }
+                    setTimeout(function() { pollSyncJob(jobId, attempt + 1); }, 2000);
+                    return;
+                }
+                setSyncBusy(false);
+                var ok = (job.status === 'success' || job.status === 'partial' || job.status === 'skipped' || job.status === 'ok');
+                var toastMsg = job.message || job.error || (ok ? '{{ t('Sync finished') }}' : '{{ t('Sync failed') }}');
+                if (typeof showToast === 'function') showToast(toastMsg, ok ? 'success' : 'danger');
+                if (ok) {
+                    setTimeout(function() { location.reload(); }, 1200);
+                }
+            })
+            .catch(function() {
+                if (attempt < 5) {
+                    setTimeout(function() { pollSyncJob(jobId, attempt + 1); }, 2000);
+                    return;
+                }
+                setSyncBusy(false);
+                if (typeof showToast === 'function') showToast('{{ t('Sync failed') }}', 'danger');
+            });
+    }
+
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+            var csrfInput = document.querySelector('[name=csrf_token]');
+            var csrf = csrfInput ? csrfInput.value : '';
+            setSyncBusy(true);
+            if (statusEl) {
+                statusEl.className = 'small text-muted mt-3';
+                statusEl.textContent = '{{ t('Starting sync...') }}';
+            }
+            fetch('/admin/google-docs/auto-sync-now', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
+                body: 'csrf_token=' + encodeURIComponent(csrf)
+            }).then(function(r) {
+                return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; });
+            }).then(function(res) {
+                var d = res.data || {};
+                if (d.status === 'ok' && !d.job_id) {
+                    setSyncBusy(false);
+                    if (typeof showToast === 'function') showToast(d.message || '{{ t('Sync finished') }}', 'success');
+                    setTimeout(function() { location.reload(); }, 1000);
+                    return;
+                }
+                if (d.job_id) {
+                    if (typeof showToast === 'function') {
+                        showToast(res.status === 409 ? '{{ t('Sync already running') }}' : '{{ t('Sync started') }}', 'success');
+                    }
+                    pollSyncJob(d.job_id, 0);
+                    return;
+                }
+                setSyncBusy(false);
+                var err = d.error || d.message || '{{ t('Sync failed') }}';
+                if (statusEl) {
+                    statusEl.className = 'small text-danger mt-3';
+                    statusEl.textContent = err;
+                }
+                if (typeof showToast === 'function') showToast(err, 'danger');
+            }).catch(function() {
+                setSyncBusy(false);
+                if (typeof showToast === 'function') showToast('{{ t('Sync failed') }}', 'danger');
+            });
+        });
+    }
+})();
+</script>
+{% endblock %}

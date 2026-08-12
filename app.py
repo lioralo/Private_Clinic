@@ -119,6 +119,7 @@ _legacy_admin_endpoints = [
     ('list_cancel_requests', 'list_cancel_requests', '/cancel_requests', ['GET']),
     ('approve_cancel_request', 'approve_cancel_request', '/cancel_requests/<int:request_id>/approve', ['POST']),
     ('reject_cancel_request', 'reject_cancel_request', '/cancel_requests/<int:request_id>/reject', ['POST']),
+    ('google_docs_sync', 'google_docs_sync', '/admin/google-docs', ['GET', 'POST']),
     ('google_docs_auto_sync_now', 'google_docs_auto_sync_now', '/admin/google-docs/auto-sync-now', ['POST']),
     ('google_docs_auto_sync_status', 'google_docs_auto_sync_status', '/admin/google-docs/auto-sync-status/<job_id>', ['GET']),
     ('admin_profile', 'admin_profile', '/admin/profile', ['GET', 'POST']),
@@ -736,53 +737,119 @@ def _safe_parse_gdoc_targets_config_json(raw_json):
     return normalized
 
 
+def _parse_gdoc_watch_expiry(raw_value):
+    raw = (raw_value or '').strip()
+    if not raw:
+        return None
+    try:
+        # Drive watch expiry is often epoch ms/seconds.
+        if raw.isdigit():
+            value = int(raw)
+            if value > 10_000_000_000:  # ms
+                value = value / 1000.0
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _gdoc_watch_meta(raw_value, now=None):
+    now = now or datetime.now(timezone.utc)
+    expiry = _parse_gdoc_watch_expiry(raw_value)
+    if not expiry:
+        return {
+            'watch_expiry_raw': (raw_value or '').strip() or None,
+            'watch_expiry_at': None,
+            'watch_expired': False,
+            'watch_expiring_soon': False,
+        }
+    seconds_left = (expiry - now).total_seconds()
+    return {
+        'watch_expiry_raw': (raw_value or '').strip() or None,
+        'watch_expiry_at': expiry,
+        'watch_expired': seconds_left <= 0,
+        'watch_expiring_soon': 0 < seconds_left <= (2 * 24 * 3600),
+    }
+
+
 def _list_connected_google_docs(db):
     docs = []
+    now = datetime.now(timezone.utc)
 
     try:
         patient_rows = db.execute('''
-            SELECT id, name, gdoc_id
+            SELECT id, name, gdoc_id, gdoc_watch_channel, gdoc_watch_expiry
             FROM patients
             WHERE COALESCE(gdoc_id, '') <> ''
               AND COALESCE(is_deleted, 0) = 0
             ORDER BY name COLLATE NOCASE ASC, id ASC
         ''').fetchall()
     except sqlite3.OperationalError:
-        patient_rows = []
+        try:
+            patient_rows = db.execute('''
+                SELECT id, name, gdoc_id
+                FROM patients
+                WHERE COALESCE(gdoc_id, '') <> ''
+                  AND COALESCE(is_deleted, 0) = 0
+                ORDER BY name COLLATE NOCASE ASC, id ASC
+            ''').fetchall()
+        except sqlite3.OperationalError:
+            patient_rows = []
     for row in patient_rows:
         target_key = _format_gdoc_target_key('patient', row['id'])
         if not target_key:
             continue
-        docs.append({
+        watch_raw = row['gdoc_watch_expiry'] if 'gdoc_watch_expiry' in row.keys() else None
+        watch_channel = row['gdoc_watch_channel'] if 'gdoc_watch_channel' in row.keys() else None
+        item = {
             'target_key': target_key,
             'target_type': 'patient',
             'target_id': int(row['id']),
             'label': row['name'] or f"Patient #{row['id']}",
             'doc_id': row['gdoc_id'],
             'doc_url': f"https://docs.google.com/document/d/{row['gdoc_id']}/edit",
-        })
+            'watch_channel': watch_channel,
+        }
+        item.update(_gdoc_watch_meta(watch_raw, now=now))
+        docs.append(item)
 
     try:
         group_rows = db.execute('''
-            SELECT id, name, gdoc_id
+            SELECT id, name, gdoc_id, gdoc_watch_channel, gdoc_watch_expiry
             FROM groups
             WHERE COALESCE(gdoc_id, '') <> ''
             ORDER BY name COLLATE NOCASE ASC, id ASC
         ''').fetchall()
     except sqlite3.OperationalError:
-        group_rows = []
+        try:
+            group_rows = db.execute('''
+                SELECT id, name, gdoc_id
+                FROM groups
+                WHERE COALESCE(gdoc_id, '') <> ''
+                ORDER BY name COLLATE NOCASE ASC, id ASC
+            ''').fetchall()
+        except sqlite3.OperationalError:
+            group_rows = []
     for row in group_rows:
         target_key = _format_gdoc_target_key('group', row['id'])
         if not target_key:
             continue
-        docs.append({
+        watch_raw = row['gdoc_watch_expiry'] if 'gdoc_watch_expiry' in row.keys() else None
+        watch_channel = row['gdoc_watch_channel'] if 'gdoc_watch_channel' in row.keys() else None
+        item = {
             'target_key': target_key,
             'target_type': 'group',
             'target_id': int(row['id']),
             'label': row['name'] or f"Group #{row['id']}",
             'doc_id': row['gdoc_id'],
             'doc_url': f"https://docs.google.com/document/d/{row['gdoc_id']}/edit",
-        })
+            'watch_channel': watch_channel,
+        }
+        item.update(_gdoc_watch_meta(watch_raw, now=now))
+        docs.append(item)
 
     docs.sort(key=lambda item: (item['target_type'], (item['label'] or '').lower(), item['target_id']))
     return docs
@@ -1198,11 +1265,20 @@ def _get_recent_gdocs_sync_history(db, limit=12):
             errors = json.loads(row['errors_json'] or '[]')
         except (TypeError, ValueError, json.JSONDecodeError):
             errors = []
+        if not isinstance(errors, list):
+            errors = []
+        try:
+            details = json.loads(row['details_json'] or '[]')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            details = []
+        if not isinstance(details, list):
+            details = []
         history.append({
             'id': int(row['id']),
             'run_at': row['run_at'],
             'trigger_source': row['trigger_source'] or 'auto',
             'status': row['status'] or 'unknown',
+            'interval_key': row['interval_key'] if 'interval_key' in row.keys() else None,
             'targets_total': int(row['targets_total'] or 0),
             'targets_processed': int(row['targets_processed'] or 0),
             'synced_total': int(row['synced_total'] or 0),
@@ -1210,8 +1286,72 @@ def _get_recent_gdocs_sync_history(db, limit=12):
             'synced_groups': int(row['synced_groups'] or 0),
             'pushed_groups': int(row['pushed_groups'] or 0),
             'errors': errors,
+            'details': details,
         })
     return history
+
+
+def _get_gdocs_per_target_status(db, limit_runs=40):
+    """Derive last known status per target_key from recent sync history details."""
+    history = _get_recent_gdocs_sync_history(db, limit=limit_runs)
+    status_by_key = {}
+    for run in history:
+        run_at = run.get('run_at')
+        for detail in run.get('details') or []:
+            if not isinstance(detail, dict):
+                continue
+            target_key = detail.get('target_key')
+            if not target_key or target_key in status_by_key:
+                continue
+            status_by_key[target_key] = {
+                'last_status': detail.get('status') or 'unknown',
+                'last_error': detail.get('error'),
+                'last_run_at': run_at,
+                'last_synced': detail.get('synced'),
+                'last_action': detail.get('action'),
+                'last_mode': detail.get('mode'),
+                'attempts': detail.get('attempts'),
+            }
+    return status_by_key
+
+
+def _get_gdocs_sync_selection_warnings(db, connected_docs=None):
+    """Compare raw selected targets vs currently connected docs."""
+    settings = get_site_settings(db)
+    connected_docs = connected_docs if connected_docs is not None else _list_connected_google_docs(db)
+    connected_by_key = {item['target_key']: item for item in connected_docs}
+
+    selected_config = _safe_parse_gdoc_targets_config_json(settings.get('gdocs_auto_sync_targets_config_json'))
+    if not selected_config:
+        selected_config = [
+            {'target_key': key, 'mode': 'pull'}
+            for key in _safe_parse_gdoc_targets_json(settings.get('gdocs_auto_sync_targets_json'))
+        ]
+
+    raw_selected_keys = []
+    mode_by_key = {}
+    for item in selected_config:
+        target_key = item.get('target_key')
+        if not target_key or target_key in mode_by_key:
+            continue
+        raw_selected_keys.append(target_key)
+        mode_by_key[target_key] = str(item.get('mode') or 'pull').strip().lower()
+
+    missing_selected = [
+        {'target_key': key, 'mode': mode_by_key.get(key) or 'pull'}
+        for key in raw_selected_keys
+        if key not in connected_by_key
+    ]
+    unselected_connected = [
+        item for item in connected_docs
+        if item['target_key'] not in mode_by_key
+    ]
+    return {
+        'raw_selected_keys': raw_selected_keys,
+        'mode_by_key': mode_by_key,
+        'missing_selected': missing_selected,
+        'unselected_connected': unselected_connected,
+    }
 
 
 def _get_gdocs_auto_sync_health(db):
@@ -1227,17 +1367,22 @@ def _get_gdocs_auto_sync_health(db):
     last_record = recent_history[0] if recent_history else None
     last_status = last_record['status'] if last_record else None
     last_synced_total = last_record['synced_total'] if last_record else None
+    last_trigger = last_record['trigger_source'] if last_record else None
+    last_errors = list(last_record.get('errors') or []) if last_record else []
 
     return {
         'enabled': state['enabled'],
         'interval_key': state['interval_key'],
         'selected_count': len(state['selected_targets']),
+        'connected_count': len(state.get('connected_docs') or []),
         'last_run_at': last_run,
         'next_run_at': next_run,
         'last_run_age_seconds': age_seconds,
         'overdue': overdue,
         'last_status': last_status,
         'last_synced_total': last_synced_total,
+        'last_trigger': last_trigger,
+        'last_errors': last_errors,
     }
 
 
