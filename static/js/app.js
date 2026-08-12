@@ -2,7 +2,21 @@ window.showAppToast = function(message, options) {
     if (!message) return;
     const config = options || {};
     const variant = config.variant || 'primary';
-    const title = config.title || window.AppConfig.translations.clinicUpdate;
+    const typeMap = {
+        primary: 'info',
+        info: 'info',
+        success: 'success',
+        danger: 'danger',
+        warning: 'warning',
+        secondary: 'info',
+        light: 'info',
+        dark: 'info'
+    };
+    if (typeof window.showToast === 'function') {
+        window.showToast(String(message), typeMap[variant] || 'info');
+        return;
+    }
+    const title = config.title || (window.AppConfig && AppConfig.translations ? AppConfig.translations.clinicUpdate : 'Clinic Update');
     const autohide = config.autohide !== false;
     const delay = Number(config.delay || 5000);
     let container = document.getElementById('notificationContainer');
@@ -24,14 +38,15 @@ window.showAppToast = function(message, options) {
     const titleElement = document.createElement('strong');
     titleElement.className = 'me-auto';
     titleElement.textContent = title;
+    const translations = (window.AppConfig && AppConfig.translations) ? AppConfig.translations : {};
     const nowLabel = document.createElement('small');
     nowLabel.className = 'text-white-50';
-    nowLabel.textContent = AppConfig.translations.justNow;
+    nowLabel.textContent = translations.justNow || 'Just now';
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'btn-close btn-close-white';
     closeButton.setAttribute('data-bs-dismiss', 'toast');
-    closeButton.setAttribute('aria-label', AppConfig.translations.close);
+    closeButton.setAttribute('aria-label', translations.close || 'Close');
     toastHeader.appendChild(icon);
     toastHeader.appendChild(titleElement);
     toastHeader.appendChild(nowLabel);
@@ -95,6 +110,21 @@ document.addEventListener('DOMContentLoaded', function() {
         return window.innerWidth >= 1024;
     }
 
+    function getScrollbarWidth() {
+        return window.innerWidth - document.documentElement.clientWidth;
+    }
+
+    function lockBodyScroll(locked) {
+        if (locked) {
+            var scrollbarWidth = getScrollbarWidth();
+            document.body.style.paddingRight = scrollbarWidth > 0 ? scrollbarWidth + 'px' : '';
+            document.body.classList.add('overflow-hidden');
+        } else {
+            document.body.style.paddingRight = '';
+            document.body.classList.remove('overflow-hidden');
+        }
+    }
+
     function setSidebarState(openOnMobile) {
         if (!sidebar) return;
         if (isDesktopViewport()) {
@@ -103,7 +133,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (sidebarBackdrop) {
                 sidebarBackdrop.classList.add('hidden');
             }
-            document.body.classList.remove('overflow-hidden');
+            lockBodyScroll(false);
             if (sidebarToggle) {
                 sidebarToggle.setAttribute('aria-expanded', 'false');
             }
@@ -115,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sidebarBackdrop) {
             sidebarBackdrop.classList.toggle('hidden', !shouldOpen);
         }
-        document.body.classList.toggle('overflow-hidden', shouldOpen);
+        lockBodyScroll(shouldOpen);
         if (sidebarToggle) {
             sidebarToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
         }
@@ -328,32 +358,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         'contact_inquiry': 'bg-warning text-dark',
                         'admin_broadcast': 'bg-secondary',
                         'system': 'bg-light text-dark',
-};
-
-// Dark mode toggle
-(function() {
-    var toggle = document.getElementById('themeToggle');
-    var icon = document.getElementById('themeToggleIcon');
-    var label = document.getElementById('themeToggleLabel');
-    if (!toggle || !icon || !label) return;
-
-    function applyDark(enabled) {
-        document.documentElement.classList.toggle('dark', enabled);
-        icon.className = enabled ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
-        var lang = document.documentElement.dir === 'rtl' ? 'he' : 'en';
-        label.textContent = enabled ? (lang === 'he' ? 'מצב בהיר' : 'Light Mode') : (lang === 'he' ? 'מצב כהה' : 'Dark Mode');
-        try { localStorage.setItem('clinic_dark_mode', enabled ? '1' : '0'); } catch(e) {}
-    }
-
-    toggle.addEventListener('click', function() {
-        var current = document.documentElement.classList.contains('dark');
-        applyDark(!current);
-    });
-
-    var saved = null;
-    try { saved = localStorage.getItem('clinic_dark_mode'); } catch(e) {}
-    if (saved === '1') applyDark(true);
-})();
+                    };
                     var badgeClass = categoryColors[category] || 'bg-light text-dark';
                     var categoryLabel = {
                         'billing': App.translations.billing || 'Billing',
@@ -771,16 +776,10 @@ document.addEventListener('click', function(e) {
     });
 });
 
-/* ── Dark mode toggle ─────────────────────────────────────────── */
+/* ── Dark mode toggle (data-bs-theme + clinic-theme) ──────────── */
 (function() {
     var STORAGE_KEY = 'clinic-theme';
     var htmlEl = document.documentElement;
-    var savedTheme = (function() {
-        try { return localStorage.getItem(STORAGE_KEY); } catch(e) { return null; }
-    })();
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var theme = savedTheme || (prefersDark ? 'dark' : 'light');
-    htmlEl.setAttribute('data-bs-theme', theme);
     function updateToggleUI() {
         var btn = document.getElementById('themeToggle');
         var icon = document.getElementById('themeToggleIcon');
@@ -803,6 +802,7 @@ document.addEventListener('click', function(e) {
                 var next = current === 'dark' ? 'light' : 'dark';
                 htmlEl.setAttribute('data-bs-theme', next);
                 try { localStorage.setItem(STORAGE_KEY, next); } catch(e) {}
+                try { localStorage.removeItem('clinic_dark_mode'); } catch(e) {}
                 updateToggleUI();
             });
         }

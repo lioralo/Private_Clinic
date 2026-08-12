@@ -38,28 +38,28 @@
 
 {# ── Quick Access Cards ──────────────────────────────────────── #}
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
-    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] will-change-[box-shadow] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='ongoing') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
         <i class="bi bi-heart-fill text-success" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Ongoing') }}</div>
             <div class="text-2xl font-bold text-success mt-1">{{ counts['ongoing'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] will-change-[box-shadow] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='candidate') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
         <i class="bi bi-hourglass-split text-warning" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Candidates') }}</div>
             <div class="text-2xl font-bold text-warning mt-1">{{ counts['waiting'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] will-change-[box-shadow] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', status='archived') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
         <i class="bi bi-archive text-primary" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Archived') }}</div>
             <div class="text-2xl font-bold text-primary mt-1">{{ counts['archived'] }}</div>
         </div>
     </a>
-    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] will-change-[box-shadow] text-decoration-none">
+    <a href="{{ url_for('crm_dashboard', show_deleted='true') }}" class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-slate-200 transition-[box-shadow,border-color] text-decoration-none">
         <i class="bi bi-trash text-danger" style="font-size:1.5rem"></i>
         <div class="mt-2">
             <div class="text-slate-500 text-sm font-semibold">{{ t('Deleted') }}</div>
@@ -72,7 +72,7 @@
 {% if security_metrics %}
 {% set sm = security_metrics %}
 {% set sec_alert = sm.failed_logins > 5 or sm.failed_2fa > 3 or sm.disabled_attempts > 0 %}
-<div class="card border-0 shadow-sm mb-4 {% if sec_alert %}border-start border-4 border-danger{% endif %}">
+<div class="card border border-slate-100 shadow-sm rounded-2xl mb-4 {% if sec_alert %}border-start border-4 border-danger{% endif %}">
     <div class="card-body py-3 px-4">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
             <h6 class="mb-0 fw-bold text-slate-700">
@@ -137,7 +137,7 @@
     <div class="col-xl-8">
 
         {# Today's schedule #}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="today-schedule" open>
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="today-schedule" open>
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-clock-fill me-2 text-primary"></i>{{ t("Today's Schedule") }}</h6>
                 <span class="badge bg-primary rounded-pill">{{ today_appointments|length }}</span>
@@ -200,7 +200,7 @@
 
         {# This week #}
         {% if week_appointments %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="this-week">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="this-week">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-calendar-week me-2 text-primary"></i>{{ t('Coming This Week') }}</h6>
                 <span class="badge bg-secondary rounded-pill">{{ week_appointments|length }}</span>
@@ -244,7 +244,7 @@
     <div class="col-xl-4">
 
         {# Google Docs auto-sync health #}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="gdocs-sync">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="gdocs-sync">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-arrow-down me-2 text-primary"></i>{{ t('Google Docs Auto Sync') }}</h6>
                 {% if gdocs_auto_sync_health.enabled %}
@@ -293,7 +293,7 @@
 
         {# Follow-up decisions needed #}
         {% if followup_patients %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" id="followupSection" data-section="followup">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" id="followupSection" data-section="followup">
             <summary class="card-header dash-card-header dash-card-header-warning">
                 <h6 class="mb-0 fw-bold text-warning-emphasis">
                     <i class="bi bi-exclamation-circle-fill me-2"></i>{{ t('Decision Needed') }}
@@ -322,7 +322,7 @@
 
         {# Waiting list — no upcoming appointment #}
         {% if waiting_patients %}
-        <details class="card border-0 shadow-sm mb-4 dashboard-fold" data-section="waiting-candidates">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 dashboard-fold" data-section="waiting-candidates">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>{{ t('Candidates — No Appointment') }}</h6>
                 <span class="badge bg-warning text-dark rounded-pill">{{ waiting_patients|length }}</span>
@@ -347,7 +347,7 @@
 
         {# Missing recurring alert #}
         {% if missing_recurring %}
-        <details class="card border-0 shadow-sm mb-4 border-danger-subtle dashboard-fold" data-section="missing-recurring">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl mb-4 border-danger-subtle dashboard-fold" data-section="missing-recurring">
             <summary class="card-header dash-card-header dash-card-header-danger">
                 <h6 class="mb-0 fw-bold text-danger">
                     <i class="bi bi-arrow-repeat me-2"></i>{{ t('Ongoing — No Recurring Set') }}
@@ -376,7 +376,7 @@
 {# ── Bottom row: Recent patients + Recent activity ────────── #}
 <div class="row g-3 mt-0">
     <div class="col-md-6">
-        <details class="card border-0 shadow-sm dashboard-fold" data-section="recent-patients">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl dashboard-fold" data-section="recent-patients">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ t('Recently Added Patients') }}</h6>
             </summary>
@@ -414,7 +414,7 @@
     </div>
 
     <div class="col-md-6">
-        <details class="card border-0 shadow-sm dashboard-fold" data-section="recent-activity">
+        <details class="card border border-slate-100 shadow-sm rounded-2xl dashboard-fold" data-section="recent-activity">
             <summary class="card-header dash-card-header">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-activity me-2 text-primary"></i>{{ t('Recent Activity') }}</h6>
             </summary>
