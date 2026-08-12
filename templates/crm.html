@@ -10,7 +10,7 @@
         <h2 class="h1 text-3xl font-extrabold text-primary tracking-tight">{{ t('Patients') }}</h2>
         <p class="text-slate-500 mt-1">{{ t('Manage clinic member records.') }}</p>
     </div>
-    <a href="{{ url_for('add_patient') }}" class="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-md hover:opacity-90 transition-opacity">
+    <a href="{{ url_for('add_patient') }}" class="flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-sm hover:opacity-90 transition-opacity">
         <i class="bi bi-person-plus-fill" style="font-size:18px"></i>
         <span>{{ t('New Patient') }}</span>
     </a>
@@ -18,7 +18,7 @@
 </div>
 
 {% if reminders %}
-<div class="card border-0 shadow-sm mb-3" id="upcoming-reminders-section">
+<div class="card border border-slate-100 shadow-sm rounded-2xl mb-3" id="upcoming-reminders-section">
     <div class="card-header bg-warning-subtle border-0 py-2 px-3">
         <h6 class="mb-0 fw-bold text-warning-emphasis">
             <i class="bi bi-bell-fill me-2"></i>{{ t('Upcoming Reminders') }}

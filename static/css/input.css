@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-    --color-primary: #3B82F6;
-    --color-primary-container: #DBEAFE;
-    --color-primary-soft: #DBEAFE;
+    --color-primary: #134e4a;
+    --color-primary-dark: #0f766e;
+    --color-primary-container: #ccfbf1;
+    --color-primary-soft: #ccfbf1;
     --color-on-primary: #FFFFFF;
-    --color-on-primary-container: #1E40AF;
+    --color-on-primary-container: #115e59;
     --color-secondary: #64748B;
     --color-secondary-container: #F1F5F9;
     --color-on-secondary: #FFFFFF;
@@ -20,8 +21,8 @@
     --color-on-surface-variant: #475569;
     --color-outline: #CBD5E1;
     --color-outline-variant: #E2E8F0;
-    --color-primary-fixed: #DBEAFE;
-    --color-primary-fixed-dim: #BFDBFE;
+    --color-primary-fixed: #ccfbf1;
+    --color-primary-fixed-dim: #99f6e4;
     --color-success: #16A34A;
     --color-warning: #D97706;
     --color-danger: #DC2626;
@@ -29,7 +30,7 @@
     --color-error-container: #FEE2E2;
     --color-on-error: #FFFFFF;
     --color-on-error-container: #991B1B;
-    --color-background: #F8FAFC;
+    --color-background: #f7f9fb;
     --color-on-background: #111827;
 
     --font-family-headline: "Poppins", "Heebo", sans-serif;
@@ -39,10 +40,11 @@
 
 /* Dark mode: override Tailwind CSS custom properties */
 [data-bs-theme="dark"] {
-    --color-primary: #60A5FA;
-    --color-primary-container: #1E3A5F;
-    --color-primary-soft: #1E3A5F;
-    --color-on-primary-container: #BFDBFE;
+    --color-primary: #5eead4;
+    --color-primary-dark: #2dd4bf;
+    --color-primary-container: #134e4a;
+    --color-primary-soft: #134e4a;
+    --color-on-primary-container: #ccfbf1;
     --color-secondary: #94A3B8;
     --color-secondary-container: #1E293B;
     --color-on-secondary-container: #CBD5E1;
@@ -56,8 +58,8 @@
     --color-on-surface-variant: #94A3B8;
     --color-outline: #334155;
     --color-outline-variant: #475569;
-    --color-primary-fixed: #1E3A5F;
-    --color-primary-fixed-dim: #162E4E;
+    --color-primary-fixed: #134e4a;
+    --color-primary-fixed-dim: #0f766e;
     --color-success: #4ADE80;
     --color-warning: #FBBF24;
     --color-danger: #F87171;

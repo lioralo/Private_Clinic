@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script>(function(){var t;try{t=localStorage.getItem('clinic-theme')}catch(e){}if(!t)t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-bs-theme',t)})();</script>
-    <title>{% if lang == 'he' %}ליאור אלוני - קליניק{% else %}Lior Aloni Clinic{% endif %}</title>
+    <title>{% block page_title %}{% if lang == 'he' %}ליאור אלוני - קליניק{% else %}Lior Aloni Clinic{% endif %}{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -82,7 +82,7 @@
         }
     </style>
 </head>
-<body class="bg-[#f2f4f6] text-[#191c1e]{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
+<body class="bg-background text-on-surface{% if current_user.is_authenticated and current_user.role == 'admin' %} admin-user{% endif %}" data-endpoint="{{ request.endpoint or '' }}" data-user-role="{% if current_user.is_authenticated %}{{ current_user.role }}{% else %}guest{% endif %}">
 <a href="#main-content" class="skip-link">{{ 'דלג לתוכן הראשי' if lang == 'he' else 'Skip to main content' }}</a>
 
 {% macro render_flash_messages(extra_classes='') -%}
@@ -183,12 +183,12 @@
 
 {% if current_user.is_authenticated and current_user.role == 'admin' %}
 {# ── ADMIN: sidebar + main content ───────────────────────────── #}
-<div class="flex min-h-screen lg:h-screen overflow-hidden">
+<div class="flex admin-shell overflow-hidden">
 
     <div id="adminSidebarBackdrop" class="fixed inset-0 bg-black/30 z-30 hidden lg:hidden transition-opacity"></div>
 
     {# Sidebar - no scroll, all content must fit viewport #}
-    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar h-screen flex-shrink-0 bg-white flex flex-col px-4 py-3">
+    <aside id="adminSidebar" aria-hidden="true" aria-label="{{ t('Admin navigation') }}" class="admin-sidebar flex-shrink-0 bg-slate-50 flex flex-col px-4 py-3 border-r border-slate-200">
 
         {# Brand - compact #}
         <div class="flex flex-col items-center mb-2 px-1 flex-shrink-0">
@@ -219,7 +219,7 @@
 
             {% macro nav_link(target, icon, label) %}
             <a href="{{ url_for(target) }}"
-               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 {% if endpoint_name in nav_parents.get(target, [target]) %}sidebar-link-active text-white{% else %}text-[#191c1e] hover:bg-primary-soft/50{% endif %} no-underline">
+               class="flex items-center gap-3 rounded-lg px-4 py-2 font-bold text-xs transition-colors duration-200 {% if endpoint_name in nav_parents.get(target, [target]) %}sidebar-link-active{% else %}text-[#191c1e] hover:bg-primary-soft/50{% endif %} no-underline">
                 <i class="bi {{ icon }}" style="font-size:16px;width:18px;text-align:center"></i>
                 <span>{{ label }}</span>
             </a>
@@ -250,7 +250,7 @@
         </a>
 
         {# Notifications & Profile #}
-        <div class="cv-auto border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
             <button type="button"
                class="w-full flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline relative"
                data-bs-toggle="offcanvas" data-bs-target="#notificationsOffcanvas" aria-controls="notificationsOffcanvas">
@@ -269,7 +269,7 @@
         </div>
 
         {# Bottom: theme toggle, language + logout #}
-        <div class="cv-auto border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
+        <div class="border-t border-slate-200 pt-3 space-y-0.5 flex-shrink-0">
             <button id="themeToggle" type="button"
                class="w-full flex items-center gap-3 text-[#191c1e] hover:bg-primary-soft/50 rounded-lg px-4 py-2.5 transition-colors duration-200 text-xs font-bold no-underline">
                 <i class="bi bi-moon-stars-fill" id="themeToggleIcon" style="font-size:16px;width:18px;text-align:center"></i>
@@ -316,8 +316,8 @@
             </button>
         </div>
 
-        {# Search bar (collapsible) #}
-        <div id="searchBar" class="hidden px-3 py-2 border-b border-slate-200 bg-gray-50">
+        {# Search bar (collapsible — reserved height prevents layout jump) #}
+        <div id="searchBar" class="px-3 border-b border-slate-200 bg-gray-50" aria-hidden="true">
             <form method="get" action="{{ url_for('admin_global_search') }}" class="flex gap-2">
                 <input type="text" name="q" class="form-control form-control-sm border-0 bg-white rounded-lg flex-1" placeholder="{{ t('Search everything...') }}" aria-label="{{ t('Search') }}" required minlength="2" dir="auto">
                 <button class="btn btn-sm btn-primary rounded-lg" type="submit">
@@ -431,7 +431,7 @@
 </main>
 {% else %}
 </main>
-<footer class="py-6 border-t border-slate-200 text-center" style="content-visibility:auto;contain-intrinsic-size:60px;">
+<footer class="py-6 border-t border-slate-200 text-center">
     <span class="text-black text-sm font-bold">{{ t('Private Psychotherapy Clinic') }}</span>
     <span class="text-slate-300 mx-2">•</span>
     <a href="{{ url_for('accessibility_statement') }}" class="text-black font-bold text-sm hover:text-teal-800 transition-colors no-underline">
@@ -445,7 +445,7 @@
 {% endif %}
 
     {# Cookie Consent Banner #}
-    <div id="cookieConsentBanner" class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 shadow-lg p-4 hidden" role="alert" aria-label="{{ 'הודעת עוגיות' if lang == 'he' else 'Cookie notice' }}">
+    <div id="cookieConsentBanner" class="fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200 shadow-lg p-4 hidden pointer-events-auto" role="alert" aria-label="{{ 'הודעת עוגיות' if lang == 'he' else 'Cookie notice' }}">
         <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <p class="text-sm text-slate-700 flex-1">
                 {% if lang == 'he' %}
@@ -657,8 +657,9 @@
         var searchToggleBtn = document.getElementById('searchToggleBtn');
         var searchBar = document.getElementById('searchBar');
         function toggleSearch() {
-            searchBar.classList.toggle('hidden');
-            if (!searchBar.classList.contains('hidden')) {
+            var isOpen = searchBar.classList.toggle('is-open');
+            searchBar.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            if (isOpen) {
                 var input = searchBar.querySelector('input[name=q]');
                 if (input) setTimeout(function() { input.focus(); }, 100);
             }

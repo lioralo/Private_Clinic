@@ -9,7 +9,7 @@
 :root {
     /* ── Brand Colors (aliased from Tailwind --color-* tokens) ── */
     --primary-color:    var(--color-primary);
-    --primary-dark:     var(--color-primary-dark, #2563EB);
+    --primary-dark:     var(--color-primary-dark, #0f766e);
     --primary-soft:     var(--color-primary-container);
     --accent-color:     var(--color-accent, #8B5CF6);
     --secondary-color:  var(--color-secondary);
@@ -61,10 +61,11 @@
     --shadow-card-hover:       0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
     --shadow-dropdown:         0 4px 12px rgba(0, 0, 0, 0.08);
 
-    /* ── Sidebar ───────────────────────────────────────────── */
+    /* ── Admin layout ───────────────────────────────────────── */
+    --admin-topbar-height:     3rem;
     --sidebar-width:           16rem;
-    --sidebar-link-active-bg:  var(--color-primary);
-    --sidebar-link-active-fg:  #FFFFFF;
+    --sidebar-link-active-bg:  color-mix(in srgb, var(--color-primary) 12%, transparent);
+    --sidebar-link-active-fg:  var(--color-primary);
     --sidebar-link-hover-bg:   color-mix(in srgb, var(--color-primary) 8%, transparent);
 
     /* ── Transitions ───────────────────────────────────────── */
@@ -74,7 +75,7 @@
 
     /* ── Bootstrap Overrides ───────────────────────────────── */
     --bs-primary:              var(--color-primary);
-    --bs-primary-rgb:          59, 130, 246;
+    --bs-primary-rgb:          19, 78, 74;
     --bs-secondary:            var(--color-secondary);
     --bs-secondary-rgb:        100, 116, 139;
     --bs-success:              var(--color-success);
@@ -84,7 +85,7 @@
     --bs-danger:               var(--color-danger);
     --bs-danger-rgb:           220, 38, 38;
     --bs-link-color:           var(--color-primary);
-    --bs-link-hover-color:     var(--color-primary-dark, #2563EB);
+    --bs-link-hover-color:     var(--color-primary-dark, #0f766e);
 }
 
 /* ── Density Variants ──────────────────────────────────────── */
