@@ -5,27 +5,22 @@ import {NextIntlClientProvider} from "next-intl";
 import {getMessages} from "next-intl/server";
 import SessionProviderWrapper from "@/components/session-provider";
 
-export default function LocaleLayout({
+export default async function LocaleLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { locale: string };
+  // Next 16 may pass params as a Promise in async server components.
+  params: Promise<{ locale: string }> | { locale: string };
 }) {
-  // This layout is async via NextIntl's message loading below.
-  // (Next.js allows an async function even if the type signature is simple.)
-  return <LocaleLayoutInner children={children} params={params} />;
-}
+  const resolvedParams = await params;
 
-async function LocaleLayoutInner({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: { locale: string };
-}) {
   const locale =
-    params.locale === "he" ? "he" : params.locale === "en" ? "en" : null;
+    resolvedParams.locale === "he"
+      ? "he"
+      : resolvedParams.locale === "en"
+        ? "en"
+        : null;
   if (!locale) notFound();
 
   const dir = locale === "he" ? "rtl" : "ltr";
