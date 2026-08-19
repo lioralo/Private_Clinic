@@ -5,8 +5,11 @@ import { prisma } from "@/lib/prisma";
 export default async function PatientsPage({
   params,
 }: {
-  params: { locale: "en" | "he" };
+  params: Promise<{ locale: "en" | "he" }> | { locale: "en" | "he" };
 }) {
+  const resolvedParams = await params;
+  const locale = resolvedParams.locale;
+
   const patients = await prisma.patient.findMany({
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -17,20 +20,20 @@ export default async function PatientsPage({
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-semibold mb-1">
-            {params.locale === "he" ? "מטופלים" : "Patients"}
+            {locale === "he" ? "מטופלים" : "Patients"}
           </h1>
           <p className="text-[var(--color-foreground)]/70">
-            {params.locale === "he"
+            {locale === "he"
               ? "רשימת מטופלים"
               : "Patient list (CRUD in v1 starter)."}
           </p>
         </div>
 
         <Link
-          href={`/${params.locale}/patients/new`}
+          href={`/${locale}/patients/new`}
           className="rounded-xl bg-[var(--color-primary)] text-[var(--color-surface)] px-4 py-2 font-semibold hover:opacity-90"
         >
-          {params.locale === "he" ? "מטופל חדש" : "New patient"}
+          {locale === "he" ? "מטופל חדש" : "New patient"}
         </Link>
       </div>
 
@@ -39,16 +42,16 @@ export default async function PatientsPage({
           <thead>
             <tr className="bg-[var(--color-primary-container)]/40">
               <th className="text-start px-4 py-3 font-semibold">
-                {params.locale === "he" ? "שם" : "Name"}
+                {locale === "he" ? "שם" : "Name"}
               </th>
               <th className="text-start px-4 py-3 font-semibold">
-                {params.locale === "he" ? "טלפון" : "Phone"}
+                {locale === "he" ? "טלפון" : "Phone"}
               </th>
               <th className="text-start px-4 py-3 font-semibold">
-                {params.locale === "he" ? "אימייל" : "Email"}
+                {locale === "he" ? "אימייל" : "Email"}
               </th>
               <th className="text-end px-4 py-3 font-semibold">
-                {params.locale === "he" ? "פעולות" : "Actions"}
+                {locale === "he" ? "פעולות" : "Actions"}
               </th>
             </tr>
           </thead>
@@ -56,7 +59,7 @@ export default async function PatientsPage({
             {patients.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-[var(--color-foreground)]/70">
-                  {params.locale === "he"
+                  {locale === "he"
                     ? "אין עדיין מטופלים."
                     : "No patients yet."}
                 </td>
@@ -67,7 +70,7 @@ export default async function PatientsPage({
                   <td className="px-4 py-3 font-medium">
                     <Link
                       className="hover:underline"
-                      href={`/${params.locale}/patients/${p.id}`}
+                      href={`/${locale}/patients/${p.id}`}
                     >
                       {p.firstName} {p.lastName}
                     </Link>
@@ -77,9 +80,9 @@ export default async function PatientsPage({
                   <td className="px-4 py-3 text-end">
                     <Link
                       className="text-[var(--color-primary-dark)] hover:underline"
-                      href={`/${params.locale}/patients/${p.id}`}
+                      href={`/${locale}/patients/${p.id}`}
                     >
-                      {params.locale === "he" ? "צפה" : "View"}
+                      {locale === "he" ? "צפה" : "View"}
                     </Link>
                   </td>
                 </tr>
