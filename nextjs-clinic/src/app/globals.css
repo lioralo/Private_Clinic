@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #134e4a;
+  --color-primary-dark: #0f3d3a;
+  --color-primary-container: #ccfbf1;
+  --color-accent: #87beb8;
+  --color-tertiary: #e3b453;
+
+  --color-background: #f7f8f9;
+  --color-surface: #ffffff;
+  --color-foreground: #0f172a;
+  --color-border: rgba(15, 23, 42, 0.12);
+
+  --radius-xl: 1.25rem;
+
+  --font-sans: var(--font-plus-jakarta-sans);
+  --font-hebrew: var(--font-heebo);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+html[data-theme="dark"] {
+  --color-primary: #5eead4;
+  --color-primary-dark: #20c997;
+  --color-primary-container: #0f3d3a;
+
+  --color-background: #0f172a;
+  --color-surface: #1e293b;
+  --color-foreground: #e2e8f0;
+  --color-border: rgba(226, 232, 240, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --color-primary: #5eead4;
+    --color-primary-dark: #20c997;
+    --color-primary-container: #0f3d3a;
+
+    --color-background: #0f172a;
+    --color-surface: #1e293b;
+    --color-foreground: #e2e8f0;
+    --color-border: rgba(226, 232, 240, 0.2);
+  }
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Hebrew/RTL-first: when locale wrapper sets dir=rtl, switch to Heebo. */
+[dir="rtl"] {
+  font-family: var(--font-hebrew);
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
