@@ -1,11 +1,17 @@
 "use client";
 
+import React, { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import type { FormEvent } from "react";
 
-export default function LoginPage({ params }: { params: { locale: "en" | "he" } }) {
+export default function LoginPage({
+  params,
+}: {
+  params: Promise<{ locale: "en" | "he" }> | { locale: "en" | "he" };
+}) {
+  const resolvedParams = React.use(params as any) as { locale: "en" | "he" };
+  const locale = resolvedParams.locale;
   const router = useRouter();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("admin-password");
@@ -27,23 +33,23 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
 
     if (!res?.ok) {
       setError(
-        params.locale === "he"
+        locale === "he"
           ? "פרטי התחברות לא נכונים."
           : "Invalid username or password."
       );
       return;
     }
 
-    router.push(`/${params.locale}`);
+    router.push(`/${locale}`);
   }
 
   return (
     <div className="max-w-md">
       <h1 className="text-2xl font-semibold mb-2">
-        {params.locale === "he" ? "התחברות" : "Login"}
+        {locale === "he" ? "התחברות" : "Login"}
       </h1>
       <p className="text-[var(--color-foreground)]/70 mb-4">
-        {params.locale === "he"
+        {locale === "he"
           ? "היכנס/י למערכת עם שם משתמש וסיסמה."
           : "Sign in with your username and password."}
       </p>
@@ -53,7 +59,7 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
         className="rounded-2xl border p-4 border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col gap-3"
       >
         <label className="flex flex-col gap-1 text-sm">
-          {params.locale === "he" ? "שם משתמש" : "Username"}
+          {locale === "he" ? "שם משתמש" : "Username"}
           <input
               name="username"
             className="rounded-xl border px-3 py-2 border-[var(--color-border)] bg-transparent outline-none"
@@ -64,7 +70,7 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {params.locale === "he" ? "סיסמה" : "Password"}
+          {locale === "he" ? "סיסמה" : "Password"}
           <input
               name="password"
             type="password"
@@ -85,10 +91,10 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
           className="rounded-xl bg-[var(--color-primary)] text-[var(--color-surface)] py-2 px-3 font-semibold hover:opacity-90 disabled:opacity-60"
         >
           {submitting
-            ? params.locale === "he"
+            ? locale === "he"
               ? "מתחבר..."
               : "Signing in..."
-            : params.locale === "he"
+            : locale === "he"
             ? "התחבר"
             : "Sign in"}
         </button>
