@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaSqlite } from "prisma-adapter-sqlite";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 // Prevent creating many PrismaClient instances in dev (Next.js hot reload).
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -11,7 +11,7 @@ if (!databaseUrl) {
   );
 }
 
-const adapter = new PrismaSqlite({ connectionString: databaseUrl });
+const adapter = new PrismaBetterSqlite3({ connectionString: databaseUrl });
 
 export const prisma =
   globalForPrisma.prisma ??
