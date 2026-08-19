@@ -1,8 +1,7 @@
 import React from "react";
 import { notFound } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import {NextIntlClientProvider} from "next-intl";
-import {getMessages} from "next-intl/server";
+import { NextIntlClientProvider } from "next-intl";
 import SessionProviderWrapper from "@/components/session-provider";
 
 export default async function LocaleLayout({
@@ -24,7 +23,10 @@ export default async function LocaleLayout({
   if (!locale) notFound();
 
   const dir = locale === "he" ? "rtl" : "ltr";
-  const messages = await getMessages();
+  const messages =
+    locale === "he"
+      ? (await import("@/messages/he.json")).default
+      : (await import("@/messages/en.json")).default;
 
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
