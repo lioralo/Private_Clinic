@@ -55,6 +55,7 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
         <label className="flex flex-col gap-1 text-sm">
           {params.locale === "he" ? "שם משתמש" : "Username"}
           <input
+              name="username"
             className="rounded-xl border px-3 py-2 border-[var(--color-border)] bg-transparent outline-none"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -65,6 +66,7 @@ export default function LoginPage({ params }: { params: { locale: "en" | "he" } 
         <label className="flex flex-col gap-1 text-sm">
           {params.locale === "he" ? "סיסמה" : "Password"}
           <input
+              name="password"
             type="password"
             className="rounded-xl border px-3 py-2 border-[var(--color-border)] bg-transparent outline-none"
             value={password}

@@ -9,19 +9,31 @@ async function main() {
     where: { username },
   });
 
-  if (existing) {
-    return;
+  if (!existing) {
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.user.create({
+      data: {
+        username,
+        passwordHash,
+        role: "ADMIN",
+      },
+    });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
-
-  await prisma.user.create({
-    data: {
-      username,
-      passwordHash,
-      role: "ADMIN",
-    },
-  });
+  // Seed one sample patient for e2e smoke tests.
+  const patientCount = await prisma.patient.count();
+  if (patientCount === 0) {
+    await prisma.patient.create({
+      data: {
+        firstName: "Test",
+        lastName: "Patient",
+        phone: "0500000000",
+        email: null,
+        notesText: "Seeded sample patient for e2e.",
+      },
+    });
+  }
 }
 
 main()
