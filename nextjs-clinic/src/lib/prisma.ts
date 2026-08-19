@@ -11,7 +11,8 @@ if (!databaseUrl) {
   );
 }
 
-const adapter = new PrismaBetterSqlite3({ connectionString: databaseUrl });
+// prisma-adapter-better-sqlite3 expects `{ url }` (it derives the db path via `url.replace(/^file:/, '')`).
+const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 
 export const prisma =
   globalForPrisma.prisma ??
