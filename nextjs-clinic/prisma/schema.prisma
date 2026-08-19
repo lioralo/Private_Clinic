@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  ADMIN
+  CLINICIAN
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         UserRole  @default(ADMIN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patientsOwned Patient[]    @relation("PatientOwner")
+  appointments  Appointment[] @relation("ProviderAppointments")
+  notesAuthored Note[]       @relation("NoteAuthors")
+}
+
+model Patient {
+  id String @id @default(cuid())
+
+  firstName String
+  lastName String
+  phone String?
+  email String?
+  notesText String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownerId String?
+  owner   User?   @relation("PatientOwner", fields: [ownerId], references: [id])
+
+  appointments Appointment[]
+  notes Note[]
+}
+
+model Appointment {
+  id String @id @default(cuid())
+
+  patientId  String
+  providerId String
+
+  startAt DateTime
+  endAt DateTime
+  status AppointmentStatus @default(SCHEDULED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient  Patient @relation(fields: [patientId], references: [id])
+  provider User    @relation("ProviderAppointments", fields: [providerId], references: [id])
+}
+
+model Note {
+  id String @id @default(cuid())
+
+  patientId String
+  authorId  String
+
+  content String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+  author  User    @relation("NoteAuthors", fields: [authorId], references: [id])
+}

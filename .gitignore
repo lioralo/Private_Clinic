@@ -20,3 +20,9 @@ manual_backups/
 node_modules/
 .venv_test/
 "AI S/"
+nextjs-clinic/.git/
+nextjs-clinic/.next/
+nextjs-clinic/.agents/
+nextjs-clinic/.claude/
+nextjs-clinic/.windsurf/
+nextjs-clinic/skills-lock.json
